@@ -36,6 +36,29 @@
 
 ---
 
+## The interface
+
+**Not a running application — a build of the planned one.** The schematic, the component palette,
+the parameter panel and every number in the results dock come from a real engine run, exported by
+[`examples/export_ui_data.py`](examples/export_ui_data.py); what is missing is the session server
+that would let you press Run and get a new one. Open
+[`docs/ui-mockup.html`](docs/ui-mockup.html) in a browser to click through it, and
+[DESIGN.md](DESIGN.md) for why it looks like this.
+
+![The OpenOptiSim schematic editor on its paper ground](docs/images/studio-paper.png)
+
+It ships two grounds and defaults to paper, because a schematic is a document before it is a
+screen and its plots leave the tool for reports and papers. Graphite is one click away:
+
+![The same editor on its graphite ground](docs/images/studio-graphite.png)
+
+Every wire colour is a wavelength rather than a preference — optical C-band cyan, electrical amber,
+binary slate, symbol violet, metric magenta — so a glance at a link tells you what travels down it.
+A typed-port system that refuses invalid wiring at edit time is worth nothing if the types are
+invisible.
+
+---
+
 ## Try it
 
 ```bash

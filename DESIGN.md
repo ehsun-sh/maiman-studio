@@ -126,12 +126,19 @@ the action taken dozens of times an hour.
 sized by the dock's *height*, not its width. A shorter dock wastes the width it
 has.
 
-**The canvas viewBox is 1000 x 420**, seven columns of 138px at a node width of
-116. The seventh column arrived with the span and its compensator; the
-alternative was to keep six and squeeze the spacing to 120, which leaves four
-pixels between adjacent blocks and reads as cramped. Widening also moved the
-aspect ratio to 2.38, closer to the 2.29 the canvas region actually has at
-1440px than the 2.10 it had before.
+**The canvas viewBox is 1000 x 530**, seven columns of 138px at a node width of
+116, three rows at y = 30 / 220 / 410. The seventh column arrived with the span
+and its compensator; the alternative was to keep six and squeeze the spacing to
+120, which leaves four pixels between adjacent blocks and reads as cramped.
+
+The *height* is set by the region the SVG actually lands in, and that number is
+worth measuring rather than estimating. At 1440px the canvas region is
+**964 x 510 — an aspect of 1.89**. With `preserveAspectRatio="xMidYMid meet"`
+any box wider than that is letterboxed top and bottom: the original 880 x 420
+(2.10) wasted 50px, and widening to 1000 x 420 (2.38) wasted **105px** — it made
+the fit worse, not better, which is the opposite of what a first pass here
+claimed. Matching the box to 1.89 wastes none, and the rows spread into the
+height they gained.
 
 Below 940px the palette and inspector collapse and a note says so. This is a
 desktop tool; the real build would dock them as overlays rather than dropping
@@ -203,15 +210,25 @@ measurement, in **both grounds**:
 - **Theme-block drift** — the two graphite blocks are compared key by key.
 - **Canvas repaint** — plot beds are sampled after switching, in both
   directions.
-- **Geometry** — no SVG element may stray outside the viewBox; no horizontal
-  page overflow at 1440px.
+- **Geometry** — no SVG element may stray outside the viewBox; the viewBox
+  aspect must match the canvas region's, or the difference is letterboxed away;
+  the Ports legend must not overlap a block; no horizontal page overflow.
+- **Screenshots** — `python docs/capture_screenshots.py` regenerates
+  [`docs/images/`](docs/images/) in both grounds at the same 1440px the audits
+  use, so what the README shows is what the current build renders rather than an
+  older one. It refuses to run if the mockup's theme bootstrap has changed,
+  because the failure mode otherwise is two paper captures, one of them labelled
+  graphite.
 
 Two findings worth keeping:
 
 - A contrast audit run while the browser pane was not compositing reported a
   clean result that **meant nothing** — the page had laid out at its narrow
   breakpoint, where the palette and inspector are `display: none` and were never
-  checked. Verify the viewport before trusting the audit.
+  checked. It happened a second time on a freshly opened tab, which does not
+  inherit the previous tab's emulated size. The audit now asserts
+  `innerWidth === 1440` and throws otherwise, and reports how many nodes it
+  inspected so a zero is readable as a pass rather than as silence.
 - The design detector once ran degraded and returned `[]`. An empty result from
   a degraded tool is an undercount, not a pass.
 

@@ -705,7 +705,7 @@ verdict, and DESIGN.md
       </div>
       <div class="canvas-wrap" id="canvas-wrap">
         <div class="canvas-grid"></div>
-        <svg id="graph" viewBox="0 0 1000 420" preserveAspectRatio="xMidYMid meet"
+        <svg id="graph" viewBox="0 0 1000 530" preserveAspectRatio="xMidYMid meet"
              role="img" aria-label="Optical link schematic"></svg>
         <div class="canvas-badge">
           <span>Ports</span>
@@ -14694,23 +14694,23 @@ verdict, and DESIGN.md
      into two electrical drives, an optical field, two photocurrents back, and
      symbols out again. Every one of the five port colours appears on it. */
   const NODES = [
-    { id: "ref",  type: "QAMMapper",            x: 168, y:  25, label: "ref",  sub: "absolute" },
-    { id: "tx",   type: "CWLaser",              x: 306, y:  25, label: "tx",   sub: "+2 dBm" },
-    { id: "lo",   type: "CWLaser",              x: 444, y:  25, label: "lo",   sub: "+10 dBm" },
-    { id: "pm",   type: "PowerMeter",           x: 720, y:  25, label: "pm",   sub: "−27.9 dBm" },
-    { id: "prbs", type: "PRBSGenerator",        x:  30, y: 140, label: "prbs", sub: "PRBS-23" },
-    { id: "map",  type: "QAMMapper",            x: 168, y: 140, label: "map",  sub: "16-QAM diff" },
-    { id: "drv",  type: "IQDriver",             x: 306, y: 140, label: "drv",  sub: "RRC β 0.2" },
-    { id: "mod",  type: "IQModulator",          x: 444, y: 140, label: "mod",  sub: "Vπ 4 V" },
-    { id: "fib",  type: "Fiber",                x: 582, y: 140, label: "fib",  sub: "80 km SMF" },
-    { id: "rx",   type: "CoherentReceiver",     x: 720, y: 140, label: "rx",   sub: "0.8 A/W" },
-    { id: "cdc",  type: "DispersionCompensator", x: 30, y: 295, label: "cdc", sub: "1360 ps/nm" },
-    { id: "smp",  type: "IQSampler",            x: 168, y: 295, label: "smp",  sub: "matched" },
-    { id: "cr",   type: "CarrierRecovery",      x: 306, y: 295, label: "cr",   sub: "64-sym BPS" },
-    { id: "dec",  type: "DifferentialDecoder",  x: 444, y: 295, label: "dec",  sub: "quadrant" },
-    { id: "cd",   type: "ConstellationDiagram", x: 582, y: 295, label: "cd",   sub: "96 × 96" },
-    { id: "vsa",  type: "ConstellationAnalyzer", x: 720, y: 295, label: "vsa", sub: "EVM 7.3 %" },
-    { id: "ber",  type: "ConstellationAnalyzer", x: 858, y: 295, label: "ber", sub: "0 errors" }
+    { id: "ref",  type: "QAMMapper",            x: 168, y:  30, label: "ref",  sub: "absolute" },
+    { id: "tx",   type: "CWLaser",              x: 306, y:  30, label: "tx",   sub: "+2 dBm" },
+    { id: "lo",   type: "CWLaser",              x: 444, y:  30, label: "lo",   sub: "+10 dBm" },
+    { id: "pm",   type: "PowerMeter",           x: 720, y:  30, label: "pm",   sub: "−27.9 dBm" },
+    { id: "prbs", type: "PRBSGenerator",        x:  30, y: 220, label: "prbs", sub: "PRBS-23" },
+    { id: "map",  type: "QAMMapper",            x: 168, y: 220, label: "map",  sub: "16-QAM diff" },
+    { id: "drv",  type: "IQDriver",             x: 306, y: 220, label: "drv",  sub: "RRC β 0.2" },
+    { id: "mod",  type: "IQModulator",          x: 444, y: 220, label: "mod",  sub: "Vπ 4 V" },
+    { id: "fib",  type: "Fiber",                x: 582, y: 220, label: "fib",  sub: "80 km SMF" },
+    { id: "rx",   type: "CoherentReceiver",     x: 720, y: 220, label: "rx",   sub: "0.8 A/W" },
+    { id: "cdc",  type: "DispersionCompensator", x: 30, y: 410, label: "cdc", sub: "1360 ps/nm" },
+    { id: "smp",  type: "IQSampler",            x: 168, y: 410, label: "smp",  sub: "matched" },
+    { id: "cr",   type: "CarrierRecovery",      x: 306, y: 410, label: "cr",   sub: "64-sym BPS" },
+    { id: "dec",  type: "DifferentialDecoder",  x: 444, y: 410, label: "dec",  sub: "quadrant" },
+    { id: "cd",   type: "ConstellationDiagram", x: 582, y: 410, label: "cd",   sub: "96 × 96" },
+    { id: "vsa",  type: "ConstellationAnalyzer", x: 720, y: 410, label: "vsa", sub: "EVM 7.3 %" },
+    { id: "ber",  type: "ConstellationAnalyzer", x: 858, y: 410, label: "ber", sub: "0 errors" }
   ];
   const EDGES = [
     { from: ["prbs", "out"], to: ["map", "in"],           type: "binary" },
