@@ -105,7 +105,11 @@ def test_ase_psd_matches_the_spontaneous_emission_relation() -> None:
     expected = n_sp * H_PLANCK * NU_1550 * (gain - 1.0)
 
     amp = EDFA(gain=gain_db, noise_figure=noise_figure_db)
-    assert amp.ase_psd(gain) == pytest.approx(expected, rel=1e-9)
+    # abs=0.0, because an ASE density is ~1e-17 W/Hz and pytest.approx applies
+    # a default absolute tolerance of 1e-12 alongside rel. Without this the
+    # assertion accepted every value within 1e-12 of the answer — five orders of
+    # magnitude either side, zero included — and tested nothing at all.
+    assert amp.ase_psd(gain) == pytest.approx(expected, rel=1e-9, abs=0.0)
     assert amp.spontaneous_emission_factor(gain) == pytest.approx(n_sp, rel=1e-9)
 
 

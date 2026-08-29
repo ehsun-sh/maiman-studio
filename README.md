@@ -28,8 +28,11 @@
 > from it** — signal-ASE and ASE-ASE beat noise are modelled in both detector families — and PMD
 > is drawn as a random realisation with the right Maxwellian statistics.
 >
-> **Not implemented yet:** cross-phase modulation and four-wave mixing between channels,
-> and the GUI. See the [roadmap](#roadmap).
+> Channels interact: the split-step propagates them coupled, so a neighbour's power modulates
+> each channel's phase at twice the rate its own does, sliding past under walk-off derived from
+> the dispersion — and triplets of channels mix to put light where nobody launched it.
+>
+> **Not implemented yet:** the GUI. See the [roadmap](#roadmap).
 >
 > This is not yet a useful simulator. It is a foundation with the expensive decisions made and
 > tested. Criticism of those decisions is worth more right now than any feature —
@@ -376,6 +379,71 @@ noise bins rendered onto one grid, the way an instrument shows them. Its resolut
 not cosmetic — widening it raises the ASE trace decibel for decibel and leaves a carrier exactly
 where it is, which is the clearest demonstration of why OSNR needs a stated reference bandwidth.
 
+## What channels do to each other
+
+Until recently bands propagated independently through the fiber, which made this a good model of
+one channel and an optimistic model of a comb. They no longer do. The same `|A|²A` term that gives
+a channel its own self-phase modulation lets every *other* channel rotate its phase — and the
+coefficient is not free. Expanding the term for a sum of carriers, a channel's own power appears
+once and a neighbour's appears twice, because there are two ways to choose which un-conjugated
+factor belongs to the neighbour and one way when it is the channel itself.
+
+That factor of two is measurable, and it is exact:
+
+| co-propagating channels | mean nonlinear phase | vs one channel | closed form |
+| :--- | ---: | ---: | ---: |
+| 1 | 0.027518 rad | 1.000× | 1× |
+| 2 | 0.082559 rad | 3.000× | 3× |
+| 3 | 0.137600 rad | 5.000× | 5× |
+| 4 | 0.192640 rad | 7.000× | 7× |
+
+**Dispersion is the cure here, not the disease.** Chromatic dispersion is normally introduced as
+something to compensate. Between channels it is the only thing keeping them apart: it makes them
+travel at different speeds, so a neighbour's bit pattern *slides past* instead of sitting on top of
+the channel it is modulating. Walk-off is therefore not a separate parameter — it is the
+group-delay term of the same expansion of β(ω) that produces the dispersion, so setting D to zero
+removes both at once. At 17 ps/nm/km a 100 GHz neighbour separates by 13.62 ps/km, and has slid 140
+symbols by the end of a 320 km link.
+
+What walk-off removes is not the cross-phase modulation but its *variation*. The mean phase shift
+is fixed by the neighbour's average power and no amount of sliding changes it — sliding
+redistributes in time, it does not destroy. That split is the whole mechanism, because a constant
+phase offset is absorbed by carrier recovery for free and it is the variation that closes an eye.
+Measured on channel 1 of a four-channel QPSK comb over 4 × 80 km, as EVM after carrier recovery:
+
+| launch/channel | D = 0 | D = 17 ps/nm/km |
+| :--- | ---: | ---: |
+| −3 dBm | +0.18 % | +0.00 % |
+| 0 dBm | +0.49 % | +0.03 % |
+| +3 dBm | **+2.84 %** | **+0.29 %** |
+
+Ten times less penalty for having dispersion in the fiber.
+
+**Four-wave mixing lands on the channels.** Products appear at `f_i + f_j − f_k`, and on an equally
+spaced grid those frequencies *are* channel frequencies — so the crosstalk arrives in band, where
+no filter downstream can reach it. The model folds such a product into the channel it lands on,
+with a phase drawn from the run's generator for the same reason PMD is drawn: it is set by fiber
+details nobody measures. Dispersion suppresses mixing too, by dephasing it, and the phase mismatch
+grows as the *square* of the channel spacing:
+
+| channel spacing | D = 0 | D = 2 | D = 17 |
+| :--- | ---: | ---: | ---: |
+| 25 GHz | 0.0 dB | −4.4 dB | −21.2 dB |
+| 50 GHz | 0.0 dB | −14.7 dB | −33.1 dB |
+| 100 GHz | 0.0 dB | −26.7 dB | −45.4 dB |
+| 200 GHz | 0.0 dB | −38.6 dB | −57.4 dB |
+
+Zero-dispersion fiber is perfectly phase matched at every spacing, which is the whole reason
+dispersion-shifted fiber was abandoned for WDM.
+
+The two effects are computed differently, and the difference is worth knowing before reading a
+number off the block. Cross-phase modulation is solved on the waveform inside the split-step,
+because it depends on the neighbour's instantaneous power sliding past; four-wave mixing is solved
+in closed form from the band powers and injected as tones, because the products land at frequencies
+no band is sampled at. Not putting the channels on one grid is what makes a WDM comb affordable at
+all, and that choice has to be paid for somewhere. See
+[`examples/wdm_nonlinear.py`](examples/wdm_nonlinear.py).
+
 ## What this is
 
 A block-diagram simulator for optical systems: drop components on a canvas, wire a link, run it,
@@ -510,7 +578,7 @@ time window, and results are reproducible.
 | **1 — MVP: linear link** *(essentially done)* | ✅ PRBS → NRZ → laser → MZM → fiber (α + CD) → PIN → filter → eye/Q/BER, validated end to end. **Python only, no GUI.** | ~2–3 months |
 | **1.5 — Nonlinear & amplified** ✅ | Adaptive-step SSFM, Kerr, EDFA with ASE, OSNR, PMD, APD | ~2 months |
 | **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier phase recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
-| **3 — GUI & WDM** | ✅ Wavelength-selective filters and an OSA. Session server, React Flow graph editor · DWDM + XPM/FWM crosstalk, 400G/800G references, CuPy back-end | ~6 months |
+| **3 — GUI & WDM** | ✅ Wavelength-selective filters, an OSA, and coupled-channel propagation: cross-phase modulation with walk-off, and four-wave mixing. Session server, React Flow graph editor · 400G/800G references, CuPy back-end | ~6 months |
 | **4 — PIC** | Waveguides, ring resonators, MMI, MZI via integration with an existing S-matrix solver; PDK import | — |
 
 ¹ One developer, part-time. Estimates, not commitments.
@@ -561,7 +629,13 @@ Every physics block ships with a test against a closed-form result, run in CI
 | Matched filtering | Costs `10·log10(f_s/R_s)` to omit — the receiver integrates noise it cannot use | ✅ |
 | **PMD** | DGD Maxwellian: `⟨τ²⟩/⟨τ⟩² = 3π/8`, mean `∝√L`, spread `0.42·mean` | ✅ |
 | APD | `F(M) = kM + (2−1/M)(1−k)`; an **interior optimum gain** exists | ✅ |
-| XPM / FWM | Cross-channel nonlinearity | ⬜ |
+| **Cross-phase modulation** | `n` equal channels give `(2n−1)×` one channel's nonlinear phase — exact to 1e-3 | ✅ |
+| XPM swing | Peak-to-peak `2·γ·P·L_eff` on a probe beside an on/off pump, with no walk-off | ✅ |
+| Walk-off | `D·Δλ` per unit length, derived from β₂ and not declared beside it | ✅ |
+| Walk-off conserves the mean | Mean XPM phase fixed at `2·γ·⟨P⟩·L_eff` across a 16× change in slip, while its spread falls 5.7× | ✅ |
+| FWM efficiency | `η → 1` phase matched; `→ sinc²(Δβ·L/2)` lossless; even in Δβ | ✅ |
+| FWM phase mismatch | `Δβ = −β₂(ω_i−ω_k)(ω_j−ω_k)` — quadratic in spacing, zero at zero dispersion | ✅ |
+| FWM product power | Component reproduces `d²γ²P_iP_jP_k·L_eff²·η·e^{−αL}` to 1e-7; cubic in power; `d = 2−δ_ij` gives non-degenerate products exactly 6.02 dB | ✅ |
 
 Component models are derived from published literature and standards (Agrawal, *Nonlinear Fiber
 Optics*; ITU-T G.652 / G.694.1; relevant IEEE 802.3 clauses), cited in each component's

@@ -14,6 +14,7 @@ not be introduced: it is GPL-2.0-or-later, and linking it — directly or throug
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -130,15 +131,35 @@ class PropagationDiagnostics:
     """DGD realised on this run [s]. PMD is random, so this differs run to run;
     it is reported because the value a result depends on should be visible."""
 
+    walkoff_span: float = 0.0
+    """Largest relative group delay between bands over the span [s].
+
+    Removed from the returned waveforms — each band comes back in its own
+    retarded frame — but reported here, because it is what decides how much
+    cross-phase modulation survives and a removed quantity that still governs
+    the answer should not be invisible."""
+
+    peak_walkoff_slip: float = 0.0
+    """Largest relative slip between bands within any single step [samples].
+
+    The nonlinear operator freezes the bands' relative positions for the length
+    of a step, so this is the walk-off counterpart of
+    ``peak_nonlinear_phase``: the quantity a shorter step buys accuracy in."""
+
+    mixing_products: int = 0
+    """Four-wave mixing products emitted at distinct frequencies."""
+
     def __repr__(self) -> str:
         pmd = (
             f", DGD {self.differential_group_delay * 1e12:.2f} ps"
             if self.differential_group_delay
             else ""
         )
+        walkoff = f", walk-off {self.walkoff_span * 1e12:.1f} ps" if self.walkoff_span else ""
+        fwm = f", {self.mixing_products} FWM tones" if self.mixing_products else ""
         return (
             f"PropagationDiagnostics({self.steps} steps over {self.distance / 1e3:.1f} km, "
-            f"max phase {self.peak_nonlinear_phase:.4f} rad{pmd})"
+            f"max phase {self.peak_nonlinear_phase:.4f} rad{pmd}{walkoff}{fwm})"
         )
 
 
@@ -171,19 +192,144 @@ def propagate_ssfm(
     bound is recomputed from the current peak power, steps lengthen naturally as
     the pulse loses power to attenuation.
 
+    This is the one-channel case of :func:`propagate_coupled_ssfm` and is written
+    as a call to it rather than as a second implementation. With a single field
+    the cross-phase term ``2*total - |A|**2`` collapses to ``|A|**2`` exactly, so
+    the two agree to the last bit and cannot drift apart as either is changed.
+
     Returns the propagated field and :class:`PropagationDiagnostics`.
+    """
+    fields, diagnostics = propagate_coupled_ssfm(
+        (field,),
+        sample_rate,
+        beta2=(beta2,),
+        walkoff=(0.0,),
+        gamma=gamma,
+        alpha=alpha,
+        distance=distance,
+        max_nonlinear_phase=max_nonlinear_phase,
+        max_step=max_step,
+    )
+    return fields[0], diagnostics
+
+
+def propagate_coupled_ssfm(
+    fields: Sequence[np.ndarray],
+    sample_rate: float,
+    *,
+    beta2: Sequence[float],
+    walkoff: Sequence[float],
+    gamma: float,
+    alpha: float,
+    distance: float,
+    max_nonlinear_phase: float = 0.005,
+    max_walkoff_slip: float = 0.5,
+    max_step: float | None = None,
+) -> tuple[list[np.ndarray], PropagationDiagnostics]:
+    """Co-propagate several channels through one fiber, coupled by the Kerr effect.
+
+    ``dA_k/dz = -(alpha/2) A_k - d_k dA_k/dT - (i beta2_k / 2) d2A_k/dT2
+    + i gamma (|A_k|**2 + 2 sum_{j != k} |A_j|**2) A_k``
+
+    The whole content of the extension is that factor of two. A channel's own
+    power rotates its own phase once; every *other* channel's power rotates it
+    twice, and that asymmetry is not a fudge but falls out of expanding
+    ``|A|**2 A`` for a sum of carriers — there are two ways to choose which of
+    the two un-conjugated factors belongs to the neighbour and one way when it
+    is the channel itself. Cross-phase modulation is therefore not a separate
+    effect bolted on beside self-phase modulation; it is the same term, counted
+    properly.
+
+    Written as ``2 * total - |A_k|**2`` where ``total`` is the summed power of
+    every field, so the cost is linear in the channel count rather than
+    quadratic, and so one field reduces to plain SPM identically.
+
+    **Walk-off is the reason the answer is not absurd.** Channels at different
+    wavelengths travel at different group velocities, so a neighbour's power
+    slides past rather than sitting on top of the channel it is modulating, and
+    what survives is closer to the average of its pattern than to its peaks.
+    Without that sliding the model would report an impairment several times too
+    large and would get the dependence on dispersion backwards — it is the
+    low-dispersion link, not the high-dispersion one, that suffers most from
+    cross-phase modulation. ``walkoff[k]`` is the inverse group velocity of
+    channel ``k`` relative to an arbitrary common frame [s/m]; the frame drops
+    out, see below.
+
+    **Sign convention.** :func:`propagate_dispersion` notes that a beta2-only
+    model is insensitive to the transform's sign convention because omega
+    appears squared, and that this stops being true the moment a group-delay
+    term is added. This is that moment. Rather than guess, the walk-off operator
+    is taken from the same Taylor expansion of ``beta(omega)`` that produced the
+    dispersion operator: with ``exp(op * z)`` and ``op`` carrying
+    ``0.5j * beta2 * omega**2`` for the quadratic term, the linear term is
+    ``-1j * d_k * omega``, which delays a channel of larger inverse group
+    velocity. Deriving it rather than asserting it is what makes it checkable.
+
+    **Each field is returned in its own retarded frame.** The accumulated
+    ``d_k * distance`` is divided out at the end, exactly, because it is a
+    constant group delay: real hardware removes it in clock recovery, and
+    keeping it would do nothing but slide every channel off its own sampler by
+    tens of symbols. The walk-off still acts in full *during* propagation, where
+    the physics is; only the bookkeeping delay is removed. Because it is
+    removed, the choice of common frame cannot affect the result — and neither
+    can the sign of the walk-off, since the impairment depends on the relative
+    slip, which is even in it.
+
+    **Two step-size bounds, for two ways of being wrong.** The nonlinear
+    operator freezes both the power *and* the channels' relative positions for
+    the length of a step, so besides the usual ``max_nonlinear_phase`` cap there
+    is ``max_walkoff_slip``: the relative slip between the fastest and slowest
+    channel within one step, in samples. Both are reported.
+
+    The phase cap is on the largest rotation applied to *any* channel, which
+    makes it the **weakest** channel that sets the step: it has the most
+    neighbour power to be turned by and least of its own to subtract. So adding
+    a dark or heavily attenuated band roughly halves the step size while
+    changing the answer not at all. That is the conservative direction to err
+    in, and the cost is bounded at a factor of two however faint the band is.
+
+    Every field must share one time grid. Coupling is evaluated sample by sample
+    and there is no meaningful way to add to it the power of a channel sampled
+    on a different grid, so a mismatch raises rather than being papered over.
+
+    Polarization is not handled here. The caller passes co-polarized fields and
+    calls twice, which reproduces the scalar-per-polarization model the rest of
+    the fiber already uses — see :class:`oosim.components.fiber.Fiber` for what
+    that leaves out.
+
+    Returns the propagated fields, in input order, and
+    :class:`PropagationDiagnostics`.
     """
     if distance < 0.0:
         raise ValueError(f"distance must be non-negative, got {distance}")
     if max_nonlinear_phase <= 0.0:
         raise ValueError(f"max_nonlinear_phase must be positive, got {max_nonlinear_phase}")
+    if max_walkoff_slip <= 0.0:
+        raise ValueError(f"max_walkoff_slip must be positive, got {max_walkoff_slip}")
+    if len(beta2) != len(fields) or len(walkoff) != len(fields):
+        raise ValueError(
+            f"beta2 and walkoff must have one entry per field, got {len(beta2)} and "
+            f"{len(walkoff)} for {len(fields)} fields"
+        )
 
-    a = field.astype(np.complex128, copy=True)
+    a = [f.astype(np.complex128, copy=True) for f in fields]
+    if not a:
+        return a, PropagationDiagnostics(0, distance, 0.0, 0.0, 0.0)
+
+    widths = {f.shape[0] for f in a}
+    if len(widths) != 1:
+        raise ValueError(
+            "coupled propagation needs one common time grid; got lengths "
+            f"{sorted(widths)}. Cross-phase modulation is evaluated sample by "
+            "sample, so channels sampled differently cannot be coupled."
+        )
+
+    spread = max(walkoff) - min(walkoff)
     if distance == 0.0:
         return a, PropagationDiagnostics(0, 0.0, 0.0, 0.0, 0.0)
 
-    omega = angular_frequency_grid(field.shape[0], sample_rate)
-    dispersion_operator = 0.5j * beta2 * omega**2
+    omega = angular_frequency_grid(a[0].shape[0], sample_rate)
+    operators = [0.5j * b * omega**2 - 1j * w * omega for b, w in zip(beta2, walkoff, strict=True)]
     ceiling = max_step if max_step is not None else distance
 
     travelled = 0.0
@@ -191,28 +337,58 @@ def propagate_ssfm(
     shortest = np.inf
     longest = 0.0
     peak_phase = 0.0
+    peak_slip = 0.0
 
     while travelled < distance:
         remaining = distance - travelled
         step = min(ceiling, remaining)
-        peak_power = float(np.max(np.abs(a) ** 2))
-        if gamma != 0.0 and peak_power > 0.0:
-            step = min(step, max_nonlinear_phase / (abs(gamma) * peak_power))
+        if gamma != 0.0:
+            # The largest rotation any channel will see is set by the *smallest*
+            # self power against the summed total, because 2*total - |A_k|**2
+            # grows as |A_k|**2 shrinks.
+            floor = np.abs(a[0]) ** 2
+            for field in a[1:]:
+                np.minimum(floor, np.abs(field) ** 2, out=floor)
+            peak_effective = float(np.max(2.0 * _total_power(a) - floor))
+            if peak_effective > 0.0:
+                step = min(step, max_nonlinear_phase / (abs(gamma) * peak_effective))
+            # Only the nonlinear operator cares where the channels sit relative
+            # to one another; the linear one is exact at any step length, so a
+            # linear run needs no walk-off bound at all.
+            if spread > 0.0:
+                step = min(step, max_walkoff_slip / (spread * sample_rate))
         # A step can only be shortened to the point where it still advances;
         # without this an extreme peak power would stall the loop.
         step = max(min(step, remaining), remaining * 1e-9)
 
-        half = np.exp(-alpha * step / 4.0 + dispersion_operator * (step / 2.0))
-        a = np.fft.ifft(np.fft.fft(a) * half)
-        phase = gamma * np.abs(a) ** 2 * step
-        a = a * np.exp(1j * phase)
-        a = np.fft.ifft(np.fft.fft(a) * half)
+        half = [np.exp(-alpha * step / 4.0 + op * (step / 2.0)) for op in operators]
+        a = [np.fft.ifft(np.fft.fft(f) * h) for f, h in zip(a, half, strict=True)]
+
+        if gamma != 0.0:
+            total = _total_power(a)
+            rotated = []
+            for field in a:
+                phase = gamma * (2.0 * total - np.abs(field) ** 2) * step
+                peak_phase = max(peak_phase, float(np.max(np.abs(phase))))
+                rotated.append(field * np.exp(1j * phase))
+            a = rotated
+
+        a = [np.fft.ifft(np.fft.fft(f) * h) for f, h in zip(a, half, strict=True)]
 
         travelled += step
         steps += 1
         shortest = min(shortest, step)
         longest = max(longest, step)
-        peak_phase = max(peak_phase, float(np.max(np.abs(phase))))
+        peak_slip = max(peak_slip, spread * step * sample_rate)
+
+    if spread > 0.0:
+        # Back into each channel's own retarded frame. This is the exact inverse
+        # of the accumulated -1j*w*omega*distance, so it cannot remove anything
+        # the propagation put there.
+        a = [
+            np.fft.ifft(np.fft.fft(f) * np.exp(1j * w * omega * distance))
+            for f, w in zip(a, walkoff, strict=True)
+        ]
 
     return a, PropagationDiagnostics(
         steps=steps,
@@ -220,6 +396,168 @@ def propagate_ssfm(
         shortest_step=float(shortest),
         longest_step=longest,
         peak_nonlinear_phase=peak_phase,
+        walkoff_span=spread * distance,
+        peak_walkoff_slip=peak_slip,
+    )
+
+
+def _total_power(fields: Sequence[np.ndarray]) -> np.ndarray:
+    """Summed instantaneous power of co-propagating fields [W], sample by sample."""
+    total = np.abs(fields[0]) ** 2
+    for field in fields[1:]:
+        total += np.abs(field) ** 2
+    return total
+
+
+def walkoff_from_dispersion(beta2: float, frequency_offset: float) -> float:
+    """Inverse-group-velocity offset ``d`` [s/m] of a channel ``frequency_offset`` [Hz] away.
+
+    ``d = beta2 * 2 * pi * frequency_offset``, the linear term of the same
+    expansion of ``beta(omega)`` whose quadratic term is the dispersion the
+    channel sees. Walk-off is therefore not an independent parameter: set the
+    dispersion to zero and channels stop sliding past one another, which is
+    exactly the condition under which cross-phase modulation is worst.
+
+    In the units a link budget is written in this is ``d = D * delta_lambda``:
+    at D = 17 ps/nm/km two channels 100 GHz apart (0.8 nm at 1550 nm) separate
+    by about 13.6 ps for every kilometre they travel.
+    """
+    return beta2 * 2.0 * math.pi * frequency_offset
+
+
+# --------------------------------------------------------------------------
+# Four-wave mixing
+# --------------------------------------------------------------------------
+
+
+def effective_length(alpha: float, distance: float) -> float:
+    """Nonlinear effective length ``L_eff = (1 - exp(-alpha*L)) / alpha`` [m].
+
+    The length a lossless fiber would need to accumulate the same nonlinear
+    effect as this lossy one. It saturates at ``1/alpha`` — about 21 km at
+    0.2 dB/km — which is why the second half of an 80 km span contributes almost
+    nothing nonlinear and why adding spans, not lengthening them, is what makes
+    nonlinearity accumulate.
+
+    Tends to ``distance`` as ``alpha`` tends to zero, and is evaluated that way
+    rather than dividing by something near zero.
+    """
+    if alpha * distance < 1e-9:
+        return distance
+    return (1.0 - math.exp(-alpha * distance)) / alpha
+
+
+def fwm_phase_mismatch(beta2: float, offset_i: float, offset_j: float, offset_k: float) -> float:
+    """Linear phase mismatch ``delta_beta`` [rad/m] of the product at i + j - k.
+
+    Four-wave mixing converts two photons from channels ``i`` and ``j`` into one
+    at ``k`` and one at ``f_i + f_j - f_k``. Energy is conserved by construction;
+    momentum is not, and the residual is what decides whether the product grows
+    or oscillates away.
+
+    Expanding ``beta(omega)`` to second order about any reference and forming
+    ``beta_i + beta_j - beta_k - beta_F``, the constant and group-delay terms
+    cancel exactly — they must, because the four frequencies satisfy
+    ``omega_i + omega_j = omega_k + omega_F`` — and what is left is::
+
+        delta_beta = -beta2 * (omega_i - omega_k) * (omega_j - omega_k)
+
+    Two things follow, and they are the whole story of why dispersion suppresses
+    four-wave mixing. It vanishes identically at zero dispersion, so a
+    dispersion-shifted fiber operated at its zero is the worst possible place to
+    put a WDM comb. And it grows as the *square* of the channel spacing, so
+    widening the grid buys suppression quadratically.
+
+    Offsets are in Hz from a common reference; only differences enter, so which
+    reference is irrelevant. The sign of the result is unobservable — the
+    efficiency below is even in it — but it is returned signed rather than
+    absolute so that the expression above can be read off the code.
+    """
+    two_pi = 2.0 * math.pi
+    return -beta2 * (two_pi * (offset_i - offset_k)) * (two_pi * (offset_j - offset_k))
+
+
+def fwm_efficiency(phase_mismatch: float, alpha: float, distance: float) -> float:
+    """Four-wave mixing efficiency, dimensionless and between 0 and 1.
+
+    Under undepleted pumps the product field obeys
+    ``dA_F/dz = i d gamma A_i A_j A_k* exp(i delta_beta z) - (alpha/2) A_F``,
+    and with the pumps decaying as ``exp(-alpha z / 2)`` this integrates to a
+    single mixing integral::
+
+        A_F(L) proportional to integral_0^L exp((i delta_beta - alpha) z) dz
+
+    The efficiency is that integral's squared magnitude normalised by
+    ``L_eff**2``, so that it is 1 when the process is perfectly phase matched
+    and the textbook form ``P_F = d**2 gamma**2 P_i P_j P_k L_eff**2 eta
+    exp(-alpha L)`` holds with no further factors. Written out::
+
+        eta = alpha**2 / (alpha**2 + delta_beta**2)
+              * [1 + 4 exp(-alpha L) sin**2(delta_beta L / 2) / (1 - exp(-alpha L))**2]
+
+    which is the expression usually quoted, and is what the complex integral
+    above reduces to. The integral is evaluated instead of the expanded form
+    because it stays well behaved in both limits: lossless, where the expression
+    is 0/0 and the true answer is ``sinc**2(delta_beta L / 2)``, and phase
+    matched, where it is 1.
+    """
+    if distance <= 0.0:
+        return 0.0
+    reference = effective_length(alpha, distance)
+    if reference <= 0.0:
+        return 0.0
+    rate = complex(-alpha, phase_mismatch)
+    if abs(rate) * distance < 1e-9:
+        integral = complex(distance)
+    else:
+        integral = (np.exp(rate * distance) - 1.0) / rate
+    return float(abs(integral) ** 2 / reference**2)
+
+
+def fwm_product_power(
+    power_i: float,
+    power_j: float,
+    power_k: float,
+    *,
+    gamma: float,
+    alpha: float,
+    distance: float,
+    phase_mismatch: float,
+    degenerate: bool,
+) -> float:
+    """Power generated at ``f_i + f_j - f_k`` over one span [W].
+
+    ``P_F = d**2 gamma**2 P_i P_j P_k L_eff**2 eta exp(-alpha L)``
+
+    ``d`` is the degeneracy factor, and it is not a fitted constant: expanding
+    ``|A|**2 A = A A A*`` for a sum of carriers, the term oscillating at
+    ``omega_i + omega_j - omega_k`` is assembled by choosing which of the two
+    un-conjugated factors is ``i`` and which is ``j``. There are two ways when
+    the pumps differ and one when they are the same channel, so ``d = 2`` for
+    non-degenerate mixing and ``d = 1`` for degenerate. Non-degenerate products
+    are therefore 6 dB stronger for the same pump powers — which is why the
+    products that land *between* channels on a uniform grid, from three distinct
+    pumps, dominate the ones that a single pump makes.
+
+    The cubic dependence on power is the reason four-wave mixing is a launch
+    power problem before it is anything else: 1 dB more per channel is 3 dB more
+    product, and 2 dB less in the ratio that matters.
+
+    Pump depletion is not modelled, so this overestimates once the product
+    approaches the pumps. It never does at any power a link is operated at.
+    """
+    factor = 1.0 if degenerate else 2.0
+    length = effective_length(alpha, distance)
+    efficiency = fwm_efficiency(phase_mismatch, alpha, distance)
+    return (
+        factor**2
+        * gamma**2
+        * power_i
+        * power_j
+        * power_k
+        * length**2
+        * efficiency
+        * math.exp(-alpha * distance)
     )
 
 

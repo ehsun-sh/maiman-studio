@@ -854,6 +854,11 @@ verdict, and DESIGN.md
      "default": true,
      "doc": "Add thermal (Johnson) noise"
     },
+    "ase_beat_noise": {
+     "type": "bool",
+     "default": true,
+     "doc": "Add signal-ASE and ASE-ASE beat noise"
+    },
     "gain": {
      "type": "float",
      "default": 10.0,
@@ -1087,6 +1092,11 @@ verdict, and DESIGN.md
      "type": "bool",
      "default": true,
      "doc": "Add thermal (Johnson) noise"
+    },
+    "ase_beat_noise": {
+     "type": "bool",
+     "default": true,
+     "doc": "Add LO-ASE beat noise"
     }
    },
    "ports": {
@@ -1290,6 +1300,11 @@ verdict, and DESIGN.md
      "type": "bool",
      "default": true,
      "doc": "Add thermal (Johnson) noise"
+    },
+    "ase_beat_noise": {
+     "type": "bool",
+     "default": true,
+     "doc": "Add LO-ASE beat noise"
     }
    },
    "ports": {
@@ -1459,6 +1474,30 @@ verdict, and DESIGN.md
      "unit": "",
      "min": 1e-06,
      "doc": "Largest nonlinear phase rotation allowed per split-step [rad]"
+    },
+    "cross_phase_modulation": {
+     "type": "bool",
+     "default": true,
+     "doc": "Couple the bands: each is phase-modulated by the others' power"
+    },
+    "max_walkoff_slip": {
+     "type": "float",
+     "default": 0.5,
+     "unit": "",
+     "min": 0.001,
+     "doc": "Largest relative slip between bands allowed per split-step [samples]"
+    },
+    "four_wave_mixing": {
+     "type": "bool",
+     "default": true,
+     "doc": "Generate mixing products between bands"
+    },
+    "mixing_floor": {
+     "type": "float",
+     "default": 70.0,
+     "unit": "dB",
+     "min": 0.0,
+     "doc": "Discard mixing products this far below the strongest band"
     },
     "pmd_coefficient": {
      "type": "float",
@@ -1786,6 +1825,107 @@ verdict, and DESIGN.md
     }
    }
   },
+  "OpticalFilter": {
+   "name": "Optical Filter",
+   "type": "OpticalFilter",
+   "class": "oosim.components.filters.OpticalFilter",
+   "category": "Passive",
+   "version": "0.1.0",
+   "parameters": {
+    "center_wavelength": {
+     "type": "float",
+     "default": 1550.0,
+     "unit": "nm",
+     "min": 1200.0,
+     "max": 1700.0,
+     "doc": "Centre of the passband"
+    },
+    "bandwidth": {
+     "type": "float",
+     "default": 50.0,
+     "unit": "GHz",
+     "min": 0.0,
+     "doc": "3 dB full width"
+    },
+    "order": {
+     "type": "float",
+     "default": 3.0,
+     "unit": "",
+     "min": 1.0,
+     "max": 10.0,
+     "doc": "Super-Gaussian order; 1 is Gaussian"
+    },
+    "insertion_loss": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "dB",
+     "min": 0.0,
+     "doc": "Loss at peak transmission"
+    },
+    "extinction": {
+     "type": "float",
+     "default": 40.0,
+     "unit": "dB",
+     "min": 0.0,
+     "doc": "Out-of-band rejection floor; 0 disables the floor"
+    }
+   },
+   "ports": {
+    "inputs": {
+     "in": "optical"
+    },
+    "outputs": {
+     "out": "optical"
+    }
+   }
+  },
+  "OpticalSpectrumAnalyzer": {
+   "name": "Optical Spectrum Analyzer",
+   "type": "OpticalSpectrumAnalyzer",
+   "class": "oosim.components.filters.OpticalSpectrumAnalyzer",
+   "category": "Measurements",
+   "version": "0.1.0",
+   "parameters": {
+    "center_wavelength": {
+     "type": "float",
+     "default": 1550.0,
+     "unit": "nm",
+     "min": 1200.0,
+     "max": 1700.0,
+     "doc": "Centre of the displayed span"
+    },
+    "span": {
+     "type": "float",
+     "default": 1000.0,
+     "unit": "GHz",
+     "min": 1.0,
+     "doc": "Displayed frequency span"
+    },
+    "points": {
+     "type": "float",
+     "default": 1024.0,
+     "unit": "",
+     "min": 16.0,
+     "max": 16384.0,
+     "doc": "Trace points"
+    },
+    "resolution_bandwidth": {
+     "type": "float",
+     "default": 12.5,
+     "unit": "GHz",
+     "min": 0.001,
+     "doc": "Instrument resolution; 12.5 GHz is 0.1 nm at 1550 nm"
+    }
+   },
+   "ports": {
+    "inputs": {
+     "in": "optical"
+    },
+    "outputs": {
+     "out": "metric"
+    }
+   }
+  },
   "PINPhotodiode": {
    "name": "PIN Photodiode",
    "type": "PINPhotodiode",
@@ -1830,6 +1970,11 @@ verdict, and DESIGN.md
      "type": "bool",
      "default": true,
      "doc": "Add thermal (Johnson) noise"
+    },
+    "ase_beat_noise": {
+     "type": "bool",
+     "default": true,
+     "doc": "Add signal-ASE and ASE-ASE beat noise"
     }
    },
    "ports": {
