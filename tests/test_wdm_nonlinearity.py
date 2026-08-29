@@ -279,7 +279,7 @@ def test_step_bounds_must_be_positive(bad: dict[str, float]) -> None:
             gamma=GAMMA,
             alpha=ALPHA,
             distance=SPAN,
-            **bad,  # type: ignore[arg-type]
+            **bad,
         )
 
 
@@ -355,8 +355,8 @@ def test_non_degenerate_products_are_six_db_stronger() -> None:
         "distance": SPAN,
         "phase_mismatch": 0.0,
     }
-    degenerate = fwm_product_power(POWER, POWER, POWER, degenerate=True, **common)  # type: ignore[arg-type]
-    mixed = fwm_product_power(POWER, POWER, POWER, degenerate=False, **common)  # type: ignore[arg-type]
+    degenerate = fwm_product_power(POWER, POWER, POWER, degenerate=True, **common)
+    mixed = fwm_product_power(POWER, POWER, POWER, degenerate=False, **common)
     assert 10.0 * math.log10(mixed / degenerate) == pytest.approx(6.0206, rel=1e-6)
 
 
@@ -554,6 +554,6 @@ def test_a_linear_span_is_untouched_by_either_effect() -> None:
     ctx, signal = comb(4)
     fiber = Fiber(length=80.0, attenuation=0.2, dispersion=17.0, nonlinearity=0.0)
     result = fiber.run(ctx, {"in": signal})
-    assert result["diagnostics"].mixing_products == 0  # type: ignore[attr-defined]
-    assert result["diagnostics"].steps == 0  # type: ignore[attr-defined]
-    assert len(result["out"].bands) == 4  # type: ignore[attr-defined]
+    assert result["diagnostics"].mixing_products == 0
+    assert result["diagnostics"].steps == 0
+    assert len(result["out"].bands) == 4

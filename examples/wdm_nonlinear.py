@@ -274,7 +274,7 @@ def main() -> None:
     print("     " + "-" * 60)
     for launch_dbm in (-3.0, 0.0, 3.0):
         for dispersion in (0.0, 17.0):
-            row = []
+            evms = []
             for coupled in (False, True):
                 graph, ports = build(
                     channels=CHANNELS,
@@ -283,10 +283,10 @@ def main() -> None:
                     coupled=coupled,
                     mixing=coupled,
                 )
-                row.append(graph.run()[ports["vsa"]].evm * 100.0)
+                evms.append(graph.run()[ports["vsa"]].evm * 100.0)
             print(
                 f"     {launch_dbm:5.0f}dBm  {dispersion:6.0f}ps/nm/km  "
-                f"{row[0]:10.2f} %  {row[1]:7.2f} %  {row[1] - row[0]:+8.2f} %"
+                f"{evms[0]:10.2f} %  {evms[1]:7.2f} %  {evms[1] - evms[0]:+8.2f} %"
             )
     print("     the independent column is what this simulator reported before today.")
     print("     at zero dispersion the neighbours never slide past, so the penalty is")
