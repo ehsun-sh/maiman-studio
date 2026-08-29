@@ -53,6 +53,26 @@ class CoherentReceiver(Component):
     shot-noise-limited Q-factor of QPSK is ``sqrt(R*P_s / (2*q*B))``, which the
     test suite asserts against a counted error rate rather than assuming.
 
+    **ASE beats with the LO, and on an amplified link that is the noise floor.**
+    The hybrid mixes everything at its input against the local oscillator, and
+    accompanying ASE is not exempt::
+
+        var = R**2 * (P_lo_x * S_x + P_lo_y * S_y) * B
+
+    on each of I and Q, with ``S`` the one-sided ASE density per polarization and
+    ``B`` the same bandwidth the shot noise uses. It is written per polarization
+    for the same reason the shot term is not: only ASE co-polarized with the LO
+    beats down to baseband, which is why a polarization-diverse receiver collects
+    twice the noise of a single-polarization one and hears twice as much signal
+    for it.
+
+    There is no optical-filter parameter here, and there does not need to be one.
+    A coherent receiver filters itself: only ASE within the electrical bandwidth
+    of the LO reaches baseband at all, so the spontaneous-spontaneous term that
+    forces a direct-detection front end to carry a filter is absent by
+    construction. That is a real advantage of the architecture rather than a
+    simplification of the model.
+
     Only the signal band nearest the LO is detected. The others beat at their
     frequency separation — hundreds of GHz for any realistic channel grid — which
     is far outside the electrical bandwidth of any receiver. They are genuinely
@@ -68,6 +88,7 @@ class CoherentReceiver(Component):
     temperature = Param(300.0, unit="", min=0.0, doc="Receiver temperature [K]")
     shot_noise = BoolParam(True, doc="Add LO-dominated shot noise")
     thermal_noise = BoolParam(True, doc="Add thermal (Johnson) noise")
+    ase_beat_noise = BoolParam(True, doc="Add LO-ASE beat noise")
 
     inputs = {"in": PortType.OPTICAL, "lo": PortType.OPTICAL}
     outputs = {"i": PortType.ELECTRICAL, "q": PortType.ELECTRICAL}
@@ -111,9 +132,20 @@ class CoherentReceiver(Component):
         current_q = responsivity * mix.imag
 
         bandwidth = self.noise_bandwidth(ctx)
-        # Signal-spontaneous beating with accompanying ASE is not modelled; the
-        # noise bins contribute no photocurrent here, exactly as they contribute
-        # no beat term in the direct-detection receiver.
+
+        if self.ase_beat_noise and signal.noise:
+            # Measured at the LO's frequency, not the signal's: the LO is what
+            # everything is mixed against, and a signal detuned out of the LO's
+            # band would not beat with the ASE sitting on top of it either.
+            psd_x, psd_y = signal.noise_psd_at(reference.f0)
+            lo_power_x = float(np.mean(np.abs(lo_x) ** 2))
+            lo_power_y = float(np.mean(np.abs(lo_y) ** 2))
+            variance = responsivity**2 * (lo_power_x * psd_x + lo_power_y * psd_y) * bandwidth
+            if variance > 0.0:
+                rng = ctx.rng(type(self).__name__, self.label, "ase-beat")
+                current_i = current_i + rng.normal(0.0, np.sqrt(variance), size=ctx.num_samples)
+                current_q = current_q + rng.normal(0.0, np.sqrt(variance), size=ctx.num_samples)
+
         if self.shot_noise and lo_power > 0.0:
             variance = Q_ELECTRON * responsivity * lo_power * bandwidth
             rng = ctx.rng(type(self).__name__, self.label, "shot")

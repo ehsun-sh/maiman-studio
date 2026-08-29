@@ -24,8 +24,9 @@
 > a hand-written loop that mutates the graph.
 >
 > Fiber nonlinearity is solved by adaptive-step split-step Fourier, EDFAs emit ASE into the
-> noise-bin model so amplified multi-span links give correct OSNR, and PMD is drawn as a random
-> realisation with the right Maxwellian statistics.
+> noise-bin model so amplified multi-span links give correct OSNR **and a Q-factor that follows
+> from it** — signal-ASE and ASE-ASE beat noise are modelled in both detector families — and PMD
+> is drawn as a random realisation with the right Maxwellian statistics.
 >
 > **Not implemented yet:** cross-phase modulation and four-wave mixing between channels,
 > wavelength-selective filtering, and the GUI. See the [roadmap](#roadmap).
@@ -304,6 +305,46 @@ The last row is the honest caveat — self-phase modulation *alone* also preserv
 shape invariance proves nothing by itself. It is invariance with both effects active that is the
 result.
 
+### What ASE beat noise is for
+
+An amplifier's OSNR is only half an answer. A photodiode squares the field, so ASE arriving with
+the signal *beats* against it rather than merely adding its power — and on any amplified link that
+beat term is the noise floor. Without it this project could compute OSNR to a hundredth of a dB
+over sixteen spans and then report a Q that had almost nothing to do with it:
+
+```
+8 x 80 km, each amplified to transparency, 10 Gb/s OOK
+
+   NF       OSNR    Q before    Q now   Q from OSNR
+  4 dB   25.96 dB     118.73    22.79         25.08
+  8 dB   21.96 dB     113.72    14.50         15.59
+ 14 dB   15.96 dB      94.83     6.83          7.51
+```
+
+The middle column is the old model. Ten decibels of OSNR cost it **nothing at all** — Q moved from
+118.7 to 94.8 while the link's optical margin collapsed — because the only thing ASE contributed
+was mean power and its shot noise. The right-hand column is the textbook relation
+`Q = 2·√(B_ref/B_e)·OSNR/(1+√(1+4·OSNR))`, checked first against its own known point: 14.5 dB must
+give Q ≈ 6, which is the industry figure for 10 Gb/s at 1e-9.
+
+The model now sits **just below** that limit at every point, which is the right side to be on — it
+carries shot, thermal and finite-extinction effects the closed form omits.
+
+Coherent detection has the same term, with ASE beating against the local oscillator instead, and
+there the check is `SNR = 2·OSNR·B_ref/R_s`. The gap closes as ASE takes over, which is what makes
+it a test of the beat term rather than of one operating point:
+
+| noise figure | OSNR | SNR | optical limit | gap |
+| ---: | ---: | ---: | ---: | ---: |
+| 4 dB | 22.08 dB | 18.82 dB | 21.01 dB | 2.18 dB |
+| 10 dB | 16.08 dB | 14.32 dB | 15.01 dB | 0.69 dB |
+| 16 dB | 10.08 dB | 8.78 dB | 9.01 dB | **0.23 dB** |
+
+Only ASE co-polarized with the signal beats with it, which is why a polarizer helps a receiver and
+why a coherent front end needs no optical filter at all: it is filtered by its own electrical
+bandwidth, so the ASE-ASE term that forces a direct-detection receiver to carry one is absent by
+construction.
+
 ## What this is
 
 A block-diagram simulator for optical systems: drop components on a canvas, wire a link, run it,
@@ -478,6 +519,10 @@ Every physics block ships with a test against a closed-form result, run in CI
 | Higher-order soliton (N=2) | Compresses at half a period, recovers at a full one | ✅ |
 | EDFA | `P_ASE = 2·n_sp·hν·(G−1)·B_o`; `n_sp = NF·G/2(G−1)` | ✅ |
 | OSNR | `58 + P_launch − NF − 10·log10(spans)`, over 16 spans | ✅ |
+| **Signal-ASE beat** | Q on an amplified link tracks `2√(B_ref/B_e)·OSNR/(1+√(1+4·OSNR))` to 15% | ✅ |
+| ASE beat, coherent | Electrical SNR converges on `2·OSNR·B_ref/R_s` as ASE dominates — 0.23 dB | ✅ |
+| Beat is polarization-selective | Co-polarized ASE beats; orthogonal ASE does not, on both detectors | ✅ |
+| Matched filtering | Costs `10·log10(f_s/R_s)` to omit — the receiver integrates noise it cannot use | ✅ |
 | **PMD** | DGD Maxwellian: `⟨τ²⟩/⟨τ⟩² = 3π/8`, mean `∝√L`, spread `0.42·mean` | ✅ |
 | APD | `F(M) = kM + (2−1/M)(1−k)`; an **interior optimum gain** exists | ✅ |
 | XPM / FWM | Cross-channel nonlinearity | ⬜ |

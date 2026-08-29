@@ -70,10 +70,14 @@ OSNR_REFERENCE_BANDWIDTH = 12.5e9
 
 
 def noise_psd_at(signal: OpticalSignal, frequency: float) -> float:
-    """Total noise PSD at ``frequency`` [W/Hz], summed over both polarizations."""
-    return sum(
-        bin_.psd_x + bin_.psd_y for bin_ in signal.noise if bin_.f_start <= frequency < bin_.f_end
-    )
+    """Total noise PSD at ``frequency`` [W/Hz], summed over both polarizations.
+
+    Defers to :meth:`OpticalSignal.noise_psd_at` so that a measurement and a
+    detector can never disagree about how much ASE is present — they did once,
+    by a factor equal to the number of amplifiers in the chain.
+    """
+    psd_x, psd_y = signal.noise_psd_at(frequency)
+    return psd_x + psd_y
 
 
 def osnr(signal: OpticalSignal, *, reference_bandwidth: float = OSNR_REFERENCE_BANDWIDTH) -> float:

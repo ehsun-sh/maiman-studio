@@ -36,9 +36,33 @@ class PINPhotodiode(Component):
       at their frequency separation, far above any realistic receiver bandwidth
       for the channel spacings this is used with, but it is genuinely absent
       rather than merely negligible.
-    * Noise bins contribute mean power and its shot noise, but signal-ASE beat
-      noise is not modelled. On an amplified link that term dominates, so a
-      Q-factor computed after an EDFA is optimistic.
+    * Bands are detected incoherently, so a *band* never beats with another band.
+      ASE does beat with the signal, and that is modelled — see below.
+
+    **ASE beat noise.** A photodiode squares the field, so an ASE field arriving
+    with the signal does not simply add its power: it beats. Writing
+    ``i = R|E_s + E_n|**2`` gives a signal-spontaneous cross term and a
+    spontaneous-spontaneous one, and on any amplified link the first dominates
+    every other noise source in this class by orders of magnitude::
+
+        var_sig_sp = 4 R**2 (P_x S_x + P_y S_y) B_e
+        var_sp_sp  = 2 R**2 (S_x**2 + S_y**2) B_o B_e
+
+    ``S`` is the one-sided ASE density per polarization at the signal's own
+    frequency, which is why :meth:`OpticalSignal.noise_psd_at` exists — the
+    integrated noise power is spread over the whole amplifier band and is the
+    wrong number. The signal-spontaneous term is written per polarization so a
+    signal on Y beats with Y's ASE and not with X's; ASE orthogonal to the signal
+    contributes only to the spontaneous-spontaneous term, which is what a
+    polarization filter in front of a receiver exploits.
+
+    ``optical_bandwidth`` is the receiver's optical filter, and it has to be
+    stated because the spontaneous-spontaneous term scales with it. Left at zero
+    the full width of the noise bin is used, which for an EDFA's default 4 THz is
+    a receiver with no filter at all — physically meaningful, ruinous, and not
+    what anyone builds. A real front end filters to a few times the line rate.
+    This parameter is a stand-in for the wavelength-selective filter the
+    component library does not have yet, and should move there when it lands.
     """
 
     display_name = "PIN Photodiode"
@@ -50,6 +74,10 @@ class PINPhotodiode(Component):
     temperature = Param(300.0, unit="", min=0.0, doc="Receiver temperature [K]")
     shot_noise = BoolParam(True, doc="Add shot noise")
     thermal_noise = BoolParam(True, doc="Add thermal (Johnson) noise")
+    ase_beat_noise = BoolParam(True, doc="Add signal-ASE and ASE-ASE beat noise")
+    optical_bandwidth = Param(
+        0.0, unit="GHz", min=0.0, doc="Receiver optical filter; 0 uses the whole noise bin"
+    )
 
     inputs = {"in": PortType.OPTICAL}
     outputs = {"out": PortType.ELECTRICAL}
@@ -66,14 +94,51 @@ class PINPhotodiode(Component):
         """Effective one-sided noise bandwidth [Hz] of the sampled representation."""
         return ctx.sample_rate / 2.0
 
+    def optical_noise_bandwidth(self, signal: OpticalSignal, frequency: float) -> float:
+        """Optical bandwidth the ASE actually reaches the diode through [Hz].
+
+        The declared filter when there is one, otherwise the width of the noise
+        bin the signal sits in — an unfiltered receiver, which is a real thing to
+        be able to model and a terrible thing to build.
+        """
+        declared = self.si("optical_bandwidth")
+        covering = [b.bandwidth for b in signal.noise if b.f_start <= frequency < b.f_end]
+        if not covering:
+            return declared
+        widest = max(covering)
+        return min(declared, widest) if declared > 0.0 else widest
+
+    def received_noise_power(self, signal: OpticalSignal, frequency: float) -> float:
+        """ASE power that survives the receiver's optical filter [W].
+
+        **The filter has to cut the power as well as the beat term.** Passing the
+        whole amplifier band's ASE to the diode while integrating the
+        spontaneous-spontaneous beat over a narrow filter is not a conservative
+        approximation, it is two different receivers averaged together: an EDFA's
+        default 4 THz carries as much ASE power as the signal itself, so the shot
+        noise on it swamps the beat terms the filter was introduced to control.
+        Filtering one and not the other was the first version of this method and
+        it put 2.4x too much noise in a space.
+        """
+        psd_x, psd_y = signal.noise_psd_at(frequency)
+        if psd_x == 0.0 and psd_y == 0.0:
+            return signal.noise_power()
+        return (psd_x + psd_y) * self.optical_noise_bandwidth(signal, frequency)
+
     def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
         signal: OpticalSignal = inputs["in"]
 
-        power = np.zeros(ctx.num_samples, dtype=np.float64)
+        power_x = np.zeros(ctx.num_samples, dtype=np.float64)
+        power_y = np.zeros(ctx.num_samples, dtype=np.float64)
         for band in signal.bands:
-            power += np.abs(band.Ex.astype(np.complex128)) ** 2
-            power += np.abs(band.Ey.astype(np.complex128)) ** 2
-        power += signal.noise_power()
+            power_x += np.abs(band.Ex.astype(np.complex128)) ** 2
+            power_y += np.abs(band.Ey.astype(np.complex128)) ** 2
+        reference = (
+            signal.bands[0].f0
+            if signal.bands
+            else (signal.noise[0].f_start if signal.noise else 0.0)
+        )
+        power = power_x + power_y + self.received_noise_power(signal, reference)
 
         gain = self.multiplication()
         primary = self.si("responsivity") * power + self.si("dark_current")
@@ -95,6 +160,22 @@ class PINPhotodiode(Component):
             )
             rng = ctx.rng(type(self).__name__, self.label, "shot")
             current = current + rng.normal(0.0, np.sqrt(shot_variance))
+
+        if self.ase_beat_noise and signal.noise:
+            responsivity = self.si("responsivity")
+            psd_x, psd_y = signal.noise_psd_at(reference)
+            optical = self.optical_noise_bandwidth(signal, reference)
+
+            # Signal-spontaneous. Time-varying, because it rides on the
+            # instantaneous power: a mark is noisier than a space, which is the
+            # whole reason an amplified link's eye closes from the top.
+            sig_sp = 4.0 * responsivity**2 * (power_x * psd_x + power_y * psd_y) * bandwidth
+            # Spontaneous-spontaneous. Constant, and present even in a space.
+            sp_sp = 2.0 * responsivity**2 * (psd_x**2 + psd_y**2) * optical * bandwidth
+
+            variance = np.maximum(sig_sp + sp_sp, 0.0) * gain**2 * self.excess_noise_factor()
+            rng = ctx.rng(type(self).__name__, self.label, "ase-beat")
+            current = current + rng.normal(0.0, np.sqrt(variance))
 
         if self.thermal_noise and self.si("load_resistance") > 0.0:
             thermal_variance = (

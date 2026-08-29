@@ -183,6 +183,26 @@ class OpticalSignal:
         """Signal plus noise power [W]."""
         return self.signal_power() + self.noise_power()
 
+    def noise_psd_at(self, frequency: float) -> tuple[float, float]:
+        """One-sided ASE power spectral density at ``frequency`` [W/Hz per polarization].
+
+        Returns ``(psd_x, psd_y)`` **summed over every bin covering the
+        frequency**, because bins routinely overlap: each amplifier in a chain
+        appends its own, and eight spans leave eight bins spanning the same band.
+        Taking the first match instead undercounts the density by the number of
+        amplifiers, which is a factor of eight on a link where every other number
+        still looks entirely reasonable.
+
+        This is what a detector needs to form signal-spontaneous beat noise: not
+        the *integrated* noise power, which is spread over the whole amplifier
+        bandwidth, but the density where the signal actually sits. The two differ
+        by orders of magnitude, and using the first in place of the second is the
+        difference between a beat term and a rounding error.
+        """
+        psd_x = sum(b.psd_x for b in self.noise if b.f_start <= frequency < b.f_end)
+        psd_y = sum(b.psd_y for b in self.noise if b.f_start <= frequency < b.f_end)
+        return float(psd_x), float(psd_y)
+
 
 @dataclass(frozen=True)
 class ElectricalSignal:
