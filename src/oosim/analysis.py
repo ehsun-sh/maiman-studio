@@ -83,20 +83,33 @@ def noise_psd_at(signal: OpticalSignal, frequency: float) -> float:
 def osnr(signal: OpticalSignal, *, reference_bandwidth: float = OSNR_REFERENCE_BANDWIDTH) -> float:
     """Optical signal-to-noise ratio [dB], in a reference bandwidth.
 
-    Signal power is the total in the sampled bands; noise power is the noise
-    PSD *at each band's own centre frequency*, integrated over the reference
-    bandwidth. Quoting OSNR in a fixed reference bandwidth rather than the
-    signal's own is the convention, and it is the reason a 10 G and a 100 G
-    channel with the same OSNR do not have the same margin.
+    **OSNR is per channel, and this reports the strongest one.** Summing the
+    power of every band and dividing by the noise at every band centre gives the
+    right answer only while all the channels are equal, and silently the wrong one
+    the moment they are not: after a demultiplexer suppresses three channels of
+    four, the numerator loses them but the denominator still counts their noise,
+    and the surviving channel's OSNR reads 6 dB low. That is what a first version
+    of this function did, and a four-channel example is what found it.
+
+    Taking the strongest band is what an instrument-based measurement does — you
+    find the peak and read the shoulder beside it — and it leaves the
+    single-channel and equal-channel cases exactly as they were.
+
+    Quoting OSNR in a fixed reference bandwidth rather than the signal's own is
+    the convention, and it is the reason a 10 G and a 100 G channel with the same
+    OSNR do not have the same margin.
     """
     if reference_bandwidth <= 0.0:
         raise ValueError(f"reference_bandwidth must be positive, got {reference_bandwidth}")
+    if not signal.bands:
+        return -math.inf
 
-    signal_power = signal.signal_power()
+    strongest = max(signal.bands, key=lambda band: band.average_power())
+    signal_power = strongest.average_power()
     if signal_power <= 0.0:
         return -math.inf
 
-    noise_power = sum(noise_psd_at(signal, band.f0) * reference_bandwidth for band in signal.bands)
+    noise_power = noise_psd_at(signal, strongest.f0) * reference_bandwidth
     if noise_power <= 0.0:
         return math.inf
     return 10.0 * math.log10(signal_power / noise_power)

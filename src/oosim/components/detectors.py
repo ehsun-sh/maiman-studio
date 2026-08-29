@@ -56,13 +56,16 @@ class PINPhotodiode(Component):
     contributes only to the spontaneous-spontaneous term, which is what a
     polarization filter in front of a receiver exploits.
 
-    ``optical_bandwidth`` is the receiver's optical filter, and it has to be
-    stated because the spontaneous-spontaneous term scales with it. Left at zero
-    the full width of the noise bin is used, which for an EDFA's default 4 THz is
-    a receiver with no filter at all — physically meaningful, ruinous, and not
-    what anyone builds. A real front end filters to a few times the line rate.
-    This parameter is a stand-in for the wavelength-selective filter the
-    component library does not have yet, and should move there when it lands.
+    **The spontaneous-spontaneous term scales with the optical bandwidth, so
+    something has to set it.** This diode integrates whatever ASE reaches it, and
+    an unfiltered receiver on an eight-span link genuinely loses a factor of three
+    in Q to spontaneous-spontaneous beating alone. That is a real result, not a
+    modelling artefact, and it is why nobody builds one:
+    :class:`~oosim.components.filters.OpticalFilter` belongs in front of this
+    block on any amplified link. An earlier version of this class carried the
+    passband as a parameter of its own, which was a stand-in for a component that
+    did not exist yet; it does now, and two ways to express one piece of hardware
+    would only drift apart.
     """
 
     display_name = "PIN Photodiode"
@@ -75,9 +78,6 @@ class PINPhotodiode(Component):
     shot_noise = BoolParam(True, doc="Add shot noise")
     thermal_noise = BoolParam(True, doc="Add thermal (Johnson) noise")
     ase_beat_noise = BoolParam(True, doc="Add signal-ASE and ASE-ASE beat noise")
-    optical_bandwidth = Param(
-        0.0, unit="GHz", min=0.0, doc="Receiver optical filter; 0 uses the whole noise bin"
-    )
 
     inputs = {"in": PortType.OPTICAL}
     outputs = {"out": PortType.ELECTRICAL}
@@ -97,28 +97,23 @@ class PINPhotodiode(Component):
     def optical_noise_bandwidth(self, signal: OpticalSignal, frequency: float) -> float:
         """Optical bandwidth the ASE actually reaches the diode through [Hz].
 
-        The declared filter when there is one, otherwise the width of the noise
-        bin the signal sits in — an unfiltered receiver, which is a real thing to
-        be able to model and a terrible thing to build.
+        The width of the noise bin the signal sits in, which is whatever the last
+        filter in the line left behind. A diode has no wavelength selectivity of
+        its own, so this is a question about the link and not about the detector.
         """
-        declared = self.si("optical_bandwidth")
         covering = [b.bandwidth for b in signal.noise if b.f_start <= frequency < b.f_end]
-        if not covering:
-            return declared
-        widest = max(covering)
-        return min(declared, widest) if declared > 0.0 else widest
+        return max(covering) if covering else 0.0
 
     def received_noise_power(self, signal: OpticalSignal, frequency: float) -> float:
-        """ASE power that survives the receiver's optical filter [W].
+        """ASE power arriving with the signal [W].
 
-        **The filter has to cut the power as well as the beat term.** Passing the
-        whole amplifier band's ASE to the diode while integrating the
-        spontaneous-spontaneous beat over a narrow filter is not a conservative
-        approximation, it is two different receivers averaged together: an EDFA's
-        default 4 THz carries as much ASE power as the signal itself, so the shot
-        noise on it swamps the beat terms the filter was introduced to control.
-        Filtering one and not the other was the first version of this method and
-        it put 2.4x too much noise in a space.
+        Density at the signal's frequency times the width it survives over, which
+        is the same pair of numbers the beat terms use. Deriving the mean power
+        and the beat variance from one source is deliberate: an early version
+        took them from different places — the whole amplifier band for the power
+        and a narrow filter for the beat — and that is not a conservative
+        approximation but two different receivers averaged together. It put 2.4x
+        too much noise in a space.
         """
         psd_x, psd_y = signal.noise_psd_at(frequency)
         if psd_x == 0.0 and psd_y == 0.0:
@@ -133,8 +128,16 @@ class PINPhotodiode(Component):
         for band in signal.bands:
             power_x += np.abs(band.Ex.astype(np.complex128)) ** 2
             power_y += np.abs(band.Ey.astype(np.complex128)) ** 2
+        # The strongest band, not the first. A detector has no wavelength
+        # selectivity, so "which channel is this" is decided by whatever survived
+        # the last filter — and on a demultiplexed comb the first band in the list
+        # is a suppressed neighbour a full channel spacing away. Reading the ASE
+        # density there returns zero, because a filter has already clipped the
+        # noise bins to its own passband, and the beat terms below then evaluate
+        # to nothing at all. Silently: the link simply looks four times better
+        # than its own OSNR allows.
         reference = (
-            signal.bands[0].f0
+            max(signal.bands, key=lambda b: b.average_power()).f0
             if signal.bands
             else (signal.noise[0].f_start if signal.noise else 0.0)
         )

@@ -19,7 +19,7 @@ from .detectors import APDPhotodiode, PINPhotodiode
 from .dsp import ButterflyEqualizer, DispersionCompensator
 from .electrical import DCVoltage, IQDriver, NRZDriver, PRBSGenerator
 from .fiber import Fiber
-from .filters import ElectricalFilter
+from .filters import ElectricalFilter, OpticalFilter, OpticalSpectrumAnalyzer
 from .mapping import DifferentialDecoder, QAMMapper
 from .meters import OSNRMeter, PowerMeter
 from .modulators import IQModulator, MachZehnderModulator
@@ -58,6 +58,8 @@ __all__ = [
     "MachZehnderModulator",
     "NRZDriver",
     "OSNRMeter",
+    "OpticalFilter",
+    "OpticalSpectrumAnalyzer",
     "PINPhotodiode",
     "PRBSGenerator",
     "PolarizationCombiner",

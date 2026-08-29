@@ -23,6 +23,7 @@ in units of sqrt(W). Average power is the mean of that over the time window.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -378,6 +379,113 @@ class PowerReading:
     def __repr__(self) -> str:
         per_band = ", ".join(f"{b.wavelength_nm:.2f}nm={b.power_dbm:.3f}dBm" for b in self.bands)
         return f"PowerReading({self.power_dbm:.3f} dBm" + (f"; {per_band})" if per_band else ")")
+
+
+@dataclass(frozen=True)
+class OpticalSpectrum:
+    """A trace from an optical spectrum analyser.
+
+    ``power_w`` is the power falling in each display bin. What an *instrument*
+    shows is that power integrated over its resolution bandwidth, which is
+    :meth:`power_per_resolution`, and the distinction is the point of the class
+    rather than a presentational detail.
+
+    A flat noise density and a discrete carrier respond to the resolution setting
+    in opposite ways. Widening it sweeps more of the density into each reading, so
+    ASE rises decibel for decibel; a carrier already lies entirely inside the
+    window, so it does not move at all. That asymmetry is why an OSNR figure means
+    nothing without the bandwidth it was quoted in — and it is also why this
+    cannot be stored as a density and scaled by the resolution, which would move
+    the carrier too. The first version of this class did exactly that.
+    """
+
+    frequencies: np.ndarray
+    """Display grid [Hz]."""
+
+    power_w: np.ndarray
+    """Power in each display bin [W]."""
+
+    resolution_bandwidth: float
+    """The instrument's resolution [Hz]."""
+
+    def __post_init__(self) -> None:
+        if self.frequencies.shape != self.power_w.shape:
+            raise ValueError(
+                f"frequencies and power_w differ in shape, "
+                f"{self.frequencies.shape} and {self.power_w.shape}"
+            )
+        if self.resolution_bandwidth <= 0:
+            raise ValueError(
+                f"resolution_bandwidth must be positive, got {self.resolution_bandwidth}"
+            )
+        object.__setattr__(self, "frequencies", freeze(self.frequencies))
+        object.__setattr__(self, "power_w", freeze(self.power_w))
+
+    @property
+    def step(self) -> float:
+        """Spacing of the display grid [Hz]."""
+        grid = np.asarray(self.frequencies)
+        return float(grid[1] - grid[0]) if grid.shape[0] > 1 else self.resolution_bandwidth
+
+    @property
+    def wavelengths_nm(self) -> np.ndarray:
+        """Display grid as vacuum wavelength [nm], which is how an OSA is read."""
+        from .units import C_LIGHT
+
+        return C_LIGHT / np.asarray(self.frequencies) * 1e9
+
+    def total_power(self) -> float:
+        """Power across the whole trace [W]."""
+        return float(np.sum(np.asarray(self.power_w)))
+
+    def density(self) -> np.ndarray:
+        """Power spectral density [W/Hz] — meaningful for noise, not for a carrier."""
+        return np.asarray(self.power_w) / self.step
+
+    def power_per_resolution(self) -> np.ndarray:
+        """What the instrument displays: power within one resolution bandwidth [W].
+
+        The resolution filter is Gaussian, scaled so that its peak is 1 and its
+        area is one resolution bandwidth. Those two conditions are what make the
+        trace mean the right thing for both kinds of feature at once: a carrier
+        narrower than the setting reads its own power, and a flat density reads
+        ``density * resolution_bandwidth``.
+
+        A rectangular window satisfies the same two conditions and is still wrong,
+        because it turns every carrier into a flat plateau one bandwidth wide —
+        ``argmax`` then reports a peak half a resolution bandwidth off centre,
+        which at 12.5 GHz is 6 GHz and enough to put a channel on the wrong side
+        of a grid boundary. A real instrument's resolution filter has no flat top
+        either, so this is the more faithful shape as well as the better-behaved
+        one.
+        """
+        width = self.resolution_bandwidth / self.step
+        sigma = width / math.sqrt(2.0 * math.pi)
+        half = max(1, math.ceil(4.0 * sigma))
+        offsets = np.arange(-half, half + 1, dtype=np.float64)
+        kernel = np.exp(-0.5 * (offsets / sigma) ** 2)
+        return np.convolve(np.asarray(self.power_w), kernel, mode="same")
+
+    def power_dbm(self, floor_w: float = 1e-18) -> np.ndarray:
+        """The trace in dBm, floored so an empty region plots instead of diverging."""
+        return 10.0 * np.log10(np.maximum(self.power_per_resolution(), floor_w) * 1e3)
+
+    def peak(self) -> tuple[float, float]:
+        """``(frequency, power_per_resolution)`` of the largest point."""
+        displayed = self.power_per_resolution()
+        index = int(np.argmax(displayed))
+        return float(self.frequencies[index]), float(displayed[index])
+
+    def __repr__(self) -> str:
+        frequency, power = self.peak()
+        from .units import C_LIGHT
+
+        return (
+            f"OpticalSpectrum({len(self.frequencies)} points, peak "
+            f"{C_LIGHT / frequency * 1e9:.2f} nm at "
+            f"{10.0 * np.log10(max(power, 1e-18) * 1e3):.2f} dBm/"
+            f"{self.resolution_bandwidth / 1e9:.1f}GHz)"
+        )
 
 
 @dataclass(frozen=True)

@@ -13,6 +13,7 @@ not be introduced: it is GPL-2.0-or-later, and linking it — directly or throug
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
@@ -359,6 +360,50 @@ def gaussian_lowpass_response(frequency: np.ndarray, bandwidth: float) -> np.nda
     if bandwidth <= 0.0:
         raise ValueError(f"bandwidth must be positive, got {bandwidth}")
     return np.exp(-0.5 * np.log(2.0) * (frequency / bandwidth) ** 2)
+
+
+def super_gaussian_response(frequency: np.ndarray, bandwidth: float, order: int) -> np.ndarray:
+    """Amplitude response of a super-Gaussian band-pass of 3 dB *full* width ``bandwidth``.
+
+    ``|H(f)|**2 = exp(-ln2 * (2f/B)**(2n))``, which is exactly 1/2 at ``f = B/2``
+    for every order — so the declared width means the same thing whatever the
+    shape, and only the steepness of the skirts changes.
+
+    Order 1 is an ordinary Gaussian, the shape of a thin-film filter. Raising the
+    order flattens the top and steepens the edges towards the brick wall a
+    wavelength-selective switch approximates; 3 to 5 is the usual range for a
+    ROADM channel. The flat top matters for a signal passing through many of
+    them, because a Gaussian's rounded peak narrows the passband a little at
+    every hop while a flat one does not.
+    """
+    if bandwidth <= 0.0:
+        raise ValueError(f"bandwidth must be positive, got {bandwidth}")
+    if order < 1:
+        raise ValueError(f"order must be >= 1, got {order}")
+    return np.exp(-0.5 * np.log(2.0) * (2.0 * frequency / bandwidth) ** (2 * order))
+
+
+def super_gaussian_noise_bandwidth(bandwidth: float, order: int) -> float:
+    """Equivalent noise bandwidth of :func:`super_gaussian_response` [Hz].
+
+    ``B_n = integral |H(f)|**2 df = B * Gamma(1 + 1/2n) / ln2**(1/2n)``.
+
+    Having it in closed form is what lets a filtered ASE power be checked by
+    arithmetic. At order 1 it is ``B * sqrt(pi/4ln2) ~ 1.0645 B``, which is
+    :func:`gaussian_noise_bandwidth` and is asserted to equal it exactly.
+
+    It does *not* approach ``B`` monotonically, which is worth knowing before
+    reading a ratio near 1 as convergence: measured, the ratio is 1.0645, 0.9934,
+    0.9862, 0.9869, 0.9915 at orders 1, 2, 3, 5 and 10. It undershoots around
+    order 3 and comes back. A Gaussian's rounded shoulders pass more than its 3 dB
+    width; a steep skirt passes slightly less before the flat top wins it back.
+    """
+    if bandwidth <= 0.0:
+        raise ValueError(f"bandwidth must be positive, got {bandwidth}")
+    if order < 1:
+        raise ValueError(f"order must be >= 1, got {order}")
+    exponent = 1.0 / (2.0 * order)
+    return float(bandwidth * math.gamma(1.0 + exponent) / np.log(2.0) ** exponent)
 
 
 def gaussian_noise_bandwidth(bandwidth: float) -> float:

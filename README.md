@@ -29,7 +29,7 @@
 > is drawn as a random realisation with the right Maxwellian statistics.
 >
 > **Not implemented yet:** cross-phase modulation and four-wave mixing between channels,
-> wavelength-selective filtering, and the GUI. See the [roadmap](#roadmap).
+> and the GUI. See the [roadmap](#roadmap).
 >
 > This is not yet a useful simulator. It is a foundation with the expensive decisions made and
 > tested. Criticism of those decisions is worth more right now than any feature —
@@ -345,6 +345,37 @@ why a coherent front end needs no optical filter at all: it is filtered by its o
 bandwidth, so the ASE-ASE term that forces a direct-detection receiver to carry one is absent by
 construction.
 
+### Wavelength selection, and what a filter is really for
+
+`python examples/wdm_demux.py` puts four channels on a 100 GHz grid through four amplified spans
+and demultiplexes one. Because every band carries its own centre frequency, that is a real
+wavelength-selective operation and not a choice of array index — a filter tuned *between* two
+channels attenuates both.
+
+The second job is the one that surprises people. An amplifier emits ASE across four terahertz and
+every hertz of it reaches the photodiode and beats there:
+
+| link | OSNR | ASE power | Q | vs OSNR limit |
+| :--- | ---: | ---: | ---: | ---: |
+| no demultiplexer | 29.93 dB | 0.3250 mW | 7.43 | 0.19× |
+| 50 GHz demux | 26.92 dB | 0.0040 mW | 25.04 | **0.89×** |
+
+Eighty times less ASE reaches the diode, and the demultiplexed link lands just under its own OSNR
+limit — which is where a real receiver sits. **The OSNR figure barely moves**: it is quoted in a
+fixed 12.5 GHz reference bandwidth, so it cannot see ASE removed outside that band. The cheapest
+improvement available to a receiver is invisible to the number everyone quotes.
+
+The filter's skirts are floored at a declared `extinction`, because a super-Gaussian's are not. A
+third-order 50 GHz passband is `exp(-2838)` one channel spacing away — not a small number but
+exactly zero in double precision, which would make rejection infinite and a chain of filters
+accumulate no crosstalk at all. Real hardware specifies 30–50 dB and it is that floor, not the
+shape, that decides what leaks through a long line of them.
+
+The **[OSA](src/oosim/components/filters.py)** finally makes the signal model visible: bands and
+noise bins rendered onto one grid, the way an instrument shows them. Its resolution bandwidth is
+not cosmetic — widening it raises the ASE trace decibel for decibel and leaves a carrier exactly
+where it is, which is the clearest demonstration of why OSNR needs a stated reference bandwidth.
+
 ## What this is
 
 A block-diagram simulator for optical systems: drop components on a canvas, wire a link, run it,
@@ -479,7 +510,7 @@ time window, and results are reproducible.
 | **1 — MVP: linear link** *(essentially done)* | ✅ PRBS → NRZ → laser → MZM → fiber (α + CD) → PIN → filter → eye/Q/BER, validated end to end. **Python only, no GUI.** | ~2–3 months |
 | **1.5 — Nonlinear & amplified** ✅ | Adaptive-step SSFM, Kerr, EDFA with ASE, OSNR, PMD, APD | ~2 months |
 | **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier phase recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
-| **3 — GUI & WDM** | Session server, React Flow graph editor, wavelength-selective filters and an OSA · DWDM + XPM/FWM crosstalk, 400G/800G references, CuPy back-end | ~6 months |
+| **3 — GUI & WDM** | ✅ Wavelength-selective filters and an OSA. Session server, React Flow graph editor · DWDM + XPM/FWM crosstalk, 400G/800G references, CuPy back-end | ~6 months |
 | **4 — PIC** | Waveguides, ring resonators, MMI, MZI via integration with an existing S-matrix solver; PDK import | — |
 
 ¹ One developer, part-time. Estimates, not commitments.
@@ -522,6 +553,11 @@ Every physics block ships with a test against a closed-form result, run in CI
 | **Signal-ASE beat** | Q on an amplified link tracks `2√(B_ref/B_e)·OSNR/(1+√(1+4·OSNR))` to 15% | ✅ |
 | ASE beat, coherent | Electrical SNR converges on `2·OSNR·B_ref/R_s` as ASE dominates — 0.23 dB | ✅ |
 | Beat is polarization-selective | Co-polarized ASE beats; orthogonal ASE does not, on both detectors | ✅ |
+| Filter noise bandwidth | `B_n = B·Γ(1+1/2n)/ln2^(1/2n)`, against numerical integration; order 1 is the Gaussian | ✅ |
+| Filtered ASE power | Exactly density × `B_n`; a demux passes its own equivalent noise bandwidth | ✅ |
+| Wavelength selectivity | A filter between two channels attenuates both; rejection stops at `extinction` | ✅ |
+| OSA normalisation | Trace integrates back to an independent power meter; ASE reads density × RBW | ✅ |
+| Per-channel OSNR | Survives a demultiplexer that suppresses three channels of four | ✅ |
 | Matched filtering | Costs `10·log10(f_s/R_s)` to omit — the receiver integrates noise it cannot use | ✅ |
 | **PMD** | DGD Maxwellian: `⟨τ²⟩/⟨τ⟩² = 3π/8`, mean `∝√L`, spread `0.42·mean` | ✅ |
 | APD | `F(M) = kM + (2−1/M)(1−k)`; an **interior optimum gain** exists | ✅ |

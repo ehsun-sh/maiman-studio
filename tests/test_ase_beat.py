@@ -44,6 +44,7 @@ from oosim.components import (
     IQSampler,
     MachZehnderModulator,
     NRZDriver,
+    OpticalFilter,
     OSNRMeter,
     PINPhotodiode,
     PRBSGenerator,
@@ -113,8 +114,15 @@ def amplified_ook(
         graph.connect(fiber, amplifier["in"])
         node = amplifier
 
+    if optical_bandwidth > 0.0:
+        channel_filter = graph.add(
+            OpticalFilter(center_wavelength=1550.0, bandwidth=optical_bandwidth)
+        )
+        graph.connect(node, channel_filter["in"])
+        node = channel_filter
+
     meter = graph.add(OSNRMeter())
-    detector = graph.add(PINPhotodiode(ase_beat_noise=beat, optical_bandwidth=optical_bandwidth))
+    detector = graph.add(PINPhotodiode(ase_beat_noise=beat))
     receiver_filter = graph.add(ElectricalFilter(bandwidth=FILTER_BANDWIDTH / 1e9))
     analyzer = graph.add(BERAnalyzer())
     graph.connect(node, meter["in"])
@@ -166,11 +174,13 @@ def test_q_responds_to_the_amplifier_noise_figure() -> None:
 
 
 def test_the_optical_filter_cuts_power_and_beat_together() -> None:
-    """Narrowing the receiver's optical filter must improve the link.
+    """Narrowing the channel filter must improve the link.
 
-    It is the one knob that reduces ASE-ASE beating without touching the signal.
-    An earlier version applied it to the beat term but let the whole amplifier
-    band's ASE power reach the diode anyway, which is two different receivers
+    It is the one component that reduces ASE-ASE beating without touching the
+    signal much, and it does so by cutting the noise bins the detector then
+    integrates — the diode has no wavelength selectivity of its own. An earlier
+    version of the detector applied a passband to the beat term but let the whole
+    amplifier band's ASE power reach it anyway, which is two different receivers
     averaged together rather than a conservative approximation.
     """
     _, narrow = amplified_ook(14.0, optical_bandwidth=25.0)
@@ -191,7 +201,7 @@ def _detector_noise(ctx: SimulationContext, signal_x: bool, ase_x: bool) -> floa
 
     from oosim.signals import Band
 
-    detector = PINPhotodiode(optical_bandwidth=100.0, shot_noise=False, thermal_noise=False)
+    detector = PINPhotodiode(shot_noise=False, thermal_noise=False)
     detector.label = "pin"
     n = ctx.num_samples
     field = np.full(n, math.sqrt(1e-3), dtype=np.complex128)
@@ -204,7 +214,7 @@ def _detector_noise(ctx: SimulationContext, signal_x: bool, ase_x: bool) -> floa
         fs=ctx.sample_rate,
     )
     density = 2e-17
-    noise = NoiseBin(f0 - 2e12, f0 + 2e12, density if ase_x else 0.0, 0.0 if ase_x else density)
+    noise = NoiseBin(f0 - 50e9, f0 + 50e9, density if ase_x else 0.0, 0.0 if ase_x else density)
     signal = OpticalSignal(bands=(band,), noise=(noise,))
     return float(np.std(detector.run(ctx, {"in": signal})["out"].samples))
 
