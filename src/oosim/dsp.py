@@ -1,24 +1,90 @@
-"""Adaptive equalisation: the 2x2 butterfly that separates two polarizations.
+"""Receiver DSP: dispersion compensation, pulse shaping, adaptive equalisation.
 
-A dual-polarization receiver measures the field on *its own* axes, which bear no
-relation to the ones the transmitter launched — a fibre rotates the state
-arbitrarily and drifts on a millisecond timescale. What arrives is therefore two
-mixtures rather than two channels, and no amount of power separates them. The
-filter here is what does.
+Two impairments are undone here, and they are undone separately because they are
+different kinds of problem. **Chromatic dispersion is deterministic**: a known,
+static, all-pass phase that one fixed filter inverts exactly, and it can be
+hundreds of taps long. **Polarization mixing is not**: it is a random rotation
+that drifts on a millisecond timescale, so it needs a short adaptive filter that
+tracks. Trying to do both with one adaptive filter needs it to be both long and
+fast, which is the worst of each. Every deployed coherent receiver splits them in
+exactly this order, and so does this module.
 
-Model reference: S. J. Savory, "Digital filters for coherent optical receivers",
-Optics Express 16(2), 2008; D. N. Godard, "Self-recovering equalization and
-carrier tracking", IEEE Trans. Comm. 28(11), 1980 (the constant-modulus
-algorithm).
+Model references: S. J. Savory, "Digital filters for coherent optical receivers",
+Optics Express 16(2), 2008 (both the static CD filter and the butterfly);
+D. N. Godard, "Self-recovering equalization and carrier tracking", IEEE Trans.
+Comm. 28(11), 1980 (the constant-modulus algorithm).
 """
 
 from __future__ import annotations
 
 import numpy as np
 
+from .kernels import dispersion_to_beta2, propagate_dispersion
+from .units import C_LIGHT
+
 #: Cross-coupling placed in the initial filter to break the 45-degree symmetry.
 #: See :func:`butterfly_equalize` for why a symmetric start cannot converge there.
 SYMMETRY_TILT = 0.1
+
+
+#: Metre used to turn an *accumulated* dispersion into the (D, length) pair the
+#: forward propagator takes. The product is what matters physically, so any split
+#: gives the same answer; one metre keeps the numbers readable in a debugger.
+_UNIT_LENGTH = 1.0
+
+
+def compensate_dispersion(
+    baseband: np.ndarray,
+    sample_rate: float,
+    *,
+    accumulated_dispersion: float,
+    wavelength: float,
+) -> np.ndarray:
+    """Undo accumulated chromatic dispersion on a complex baseband.
+
+    ``accumulated_dispersion`` is D·L in s/m — the *product*, because that is the
+    only thing a receiver can know. It cannot see how the span was built, and two
+    links with the same total behave identically, so asking for D and L
+    separately would invent a distinction that does not exist on this side of the
+    fibre. ``wavelength`` is needed because β₂ is D scaled by λ².
+
+    Chromatic dispersion is a pure phase, ``exp(i β₂ ω² z / 2)``, with unit
+    magnitude at every frequency. Nothing is lost and nothing is buried under
+    noise — the received field still holds all of it, just rearranged in time —
+    which is why a link that is completely closed at the photodiode reopens to
+    within a fraction of a dB of back-to-back. That is not error correction. It is
+    the inverse of an invertible operation.
+
+    **This calls the fibre's own propagator with a negated distance rather than
+    writing the inverse transfer function out.** The two would be equivalent only
+    as long as nobody edits one of them, and the sign of β₂ is exactly the kind of
+    thing that drifts apart across two copies. Structurally there is one filter
+    here, run in reverse; a sign error in it can only be a sign error in the
+    forward model, which the propagation tests already pin.
+
+    The window is periodic, so the filter wraps — as the forward propagation
+    wrapped. That is self-consistent within a run, and it is why compensation
+    returns *exactly* the launched waveform rather than approximately. Over a real
+    span the wrap is a genuine edge effect and the outer symbols are dropped, as
+    ``ignore_edges`` on the analysers already does.
+    """
+    beta2 = dispersion_to_beta2(accumulated_dispersion / _UNIT_LENGTH, wavelength)
+    return propagate_dispersion(baseband, sample_rate, beta2, -_UNIT_LENGTH)
+
+
+def dispersive_spread(
+    accumulated_dispersion: float, bandwidth: float, wavelength: float, symbol_rate: float
+) -> float:
+    """How many symbol periods the channel smears one symbol across.
+
+    ``Δτ = D·L · Δλ``, with the occupied optical bandwidth converted to a
+    wavelength span by ``Δλ = λ²·Δf/c``. Reported in symbols because that is the
+    number that decides whether an adaptive equaliser can plausibly cope: a
+    seven-tap butterfly covers three symbols either side, so anything past that
+    has to be removed statically first.
+    """
+    wavelength_span = wavelength**2 * bandwidth / C_LIGHT
+    return abs(accumulated_dispersion * wavelength_span) * symbol_rate
 
 
 def root_raised_cosine(roll_off: float, span_symbols: int, samples_per_symbol: int) -> np.ndarray:

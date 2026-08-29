@@ -13,9 +13,11 @@
 >
 > Two complete links run end to end and produce numbers that match theory.
 > **Direct detection:** PRBS → NRZ → CW laser → MZM → fiber (loss + dispersion) → PIN → filter →
-> eye/Q/BER. **Coherent:** PRBS → Gray-coded M-QAM → RRC shaping → IQ modulator → 90° hybrid with
-> balanced detection → carrier recovery → EVM/SNR and counted errors, up to 256-QAM, and dual
-> polarization at 256 Gb/s with a blind butterfly equaliser.
+> eye/Q/BER. **Coherent:** PRBS → Gray-coded M-QAM → RRC shaping → IQ modulator → **fiber** →
+> 90° hybrid with balanced detection → dispersion compensation → carrier recovery → EVM/SNR and
+> counted errors, up to 256-QAM, and dual polarization at 256 Gb/s with a blind butterfly
+> equaliser. The coherent chain now runs over a real span: 1000 km of fiber leaves nothing
+> recoverable at the photodiode, and the receiver returns it to back-to-back quality.
 > Every physics block is validated against a closed-form result in CI.
 >
 > Projects save to versioned JSON and sweeps are first-class, so a curve is one call rather than
@@ -26,7 +28,7 @@
 > realisation with the right Maxwellian statistics.
 >
 > **Not implemented yet:** cross-phase modulation and four-wave mixing between channels,
-> equalisers, coherent detection, and the GUI. See the [roadmap](#roadmap).
+> wavelength-selective filtering, and the GUI. See the [roadmap](#roadmap).
 >
 > This is not yet a useful simulator. It is a foundation with the expensive decisions made and
 > tested. Criticism of those decisions is worth more right now than any feature —
@@ -145,6 +147,59 @@ subtracting a constant or a line, and it puts a ceiling on SNR that no power bud
 [`CarrierRecovery`](src/oosim/components/coherent.py) removes the ceiling using the blind phase
 search of Pfau et al. Both halves of that claim are [asserted](tests/test_dsp.py) — the second
 would be meaningless without the first.
+
+### Reaching past the bench
+
+Every coherent example above was back to back. `python examples/dispersion_link.py` puts the same
+32 GBd 16-QAM link through real fiber, with loss and nonlinearity switched off so that chromatic
+dispersion is the only thing acting:
+
+```
+            accumulated   spread          uncompensated              compensated
+  span          [ps/nm]  [symbols]      EVM       SNR    errors      EVM       SNR
+       0 km          0       0.0      1.68%    35.51 dB      0/3968     1.68%    35.51 dB
+       5 km         85       0.8     17.04%    15.37 dB      5/3968     1.67%    35.52 dB
+      20 km        340       3.3    217.64%    -6.75 dB   3336/3968     1.67%    35.56 dB
+      80 km       1360      13.4   2542.45%   -28.11 dB   3698/3968     1.68%    35.52 dB
+     400 km       6800      67.0   2686.86%   -28.58 dB   3692/3968     1.67%    35.55 dB
+    1000 km      17000     167.4   3390.48%   -30.61 dB   3697/3968     1.68%    35.51 dB
+```
+
+Read the uncompensated column first, because it is the reason this block exists. **Five kilometres
+— a metro hop — costs twenty decibels.** At 80 km the link is not degraded, it is gone: 3698 of
+3968 symbols wrong is 93%, and blind guessing on 16-QAM gives 93.75%. The whole coherent phase had
+been validated without ever meeting the impairment that dominates every real span.
+
+The compensated column is the argument for coherent detection in one line. **Back-to-back quality
+at every distance, with no penalty that grows with it.** Dispersion is an all-pass phase — it
+rearranges the field in time and removes nothing — so a receiver that measures the field still
+holds all of it, and one static filter puts it back. That is not error correction; it is inverting
+an invertible operation. A direct-detection receiver squares the field at the photodiode, destroys
+the phase, and can never do this at all, which is why it has to carry dispersion-compensating fiber
+in the line instead.
+
+The setting is sharp, and that is worth seeing rather than being told:
+
+| compensator set to | error | EVM | SNR |
+| ---: | ---: | ---: | ---: |
+| 76 km | −68 ps/nm | 13.64% | 17.30 dB |
+| 79 km | −17 ps/nm | 3.78% | 28.46 dB |
+| **80 km** | **0** | **1.68%** | **35.52 dB** |
+| 81 km | +17 ps/nm | 3.77% | 28.47 dB |
+| 84 km | +68 ps/nm | 13.64% | 17.30 dB |
+
+Being one kilometre out costs 7 dB. The symmetry of those flanks is also the sign check: a
+compensator applying its correction the wrong way round would put the nominal setting at *twice*
+the span, and the two sides would not match to three digits.
+
+**Why this is a separate stage from the butterfly equaliser.** Both are linear filters, so one
+adaptive filter could in principle do both jobs. It does not work. On the dual-polarization link
+over 80 km, growing the butterfly from 7 taps to 65 — the longest the block allows, and nine times
+the cost — leaves the link just as dead, because a blind modulus criterion has no gradient to
+follow once the constellation is smeared into a Gaussian blob. The static block ahead of a 7-tap
+filter restores back-to-back quality outright. Dispersion is static and *long*; polarization
+mixing is fast and *short*; one filter serving both would have to be both, which is the worst of
+each. That ordering is [asserted](tests/test_cd_compensation.py), not quoted.
 
 ### Dual polarization
 
@@ -359,8 +414,8 @@ time window, and results are reproducible.
 | **0 — Foundations** ✅ | Signal model, context, port types, component base, registry, scheduler, `.oosim` project format, sweeps, CI | ~1 month |
 | **1 — MVP: linear link** *(essentially done)* | ✅ PRBS → NRZ → laser → MZM → fiber (α + CD) → PIN → filter → eye/Q/BER, validated end to end. **Python only, no GUI.** | ~2–3 months |
 | **1.5 — Nonlinear & amplified** ✅ | Adaptive-step SSFM, Kerr, EDFA with ASE, OSNR, PMD, APD | ~2 months |
-| **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier phase recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
-| **3 — GUI & WDM** | Session server, React Flow graph editor, OSA · DWDM + XPM/FWM crosstalk, 400G/800G references, CuPy back-end | ~6 months |
+| **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier phase recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
+| **3 — GUI & WDM** | Session server, React Flow graph editor, wavelength-selective filters and an OSA · DWDM + XPM/FWM crosstalk, 400G/800G references, CuPy back-end | ~6 months |
 | **4 — PIC** | Waveguides, ring resonators, MMI, MZI via integration with an existing S-matrix solver; PDK import | — |
 
 ¹ One developer, part-time. Estimates, not commitments.
@@ -383,6 +438,10 @@ Every physics block ships with a test against a closed-form result, run in CI
 | Gaussian pulse, CD only | `T₁/T₀ = √(1 + (z/L_D)²)`, `L_D = T₀²/\|β₂\|` | ✅ |
 | Chirped Gaussian | `T₁/T₀ = √((1 + Cβ₂z/T₀²)² + (β₂z/T₀²)²)` — pins the sign of β₂ | ✅ |
 | Dispersion compensation | `+D` then `−D` restores the input sample-for-sample | ✅ |
+| Receiver-side CD removal | Compensator is the propagator inverted; round trip exact to 1e-9 | ✅ |
+| CD compensation is all-pass | Energy conserved; a wrong sign lands exactly on twice the span | ✅ |
+| β₂ ∝ λ² | Compensating 1550 nm as 1310 nm leaves the predicted `1 − λ₁²/λ₂²` residual | ✅ |
+| **Span recovery** | 5 km to 1000 km return to back-to-back EVM; uncompensated 80 km is at chance | ✅ |
 | GVD | Energy conserved (Parseval); β₂ = −Dλ²/2πc per band | ✅ |
 | PRBS | Period `2ⁿ−1`; `2ⁿ⁻¹` marks; every n-bit window appears once | ✅ |
 | Ideal push-pull MZM | `P_out/P_in = cos²(πV / 2V_π)`; null depth equals the declared ER | ✅ |

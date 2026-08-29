@@ -79,7 +79,9 @@ edit time is meaningless if the types are invisible.
 The shown project is chosen so that **all five types appear on the canvas at
 once**. That is why it is a coherent link rather than an on-off-keyed one: only
 a coherent chain carries binary into symbols, symbols into two electrical
-drives, an optical field, two photocurrents back, and symbols out again.
+drives, an optical field, two photocurrents back, and symbols out again. It runs
+over 80 km of real fibre, because a simulator whose demonstration link has no
+fibre in it is showing the wrong thing.
 
 Accent is `--optical`, because the tool is an optical simulator. Semantic colour
 (`--good` / `--warn` / `--bad`) is kept separate from it and does not count as
@@ -123,6 +125,13 @@ the action taken dozens of times an hour.
 **The dock is 292px** because the constellation's plot is square and therefore
 sized by the dock's *height*, not its width. A shorter dock wastes the width it
 has.
+
+**The canvas viewBox is 1000 x 420**, seven columns of 138px at a node width of
+116. The seventh column arrived with the span and its compensator; the
+alternative was to keep six and squeeze the spacing to 120, which leaves four
+pixels between adjacent blocks and reads as cramped. Widening also moved the
+aspect ratio to 2.38, closer to the 2.29 the canvas region actually has at
+1440px than the 2.10 it had before.
 
 Below 940px the palette and inspector collapse and a note says so. This is a
 desktop tool; the real build would dock them as overlays rather than dropping
@@ -174,6 +183,10 @@ found engine defects that the test suite missed:
   zero** however bad the link was, because that block emits decisions. The
   mockup now carries two analysers — soft measurement before the decoder, error
   count after — which is also how a bench does it.
+- The sensitivity sweep's 256-QAM curve **never crossed the FEC threshold** in
+  the swept range, so it was the one curve with no label — quietly contradicting
+  the rule in section 6 that each is labelled where it crosses. The range now
+  extends far enough that all four cross.
 
 ---
 
@@ -225,7 +238,8 @@ Two findings worth keeping:
 - The mockup shows a single-carrier link. The dual-polarization link is in
   [`examples/dualpol_link.py`](examples/dualpol_link.py) and is not on the
   canvas: at ~20 blocks the node text stops being readable at this canvas size,
-  and a schematic nobody can read is not a better demonstration.
+  and a schematic nobody can read is not a better demonstration. At 17 blocks
+  the current graph is already close to that ceiling.
 - No motion beyond the run pulse and the control transitions.
 - No empty, loading or error states — there is no session server yet to produce
   them.

@@ -16,7 +16,7 @@ from .coherent import (
     IQSampler,
 )
 from .detectors import APDPhotodiode, PINPhotodiode
-from .dsp import ButterflyEqualizer
+from .dsp import ButterflyEqualizer, DispersionCompensator
 from .electrical import DCVoltage, IQDriver, NRZDriver, PRBSGenerator
 from .fiber import Fiber
 from .filters import ElectricalFilter
@@ -46,6 +46,7 @@ __all__ = [
     "ConstellationDiagram",
     "DCVoltage",
     "DifferentialDecoder",
+    "DispersionCompensator",
     "DualPolarizationReceiver",
     "ElectricalFilter",
     "EyeDiagram",

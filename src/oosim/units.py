@@ -76,6 +76,10 @@ _TO_SI: dict[str, Callable[[float], float]] = {
     "dB/km": lambda x: x * 1e-3,  # -> dB/m (still logarithmic, per metre)
     # Dispersion: ps/(nm*km) -> s/m^2
     "ps/nm/km": lambda x: x * 1e-6,
+    # Accumulated dispersion: ps/nm -> s/m. This is D integrated over a span, so
+    # it is what a receiver-side compensator is specified by; the length has
+    # already been absorbed and cannot be recovered from it.
+    "ps/nm": lambda x: x * 1e-3,
     # Nonlinearity: 1/(W*km) -> 1/(W*m)
     "1/W/km": lambda x: x * 1e-3,
     # PMD coefficient: ps/sqrt(km) -> s/sqrt(m)
@@ -110,6 +114,7 @@ _FROM_SI: dict[str, Callable[[float], float]] = {
     "dB": linear_to_db,
     "dB/km": lambda x: x * 1e3,
     "ps/nm/km": lambda x: x * 1e6,
+    "ps/nm": lambda x: x * 1e3,
     "1/W/km": lambda x: x * 1e3,
     "ps/sqrt(km)": lambda x: x * 1e12 * math.sqrt(1e3),
     "m": lambda x: x,

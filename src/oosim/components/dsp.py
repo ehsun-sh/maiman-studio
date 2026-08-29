@@ -1,13 +1,137 @@
-"""Receiver DSP blocks that operate on symbols."""
+"""Receiver DSP blocks.
+
+Ordered the way a coherent receiver orders them: the static, deterministic
+impairment is removed first at the sample rate, and only then does an adaptive
+filter run on what is left. See :mod:`oosim.dsp` for why that split is not a
+matter of taste.
+"""
 
 from __future__ import annotations
+
+from dataclasses import dataclass
 
 import numpy as np
 
 from ..component import Component, Param, PortType
 from ..context import SimulationContext
-from ..dsp import butterfly_equalize
-from ..signals import Signal, SymbolSignal
+from ..dsp import butterfly_equalize, compensate_dispersion, dispersive_spread
+from ..signals import ElectricalSignal, Signal, SymbolSignal
+
+
+@dataclass(frozen=True)
+class DispersionDiagnostics:
+    """What the compensator was asked to remove.
+
+    A filter this aggressive should say what it did. The spread in symbol periods
+    is the number worth reading: it is what decides whether the adaptive stage
+    downstream had any chance, and it makes a misplaced decimal point in the
+    dispersion parameter obvious at a glance.
+    """
+
+    accumulated_dispersion: float
+    """Dispersion removed [s/m]."""
+
+    removed_symbols: float
+    """Symbol periods of smearing that corresponds to."""
+
+    def __repr__(self) -> str:
+        return (
+            f"DispersionDiagnostics({self.accumulated_dispersion * 1e3:.1f} ps/nm removed, "
+            f"{self.removed_symbols:.1f} symbols of spread)"
+        )
+
+
+class DispersionCompensator(Component):
+    """Removes accumulated chromatic dispersion from the received baseband.
+
+    Coherent detection hands back the complex field, so the dispersion the fibre
+    applied is still there in full and still invertible — one static all-pass
+    filter undoes it. This is what makes a coherent receiver worth building. A
+    direct-detection receiver squares the field at the photodiode, destroys the
+    phase, and can never do this at all; it has to carry dispersion-compensating
+    fibre in the line, with the loss and the nonlinearity that come with it.
+
+    **Why it is not the butterfly's job.** Both are linear filters, so in
+    principle one adaptive filter could do both. In practice they have opposite
+    requirements: dispersion is static and *long* — 80 km at 32 GBd smears a
+    symbol over about thirteen of its neighbours — while polarization mixing is
+    short and *fast*, drifting on a millisecond timescale. One filter serving both
+    would have to be hundreds of taps and adapt quickly, which converges slowly
+    and costs enormously. Splitting them makes each easy.
+
+    ``accumulated_dispersion`` is D·L for the whole path, in ps/nm, and is
+    positive for standard fibre. Getting it wrong is not a soft failure: the
+    filter then adds dispersion over part of the range instead of removing it,
+    so an error of a given size is roughly as damaging as that much uncompensated
+    span. A real receiver estimates it blindly at acquisition; here it is
+    declared, and the ``diagnostics`` port reports how many symbol periods of
+    smearing the declared value corresponds to — so a figure that is wrong by an
+    order of magnitude is visible as a number rather than only as a bad EVM.
+
+    ``wavelength`` must be the *signal* wavelength, since β₂ scales as λ².
+    """
+
+    display_name = "CD Compensator"
+    category = "DSP"
+
+    accumulated_dispersion = Param(
+        0.0, unit="ps/nm", doc="Total D*L to remove; positive for standard fiber (0 disables)"
+    )
+    wavelength = Param(1550.0, unit="nm", min=1.0, doc="Signal wavelength, for the lambda^2 in b2")
+
+    inputs = {"i": PortType.ELECTRICAL, "q": PortType.ELECTRICAL}
+    outputs = {
+        "i": PortType.ELECTRICAL,
+        "q": PortType.ELECTRICAL,
+        "diagnostics": PortType.METRIC,
+    }
+
+    def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
+        in_phase: ElectricalSignal = inputs["i"]
+        quadrature: ElectricalSignal = inputs["q"]
+
+        if in_phase.num_samples != quadrature.num_samples:
+            raise ValueError(
+                f"{self.label}: I and Q differ in length, "
+                f"{in_phase.num_samples} and {quadrature.num_samples}"
+            )
+        if in_phase.fs != quadrature.fs:
+            raise ValueError(
+                f"{self.label}: I and Q are sampled at different rates, "
+                f"{in_phase.fs} and {quadrature.fs} Hz"
+            )
+
+        accumulated = self.si("accumulated_dispersion")
+        wavelength = self.si("wavelength")
+
+        baseband = np.asarray(in_phase.samples).astype(np.complex128)
+        baseband = baseband + 1j * np.asarray(quadrature.samples)
+        if accumulated != 0.0:
+            baseband = compensate_dispersion(
+                baseband,
+                in_phase.fs,
+                accumulated_dispersion=accumulated,
+                wavelength=wavelength,
+            )
+
+        # Reported against the occupied bandwidth rather than the sample rate: the
+        # signal only has energy out to (1 + roll_off) * Rs, and quoting the spread
+        # over the empty rest of the band would inflate it several times over.
+        occupied = ctx.bit_rate * 1.2
+        diagnostics = DispersionDiagnostics(
+            accumulated_dispersion=accumulated,
+            removed_symbols=dispersive_spread(accumulated, occupied, wavelength, ctx.bit_rate),
+        )
+
+        return {
+            "i": ElectricalSignal(
+                samples=baseband.real.astype(ctx.real_dtype), fs=in_phase.fs, unit=in_phase.unit
+            ),
+            "q": ElectricalSignal(
+                samples=baseband.imag.astype(ctx.real_dtype), fs=quadrature.fs, unit=quadrature.unit
+            ),
+            "diagnostics": diagnostics,
+        }
 
 
 class ButterflyEqualizer(Component):

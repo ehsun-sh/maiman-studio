@@ -28,6 +28,8 @@ from oosim.components import (
     ConstellationDiagram,
     CWLaser,
     DifferentialDecoder,
+    DispersionCompensator,
+    Fiber,
     IQDriver,
     IQModulator,
     IQSampler,
@@ -39,6 +41,8 @@ from oosim.components import (
 V_PI = 4.0
 SYMBOL_RATE = 32e9
 BITS_PER_SYMBOL = 4
+SPAN_KM = 80.0
+DISPERSION = 17.0  # ps/nm/km, standard single-mode fiber at 1550 nm
 # BPSK is absent on purpose: differential *quadrant* encoding needs a quadrant to
 # difference, and a two-point constellation has none. A binary format resolves its
 # ambiguity by other means, and the mapper says so rather than silently coping.
@@ -81,11 +85,28 @@ def build(sequence_length: int = 4096) -> Graph:
     # phase walk put a hard floor near 18 dB SNR however much power was
     # launched. The CarrierRecovery stage below is what makes the realistic
     # number usable again.
-    laser = graph.add(CWLaser(power=-8.0, wavelength=1550.0, linewidth=100.0, label="tx"))
+    laser = graph.add(CWLaser(power=2.0, wavelength=1550.0, linewidth=100.0, label="tx"))
+    # A real span, not a patch cord. 80 km of standard fiber costs 16 dB and
+    # smears each symbol over thirteen of its neighbours; the compensator below
+    # is what makes the second of those survivable and nothing makes it optional.
+    fiber = graph.add(
+        Fiber(
+            length=SPAN_KM,
+            attenuation=0.2,
+            dispersion=DISPERSION,
+            nonlinearity=0.0,
+            label="fib",
+        )
+    )
     modulator = graph.add(IQModulator(v_pi=V_PI, label="mod"))
     meter = graph.add(PowerMeter(label="pm"))
     lo = graph.add(CWLaser(power=10.0, wavelength=1550.0, linewidth=100.0, label="lo"))
     receiver = graph.add(CoherentReceiver(responsivity=0.8, label="rx"))
+    compensator = graph.add(
+        DispersionCompensator(
+            accumulated_dispersion=DISPERSION * SPAN_KM, wavelength=1550.0, label="cdc"
+        )
+    )
     sampler = graph.add(IQSampler(matched_filter=True, roll_off=0.2, label="smp"))
     recovery = graph.add(CarrierRecovery(window=64.0, test_phases=32.0, label="cr"))
     decoder = graph.add(DifferentialDecoder(label="dec"))
@@ -103,11 +124,15 @@ def build(sequence_length: int = 4096) -> Graph:
     graph.connect(laser, modulator["optical_in"])
     graph.connect(driver["i"], modulator["i"])
     graph.connect(driver["q"], modulator["q"])
-    graph.connect(modulator, meter["in"])
-    graph.connect(modulator, receiver["in"])
+    graph.connect(modulator, fiber["in"])
+    # The meter sits after the span, so "received" means received.
+    graph.connect(fiber, meter["in"])
+    graph.connect(fiber, receiver["in"])
     graph.connect(lo, receiver["lo"])
-    graph.connect(receiver["i"], sampler["i"])
-    graph.connect(receiver["q"], sampler["q"])
+    graph.connect(receiver["i"], compensator["i"])
+    graph.connect(receiver["q"], compensator["q"])
+    graph.connect(compensator["i"], sampler["i"])
+    graph.connect(compensator["q"], sampler["q"])
     graph.connect(mapper["out"], sampler["reference"])
     graph.connect(sampler["out"], recovery["in"])
     graph.connect(recovery["out"], decoder["in"])
@@ -158,7 +183,7 @@ def main() -> None:
     # being measured.
     mappers = [c for c in graph.components if isinstance(c, QAMMapper)]
     for bits_per_symbol, name in FORMATS.items():
-        points = [float(p) for p in range(-44, -6, 3)]
+        points = [float(p) for p in range(-28, 22, 3)]
         overrides: dict[Any, list[float]] = {
             (laser, "power"): points,
             (prbs, "bits_per_symbol"): [float(bits_per_symbol)],
@@ -218,6 +243,7 @@ def main() -> None:
             "num_samples": graph.ctx.num_samples,
             "seed": graph.ctx.seed,
             "format": FORMATS[BITS_PER_SYMBOL],
+            "span_km": SPAN_KM,
             "gbps": SYMBOL_RATE * BITS_PER_SYMBOL / 1e9,
         },
     }
