@@ -12,9 +12,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from oosim import Graph, SimulationContext
-from oosim.components import Attenuator, Combiner, CWLaser, Fiber, PowerMeter
-from oosim.units import dbm_to_w, w_to_dbm
+from maiman import Graph, SimulationContext
+from maiman.components import Attenuator, Combiner, CWLaser, Fiber, PowerMeter
+from maiman.units import dbm_to_w, w_to_dbm
 
 # dBm tolerance. Fields are complex64 by default (~1e-7 relative), so a power
 # error of 1e-6 relative is ~4e-6 dB; 1e-4 dB is comfortably above the noise

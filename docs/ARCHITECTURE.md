@@ -1,4 +1,4 @@
-# OpenOptiSim — Architecture & Roadmap
+# Maiman Studio — Architecture & Roadmap
 
 > **Vision:** An open-source, modular platform for system-level simulation of optical
 > communication links and photonic circuits — the tool that fills the gap between
@@ -82,7 +82,7 @@ it rather than rewriting it.
                                         │  in-process
  ┌──────────────────────────────────────▼───────────────────────────────────────┐
  │                             Public Python API                                 │
- │        oosim.Graph · Component · run() · sweep() · analysis helpers           │
+ │        maiman.Graph · Component · run() · sweep() · analysis helpers           │
  │                    (this is the product for scripting users)                  │
  └──────────────┬─────────────────────────────────────┬─────────────────────────┘
                 │                                     │
@@ -390,7 +390,7 @@ never with exact float equality.
 
 ## 8. Project File Format
 
-The saved schematic is a versioned, human-readable, git-diffable JSON document (`.oosim`):
+The saved schematic is a versioned, human-readable, git-diffable JSON document (`.maiman`):
 
 ```json
 {
@@ -398,7 +398,7 @@ The saved schematic is a versioned, human-readable, git-diffable JSON document (
   "context": { "bit_rate": 10e9, "samples_per_symbol": 16,
                "sequence_length": 1024, "seed": 42 },
   "nodes": [
-    { "id": "laser1", "type": "oosim.sources.CWLaser",
+    { "id": "laser1", "type": "maiman.sources.CWLaser",
       "params": { "power": 10.0, "wavelength": 1550.0 },
       "ui": { "x": 100, "y": 200 } }
   ],
@@ -441,7 +441,7 @@ Timelines assume one developer working part-time. They are estimates, not commit
 Repository, license, CI, packaging. `SimulationContext`, signal types, port typing, component
 base class and registry, scheduler, result store, project file format, test harness.
 
-*Exit criterion:* a two-block graph runs end-to-end from Python and from a `.oosim` file.
+*Exit criterion:* a two-block graph runs end-to-end from Python and from a `.maiman` file.
 No physics yet — and that is the point.
 
 ### Phase 1 — MVP: linear optical link (~2–3 months)
@@ -501,9 +501,11 @@ top-level link simulation remains dataflow.
   (Agrawal, *Nonlinear Fiber Optics*; ITU-T G.652, G.694.1; relevant IEEE 802.3 clauses) and
   cite the source in each component's docstring. This protects the project and makes the models
   reviewable.
-* **Naming:** "OpenOptiSim" sits close to *OptiSystem* / Optiwave for a project that explicitly
-  cites it as a benchmark. Worth choosing a more distinct name before the first public release,
-  while renaming is still cheap.
+* **Naming:** the project was renamed from "OpenOptiSim" to **Maiman Studio** before the first
+  public release, while renaming was still cheap. The old name sat close to *OptiSystem* /
+  Optiwave for a project that explicitly cites it as a benchmark; the new one carries no such
+  echo. Theodore Maiman built the first working laser in 1960 — the name points at the physics,
+  not at a competitor. The Python package is `maiman` and project files are `.maiman`.
 
 ---
 
@@ -516,7 +518,7 @@ top-level link simulation remains dataflow.
    generation.
 4. Implement the scheduler (topological sort, type validation, memory release) and prove it on a
    trivial pass-through graph.
-5. Define and freeze `.oosim` schema v1; round-trip test.
+5. Define and freeze `.maiman` schema v1; round-trip test.
 6. Build the Phase 1 chain: PRBS → NRZ → CW Laser → MZM → linear fiber → PIN → BER.
 7. Stand up the validation suite from §7 in CI, with every tolerance justified in a comment.
 8. Write the first example notebook — for a scientific open-source tool, the examples are the

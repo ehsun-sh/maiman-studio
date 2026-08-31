@@ -14,7 +14,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-from oosim.modulation import (
+from maiman.modulation import (
     ber_qam,
     bits_to_indices,
     blind_phase_search,

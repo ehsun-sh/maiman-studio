@@ -14,8 +14,8 @@ from typing import Any, cast
 import numpy as np
 import pytest
 
-from oosim import Graph, SimulationContext
-from oosim.components import (
+from maiman import Graph, SimulationContext
+from maiman.components import (
     CarrierRecovery,
     CoherentReceiver,
     ConstellationAnalyzer,
@@ -26,7 +26,7 @@ from oosim.components import (
     PRBSGenerator,
     QAMMapper,
 )
-from oosim.signals import ConstellationMeasurement
+from maiman.signals import ConstellationMeasurement
 
 #: Enough symbols for the walk to actually wander, and a window edge to discard.
 SEQUENCE = 4096

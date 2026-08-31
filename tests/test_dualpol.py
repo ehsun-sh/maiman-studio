@@ -8,7 +8,7 @@ channels, and both halves of that are asserted here: unrecoverable without it,
 error-free with it, at rotations up to and including the 45-degree worst case.
 
 This is also the increment that finally exercises ``Ey``, which has been in
-:class:`~oosim.signals.Band` since the first commit for exactly this reason.
+:class:`~maiman.signals.Band` since the first commit for exactly this reason.
 """
 
 from __future__ import annotations
@@ -19,8 +19,8 @@ from typing import Any, cast
 import numpy as np
 import pytest
 
-from oosim import Graph, SimulationContext
-from oosim.components import (
+from maiman import Graph, SimulationContext
+from maiman.components import (
     ButterflyEqualizer,
     CarrierRecovery,
     ConstellationAnalyzer,
@@ -35,10 +35,10 @@ from oosim.components import (
     QAMMapper,
     Splitter,
 )
-from oosim.dsp import butterfly_equalize, constellation_radii, godard_radius
-from oosim.modulation import qam_constellation
-from oosim.signals import Band, ConstellationMeasurement, OpticalSignal
-from oosim.units import C_LIGHT
+from maiman.dsp import butterfly_equalize, constellation_radii, godard_radius
+from maiman.modulation import qam_constellation
+from maiman.signals import Band, ConstellationMeasurement, OpticalSignal
+from maiman.units import C_LIGHT
 
 F0 = C_LIGHT / 1550e-9
 
@@ -392,7 +392,7 @@ def test_a_retardation_alone_still_needs_the_equaliser() -> None:
 def test_the_equaliser_refuses_mismatched_formats() -> None:
     ctx = context()
     equalizer = ButterflyEqualizer(label="eq")
-    from oosim.signals import SymbolSignal
+    from maiman.signals import SymbolSignal
 
     qpsk, qam16 = qam_constellation(2), qam_constellation(4)
     flat = np.zeros(64, dtype=int)

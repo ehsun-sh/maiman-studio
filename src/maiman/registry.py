@@ -7,7 +7,7 @@ the file is only ever allowed to *look up* a name that is already registered,
 and a name that is not registered is an error telling the user which package to
 install and import.
 
-Registration happens automatically when a :class:`~oosim.component.Component`
+Registration happens automatically when a :class:`~maiman.component.Component`
 subclass is defined, so a third-party component is available as soon as its
 package is imported.
 """

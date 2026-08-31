@@ -1,4 +1,4 @@
-# OpenOptiSim — product context
+# Maiman Studio — product context
 
 ## What it is
 
@@ -46,14 +46,14 @@ constantly and any latency compounds.
 2. Edit component parameters with their real units visible.
 3. Run, and show progress on a run that takes seconds to minutes.
 4. Display results: eye diagram, spectrum, BER curves, sweep results.
-5. Open and save `.oosim` projects.
+5. Open and save `.maiman` projects.
 6. Sweep a parameter and plot the curve.
 
 ## Constraints that are already decided
 
 * **The GUI is a client of the public Python API.** If a feature is not reachable from Python, it
   does not exist. The GUI gets no privileged access.
-* **The component palette is generated** from `oosim.manifests()`, never hand-written, so it
+* **The component palette is generated** from `maiman.manifests()`, never hand-written, so it
   cannot drift from what the engine actually offers.
 * **Result data is reduced in the engine**, never in the browser. An eye diagram arrives as a
   binned histogram of fixed size; the browser never receives a raw sample buffer.

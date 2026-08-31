@@ -58,9 +58,9 @@ class Fiber(Component):
     is rotated by every other one's power, at twice the rate its own power
     rotates it, and triplets of them mix to generate light at new frequencies.
     Both fall out of the same ``|A|**2 A`` term that produces self-phase
-    modulation — see :func:`oosim.kernels.propagate_coupled_ssfm` for the count
+    modulation — see :func:`maiman.kernels.propagate_coupled_ssfm` for the count
     that gives cross-phase modulation its factor of two, and
-    :func:`oosim.kernels.fwm_product_power` for the one that gives four-wave
+    :func:`maiman.kernels.fwm_product_power` for the one that gives four-wave
     mixing its degeneracy factor.
 
     The two are computed differently, and the difference is worth understanding

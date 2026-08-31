@@ -1,4 +1,4 @@
-<title>OpenOptiSim Studio</title>
+<title>Maiman Studio</title>
 
 <!--
 THESIS: A schematic editor that shows an engineer the physics, not the chrome. It refuses the
@@ -572,7 +572,7 @@ verdict, and DESIGN.md
      its own for the no-script case. */
   try {
     document.documentElement.setAttribute(
-      "data-theme", sessionStorage.getItem("oosim-theme") || "light");
+      "data-theme", sessionStorage.getItem("maiman-theme") || "light");
   } catch (e) {
     document.documentElement.setAttribute("data-theme", "light");
   }
@@ -590,7 +590,7 @@ verdict, and DESIGN.md
         <path d="M3.4 3.4l1.6 1.6M11 11l1.6 1.6M12.6 3.4L11 5M5 11l-1.6 1.6" stroke="currentColor"
               stroke-width="1.3" stroke-linecap="round" opacity=".4"/>
       </svg>
-      <span class="brand-name">OpenOpti<span>Sim</span></span>
+      <span class="brand-name">Maiman<span>&nbsp;Studio</span></span>
     </div>
     <button class="menu-item">File</button>
     <button class="menu-item">Edit</button>
@@ -611,7 +611,7 @@ verdict, and DESIGN.md
         </svg>
       </button>
       <div class="kernel"><span class="dot" id="kernel-dot"></span><span id="kernel-text">engine ready</span></div>
-      <span class="num" style="color:var(--ink-4)">coherent_16qam.oosim</span>
+      <span class="num" style="color:var(--ink-4)">coherent_16qam.maiman</span>
     </div>
   </div>
 
@@ -807,12 +807,12 @@ verdict, and DESIGN.md
   </div>
 </div>
 
-<script id="oosim-data" type="application/json">{
+<script id="maiman-data" type="application/json">{
  "manifests": {
   "APDPhotodiode": {
    "name": "APD Photodiode",
    "type": "APDPhotodiode",
-   "class": "oosim.components.detectors.APDPhotodiode",
+   "class": "maiman.components.detectors.APDPhotodiode",
    "category": "Receivers",
    "version": "0.1.0",
    "parameters": {
@@ -887,7 +887,7 @@ verdict, and DESIGN.md
   "Attenuator": {
    "name": "Attenuator",
    "type": "Attenuator",
-   "class": "oosim.components.passive.Attenuator",
+   "class": "maiman.components.passive.Attenuator",
    "category": "Passive",
    "version": "0.1.0",
    "parameters": {
@@ -911,7 +911,7 @@ verdict, and DESIGN.md
   "BERAnalyzer": {
    "name": "BER Analyzer",
    "type": "BERAnalyzer",
-   "class": "oosim.components.analyzers.BERAnalyzer",
+   "class": "maiman.components.analyzers.BERAnalyzer",
    "category": "Measurements",
    "version": "0.1.0",
    "parameters": {
@@ -948,7 +948,7 @@ verdict, and DESIGN.md
   "ButterflyEqualizer": {
    "name": "Butterfly Equalizer",
    "type": "ButterflyEqualizer",
-   "class": "oosim.components.dsp.ButterflyEqualizer",
+   "class": "maiman.components.dsp.ButterflyEqualizer",
    "category": "DSP",
    "version": "0.1.0",
    "parameters": {
@@ -990,7 +990,7 @@ verdict, and DESIGN.md
   "CWLaser": {
    "name": "CW Laser",
    "type": "CWLaser",
-   "class": "oosim.components.sources.CWLaser",
+   "class": "maiman.components.sources.CWLaser",
    "category": "Optical Sources",
    "version": "0.1.0",
    "parameters": {
@@ -1026,7 +1026,7 @@ verdict, and DESIGN.md
   "CarrierRecovery": {
    "name": "Carrier Recovery",
    "type": "CarrierRecovery",
-   "class": "oosim.components.coherent.CarrierRecovery",
+   "class": "maiman.components.coherent.CarrierRecovery",
    "category": "DSP",
    "version": "0.1.0",
    "parameters": {
@@ -1058,7 +1058,7 @@ verdict, and DESIGN.md
   "CoherentReceiver": {
    "name": "Coherent Receiver",
    "type": "CoherentReceiver",
-   "class": "oosim.components.coherent.CoherentReceiver",
+   "class": "maiman.components.coherent.CoherentReceiver",
    "category": "Receivers",
    "version": "0.1.0",
    "parameters": {
@@ -1113,7 +1113,7 @@ verdict, and DESIGN.md
   "Combiner": {
    "name": "Optical Combiner",
    "type": "Combiner",
-   "class": "oosim.components.passive.Combiner",
+   "class": "maiman.components.passive.Combiner",
    "category": "Passive",
    "version": "0.1.0",
    "parameters": {
@@ -1135,7 +1135,7 @@ verdict, and DESIGN.md
   "ConstellationAnalyzer": {
    "name": "Constellation Analyzer",
    "type": "ConstellationAnalyzer",
-   "class": "oosim.components.analyzers.ConstellationAnalyzer",
+   "class": "maiman.components.analyzers.ConstellationAnalyzer",
    "category": "Measurements",
    "version": "0.1.0",
    "parameters": {
@@ -1165,7 +1165,7 @@ verdict, and DESIGN.md
   "ConstellationDiagram": {
    "name": "Constellation Diagram",
    "type": "ConstellationDiagram",
-   "class": "oosim.components.analyzers.ConstellationDiagram",
+   "class": "maiman.components.analyzers.ConstellationDiagram",
    "category": "Measurements",
    "version": "0.1.0",
    "parameters": {
@@ -1196,7 +1196,7 @@ verdict, and DESIGN.md
   "DCVoltage": {
    "name": "DC Voltage",
    "type": "DCVoltage",
-   "class": "oosim.components.electrical.DCVoltage",
+   "class": "maiman.components.electrical.DCVoltage",
    "category": "Electrical Sources",
    "version": "0.1.0",
    "parameters": {
@@ -1217,7 +1217,7 @@ verdict, and DESIGN.md
   "DifferentialDecoder": {
    "name": "Differential Decoder",
    "type": "DifferentialDecoder",
-   "class": "oosim.components.mapping.DifferentialDecoder",
+   "class": "maiman.components.mapping.DifferentialDecoder",
    "category": "DSP",
    "version": "0.1.0",
    "parameters": {},
@@ -1233,7 +1233,7 @@ verdict, and DESIGN.md
   "DispersionCompensator": {
    "name": "CD Compensator",
    "type": "DispersionCompensator",
-   "class": "oosim.components.dsp.DispersionCompensator",
+   "class": "maiman.components.dsp.DispersionCompensator",
    "category": "DSP",
    "version": "0.1.0",
    "parameters": {
@@ -1266,7 +1266,7 @@ verdict, and DESIGN.md
   "DualPolarizationReceiver": {
    "name": "Dual-Pol Coherent Receiver",
    "type": "DualPolarizationReceiver",
-   "class": "oosim.components.coherent.DualPolarizationReceiver",
+   "class": "maiman.components.coherent.DualPolarizationReceiver",
    "category": "Receivers",
    "version": "0.1.0",
    "parameters": {
@@ -1323,7 +1323,7 @@ verdict, and DESIGN.md
   "EDFA": {
    "name": "EDFA",
    "type": "EDFA",
-   "class": "oosim.components.amplifiers.EDFA",
+   "class": "maiman.components.amplifiers.EDFA",
    "category": "Amplifiers",
    "version": "0.1.0",
    "parameters": {
@@ -1375,7 +1375,7 @@ verdict, and DESIGN.md
   "ElectricalFilter": {
    "name": "Electrical Filter",
    "type": "ElectricalFilter",
-   "class": "oosim.components.filters.ElectricalFilter",
+   "class": "maiman.components.filters.ElectricalFilter",
    "category": "Electrical",
    "version": "0.1.0",
    "parameters": {
@@ -1399,7 +1399,7 @@ verdict, and DESIGN.md
   "EyeDiagram": {
    "name": "Eye Diagram",
    "type": "EyeDiagram",
-   "class": "oosim.components.analyzers.EyeDiagram",
+   "class": "maiman.components.analyzers.EyeDiagram",
    "category": "Measurements",
    "version": "0.1.0",
    "parameters": {
@@ -1437,7 +1437,7 @@ verdict, and DESIGN.md
   "Fiber": {
    "name": "Optical Fiber",
    "type": "Fiber",
-   "class": "oosim.components.fiber.Fiber",
+   "class": "maiman.components.fiber.Fiber",
    "category": "Fiber",
    "version": "0.1.0",
    "parameters": {
@@ -1527,7 +1527,7 @@ verdict, and DESIGN.md
   "GaussianPulse": {
    "name": "Gaussian Pulse",
    "type": "GaussianPulse",
-   "class": "oosim.components.sources.GaussianPulse",
+   "class": "maiman.components.sources.GaussianPulse",
    "category": "Optical Sources",
    "version": "0.1.0",
    "parameters": {
@@ -1569,7 +1569,7 @@ verdict, and DESIGN.md
   "IQDriver": {
    "name": "IQ Driver",
    "type": "IQDriver",
-   "class": "oosim.components.electrical.IQDriver",
+   "class": "maiman.components.electrical.IQDriver",
    "category": "Electrical",
    "version": "0.1.0",
    "parameters": {
@@ -1628,7 +1628,7 @@ verdict, and DESIGN.md
   "IQModulator": {
    "name": "IQ Modulator",
    "type": "IQModulator",
-   "class": "oosim.components.modulators.IQModulator",
+   "class": "maiman.components.modulators.IQModulator",
    "category": "Modulators",
    "version": "0.1.0",
    "parameters": {
@@ -1679,7 +1679,7 @@ verdict, and DESIGN.md
   "IQSampler": {
    "name": "IQ Sampler",
    "type": "IQSampler",
-   "class": "oosim.components.coherent.IQSampler",
+   "class": "maiman.components.coherent.IQSampler",
    "category": "Receivers",
    "version": "0.1.0",
    "parameters": {
@@ -1730,7 +1730,7 @@ verdict, and DESIGN.md
   "MachZehnderModulator": {
    "name": "Mach-Zehnder Modulator",
    "type": "MachZehnderModulator",
-   "class": "oosim.components.modulators.MachZehnderModulator",
+   "class": "maiman.components.modulators.MachZehnderModulator",
    "category": "Modulators",
    "version": "0.1.0",
    "parameters": {
@@ -1775,7 +1775,7 @@ verdict, and DESIGN.md
   "NRZDriver": {
    "name": "NRZ Driver",
    "type": "NRZDriver",
-   "class": "oosim.components.electrical.NRZDriver",
+   "class": "maiman.components.electrical.NRZDriver",
    "category": "Electrical",
    "version": "0.1.0",
    "parameters": {
@@ -1804,7 +1804,7 @@ verdict, and DESIGN.md
   "OSNRMeter": {
    "name": "OSNR Meter",
    "type": "OSNRMeter",
-   "class": "oosim.components.meters.OSNRMeter",
+   "class": "maiman.components.meters.OSNRMeter",
    "category": "Measurements",
    "version": "0.1.0",
    "parameters": {
@@ -1828,7 +1828,7 @@ verdict, and DESIGN.md
   "OpticalFilter": {
    "name": "Optical Filter",
    "type": "OpticalFilter",
-   "class": "oosim.components.filters.OpticalFilter",
+   "class": "maiman.components.filters.OpticalFilter",
    "category": "Passive",
    "version": "0.1.0",
    "parameters": {
@@ -1882,7 +1882,7 @@ verdict, and DESIGN.md
   "OpticalSpectrumAnalyzer": {
    "name": "Optical Spectrum Analyzer",
    "type": "OpticalSpectrumAnalyzer",
-   "class": "oosim.components.filters.OpticalSpectrumAnalyzer",
+   "class": "maiman.components.filters.OpticalSpectrumAnalyzer",
    "category": "Measurements",
    "version": "0.1.0",
    "parameters": {
@@ -1929,7 +1929,7 @@ verdict, and DESIGN.md
   "PINPhotodiode": {
    "name": "PIN Photodiode",
    "type": "PINPhotodiode",
-   "class": "oosim.components.detectors.PINPhotodiode",
+   "class": "maiman.components.detectors.PINPhotodiode",
    "category": "Receivers",
    "version": "0.1.0",
    "parameters": {
@@ -1989,7 +1989,7 @@ verdict, and DESIGN.md
   "PRBSGenerator": {
    "name": "PRBS Generator",
    "type": "PRBSGenerator",
-   "class": "oosim.components.electrical.PRBSGenerator",
+   "class": "maiman.components.electrical.PRBSGenerator",
    "category": "Electrical Sources",
    "version": "0.1.0",
    "parameters": {
@@ -2020,7 +2020,7 @@ verdict, and DESIGN.md
   "PolarizationCombiner": {
    "name": "Polarization Combiner",
    "type": "PolarizationCombiner",
-   "class": "oosim.components.passive.PolarizationCombiner",
+   "class": "maiman.components.passive.PolarizationCombiner",
    "category": "Passive",
    "version": "0.1.0",
    "parameters": {
@@ -2045,7 +2045,7 @@ verdict, and DESIGN.md
   "PolarizationRotator": {
    "name": "Polarization Rotator",
    "type": "PolarizationRotator",
-   "class": "oosim.components.passive.PolarizationRotator",
+   "class": "maiman.components.passive.PolarizationRotator",
    "category": "Passive",
    "version": "0.1.0",
    "parameters": {
@@ -2074,7 +2074,7 @@ verdict, and DESIGN.md
   "PowerMeter": {
    "name": "Optical Power Meter",
    "type": "PowerMeter",
-   "class": "oosim.components.meters.PowerMeter",
+   "class": "maiman.components.meters.PowerMeter",
    "category": "Measurements",
    "version": "0.1.0",
    "parameters": {},
@@ -2090,7 +2090,7 @@ verdict, and DESIGN.md
   "QAMMapper": {
    "name": "QAM Mapper",
    "type": "QAMMapper",
-   "class": "oosim.components.mapping.QAMMapper",
+   "class": "maiman.components.mapping.QAMMapper",
    "category": "Modulation",
    "version": "0.1.0",
    "parameters": {
@@ -2120,7 +2120,7 @@ verdict, and DESIGN.md
   "SechPulse": {
    "name": "Sech Pulse",
    "type": "SechPulse",
-   "class": "oosim.components.sources.SechPulse",
+   "class": "maiman.components.sources.SechPulse",
    "category": "Optical Sources",
    "version": "0.1.0",
    "parameters": {
@@ -2156,7 +2156,7 @@ verdict, and DESIGN.md
   "Splitter": {
    "name": "Optical Splitter",
    "type": "Splitter",
-   "class": "oosim.components.passive.Splitter",
+   "class": "maiman.components.passive.Splitter",
    "category": "Passive",
    "version": "0.1.0",
    "parameters": {
@@ -14814,7 +14814,7 @@ verdict, and DESIGN.md
 <script>
 (() => {
   "use strict";
-  const DATA = JSON.parse(document.getElementById("oosim-data").textContent);
+  const DATA = JSON.parse(document.getElementById("maiman-data").textContent);
 
   /* Port colours are never written here — the stylesheet owns every value, and
      markup refers to it by port type so a ground switch needs no repaint. */
@@ -15467,7 +15467,7 @@ verdict, and DESIGN.md
     const next = mode === "dark" ? "paper" : "graphite";
     themeBtn.title = "Switch to " + next;
     themeBtn.setAttribute("aria-label", "Switch to " + next);
-    try { sessionStorage.setItem("oosim-theme", mode); } catch (e) { /* sandboxed */ }
+    try { sessionStorage.setItem("maiman-theme", mode); } catch (e) { /* sandboxed */ }
     redrawActivePlot();
   }
   themeBtn.addEventListener("click", () =>

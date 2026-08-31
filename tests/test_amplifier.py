@@ -19,10 +19,10 @@ import math
 import numpy as np
 import pytest
 
-from oosim import Component, Graph, OpticalSignal, SimulationContext
-from oosim.analysis import OSNR_REFERENCE_BANDWIDTH, noise_psd_at, osnr
-from oosim.components import EDFA, CWLaser, Fiber, OSNRMeter, PowerMeter
-from oosim.units import C_LIGHT, H_PLANCK, db_to_linear, dbm_to_w, w_to_dbm
+from maiman import Component, Graph, OpticalSignal, SimulationContext
+from maiman.analysis import OSNR_REFERENCE_BANDWIDTH, noise_psd_at, osnr
+from maiman.components import EDFA, CWLaser, Fiber, OSNRMeter, PowerMeter
+from maiman.units import C_LIGHT, H_PLANCK, db_to_linear, dbm_to_w, w_to_dbm
 
 CTX = SimulationContext(bit_rate=10e9, samples_per_symbol=8, sequence_length=64)
 NU_1550 = C_LIGHT / 1550e-9
@@ -286,7 +286,7 @@ def test_a_nonsensical_reference_bandwidth_is_rejected() -> None:
 def test_noise_outside_the_carrier_does_not_count_against_it() -> None:
     """A noise bin sitting somewhere else in the spectrum is not this channel's
     problem — the band-resolved lookup is what makes that distinction possible."""
-    from oosim.signals import Band, NoiseBin
+    from maiman.signals import Band, NoiseBin
 
     band = Band(
         Ex=np.full(16, 0.1, dtype=np.complex64),

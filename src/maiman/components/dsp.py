@@ -2,7 +2,7 @@
 
 Ordered the way a coherent receiver orders them: the static, deterministic
 impairment is removed first at the sample rate, and only then does an adaptive
-filter run on what is left. See :mod:`oosim.dsp` for why that split is not a
+filter run on what is left. See :mod:`maiman.dsp` for why that split is not a
 matter of taste.
 """
 
@@ -146,13 +146,13 @@ class ButterflyEqualizer(Component):
     It is blind: no training sequence, no reference. The filters are adapted to
     drive each output onto a modulus the constellation actually uses, which a
     clean tributary satisfies and a mixture of two independent ones does not.
-    See :func:`oosim.dsp.butterfly_equalize` for the two-stage scheme and for the
+    See :func:`maiman.dsp.butterfly_equalize` for the two-stage scheme and for the
     45-degree saddle that the initialisation is tilted to avoid.
 
     **Which output is which is not determined.** Nothing in a blind cost function
     labels the tributaries, so the filter may deliver them swapped, and each
     carries its own arbitrary phase from the same quadrant ambiguity that
-    :class:`~oosim.components.coherent.CarrierRecovery` has. A deployed link
+    :class:`~maiman.components.coherent.CarrierRecovery` has. A deployed link
     resolves both by framing and differential encoding; here the measurement
     block resolves them because it holds the reference.
     """

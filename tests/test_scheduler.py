@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from oosim import CycleError, Graph, GraphError, PortType, SimulationContext
-from oosim.components import Attenuator, CWLaser, Fiber, PowerMeter
+from maiman import CycleError, Graph, GraphError, PortType, SimulationContext
+from maiman.components import Attenuator, CWLaser, Fiber, PowerMeter
 
 
 @pytest.fixture
@@ -240,7 +240,7 @@ def test_an_explicit_label_survives_being_added(ctx: SimulationContext) -> None:
 def test_ports_are_per_instance_so_port_count_can_be_configured(
     ctx: SimulationContext,
 ) -> None:
-    from oosim.components import Combiner
+    from maiman.components import Combiner
 
     two = Combiner(2)
     four = Combiner(4)

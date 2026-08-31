@@ -40,7 +40,7 @@ WIDTH, HEIGHT = 1440, 900
 #: rendering path, so a shorter budget yields a blank results dock.
 TIME_BUDGET_MS = 4000
 
-THEME_DEFAULT = 'sessionStorage.getItem("oosim-theme") || "light"'
+THEME_DEFAULT = 'sessionStorage.getItem("maiman-theme") || "light"'
 
 CANDIDATES = (
     r"C:\Program Files\Google\Chrome\Application\chrome.exe",

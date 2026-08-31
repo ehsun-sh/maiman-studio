@@ -7,8 +7,8 @@ import math
 import numpy as np
 import pytest
 
-from oosim import Band, NoiseBin, OpticalSignal, SimulationContext
-from oosim.units import (
+from maiman import Band, NoiseBin, OpticalSignal, SimulationContext
+from maiman.units import (
     dbm_to_w,
     frequency_to_wavelength,
     from_si,

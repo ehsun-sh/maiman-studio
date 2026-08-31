@@ -1,10 +1,10 @@
-"""OpenOptiSim — simulation of optical communication links and photonic systems.
+"""Maiman Studio — simulation of optical communication links and photonic systems.
 
 The public surface is deliberately small. Everything the GUI will eventually do
 goes through it: if a feature is not reachable from here, it does not exist.
 
-    >>> from oosim import SimulationContext, Graph
-    >>> from oosim.components import CWLaser, Fiber, PowerMeter
+    >>> from maiman import SimulationContext, Graph
+    >>> from maiman.components import CWLaser, Fiber, PowerMeter
     >>> ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=16, sequence_length=64)
     >>> g = Graph(ctx)
     >>> laser = g.add(CWLaser(power=0.0, wavelength=1550.0))

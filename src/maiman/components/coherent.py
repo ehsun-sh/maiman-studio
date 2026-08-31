@@ -187,7 +187,7 @@ class DualPolarizationReceiver(CoherentReceiver):
     The PBS axes are the receiver's own, and they bear no relation to whatever
     the transmitter launched — a fibre rotates the state arbitrarily and drifts.
     So ``x`` and ``y`` here are *not* the two tributaries. Separating those is
-    :class:`~oosim.components.dsp.ButterflyEqualizer`'s job, and without it these
+    :class:`~maiman.components.dsp.ButterflyEqualizer`'s job, and without it these
     outputs are two mixtures rather than two channels.
 
     The noise convention is inherited unchanged: each hybrid sees half the LO
@@ -274,7 +274,7 @@ class CarrierRecovery(Component):
     lifts — at 100 kHz and 32 GBd, around 18 dB, which is not enough for 16-QAM.
 
     This block is what a real receiver does about it. See
-    :func:`oosim.modulation.blind_phase_search` for the method.
+    :func:`maiman.modulation.blind_phase_search` for the method.
 
     **The quadrant ambiguity is real and is not hidden.** Every QAM constellation
     here is invariant under a quarter turn, so no blind estimator can tell which

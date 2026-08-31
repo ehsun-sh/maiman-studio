@@ -1,4 +1,4 @@
-"""Validation of the .oosim project file format and the component registry."""
+"""Validation of the .maiman project file format and the component registry."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from oosim import (
+from maiman import (
     Graph,
     ProjectError,
     SimulationContext,
@@ -17,7 +17,7 @@ from oosim import (
     registered_names,
     save,
 )
-from oosim.components import (
+from maiman.components import (
     BERAnalyzer,
     Combiner,
     CWLaser,
@@ -29,8 +29,8 @@ from oosim.components import (
     PowerMeter,
     PRBSGenerator,
 )
-from oosim.project import SCHEMA_VERSION, graph_to_dict, ui_from_dict
-from oosim.registry import lookup
+from maiman.project import SCHEMA_VERSION, graph_to_dict, ui_from_dict
+from maiman.registry import lookup
 
 
 def _link_graph() -> Graph:
@@ -80,7 +80,7 @@ def test_a_project_file_cannot_name_an_arbitrary_import_path() -> None:
     with pytest.raises(UnknownComponentError):
         lookup("os.system")
     with pytest.raises(UnknownComponentError):
-        lookup("oosim.components.sources.CWLaser")
+        lookup("maiman.components.sources.CWLaser")
 
 
 def test_manifests_cover_every_registered_component() -> None:
@@ -101,7 +101,7 @@ def test_saving_and_loading_reproduces_the_results_exactly(tmp_path: Path) -> No
     original = _link_graph()
     before = original.run()[next(c for c in original.components if isinstance(c, BERAnalyzer))]
 
-    reloaded = load(save(original, tmp_path / "link.oosim"))
+    reloaded = load(save(original, tmp_path / "link.maiman"))
     analyzer = next(c for c in reloaded.components if isinstance(c, BERAnalyzer))
     after = reloaded.run()[analyzer]
 
@@ -112,7 +112,7 @@ def test_saving_and_loading_reproduces_the_results_exactly(tmp_path: Path) -> No
 
 def test_round_trip_preserves_structure(tmp_path: Path) -> None:
     original = _link_graph()
-    reloaded = load(save(original, tmp_path / "link.oosim"))
+    reloaded = load(save(original, tmp_path / "link.maiman"))
 
     assert [c.label for c in reloaded.components] == [c.label for c in original.components]
     assert reloaded.edges.keys() == original.edges.keys()
@@ -132,7 +132,7 @@ def test_structural_config_round_trips(tmp_path: Path) -> None:
         g.connect(g.components[i], mux[f"in{i}"])
     g.connect(mux, meter)
 
-    reloaded = load(save(g, tmp_path / "wdm.oosim"))
+    reloaded = load(save(g, tmp_path / "wdm.maiman"))
     restored = next(c for c in reloaded.components if isinstance(c, Combiner))
 
     assert restored.num_inputs == 3
@@ -141,11 +141,11 @@ def test_structural_config_round_trips(tmp_path: Path) -> None:
 
 
 def test_the_file_is_readable_json(tmp_path: Path) -> None:
-    path = save(_link_graph(), tmp_path / "link.oosim")
+    path = save(_link_graph(), tmp_path / "link.maiman")
     data = json.loads(path.read_text(encoding="utf-8"))
 
     assert data["schema_version"] == SCHEMA_VERSION
-    assert "oosim_version" in data
+    assert "maiman_version" in data
     assert data["context"]["bit_rate"] == 10e9
     assert {node["id"] for node in data["nodes"]} == {
         "prbs",
@@ -178,7 +178,7 @@ def test_ui_data_is_separate_from_the_physics(tmp_path: Path) -> None:
     and a project without them must still run."""
     g = _link_graph()
     positions = {"laser": {"x": 100.0, "y": 200.0}, "fiber": {"x": 300.0, "y": 200.0}}
-    path = save(g, tmp_path / "link.oosim", ui=positions)
+    path = save(g, tmp_path / "link.maiman", ui=positions)
     data = json.loads(path.read_text(encoding="utf-8"))
 
     assert ui_from_dict(data) == positions
@@ -188,7 +188,7 @@ def test_ui_data_is_separate_from_the_physics(tmp_path: Path) -> None:
     # Strip the UI section entirely: the project still loads and still runs.
     for node in data["nodes"]:
         node.pop("ui", None)
-    stripped = tmp_path / "headless.oosim"
+    stripped = tmp_path / "headless.maiman"
     stripped.write_text(json.dumps(data), encoding="utf-8")
 
     reloaded = load(stripped)
@@ -202,7 +202,7 @@ def test_ui_data_is_separate_from_the_physics(tmp_path: Path) -> None:
 
 
 def test_a_file_without_a_schema_version_is_rejected(tmp_path: Path) -> None:
-    path = tmp_path / "bad.oosim"
+    path = tmp_path / "bad.maiman"
     path.write_text(json.dumps({"nodes": [], "edges": []}), encoding="utf-8")
     with pytest.raises(ProjectError, match="no schema_version"):
         load(path)
@@ -211,7 +211,7 @@ def test_a_file_without_a_schema_version_is_rejected(tmp_path: Path) -> None:
 def test_a_future_schema_version_is_rejected(tmp_path: Path) -> None:
     """Silently reading a newer file would be worse than refusing: the fields it
     means differently would be interpreted with today's meanings."""
-    path = tmp_path / "future.oosim"
+    path = tmp_path / "future.maiman"
     path.write_text(
         json.dumps({"schema_version": SCHEMA_VERSION + 1, "context": {}, "nodes": []}),
         encoding="utf-8",
@@ -221,14 +221,14 @@ def test_a_future_schema_version_is_rejected(tmp_path: Path) -> None:
 
 
 def test_malformed_json_is_reported_as_such(tmp_path: Path) -> None:
-    path = tmp_path / "broken.oosim"
+    path = tmp_path / "broken.maiman"
     path.write_text("{not json", encoding="utf-8")
     with pytest.raises(ProjectError, match="not valid JSON"):
         load(path)
 
 
 def test_an_unknown_component_type_is_reported_by_name(tmp_path: Path) -> None:
-    path = tmp_path / "plugin.oosim"
+    path = tmp_path / "plugin.maiman"
     path.write_text(
         json.dumps(
             {
@@ -253,7 +253,7 @@ def test_an_unknown_component_type_is_reported_by_name(tmp_path: Path) -> None:
 def test_an_edge_to_a_missing_node_is_rejected(tmp_path: Path) -> None:
     data = graph_to_dict(_link_graph())
     data["edges"].append({"from": ["ghost", "out"], "to": ["fiber", "in"]})
-    path = tmp_path / "dangling.oosim"
+    path = tmp_path / "dangling.maiman"
     path.write_text(json.dumps(data), encoding="utf-8")
     with pytest.raises(ProjectError, match="unknown node 'ghost'"):
         load(path)
@@ -263,7 +263,7 @@ def test_an_out_of_range_parameter_is_caught_on_load(tmp_path: Path) -> None:
     """Validation is not skipped just because the values came from a file."""
     data = graph_to_dict(_link_graph())
     next(n for n in data["nodes"] if n["id"] == "laser")["params"]["wavelength"] = 50.0
-    path = tmp_path / "invalid.oosim"
+    path = tmp_path / "invalid.maiman"
     path.write_text(json.dumps(data), encoding="utf-8")
     with pytest.raises(ProjectError, match="below the minimum"):
         load(path)
@@ -272,7 +272,7 @@ def test_an_out_of_range_parameter_is_caught_on_load(tmp_path: Path) -> None:
 def test_port_type_checking_still_applies_on_load(tmp_path: Path) -> None:
     data = graph_to_dict(_link_graph())
     data["edges"] = [{"from": ["prbs", "out"], "to": ["fiber", "in"]}]
-    path = tmp_path / "mistyped.oosim"
+    path = tmp_path / "mistyped.maiman"
     path.write_text(json.dumps(data), encoding="utf-8")
     with pytest.raises(ProjectError, match="port types differ"):
         load(path)

@@ -7,8 +7,8 @@ from itertools import pairwise
 import numpy as np
 import pytest
 
-from oosim import Graph, GraphError, SimulationContext, sweep
-from oosim.components import (
+from maiman import Graph, GraphError, SimulationContext, sweep
+from maiman.components import (
     BERAnalyzer,
     CWLaser,
     ElectricalFilter,
@@ -19,7 +19,7 @@ from oosim.components import (
     PowerMeter,
     PRBSGenerator,
 )
-from oosim.sweep import derive_run_seed
+from maiman.sweep import derive_run_seed
 
 
 def _link(sequence_length: int = 2048) -> tuple[Graph, CWLaser, Fiber, BERAnalyzer]:

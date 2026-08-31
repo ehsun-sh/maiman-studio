@@ -19,9 +19,9 @@ from typing import Any
 
 import numpy as np
 
-from oosim import Graph, SimulationContext, manifests, sweep
-from oosim.analysis import eye_histogram
-from oosim.components import (
+from maiman import Graph, SimulationContext, manifests, sweep
+from maiman.analysis import eye_histogram
+from maiman.components import (
     CarrierRecovery,
     CoherentReceiver,
     ConstellationAnalyzer,

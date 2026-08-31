@@ -1,4 +1,4 @@
-"""The ``.oosim`` project file: a graph, saved.
+"""The ``.maiman`` project file: a graph, saved.
 
 The format is versioned JSON, chosen so a project is readable, diffable, and
 usable without this library — a schematic that can only be opened by the program
@@ -13,8 +13,8 @@ Three rules shape it:
   author made, not the defaults they accepted, which keeps files small and
   diffs legible. The trade-off is real and worth stating: if a model's default
   changes in a later release, a file that never overrode it will simulate
-  slightly differently. ``oosim_version`` is recorded so that is diagnosable.
-* **Names are looked up, never imported.** See :mod:`oosim.registry`.
+  slightly differently. ``maiman_version`` is recorded so that is diagnosable.
+* **Names are looked up, never imported.** See :mod:`maiman.registry`.
 
 A project file is always runnable headless: nothing here requires a GUI, and
 the ``ui`` section is optional.
@@ -67,7 +67,7 @@ def graph_to_dict(graph: Graph, *, ui: dict[str, dict[str, float]] | None = None
 
     return {
         "schema_version": SCHEMA_VERSION,
-        "oosim_version": __version__,
+        "maiman_version": __version__,
         "context": {field: getattr(graph.ctx, field) for field in _CONTEXT_FIELDS},
         "nodes": nodes,
         "edges": edges,
@@ -78,7 +78,7 @@ def graph_from_dict(data: dict[str, Any]) -> Graph:
     """Rebuild a graph from a dictionary produced by :func:`graph_to_dict`."""
     version = data.get("schema_version")
     if version is None:
-        raise ProjectError("not an oosim project: no schema_version")
+        raise ProjectError("not an maiman project: no schema_version")
     if version != SCHEMA_VERSION:
         raise ProjectError(
             f"project uses schema version {version}, this build reads version {SCHEMA_VERSION}"
@@ -128,7 +128,7 @@ def ui_from_dict(data: dict[str, Any]) -> dict[str, dict[str, float]]:
 
 
 def save(graph: Graph, path: str | Path, *, ui: dict[str, dict[str, float]] | None = None) -> Path:
-    """Write ``graph`` to ``path`` as a ``.oosim`` file."""
+    """Write ``graph`` to ``path`` as a ``.maiman`` file."""
     destination = Path(path)
     destination.write_text(
         json.dumps(graph_to_dict(graph, ui=ui), indent=2) + "\n", encoding="utf-8"
@@ -137,7 +137,7 @@ def save(graph: Graph, path: str | Path, *, ui: dict[str, dict[str, float]] | No
 
 
 def load(path: str | Path) -> Graph:
-    """Read a ``.oosim`` file back into a runnable graph."""
+    """Read a ``.maiman`` file back into a runnable graph."""
     source = Path(path)
     try:
         data = json.loads(source.read_text(encoding="utf-8"))

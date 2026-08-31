@@ -14,9 +14,9 @@ import math
 import numpy as np
 import pytest
 
-from oosim import Graph, SimulationContext
-from oosim.analysis import ber_from_q, eye_histogram, measure_eye, optimal_threshold, q_factor
-from oosim.components import (
+from maiman import Graph, SimulationContext
+from maiman.analysis import ber_from_q, eye_histogram, measure_eye, optimal_threshold, q_factor
+from maiman.components import (
     BERAnalyzer,
     CWLaser,
     ElectricalFilter,
@@ -27,8 +27,8 @@ from oosim.components import (
     PINPhotodiode,
     PRBSGenerator,
 )
-from oosim.kernels import gaussian_lowpass_response, gaussian_noise_bandwidth, lowpass_filter
-from oosim.units import K_BOLTZMANN
+from maiman.kernels import gaussian_lowpass_response, gaussian_noise_bandwidth, lowpass_filter
+from maiman.units import K_BOLTZMANN
 
 V_PI = 4.0
 FILTER_GHZ = 7.0

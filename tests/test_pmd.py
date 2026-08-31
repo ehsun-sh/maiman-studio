@@ -17,10 +17,10 @@ from functools import cache
 import numpy as np
 import pytest
 
-from oosim import Graph, SimulationContext
-from oosim.analysis import instantaneous_power
-from oosim.components import Fiber, GaussianPulse, PowerMeter
-from oosim.kernels import (
+from maiman import Graph, SimulationContext
+from maiman.analysis import instantaneous_power
+from maiman.components import Fiber, GaussianPulse, PowerMeter
+from maiman.kernels import (
     MAXWELLIAN_MOMENT_RATIO,
     PMDSection,
     apply_pmd,

@@ -5,7 +5,7 @@ Run it with::
     python examples/ook_link.py
 
 It builds the link once, sweeps it, and writes the schematic to
-``examples/ook_link.oosim`` — the same file the GUI will eventually open.
+``examples/ook_link.maiman`` — the same file the GUI will eventually open.
 No plotting dependency: results print as tables.
 """
 
@@ -13,8 +13,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from oosim import Graph, SimulationContext, save, sweep
-from oosim.components import (
+from maiman import Graph, SimulationContext, save, sweep
+from maiman.components import (
     BERAnalyzer,
     CWLaser,
     ElectricalFilter,
@@ -146,5 +146,5 @@ if __name__ == "__main__":
     dispersion_limited_reach(graph)
     monte_carlo(graph)
 
-    destination = save(graph, Path(__file__).with_suffix(".oosim"), ui=LAYOUT)
+    destination = save(graph, Path(__file__).with_suffix(".maiman"), ui=LAYOUT)
     print(f"\nSchematic written to {destination.name}")

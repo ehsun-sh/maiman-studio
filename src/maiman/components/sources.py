@@ -107,7 +107,7 @@ class SechPulse(Component):
     anomalous fiber at the peak power that makes ``gamma*P0*T0**2/|beta2| = 1``,
     it propagates without changing at all — the sharpest available check that
     dispersion and the Kerr effect are both right *and* have the right signs
-    relative to each other. :func:`oosim.kernels.soliton_peak_power` computes
+    relative to each other. :func:`maiman.kernels.soliton_peak_power` computes
     that power.
     """
 

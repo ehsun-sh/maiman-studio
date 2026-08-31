@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "oosim_version": "0.0.1.dev0",
+  "maiman_version": "0.0.1.dev0",
   "context": {
     "bit_rate": 10000000000.0,
     "samples_per_symbol": 8,

@@ -12,10 +12,10 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from oosim import Graph, SimulationContext
-from oosim.analysis import instantaneous_power, rms_time_width
-from oosim.components import Combiner, Fiber, GaussianPulse, PowerMeter
-from oosim.kernels import dispersion_to_beta2
+from maiman import Graph, SimulationContext
+from maiman.analysis import instantaneous_power, rms_time_width
+from maiman.components import Combiner, Fiber, GaussianPulse, PowerMeter
+from maiman.kernels import dispersion_to_beta2
 
 # A pulse-scale window: 0.39 ps per sample, 400 ps long. Wide enough that a pulse
 # broadened several-fold stays clear of the periodic wrap that would corrupt the

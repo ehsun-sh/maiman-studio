@@ -10,8 +10,8 @@ Run: ``python examples/coherent_link.py``
 
 from __future__ import annotations
 
-from oosim import Graph, SimulationContext, sweep
-from oosim.components import (
+from maiman import Graph, SimulationContext, sweep
+from maiman.components import (
     CoherentReceiver,
     ConstellationAnalyzer,
     CWLaser,

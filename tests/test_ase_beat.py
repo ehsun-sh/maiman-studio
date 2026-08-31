@@ -29,9 +29,9 @@ import math
 
 import pytest
 
-from oosim import Graph, SimulationContext
-from oosim.component import Component
-from oosim.components import (
+from maiman import Graph, SimulationContext
+from maiman.component import Component
+from maiman.components import (
     EDFA,
     BERAnalyzer,
     CoherentReceiver,
@@ -50,7 +50,7 @@ from oosim.components import (
     PRBSGenerator,
     QAMMapper,
 )
-from oosim.signals import NoiseBin, OpticalSignal
+from maiman.signals import NoiseBin, OpticalSignal
 
 OSNR_REFERENCE = 12.5e9
 FILTER_BANDWIDTH = 7e9
@@ -199,7 +199,7 @@ def _detector_noise(ctx: SimulationContext, signal_x: bool, ase_x: bool) -> floa
     """Std of the photocurrent for a signal on one axis and ASE on one axis."""
     import numpy as np
 
-    from oosim.signals import Band
+    from maiman.signals import Band
 
     detector = PINPhotodiode(shot_noise=False, thermal_noise=False)
     detector.label = "pin"
@@ -368,7 +368,7 @@ def _coherent_beat_noise(ctx: SimulationContext, lo_x: bool, ase_x: bool) -> flo
     """Std of the I photocurrent for an LO on one axis and ASE on one axis."""
     import numpy as np
 
-    from oosim.signals import Band
+    from maiman.signals import Band
 
     receiver = CoherentReceiver(shot_noise=False, thermal_noise=False, responsivity=0.8)
     receiver.label = "rx"

@@ -14,15 +14,15 @@ from __future__ import annotations
 
 import math
 
-from oosim import Component, Graph, SimulationContext, sweep
-from oosim.analysis import peak_power, rms_time_width
-from oosim.components import EDFA, CWLaser, Fiber, OSNRMeter, SechPulse
-from oosim.kernels import (
+from maiman import Component, Graph, SimulationContext, sweep
+from maiman.analysis import peak_power, rms_time_width
+from maiman.components import EDFA, CWLaser, Fiber, OSNRMeter, SechPulse
+from maiman.kernels import (
     dispersion_to_beta2,
     soliton_peak_power,
     soliton_period,
 )
-from oosim.units import w_to_dbm
+from maiman.units import w_to_dbm
 
 SPAN_KM = 80.0
 SPAN_LOSS_DB = 0.2 * SPAN_KM

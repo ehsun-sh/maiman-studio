@@ -30,9 +30,9 @@ import math
 
 import numpy as np
 
-from oosim import Graph, SimulationContext
-from oosim.component import Component
-from oosim.components import (
+from maiman import Graph, SimulationContext
+from maiman.component import Component
+from maiman.components import (
     EDFA,
     BERAnalyzer,
     Combiner,
@@ -48,8 +48,8 @@ from oosim.components import (
     PowerMeter,
     PRBSGenerator,
 )
-from oosim.kernels import super_gaussian_response
-from oosim.units import C_LIGHT, wavelength_to_frequency
+from maiman.kernels import super_gaussian_response
+from maiman.units import C_LIGHT, wavelength_to_frequency
 
 ANCHOR = 1550.0  # nm — channel 0
 SPACING = 100e9  # Hz

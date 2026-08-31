@@ -40,9 +40,9 @@ import math
 
 import numpy as np
 
-from oosim import Graph, SimulationContext
-from oosim.component import Component
-from oosim.components import (
+from maiman import Graph, SimulationContext
+from maiman.component import Component
+from maiman.components import (
     EDFA,
     CarrierRecovery,
     CoherentReceiver,
@@ -59,7 +59,7 @@ from oosim.components import (
     PRBSGenerator,
     QAMMapper,
 )
-from oosim.kernels import (
+from maiman.kernels import (
     attenuation_db_per_m_to_alpha,
     dispersion_to_beta2,
     effective_length,
@@ -67,7 +67,7 @@ from oosim.kernels import (
     fwm_phase_mismatch,
     walkoff_from_dispersion,
 )
-from oosim.units import C_LIGHT, w_to_dbm, wavelength_to_frequency
+from maiman.units import C_LIGHT, w_to_dbm, wavelength_to_frequency
 
 ANCHOR = 1550.0  # nm — channel 0
 SPACING = 100e9  # Hz
@@ -212,7 +212,7 @@ def main() -> None:
     print("  1. A neighbour counts twice: gamma*(P + 2P + ...)*L_eff")
     print(f"     {'channels':>10}  {'mean phase':>12}  {'vs one channel':>16}  {'hand':>8}")
     print("     " + "-" * 54)
-    from oosim.kernels import propagate_coupled_ssfm
+    from maiman.kernels import propagate_coupled_ssfm
 
     power = 1e-3
     solo = None

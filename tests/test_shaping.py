@@ -17,8 +17,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from oosim import Graph, SimulationContext
-from oosim.components import (
+from maiman import Graph, SimulationContext
+from maiman.components import (
     CoherentReceiver,
     ConstellationAnalyzer,
     CWLaser,
@@ -29,8 +29,8 @@ from oosim.components import (
     PRBSGenerator,
     QAMMapper,
 )
-from oosim.dsp import circular_filter, root_raised_cosine, shape_symbols
-from oosim.modulation import (
+from maiman.dsp import circular_filter, root_raised_cosine, shape_symbols
+from maiman.modulation import (
     differential_decode,
     differential_encode,
     nearest_indices,
@@ -366,7 +366,7 @@ def test_the_decoder_block_undoes_a_turn_applied_to_real_symbols(turns: int) -> 
     graph.connect(prbs["out"], plain["in"])
     results = graph.run(keep=[encoded, plain])
 
-    from oosim.signals import SymbolSignal
+    from maiman.signals import SymbolSignal
 
     sent = results.port(encoded, "out")
     turned = SymbolSignal(

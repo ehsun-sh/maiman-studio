@@ -23,7 +23,7 @@ class EDFA(Component):
     generates is what limits how many spans a link can have, so an amplifier
     modelled without it is not a simplification but a fiction.
 
-    ASE is emitted into :class:`~oosim.signals.NoiseBin` rather than into the
+    ASE is emitted into :class:`~maiman.signals.NoiseBin` rather than into the
     sampled bands. That is the whole reason the noise-bin representation exists:
     ASE covers the amplifier's full bandwidth — terahertz — while the signal
     occupies a few tens of gigahertz of it. Sampling both together would demand

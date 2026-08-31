@@ -11,8 +11,8 @@ Run: ``python examples/dualpol_link.py``
 
 from __future__ import annotations
 
-from oosim import Graph, SimulationContext
-from oosim.components import (
+from maiman import Graph, SimulationContext
+from maiman.components import (
     ButterflyEqualizer,
     CarrierRecovery,
     ConstellationAnalyzer,

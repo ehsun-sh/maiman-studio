@@ -118,7 +118,7 @@ class IQModulator(Component):
     it compresses the outer levels of a 16-QAM constellation while leaving QPSK
     exactly alone, because QPSK only ever visits the extremes. Correcting it is
     the transmitter DSP's job; see
-    :class:`~oosim.components.electrical.IQDriver`'s ``predistort``.
+    :class:`~maiman.components.electrical.IQDriver`'s ``predistort``.
 
     **Bias error leaks carrier.** ``bias_i``/``bias_q`` are departures from the
     null. Any offset means ``t(0) != 0``, so an unmodulated component of the

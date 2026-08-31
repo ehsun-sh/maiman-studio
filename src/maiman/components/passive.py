@@ -178,7 +178,7 @@ class PolarizationRotator(Component):
     randomly: the state of polarization arriving at a receiver bears no relation
     to the one launched, and drifts on a timescale of milliseconds. A fixed
     rotation is the clean version of that, and it is the impairment that makes
-    :class:`~oosim.components.dsp.ButterflyEqualizer` necessary rather than
+    :class:`~maiman.components.dsp.ButterflyEqualizer` necessary rather than
     optional — at 45 degrees the two tributaries are mixed half and half, and no
     amount of power separates them.
 

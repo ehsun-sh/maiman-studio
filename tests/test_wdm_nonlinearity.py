@@ -14,9 +14,9 @@ import math
 import numpy as np
 import pytest
 
-from oosim import SimulationContext
-from oosim.components.fiber import Fiber
-from oosim.kernels import (
+from maiman import SimulationContext
+from maiman.components.fiber import Fiber
+from maiman.kernels import (
     attenuation_db_per_m_to_alpha,
     dispersion_to_beta2,
     effective_length,
@@ -27,8 +27,8 @@ from oosim.kernels import (
     propagate_ssfm,
     walkoff_from_dispersion,
 )
-from oosim.signals import Band, OpticalSignal
-from oosim.units import C_LIGHT, wavelength_to_frequency
+from maiman.signals import Band, OpticalSignal
+from maiman.units import C_LIGHT, wavelength_to_frequency
 
 WAVELENGTH = 1550e-9
 GAMMA = 1.3e-3  # 1/W/m

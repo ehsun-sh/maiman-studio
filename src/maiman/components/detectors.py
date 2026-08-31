@@ -61,7 +61,7 @@ class PINPhotodiode(Component):
     an unfiltered receiver on an eight-span link genuinely loses a factor of three
     in Q to spontaneous-spontaneous beating alone. That is a real result, not a
     modelling artefact, and it is why nobody builds one:
-    :class:`~oosim.components.filters.OpticalFilter` belongs in front of this
+    :class:`~maiman.components.filters.OpticalFilter` belongs in front of this
     block on any amplified link. An earlier version of this class carried the
     passband as a parameter of its own, which was a stand-in for a component that
     did not exist yet; it does now, and two ways to express one piece of hardware

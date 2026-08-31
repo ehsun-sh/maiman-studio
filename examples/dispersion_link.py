@@ -3,7 +3,7 @@
 Every other coherent example in this directory is back to back: transmitter
 straight into receiver, with nothing between them. That was a real gap. Chromatic
 dispersion is the impairment that dominates any span longer than a patch cord,
-and until :class:`~oosim.components.dsp.DispersionCompensator` existed the
+and until :class:`~maiman.components.dsp.DispersionCompensator` existed the
 transceiver had never met it.
 
 Run this and the first table shows why. Five kilometres — a metro hop — costs
@@ -23,8 +23,8 @@ mechanism, and leaving the others in would make it about a power budget instead.
 
 from __future__ import annotations
 
-from oosim import Graph, SimulationContext
-from oosim.components import (
+from maiman import Graph, SimulationContext
+from maiman.components import (
     CarrierRecovery,
     CoherentReceiver,
     ConstellationAnalyzer,
@@ -37,8 +37,8 @@ from oosim.components import (
     PRBSGenerator,
     QAMMapper,
 )
-from oosim.dsp import dispersive_spread
-from oosim.signals import ConstellationMeasurement
+from maiman.dsp import dispersive_spread
+from maiman.signals import ConstellationMeasurement
 
 DISPERSION = 17.0  # ps/nm/km — standard single-mode fibre at 1550 nm
 V_PI = 4.0

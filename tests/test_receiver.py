@@ -5,9 +5,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from oosim import Graph, SimulationContext
-from oosim.components import CWLaser, PINPhotodiode
-from oosim.units import K_BOLTZMANN, Q_ELECTRON, dbm_to_w
+from maiman import Graph, SimulationContext
+from maiman.components import CWLaser, PINPhotodiode
+from maiman.units import K_BOLTZMANN, Q_ELECTRON, dbm_to_w
 
 # Noise variance is estimated from the samples, so the window has to be long
 # enough for the estimate to be tight: the relative error of a variance estimate
@@ -182,7 +182,7 @@ def test_multiple_bands_are_detected_incoherently() -> None:
     Beating between bands lands at their frequency separation, far outside any
     realistic receiver bandwidth, and is not modelled — see the class docstring.
     """
-    from oosim.components import Combiner
+    from maiman.components import Combiner
 
     ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=8, sequence_length=16)
     g = Graph(ctx)

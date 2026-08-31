@@ -1,8 +1,8 @@
-# OpenOptiSim
+# Maiman Studio
 
 **An open-source, modular simulator for optical communication links and photonic systems.**
 
-[![CI](https://github.com/ehsun-sh/OpenOptisim/actions/workflows/ci.yml/badge.svg)](https://github.com/ehsun-sh/OpenOptisim/actions/workflows/ci.yml)
+[![CI](https://github.com/ehsun-sh/maiman-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/ehsun-sh/maiman-studio/actions/workflows/ci.yml)
 ![status](https://img.shields.io/badge/status-pre--alpha-orange)
 ![license](https://img.shields.io/badge/license-Apache--2.0-blue)
 ![python](https://img.shields.io/badge/python-3.11%2B-blue)
@@ -49,7 +49,7 @@ that would let you press Run and get a new one. Open
 [`docs/ui-mockup.html`](docs/ui-mockup.html) in a browser to click through it, and
 [DESIGN.md](DESIGN.md) for why it looks like this.
 
-![The OpenOptiSim schematic editor on its paper ground](docs/images/studio-paper.png)
+![The Maiman Studio schematic editor on its paper ground](docs/images/studio-paper.png)
 
 It ships two grounds and defaults to paper, because a schematic is a document before it is a
 screen and its plots leave the tool for reports and papers. Graphite is one click away:
@@ -70,8 +70,8 @@ pip install -e ".[dev]" && pytest
 ```
 
 ```python
-from oosim import SimulationContext, Graph
-from oosim.components import CWLaser, Combiner, Fiber, PowerMeter
+from maiman import SimulationContext, Graph
+from maiman.components import CWLaser, Combiner, Fiber, PowerMeter
 
 ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=16, sequence_length=64)
 g = Graph(ctx)
@@ -131,7 +131,7 @@ filter and analyzer all have to agree for that to hold; it is
 [a test](tests/test_ber.py), not a coincidence.
 
 Both curves come from `sweep()`, and the same script writes the schematic to
-[`examples/ook_link.oosim`](examples/ook_link.oosim) — versioned JSON, diffable, runnable headless.
+[`examples/ook_link.maiman`](examples/ook_link.maiman) — versioned JSON, diffable, runnable headless.
 
 ### Coherent
 
@@ -155,7 +155,7 @@ and never look back.
 
 Nothing here is configured to come out right. The shot-noise-limited SNR is asserted against
 `R·P/(2qB)`, the counted symbol errors against
-[`ser_qam()`](src/oosim/modulation.py), and the modulator's 3 dB against `10·log10(2)`.
+[`ser_qam()`](src/maiman/modulation.py), and the modulator's 3 dB against `10·log10(2)`.
 
 ### What carrier recovery is for
 
@@ -171,7 +171,7 @@ tellingly, **launching more power stops helping**:
 
 Twelve dB of extra power buys 1.3 dB. Laser phase noise is a random walk, so it is not removable by
 subtracting a constant or a line, and it puts a ceiling on SNR that no power budget lifts.
-[`CarrierRecovery`](src/oosim/components/coherent.py) removes the ceiling using the blind phase
+[`CarrierRecovery`](src/maiman/components/coherent.py) removes the ceiling using the blind phase
 search of Pfau et al. Both halves of that claim are [asserted](tests/test_dsp.py) — the second
 would be meaningless without the first.
 
@@ -245,7 +245,7 @@ rotation    without equaliser              with equaliser
 
 Past a few degrees the unequalised branches are not degraded — they carry no recoverable data at
 all, because each is a *mixture* of both tributaries. The
-[butterfly equaliser](src/oosim/dsp.py) separates them blind, with no training sequence anywhere in
+[butterfly equaliser](src/maiman/dsp.py) separates them blind, with no training sequence anywhere in
 the link. Read the two end rows together: 90° is a clean swap rather than a mixture, so it needs no
 equaliser at all and simply delivers the tributaries the other way round — which is also why
 nothing blind can label them, and why a real link recovers the pairing from framing.
@@ -374,7 +374,7 @@ exactly zero in double precision, which would make rejection infinite and a chai
 accumulate no crosstalk at all. Real hardware specifies 30–50 dB and it is that floor, not the
 shape, that decides what leaks through a long line of them.
 
-The **[OSA](src/oosim/components/filters.py)** finally makes the signal model visible: bands and
+The **[OSA](src/maiman/components/filters.py)** finally makes the signal model visible: bands and
 noise bins rendered onto one grid, the way an instrument shows them. Its resolution bandwidth is
 not cosmetic — widening it raises the ASE trace decibel for decibel and leaves a carrier exactly
 where it is, which is the clearest demonstration of why OSNR needs a stated reference bandwidth.
@@ -469,7 +469,7 @@ What does not exist is a single coherent tool that puts them behind a usable int
 sound signal representation underneath.
 
 So the gap is **integration and user experience**, not numerics. That shapes the whole strategy:
-where a mature open-source kernel exists, OpenOptiSim wraps or depends on it rather than
+where a mature open-source kernel exists, Maiman Studio wraps or depends on it rather than
 rewriting it. The value added here is the data model, the execution engine, the component
 library, and the UI.
 
@@ -515,7 +515,7 @@ in the [architecture document](docs/ARCHITECTURE.md).
                     └───────────────────┬──────────────────┘
  ┌──────────────────────────────────────▼───────────────────────────────────────┐
  │                             Public Python API                                 │
- │        oosim.Graph · Component · run() · sweep()                              │
+ │        maiman.Graph · Component · run() · sweep()                              │
  └──────────────┬─────────────────────────────────────┬─────────────────────────┘
  ┌──────────────▼───────────────┐    ┌────────────────▼─────────────────┐
  │      Component Library       │◄──►│         Execution Engine         │
@@ -533,7 +533,7 @@ reachable from Python, it does not exist.**
 
 ## The core data model
 
-The part most worth reviewing — see [`src/oosim/signals.py`](src/oosim/signals.py). An optical
+The part most worth reviewing — see [`src/maiman/signals.py`](src/maiman/signals.py). An optical
 signal is not one array of numbers:
 
 ```python
@@ -574,7 +574,7 @@ time window, and results are reproducible.
 
 | Phase | Scope | Estimate¹ |
 | :--- | :--- | :--- |
-| **0 — Foundations** ✅ | Signal model, context, port types, component base, registry, scheduler, `.oosim` project format, sweeps, CI | ~1 month |
+| **0 — Foundations** ✅ | Signal model, context, port types, component base, registry, scheduler, `.maiman` project format, sweeps, CI | ~1 month |
 | **1 — MVP: linear link** *(essentially done)* | ✅ PRBS → NRZ → laser → MZM → fiber (α + CD) → PIN → filter → eye/Q/BER, validated end to end. **Python only, no GUI.** | ~2–3 months |
 | **1.5 — Nonlinear & amplified** ✅ | Adaptive-step SSFM, Kerr, EDFA with ASE, OSNR, PMD, APD | ~2 months |
 | **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier phase recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
@@ -646,8 +646,8 @@ docstring — never from inspection of commercial tools.
 The core is small enough that changing it is still cheap, which makes right now the most useful
 time to push back on it. Most valuable first:
 
-* **Review the signal model and scheduler** — [`src/oosim/signals.py`](src/oosim/signals.py),
-  [`src/oosim/graph.py`](src/oosim/graph.py), and §3–§4 of the
+* **Review the signal model and scheduler** — [`src/maiman/signals.py`](src/maiman/signals.py),
+  [`src/maiman/graph.py`](src/maiman/graph.py), and §3–§4 of the
   [architecture document](docs/ARCHITECTURE.md). If something there is wrong, it is far cheaper
   to fix now than after fifty components depend on it.
 * **Tell us if this duplicates existing work.** If a project already does this well, that is worth
@@ -655,7 +655,7 @@ time to push back on it. Most valuable first:
 * **Describe your use case.** Which components, which measurements, what you currently use and
   what frustrates you about it.
 * **Add a component.** A component is a Python class with declared parameters and typed ports —
-  see [`src/oosim/components/`](src/oosim/components/) for the pattern. Every physics block needs
+  see [`src/maiman/components/`](src/maiman/components/) for the pattern. Every physics block needs
   a test against a closed-form result; a component without one will not be merged.
 
 Open an issue for any of the above.

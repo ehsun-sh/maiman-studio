@@ -33,7 +33,7 @@ class ElectricalFilter(Component):
     effect on noise checkable exactly rather than approximately.
 
     The filter is zero-phase, so there is no group delay to compensate; see
-    :func:`oosim.kernels.lowpass_filter`.
+    :func:`maiman.kernels.lowpass_filter`.
     """
 
     display_name = "Electrical Filter"

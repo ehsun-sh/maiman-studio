@@ -1,7 +1,7 @@
 """Constellations, bit mapping, and the analytical error rates they are checked against.
 
 These are plain functions rather than component methods for the same reason the
-measurements in :mod:`oosim.analysis` are: the transmitter builds a constellation,
+measurements in :mod:`maiman.analysis` are: the transmitter builds a constellation,
 the receiver slices against it, the test suite compares both to theory, and one
 implementation is the only way those three can agree.
 
@@ -196,7 +196,7 @@ def blind_phase_search(
     invariant under a quarter turn. That symmetry is also the method's cost: the
     result is correct **modulo pi/2**, and nothing blind can do better. A real
     link resolves the ambiguity by differentially encoding the quadrant; see
-    :class:`~oosim.components.coherent.CarrierRecovery` for how it is resolved
+    :class:`~maiman.components.coherent.CarrierRecovery` for how it is resolved
     here.
 
     ``window`` is the one real trade. Too short and the estimate is noisy, which

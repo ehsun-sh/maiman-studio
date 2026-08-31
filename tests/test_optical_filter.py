@@ -20,9 +20,9 @@ import math
 import numpy as np
 import pytest
 
-from oosim import Graph, SimulationContext
-from oosim.component import Component
-from oosim.components import (
+from maiman import Graph, SimulationContext
+from maiman.component import Component
+from maiman.components import (
     EDFA,
     BERAnalyzer,
     Combiner,
@@ -38,12 +38,12 @@ from oosim.components import (
     PowerMeter,
     PRBSGenerator,
 )
-from oosim.kernels import (
+from maiman.kernels import (
     gaussian_noise_bandwidth,
     super_gaussian_noise_bandwidth,
     super_gaussian_response,
 )
-from oosim.units import C_LIGHT, wavelength_to_frequency
+from maiman.units import C_LIGHT, wavelength_to_frequency
 
 CHANNEL = 1550.0  # nm
 SPACING = 100e9  # Hz

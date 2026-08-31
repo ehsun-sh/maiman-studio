@@ -4,7 +4,7 @@ The chain under test is PRBS -> QAM mapper -> IQ driver -> IQ modulator ->
 coherent receiver -> sampler -> analyser. What makes these tests worth having is
 that most of them compare against something derived outside the code: the
 shot-noise-limited SNR against a closed form, the counted symbol error rate
-against :func:`oosim.modulation.ser_qam`, the modulator's intrinsic loss against
+against :func:`maiman.modulation.ser_qam`, the modulator's intrinsic loss against
 the 3 dB a dual-parallel structure costs by construction.
 """
 
@@ -16,8 +16,8 @@ from typing import Any, cast
 import numpy as np
 import pytest
 
-from oosim import Graph, SimulationContext
-from oosim.components import (
+from maiman import Graph, SimulationContext
+from maiman.components import (
     CoherentReceiver,
     ConstellationAnalyzer,
     ConstellationDiagram,
@@ -29,9 +29,9 @@ from oosim.components import (
     PRBSGenerator,
     QAMMapper,
 )
-from oosim.modulation import qam_constellation, ser_qam
-from oosim.signals import Band, ConstellationMeasurement, OpticalSignal, SymbolSignal
-from oosim.units import C_LIGHT, Q_ELECTRON
+from maiman.modulation import qam_constellation, ser_qam
+from maiman.signals import Band, ConstellationMeasurement, OpticalSignal, SymbolSignal
+from maiman.units import C_LIGHT, Q_ELECTRON
 
 SQUARE_ORDERS = [2, 4, 6]
 ALL_ORDERS = [1, *SQUARE_ORDERS]

@@ -18,8 +18,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from oosim import Graph, SimulationContext
-from oosim.components import (
+from maiman import Graph, SimulationContext
+from maiman.components import (
     ButterflyEqualizer,
     CarrierRecovery,
     CoherentReceiver,
@@ -37,10 +37,10 @@ from oosim.components import (
     QAMMapper,
     Splitter,
 )
-from oosim.dsp import compensate_dispersion, dispersive_spread
-from oosim.kernels import dispersion_to_beta2, propagate_dispersion
-from oosim.signals import ConstellationMeasurement
-from oosim.units import C_LIGHT
+from maiman.dsp import compensate_dispersion, dispersive_spread
+from maiman.kernels import dispersion_to_beta2, propagate_dispersion
+from maiman.signals import ConstellationMeasurement
+from maiman.units import C_LIGHT
 
 DISPERSION = 17.0  # ps/nm/km, standard single-mode fibre at 1550 nm
 V_PI = 4.0

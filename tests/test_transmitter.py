@@ -5,8 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from oosim import Graph, SimulationContext
-from oosim.components import (
+from maiman import Graph, SimulationContext
+from maiman.components import (
     CWLaser,
     DCVoltage,
     MachZehnderModulator,
@@ -14,8 +14,8 @@ from oosim.components import (
     PowerMeter,
     PRBSGenerator,
 )
-from oosim.components.electrical import PRBS_TAPS
-from oosim.units import db_to_linear
+from maiman.components.electrical import PRBS_TAPS
+from maiman.units import db_to_linear
 
 DB_TOL = 1e-4
 

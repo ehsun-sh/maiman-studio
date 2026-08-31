@@ -14,10 +14,10 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from oosim import Band, Graph, SimulationContext
-from oosim.analysis import instantaneous_power, peak_power, rms_time_width
-from oosim.components import Fiber, GaussianPulse, PowerMeter, SechPulse
-from oosim.kernels import (
+from maiman import Band, Graph, SimulationContext
+from maiman.analysis import instantaneous_power, peak_power, rms_time_width
+from maiman.components import Fiber, GaussianPulse, PowerMeter, SechPulse
+from maiman.kernels import (
     PropagationDiagnostics,
     dispersion_to_beta2,
     propagate_dispersion,
@@ -25,7 +25,7 @@ from oosim.kernels import (
     soliton_peak_power,
     soliton_period,
 )
-from oosim.units import w_to_dbm
+from maiman.units import w_to_dbm
 
 # A pulse-scale window: 0.39 ps per sample over 400 ps.
 PULSE_CTX = SimulationContext(bit_rate=10e9, samples_per_symbol=256, sequence_length=4)

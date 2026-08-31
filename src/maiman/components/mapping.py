@@ -27,7 +27,7 @@ class QAMMapper(Component):
 
     The run window holds :attr:`SimulationContext.sequence_length` *symbols*, so
     a source feeding this must supply that many times ``bits_per_symbol`` bits —
-    which is what :class:`~oosim.components.electrical.PRBSGenerator`'s own
+    which is what :class:`~maiman.components.electrical.PRBSGenerator`'s own
     ``bits_per_symbol`` is for. Mismatched lengths raise here rather than being
     silently truncated, because a truncated sequence still produces a BER.
     """

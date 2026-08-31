@@ -294,7 +294,7 @@ def propagate_coupled_ssfm(
 
     Polarization is not handled here. The caller passes co-polarized fields and
     calls twice, which reproduces the scalar-per-polarization model the rest of
-    the fiber already uses — see :class:`oosim.components.fiber.Fiber` for what
+    the fiber already uses — see :class:`maiman.components.fiber.Fiber` for what
     that leaves out.
 
     Returns the propagated fields, in input order, and

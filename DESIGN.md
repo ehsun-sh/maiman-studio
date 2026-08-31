@@ -1,6 +1,6 @@
 # Design
 
-The visual and interaction record for OpenOptiSim's interface. It exists because
+The visual and interaction record for Maiman Studio's interface. It exists because
 [`docs/ui-mockup.html`](docs/ui-mockup.html) is a *build*, and a build without a
 written rationale is a set of numbers nobody can argue with later. Everything
 here was decided against the audience and use scene in [PRODUCT.md](PRODUCT.md);

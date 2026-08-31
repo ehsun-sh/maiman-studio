@@ -15,9 +15,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from oosim import Graph, SimulationContext
-from oosim.components import APDPhotodiode, CWLaser, PINPhotodiode
-from oosim.units import K_BOLTZMANN, Q_ELECTRON, dbm_to_w
+from maiman import Graph, SimulationContext
+from maiman.components import APDPhotodiode, CWLaser, PINPhotodiode
+from maiman.units import K_BOLTZMANN, Q_ELECTRON, dbm_to_w
 
 NOISE_CTX = SimulationContext(bit_rate=10e9, samples_per_symbol=16, sequence_length=4096, seed=99)
 
