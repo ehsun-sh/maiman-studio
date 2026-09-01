@@ -1,5 +1,7 @@
 """Maiman Studio — simulation of optical communication links and photonic systems.
 
+Named for Theodore Maiman, who built the first working laser in May 1960.
+
 The public surface is deliberately small. Everything the GUI will eventually do
 goes through it: if a feature is not reachable from here, it does not exist.
 

@@ -2,6 +2,9 @@
 
 **An open-source, modular simulator for optical communication links and photonic systems.**
 
+*Named for **Theodore Maiman**, who fired the first working laser in May 1960 — the event every
+link in this simulator descends from.*
+
 [![CI](https://github.com/ehsun-sh/maiman-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/ehsun-sh/maiman-studio/actions/workflows/ci.yml)
 ![status](https://img.shields.io/badge/status-pre--alpha-orange)
 ![license](https://img.shields.io/badge/license-Apache--2.0-blue)

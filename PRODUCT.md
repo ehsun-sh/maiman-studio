@@ -9,6 +9,11 @@ result as an eye diagram, a BER number, an OSNR figure.
 The engine exists and is validated: 295 tests, every physics block checked against a closed-form
 result in CI. What does not exist yet is the interface.
 
+The name is **Theodore Maiman's**, who built the first working laser at Hughes Research
+Laboratories in May 1960 — a ruby rod that everything modelled here eventually descends from.
+It points the project at the physics rather than at a competing product, which the earlier name
+did not.
+
 ## Who uses it
 
 **Primary: the practising link engineer.** Designs or verifies an optical link. Comes from
