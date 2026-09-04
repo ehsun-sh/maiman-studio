@@ -258,9 +258,13 @@ Two findings worth keeping:
   and a schematic nobody can read is not a better demonstration. At 17 blocks
   the current graph is already close to that ceiling.
 - No motion beyond the run pulse and the control transitions.
-- No empty, loading or error states. The session server now produces all three —
-  a run that is still going, a graph that will not run, a component the server
-  does not know — but the page does not yet call it, so nothing here reacts to
-  them. Designing those states is part of wiring the canvas to the API, not
-  ahead of it: the server's own error vocabulary (400 unreadable, 422 readable
-  but unrunnable, 413 too large) is what they have to render.
+- The running, failed and stale states are now real, because the page calls the
+  engine. A run in flight dims the canvas and swaps Run for Stop; a failure
+  turns the engine dot red, names the kind of failure from the status the
+  server chose (400 unreadable, 422 readable but unrunnable, 413 too large) and
+  opens the log with the engine's own message in it; a graph edited since the
+  last run marks the results dock stale rather than leaving numbers on screen
+  that answer a question no longer being asked.
+- What is still missing is the *empty* state, because there is no way yet to
+  empty the canvas — blocks cannot be added or deleted. It arrives with the
+  editing, not before it.

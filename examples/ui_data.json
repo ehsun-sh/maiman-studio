@@ -13990,6 +13990,374 @@
    ]
   }
  ],
+ "project": {
+  "schema_version": 1,
+  "maiman_version": "0.0.1.dev0",
+  "context": {
+   "bit_rate": 32000000000.0,
+   "samples_per_symbol": 16,
+   "sequence_length": 4096,
+   "seed": 2026,
+   "precision": "double"
+  },
+  "nodes": [
+   {
+    "id": "prbs",
+    "type": "PRBSGenerator",
+    "params": {
+     "order": 23.0,
+     "bits_per_symbol": 4.0
+    }
+   },
+   {
+    "id": "map",
+    "type": "QAMMapper",
+    "params": {
+     "bits_per_symbol": 4.0,
+     "differential": true
+    }
+   },
+   {
+    "id": "ref",
+    "type": "QAMMapper",
+    "params": {
+     "bits_per_symbol": 4.0,
+     "differential": false
+    }
+   },
+   {
+    "id": "drv",
+    "type": "IQDriver",
+    "params": {
+     "v_pi": 4.0,
+     "predistort": true,
+     "pulse_shaping": true,
+     "roll_off": 0.2,
+     "drive_ratio": 0.4
+    }
+   },
+   {
+    "id": "tx",
+    "type": "CWLaser",
+    "params": {
+     "power": 2.0,
+     "wavelength": 1550.0,
+     "linewidth": 100.0
+    }
+   },
+   {
+    "id": "fib",
+    "type": "Fiber",
+    "params": {
+     "length": 80.0,
+     "attenuation": 0.2,
+     "dispersion": 17.0,
+     "nonlinearity": 0.0
+    }
+   },
+   {
+    "id": "mod",
+    "type": "IQModulator",
+    "params": {
+     "v_pi": 4.0
+    }
+   },
+   {
+    "id": "pm",
+    "type": "PowerMeter",
+    "params": {}
+   },
+   {
+    "id": "lo",
+    "type": "CWLaser",
+    "params": {
+     "power": 10.0,
+     "wavelength": 1550.0,
+     "linewidth": 100.0
+    }
+   },
+   {
+    "id": "rx",
+    "type": "CoherentReceiver",
+    "params": {
+     "responsivity": 0.8
+    }
+   },
+   {
+    "id": "cdc",
+    "type": "DispersionCompensator",
+    "params": {
+     "accumulated_dispersion": 1360.0,
+     "wavelength": 1550.0
+    }
+   },
+   {
+    "id": "smp",
+    "type": "IQSampler",
+    "params": {
+     "matched_filter": true,
+     "roll_off": 0.2
+    }
+   },
+   {
+    "id": "cr",
+    "type": "CarrierRecovery",
+    "params": {
+     "window": 64.0,
+     "test_phases": 32.0
+    }
+   },
+   {
+    "id": "dec",
+    "type": "DifferentialDecoder",
+    "params": {}
+   },
+   {
+    "id": "vsa",
+    "type": "ConstellationAnalyzer",
+    "params": {
+     "ignore_edges": 64.0
+    }
+   },
+   {
+    "id": "ber",
+    "type": "ConstellationAnalyzer",
+    "params": {
+     "ignore_edges": 64.0
+    }
+   },
+   {
+    "id": "cd",
+    "type": "ConstellationDiagram",
+    "params": {
+     "bins": 96.0,
+     "extent": 1.5
+    }
+   }
+  ],
+  "edges": [
+   {
+    "from": [
+     "dec",
+     "out"
+    ],
+    "to": [
+     "ber",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "ref",
+     "out"
+    ],
+    "to": [
+     "ber",
+     "reference"
+    ]
+   },
+   {
+    "from": [
+     "cr",
+     "out"
+    ],
+    "to": [
+     "cd",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "rx",
+     "i"
+    ],
+    "to": [
+     "cdc",
+     "i"
+    ]
+   },
+   {
+    "from": [
+     "rx",
+     "q"
+    ],
+    "to": [
+     "cdc",
+     "q"
+    ]
+   },
+   {
+    "from": [
+     "smp",
+     "out"
+    ],
+    "to": [
+     "cr",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "cr",
+     "out"
+    ],
+    "to": [
+     "dec",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "map",
+     "out"
+    ],
+    "to": [
+     "drv",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "mod",
+     "out"
+    ],
+    "to": [
+     "fib",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "prbs",
+     "out"
+    ],
+    "to": [
+     "map",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "drv",
+     "i"
+    ],
+    "to": [
+     "mod",
+     "i"
+    ]
+   },
+   {
+    "from": [
+     "tx",
+     "out"
+    ],
+    "to": [
+     "mod",
+     "optical_in"
+    ]
+   },
+   {
+    "from": [
+     "drv",
+     "q"
+    ],
+    "to": [
+     "mod",
+     "q"
+    ]
+   },
+   {
+    "from": [
+     "fib",
+     "out"
+    ],
+    "to": [
+     "pm",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "prbs",
+     "out"
+    ],
+    "to": [
+     "ref",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "fib",
+     "out"
+    ],
+    "to": [
+     "rx",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "lo",
+     "out"
+    ],
+    "to": [
+     "rx",
+     "lo"
+    ]
+   },
+   {
+    "from": [
+     "cdc",
+     "i"
+    ],
+    "to": [
+     "smp",
+     "i"
+    ]
+   },
+   {
+    "from": [
+     "cdc",
+     "q"
+    ],
+    "to": [
+     "smp",
+     "q"
+    ]
+   },
+   {
+    "from": [
+     "map",
+     "out"
+    ],
+    "to": [
+     "smp",
+     "reference"
+    ]
+   },
+   {
+    "from": [
+     "cr",
+     "out"
+    ],
+    "to": [
+     "vsa",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "map",
+     "out"
+    ],
+    "to": [
+     "vsa",
+     "reference"
+    ]
+   }
+  ]
+ },
  "context": {
   "symbol_rate": 32000000000.0,
   "samples_per_symbol": 16,

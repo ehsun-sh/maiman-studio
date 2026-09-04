@@ -263,6 +263,20 @@ def test_booleans_stay_booleans() -> None:
     assert encode(1)["value"] is not True
 
 
+def test_a_quantity_is_sent_in_the_unit_it_is_quoted_in() -> None:
+    """Accumulated dispersion is held in s/m and read in ps/nm, a factor of 1e3.
+
+    Both go over the wire. Leaving the conversion to the client puts a factor of
+    a thousand in code no test runs — and it did: the page printed "1 ps/nm
+    removed" for a compensator set to 1360.
+    """
+    from maiman.components.dsp import DispersionDiagnostics
+
+    encoded = encode(DispersionDiagnostics(accumulated_dispersion=1.36, removed_symbols=13.4))
+    assert encoded["accumulated_dispersion"] == pytest.approx(1.36, abs=0.0, rel=1e-12)
+    assert encoded["accumulated_dispersion_ps_nm"] == pytest.approx(1360.0, abs=0.0, rel=1e-12)
+
+
 def test_results_are_keyed_by_component_then_port() -> None:
     results = simple_link().run()
     encoded = encode_results(results)

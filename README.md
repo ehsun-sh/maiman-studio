@@ -35,9 +35,9 @@ link in this simulator descends from.*
 > each channel's phase at twice the rate its own does, sliding past under walk-off derived from
 > the dispersion — and triplets of channels mix to put light where nobody launched it.
 >
-> The session server is in: `python -m maiman.server` puts the engine behind an HTTP API and a
-> browser can build a link, post it, and get real numbers back. What is still missing is the
-> editor — the canvas that lets you draw the graph instead of describing it. See the
+> The interface runs: `python -m maiman.server`, open the page, press Run, and the numbers come
+> from the engine. What is still missing is the *editing* — the canvas draws a fixed schematic,
+> so you can change what a block does but not which blocks there are. See the
 > [roadmap](#roadmap).
 >
 > This is not yet a useful simulator. It is a foundation with the expensive decisions made and
@@ -48,18 +48,34 @@ link in this simulator descends from.*
 
 ## The interface
 
-**The engine is behind an API; the canvas is not wired to it yet.** The schematic, the component
-palette, the parameter panel and every number in the results dock come from a real engine run,
-exported by [`examples/export_ui_data.py`](examples/export_ui_data.py). What has changed is that
-those numbers no longer have to be exported ahead of time — see
-[the session server](#the-session-server) below. What has not changed is the page: it still draws
-one fixed schematic, and making it an editor is the next piece of work.
+**It runs.**
 
     python -m maiman.server
 
-serves it at `http://127.0.0.1:8765/`, or open
-[`docs/ui-mockup.html`](docs/ui-mockup.html) directly to click through it. See
-[DESIGN.md](DESIGN.md) for why it looks like this.
+then open `http://127.0.0.1:8765/`. Press Run and the page posts its graph to the engine and draws
+what comes back: the constellation, the measurements, the block captions, and a log in which every
+line is a fact from the response. Change a parameter in the inspector and run again, and the
+numbers move because the physics moved — set the fiber to 200 km and the received power drops by
+exactly the 24 dB the extra loss costs, while the constellation collapses, because the dispersion
+compensator is still set for the old span.
+
+**The canvas draws the project document itself.** The blocks, the wires and the parameter values
+are not written into the page. They are read from the same `.maiman` document the server accepts,
+exported from the graph that produced the reference numbers, and Run posts that object straight
+back. So the picture on the canvas, the values in the inspector and the graph the engine executes
+are one description instead of three kept in agreement by hand — the hand-written copy that used
+to live in the page had already drifted, and was missing four of the fiber's parameters.
+
+**What it is not yet: an editor.** You can select a block, change its parameters and run. You
+cannot add a block, delete one, move one, or draw a wire — the canvas is still a fixed schematic.
+That is the React Flow work, and it is the next piece.
+
+The page also still opens straight off disk with nothing running, which is how it should be read
+if you only want to look. It says which mode it is in rather than leaving it to be inferred: a
+badge in the results dock reads **live** when the numbers came from this session's last run,
+**stale — graph edited** when the graph has changed since, and **reference** when they came from
+the run baked into the file. Numbers from four days ago and numbers from the last click must never
+look alike. See [DESIGN.md](DESIGN.md) for why the rest of it looks like this.
 
 ![The Maiman Studio schematic editor on its paper ground](docs/images/studio-paper.png)
 
@@ -639,7 +655,7 @@ time window, and results are reproducible.
 | **1 — MVP: linear link** *(essentially done)* | ✅ PRBS → NRZ → laser → MZM → fiber (α + CD) → PIN → filter → eye/Q/BER, validated end to end. **Python only, no GUI.** | ~2–3 months |
 | **1.5 — Nonlinear & amplified** ✅ | Adaptive-step SSFM, Kerr, EDFA with ASE, OSNR, PMD, APD | ~2 months |
 | **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier phase recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
-| **3 — GUI & WDM** | ✅ Wavelength-selective filters, an OSA, coupled-channel propagation (XPM with walk-off, FWM), and the session server. React Flow graph editor · 400G/800G references, CuPy back-end | ~6 months |
+| **3 — GUI & WDM** | ✅ Wavelength-selective filters, an OSA, coupled-channel propagation (XPM with walk-off, FWM), the session server, and a browser that runs the graph and edits its parameters. React Flow canvas — add, wire and move blocks · 400G/800G references, CuPy back-end | ~6 months |
 | **4 — PIC** | Waveguides, ring resonators, MMI, MZI via integration with an existing S-matrix solver; PDK import | — |
 
 ¹ One developer, part-time. Estimates, not commitments.

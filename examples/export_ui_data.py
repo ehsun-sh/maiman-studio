@@ -37,6 +37,7 @@ from maiman.components import (
     PRBSGenerator,
     QAMMapper,
 )
+from maiman.project import graph_to_dict
 
 V_PI = 4.0
 SYMBOL_RATE = 32e9
@@ -236,6 +237,12 @@ def main() -> None:
             "unit": eye.unit,
         },
         "sensitivity": sensitivity,
+        # The graph itself, in the same `.maiman` document format the session
+        # server accepts. The interface draws its schematic from this and posts
+        # it back to run it, so the blocks on the canvas, the values in the
+        # inspector and the graph the engine executes cannot drift apart —
+        # there is only the one description of them.
+        "project": graph_to_dict(graph),
         "context": {
             "symbol_rate": graph.ctx.bit_rate,
             "samples_per_symbol": graph.ctx.samples_per_symbol,

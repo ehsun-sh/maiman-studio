@@ -280,9 +280,15 @@ def _diagnostics(diagnostics: PropagationDiagnostics) -> dict[str, Any]:
 
 
 def _dispersion(diagnostics: DispersionDiagnostics) -> dict[str, Any]:
+    # Accumulated dispersion is held in s/m and quoted in ps/nm, which differ by
+    # 1e3 rather than by one of the usual powers. Both are sent: a client that
+    # does arithmetic wants the SI value, and one that prints a label wants the
+    # unit the parameter was typed in — deriving the second in the browser means
+    # a factor of a thousand living somewhere nothing tests.
     return {
         "kind": "dispersion",
         "accumulated_dispersion": number(diagnostics.accumulated_dispersion),
+        "accumulated_dispersion_ps_nm": number(diagnostics.accumulated_dispersion * 1e3),
         "removed_symbols": number(diagnostics.removed_symbols),
     }
 

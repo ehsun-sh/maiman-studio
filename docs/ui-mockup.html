@@ -510,6 +510,29 @@ verdict, and DESIGN.md
     color: var(--ink);
   }
   .metric .v.pass { color: var(--good); }
+  /* A field the engine would refuse. Marked, not corrected: silently clamping
+     someone's number is worse than telling them it is out of range. */
+  .field.invalid input { border-color: var(--bad); color: var(--bad); }
+  .field.invalid .field-range { color: var(--bad); }
+  /* Provenance. Deliberately quiet when it says "reference" — that is the
+     resting state and shouting about it would be noise fifty times an hour —
+     and only coloured once the numbers beside it came from a real run. */
+  #provenance {
+    font-size: 10.5px; padding: 2px 8px; margin-right: 4px; border-radius: 3px;
+    color: var(--ink-4); background: var(--panel-2); border: 1px solid var(--rule-soft);
+    letter-spacing: 0.02em; white-space: nowrap;
+  }
+  #provenance.stale {
+    color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent);
+    background: color-mix(in srgb, var(--warn) 10%, transparent);
+  }
+  #provenance.live {
+    color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, transparent);
+    background: color-mix(in srgb, var(--good) 10%, transparent);
+  }
+  /* A failed run turns the engine dot red; it is green for ready and amber
+     while busy, and those two already existed. */
+  .dot.failed { background: var(--bad); }
 
   .dock-body { flex: 1; min-height: 0; display: flex; }
   .pane { display: none; flex: 1; min-width: 0; }
@@ -732,6 +755,9 @@ verdict, and DESIGN.md
         <button class="tab" role="tab" aria-selected="false" data-pane="sens">Sensitivity</button>
         <button class="tab" role="tab" aria-selected="false" data-pane="log">Log</button>
         <div class="dock-metrics">
+          <!-- Says whether the numbers to its right came from this session or
+               from the run bundled into the page. The two must never look alike. -->
+          <span class="seg num" id="provenance">reference</span>
           <div class="metric"><span class="k">EVM</span><span class="v" id="m-evm">—</span></div>
           <div class="metric"><span class="k">SNR</span><span class="v" id="m-snr">—</span></div>
           <div class="metric"><span class="k">BER</span><span class="v" id="m-ber">—</span></div>
@@ -796,8 +822,8 @@ verdict, and DESIGN.md
 
   <!-- ===== Status bar ===== -->
   <div class="statusbar">
-    <span class="seg">17 blocks</span>
-    <span class="seg">22 links</span>
+    <span class="seg" id="sb-blocks">— blocks</span>
+    <span class="seg" id="sb-links">— links</span>
     <span class="seg" id="sb-sel">QAM Mapper selected</span>
     <div class="right">
       <span class="seg num">65 536 samples</span>
@@ -14799,6 +14825,374 @@ verdict, and DESIGN.md
    ]
   }
  ],
+ "project": {
+  "schema_version": 1,
+  "maiman_version": "0.0.1.dev0",
+  "context": {
+   "bit_rate": 32000000000.0,
+   "samples_per_symbol": 16,
+   "sequence_length": 4096,
+   "seed": 2026,
+   "precision": "double"
+  },
+  "nodes": [
+   {
+    "id": "prbs",
+    "type": "PRBSGenerator",
+    "params": {
+     "order": 23.0,
+     "bits_per_symbol": 4.0
+    }
+   },
+   {
+    "id": "map",
+    "type": "QAMMapper",
+    "params": {
+     "bits_per_symbol": 4.0,
+     "differential": true
+    }
+   },
+   {
+    "id": "ref",
+    "type": "QAMMapper",
+    "params": {
+     "bits_per_symbol": 4.0,
+     "differential": false
+    }
+   },
+   {
+    "id": "drv",
+    "type": "IQDriver",
+    "params": {
+     "v_pi": 4.0,
+     "predistort": true,
+     "pulse_shaping": true,
+     "roll_off": 0.2,
+     "drive_ratio": 0.4
+    }
+   },
+   {
+    "id": "tx",
+    "type": "CWLaser",
+    "params": {
+     "power": 2.0,
+     "wavelength": 1550.0,
+     "linewidth": 100.0
+    }
+   },
+   {
+    "id": "fib",
+    "type": "Fiber",
+    "params": {
+     "length": 80.0,
+     "attenuation": 0.2,
+     "dispersion": 17.0,
+     "nonlinearity": 0.0
+    }
+   },
+   {
+    "id": "mod",
+    "type": "IQModulator",
+    "params": {
+     "v_pi": 4.0
+    }
+   },
+   {
+    "id": "pm",
+    "type": "PowerMeter",
+    "params": {}
+   },
+   {
+    "id": "lo",
+    "type": "CWLaser",
+    "params": {
+     "power": 10.0,
+     "wavelength": 1550.0,
+     "linewidth": 100.0
+    }
+   },
+   {
+    "id": "rx",
+    "type": "CoherentReceiver",
+    "params": {
+     "responsivity": 0.8
+    }
+   },
+   {
+    "id": "cdc",
+    "type": "DispersionCompensator",
+    "params": {
+     "accumulated_dispersion": 1360.0,
+     "wavelength": 1550.0
+    }
+   },
+   {
+    "id": "smp",
+    "type": "IQSampler",
+    "params": {
+     "matched_filter": true,
+     "roll_off": 0.2
+    }
+   },
+   {
+    "id": "cr",
+    "type": "CarrierRecovery",
+    "params": {
+     "window": 64.0,
+     "test_phases": 32.0
+    }
+   },
+   {
+    "id": "dec",
+    "type": "DifferentialDecoder",
+    "params": {}
+   },
+   {
+    "id": "vsa",
+    "type": "ConstellationAnalyzer",
+    "params": {
+     "ignore_edges": 64.0
+    }
+   },
+   {
+    "id": "ber",
+    "type": "ConstellationAnalyzer",
+    "params": {
+     "ignore_edges": 64.0
+    }
+   },
+   {
+    "id": "cd",
+    "type": "ConstellationDiagram",
+    "params": {
+     "bins": 96.0,
+     "extent": 1.5
+    }
+   }
+  ],
+  "edges": [
+   {
+    "from": [
+     "dec",
+     "out"
+    ],
+    "to": [
+     "ber",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "ref",
+     "out"
+    ],
+    "to": [
+     "ber",
+     "reference"
+    ]
+   },
+   {
+    "from": [
+     "cr",
+     "out"
+    ],
+    "to": [
+     "cd",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "rx",
+     "i"
+    ],
+    "to": [
+     "cdc",
+     "i"
+    ]
+   },
+   {
+    "from": [
+     "rx",
+     "q"
+    ],
+    "to": [
+     "cdc",
+     "q"
+    ]
+   },
+   {
+    "from": [
+     "smp",
+     "out"
+    ],
+    "to": [
+     "cr",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "cr",
+     "out"
+    ],
+    "to": [
+     "dec",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "map",
+     "out"
+    ],
+    "to": [
+     "drv",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "mod",
+     "out"
+    ],
+    "to": [
+     "fib",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "prbs",
+     "out"
+    ],
+    "to": [
+     "map",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "drv",
+     "i"
+    ],
+    "to": [
+     "mod",
+     "i"
+    ]
+   },
+   {
+    "from": [
+     "tx",
+     "out"
+    ],
+    "to": [
+     "mod",
+     "optical_in"
+    ]
+   },
+   {
+    "from": [
+     "drv",
+     "q"
+    ],
+    "to": [
+     "mod",
+     "q"
+    ]
+   },
+   {
+    "from": [
+     "fib",
+     "out"
+    ],
+    "to": [
+     "pm",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "prbs",
+     "out"
+    ],
+    "to": [
+     "ref",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "fib",
+     "out"
+    ],
+    "to": [
+     "rx",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "lo",
+     "out"
+    ],
+    "to": [
+     "rx",
+     "lo"
+    ]
+   },
+   {
+    "from": [
+     "cdc",
+     "i"
+    ],
+    "to": [
+     "smp",
+     "i"
+    ]
+   },
+   {
+    "from": [
+     "cdc",
+     "q"
+    ],
+    "to": [
+     "smp",
+     "q"
+    ]
+   },
+   {
+    "from": [
+     "map",
+     "out"
+    ],
+    "to": [
+     "smp",
+     "reference"
+    ]
+   },
+   {
+    "from": [
+     "cr",
+     "out"
+    ],
+    "to": [
+     "vsa",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "map",
+     "out"
+    ],
+    "to": [
+     "vsa",
+     "reference"
+    ]
+   }
+  ]
+ },
  "context": {
   "symbol_rate": 32000000000.0,
   "samples_per_symbol": 16,
@@ -14833,83 +15227,148 @@ verdict, and DESIGN.md
     "Electrical": "electrical", "Measurements": "metric"
   };
 
-  /* ---------- The schematic, as actually built by examples/export_ui_data.py
+  /* ---------- The schematic, which is the project document -----------------
+     The blocks, the wires and the parameter values are not written here. They
+     are read from `DATA.project`, the same `.maiman` document the session
+     server accepts, exported by examples/export_ui_data.py from the graph it
+     actually ran. Pressing Run posts this object back. So the picture on the
+     canvas, the numbers in the inspector and the graph the engine executes are
+     one description rather than three that have to be kept in agreement — the
+     hand-written copy that used to live here had already drifted, and was
+     missing four of the fiber's parameters.
+
      A coherent link rather than an on-off-keyed one, because it is the graph
      that exercises the whole port-type system: binary into symbols, symbols
      into two electrical drives, an optical field, two photocurrents back, and
-     symbols out again. Every one of the five port colours appears on it. */
-  const NODES = [
-    { id: "ref",  type: "QAMMapper",            x: 168, y:  30, label: "ref",  sub: "absolute" },
-    { id: "tx",   type: "CWLaser",              x: 306, y:  30, label: "tx",   sub: "+2 dBm" },
-    { id: "lo",   type: "CWLaser",              x: 444, y:  30, label: "lo",   sub: "+10 dBm" },
-    { id: "pm",   type: "PowerMeter",           x: 720, y:  30, label: "pm",   sub: "−27.9 dBm" },
-    { id: "prbs", type: "PRBSGenerator",        x:  30, y: 220, label: "prbs", sub: "PRBS-23" },
-    { id: "map",  type: "QAMMapper",            x: 168, y: 220, label: "map",  sub: "16-QAM diff" },
-    { id: "drv",  type: "IQDriver",             x: 306, y: 220, label: "drv",  sub: "RRC β 0.2" },
-    { id: "mod",  type: "IQModulator",          x: 444, y: 220, label: "mod",  sub: "Vπ 4 V" },
-    { id: "fib",  type: "Fiber",                x: 582, y: 220, label: "fib",  sub: "80 km SMF" },
-    { id: "rx",   type: "CoherentReceiver",     x: 720, y: 220, label: "rx",   sub: "0.8 A/W" },
-    { id: "cdc",  type: "DispersionCompensator", x: 30, y: 410, label: "cdc", sub: "1360 ps/nm" },
-    { id: "smp",  type: "IQSampler",            x: 168, y: 410, label: "smp",  sub: "matched" },
-    { id: "cr",   type: "CarrierRecovery",      x: 306, y: 410, label: "cr",   sub: "64-sym BPS" },
-    { id: "dec",  type: "DifferentialDecoder",  x: 444, y: 410, label: "dec",  sub: "quadrant" },
-    { id: "cd",   type: "ConstellationDiagram", x: 582, y: 410, label: "cd",   sub: "96 × 96" },
-    { id: "vsa",  type: "ConstellationAnalyzer", x: 720, y: 410, label: "vsa", sub: "EVM 7.3 %" },
-    { id: "ber",  type: "ConstellationAnalyzer", x: 858, y: 410, label: "ber", sub: "0 errors" }
-  ];
-  const EDGES = [
-    { from: ["prbs", "out"], to: ["map", "in"],           type: "binary" },
-    { from: ["prbs", "out"], to: ["ref", "in"],           type: "binary" },
-    { from: ["map", "out"],  to: ["drv", "in"],           type: "symbol" },
-    { from: ["map", "out"],  to: ["smp", "reference"],    type: "symbol" },
-    { from: ["map", "out"],  to: ["vsa", "reference"],    type: "symbol" },
-    { from: ["ref", "out"],  to: ["ber", "reference"],    type: "symbol" },
-    { from: ["drv", "i"],    to: ["mod", "i"],            type: "electrical" },
-    { from: ["drv", "q"],    to: ["mod", "q"],            type: "electrical" },
-    { from: ["tx", "out"],   to: ["mod", "optical_in"],   type: "optical" },
-    { from: ["lo", "out"],   to: ["rx", "lo"],            type: "optical" },
-    { from: ["mod", "out"],  to: ["fib", "in"],           type: "optical" },
-    { from: ["fib", "out"],  to: ["pm", "in"],            type: "optical" },
-    { from: ["fib", "out"],  to: ["rx", "in"],            type: "optical" },
-    { from: ["rx", "i"],     to: ["cdc", "i"],            type: "electrical" },
-    { from: ["rx", "q"],     to: ["cdc", "q"],            type: "electrical" },
-    { from: ["cdc", "i"],    to: ["smp", "i"],            type: "electrical" },
-    { from: ["cdc", "q"],    to: ["smp", "q"],            type: "electrical" },
-    { from: ["smp", "out"],  to: ["cr", "in"],            type: "symbol" },
-    { from: ["cr", "out"],   to: ["dec", "in"],           type: "symbol" },
-    { from: ["cr", "out"],   to: ["cd", "in"],            type: "symbol" },
-    { from: ["cr", "out"],   to: ["vsa", "in"],           type: "symbol" },
-    { from: ["dec", "out"],  to: ["ber", "in"],           type: "symbol" }
-  ];
-  // Values the export script actually ran with. Two things on this graph are
-  // worth reading twice. The drive is backed off to 0.4 because a shaped
-  // waveform overshoots between symbols and a full-swing drive would clip. And
-  // there are two analysers rather than one: EVM is a soft measurement and has
-  // to be taken before the decoder, which emits decisions and would read a
-  // perfect zero however bad the link was; the error count only exists after it.
-  const VALUES = {
-    ref:  { bits_per_symbol: 4, differential: false },
-    tx:   { power: 2, wavelength: 1550, linewidth: 100 },
-    lo:   { power: 10, wavelength: 1550, linewidth: 100 },
-    prbs: { order: 23, bits_per_symbol: 4 },
-    map:  { bits_per_symbol: 4, differential: true },
-    drv:  { v_pi: 4, drive_ratio: 0.4, predistort: true, pulse_shaping: true,
-            roll_off: 0.2, filter_span: 16 },
-    mod:  { v_pi: 4, bias_i: 0, bias_q: 0, quadrature_error: 0, insertion_loss: 0 },
-    fib:  { length: 80, attenuation: 0.2, dispersion: 17, nonlinearity: 0,
-            max_nonlinear_phase: 0.005, pmd_coefficient: 0, pmd_sections: 60 },
-    pm:   {},
-    rx:   { responsivity: 0.8, load_resistance: 50, temperature: 300,
-            shot_noise: true, thermal_noise: true },
-    cdc:  { accumulated_dispersion: 1360, wavelength: 1550 },
-    smp:  { sample_offset: -1, agc: true, matched_filter: true, roll_off: 0.2,
-            filter_span: 16 },
-    cr:   { test_phases: 32, window: 64 },
-    dec:  {},
-    cd:   { bins: 96, extent: 1.5 },
-    vsa:  { ignore_edges: 64, remove_frequency_offset: true },
-    ber:  { ignore_edges: 64, remove_frequency_offset: true }
+     symbols out again. Every one of the five port colours appears on it.
+
+     What does stay here is where each block sits. Layout is a drawing
+     decision, not a property of the link, and the engine has no opinion about
+     it — a graph means the same thing wherever its blocks are placed. */
+  const LAYOUT = {
+    ref:  { x: 168, y:  30 }, tx:  { x: 306, y:  30 }, lo:  { x: 444, y:  30 },
+    pm:   { x: 720, y:  30 },
+    prbs: { x:  30, y: 220 }, map: { x: 168, y: 220 }, drv: { x: 306, y: 220 },
+    mod:  { x: 444, y: 220 }, fib: { x: 582, y: 220 }, rx:  { x: 720, y: 220 },
+    cdc:  { x:  30, y: 410 }, smp: { x: 168, y: 410 }, cr:  { x: 306, y: 410 },
+    dec:  { x: 444, y: 410 }, cd:  { x: 582, y: 410 }, vsa: { x: 720, y: 410 },
+    ber:  { x: 858, y: 410 }
   };
+
+  /* The live session state. Editing a parameter writes into PROJECT.nodes, and
+     Run posts exactly this — there is no separate copy to fall out of step. */
+  const PROJECT = structuredClone(DATA.project);
+
+  const nodeById = (id) => PROJECT.nodes.find((n) => n.id === id);
+
+  /* A wire is coloured by what travels down it, which the manifest of the
+     block it leaves already knows. Reading it from there rather than restating
+     it per edge means a wire cannot be drawn the wrong colour. */
+  function portType(ref) {
+    const [id, port] = ref;
+    const node = nodeById(id);
+    const m = node && DATA.manifests[node.type];
+    return (m && m.ports.outputs[port]) || "binary";
+  }
+
+  const NODES = PROJECT.nodes.map((n) => ({
+    id: n.id, type: n.type, label: n.id,
+    x: (LAYOUT[n.id] || {}).x ?? 30, y: (LAYOUT[n.id] || {}).y ?? 30,
+    sub: ""
+  }));
+  const EDGES = PROJECT.edges.map((e) => ({
+    from: e.from, to: e.to, type: portType(e.from)
+  }));
+  /* Parameter values are the project's own objects, not copies: editing one in
+     the inspector edits the document that gets posted. */
+  const VALUES = Object.fromEntries(PROJECT.nodes.map((n) => [n.id, n.params]));
+
+  /* ---------- The session ---------------------------------------------------
+     This page is served two ways and has to work both. From the session server
+     it can run the graph; opened straight off disk it cannot, and everything it
+     shows then comes from the reference run bundled into the file. Neither mode
+     is a degraded version of the other pretending to be the good one: the dock
+     says which it is looking at, because a plot that came from a run four days
+     ago and one that came from the last click must never look alike.
+
+     `live` says whether the numbers on screen came from this session. */
+  const SESSION = {
+    api: location.protocol === "http:" || location.protocol === "https:",
+    live: false,      // are the numbers on screen from this session's last run?
+    hasRun: false,    // has this session ever run?
+    running: false,
+    captions: {},      // block id -> caption from the last run, when it has one
+    results: null,     // the last run's payload
+    /* Plot data from the last run, empty until one produces some. It lives
+       here rather than beside the run code because applyTheme() redraws the
+       plots while the page is still loading, so a plot cannot read anything
+       declared further down the file. */
+    plots: { constellation: null }
+  };
+
+  async function callApi(path, options) {
+    const response = await fetch(path, options);
+    const text = await response.text();
+    let body = null;
+    try { body = JSON.parse(text); } catch { /* not JSON; keep the text */ }
+    if (!response.ok) {
+      const error = new Error((body && body.error) || text.slice(0, 200) ||
+                              `${response.status} ${response.statusText}`);
+      error.status = response.status;
+      error.detail = body && body.detail;
+      throw error;
+    }
+    return body;
+  }
+
+  /* ---------- Block captions ----------------------------------------------
+     The second line of a block used to be a fixed string. It is now read from
+     the block's own parameters, so editing a value in the inspector changes
+     what the canvas says, and a measurement block shows its last result rather
+     than a number someone typed once. `param` falls back to the manifest
+     default, because the project only stores values that were set. */
+  function param(id, name) {
+    const node = nodeById(id);
+    if (!node) return undefined;
+    if (node.params && node.params[name] !== undefined) return node.params[name];
+    const m = DATA.manifests[node.type];
+    const spec = m && m.parameters[name];
+    return spec && spec.default;
+  }
+
+  const CAPTION = {
+    CWLaser:               (id) => `${fmt(param(id, "power"))} dBm`,
+    Fiber:                 (id) => `${fmt(param(id, "length"))} km`,
+    PRBSGenerator:         (id) => `PRBS-${fmt(param(id, "order"))}`,
+    QAMMapper:             (id) => `${1 << param(id, "bits_per_symbol")}-QAM` +
+                                   (param(id, "differential") ? " diff" : ""),
+    IQDriver:              (id) => `Vπ ${fmt(param(id, "v_pi"))} V`,
+    IQModulator:           (id) => `Vπ ${fmt(param(id, "v_pi"))} V`,
+    CoherentReceiver:      (id) => `${fmt(param(id, "responsivity"))} A/W`,
+    DispersionCompensator: (id) => `${fmt(param(id, "accumulated_dispersion"))} ps/nm`,
+    IQSampler:             (id) => (param(id, "matched_filter") ? "matched" : "no filter"),
+    CarrierRecovery:       (id) => `${fmt(param(id, "window"))}-sym BPS`,
+    ConstellationDiagram:  (id) => `${fmt(param(id, "bins"))} × ${fmt(param(id, "bins"))}`,
+    OpticalFilter:         (id) => `${fmt(param(id, "bandwidth"))} GHz`,
+    EDFA:                  (id) => `${fmt(param(id, "gain"))} dB`
+  };
+
+  function caption(node) {
+    const live = SESSION.captions[node.id];
+    if (live !== undefined) return live;
+    const manifest = DATA.manifests[node.type];
+    /* A measurement block's caption is its reading. Before there is one it says
+       so — its parameters describe how it measures, not what it found, and
+       putting "ignore_edges 64" where a number belongs invites reading it as
+       one. */
+    if (manifest.category === "Measurements") return "—";
+    const shape = CAPTION[node.type];
+    if (shape) { try { return shape(node.id); } catch { /* fall through */ } }
+    const first = Object.keys(manifest.parameters)[0];
+    /* A block with nothing to configure has nothing to say here; the label
+       alone is cleaner than restating its category under its own name. */
+    return first ? `${first} ${fmt(param(node.id, first))}` : "";
+  }
 
   const NODE_W = 116, NODE_H = 52;
   const $ = (s) => document.querySelector(s);
@@ -15047,7 +15506,8 @@ verdict, and DESIGN.md
       t1.textContent = truncate(m.name, 15);
       el("title", {}, t1).textContent = m.name;
       const t2 = el("text", { x: n.x + 12, y: n.y + 37, class: "node-sub" }, g);
-      t2.textContent = `${n.label} · ${n.sub}`;
+      const cap = caption(n);
+      t2.textContent = cap ? `${n.label} · ${cap}` : n.label;
 
       inputs.forEach(([name, type], i) => {
         const y = n.y + (NODE_H * (i + 1)) / (inputs.length + 1);
@@ -15124,7 +15584,63 @@ verdict, and DESIGN.md
     $("#sb-sel").textContent = `${m.name}${label ? " · " + label : ""} selected`;
   }
 
-  const showNode = (n) => renderInspector(n.type, n.label, VALUES[n.id]);
+  /* ---------- Editing a parameter -------------------------------------------
+     The inspector used to render controls that were wired to nothing: typing
+     in one changed the pixels and no more, which is why it would cheerfully
+     accept 128 for a field whose own label said "range 1 … 8". Now an edit
+     writes into the project document, and the document is what Run posts.
+
+     Validation is here as well as in the engine, and both are needed for
+     different reasons. The engine's check is the one that must be right: it
+     runs whether or not anything came through this page. This one exists so
+     that a typo is answered where it was made, immediately, instead of
+     surviving until a run comes back and has to explain itself. When they
+     disagree the engine wins — the field is marked and the value is left for
+     the server to reject in its own words. */
+  function bindFields(nodeId) {
+    if (!nodeId) return;
+    const node = nodeById(nodeId);
+    if (!node) return;
+    const specs = DATA.manifests[node.type].parameters;
+    inspector.querySelectorAll(".field").forEach((field) => {
+      const label = field.querySelector("label");
+      const input = field.querySelector("input");
+      if (!label || !input) return;
+      const name = label.textContent;
+      const spec = specs[name];
+      if (!spec) return;
+
+      const commit = () => {
+        if (spec.type === "bool") {
+          node.params[name] = input.checked;
+        } else {
+          const value = Number(input.value);
+          const bad = !Number.isFinite(value)
+            || (spec.min !== undefined && value < spec.min)
+            || (spec.max !== undefined && value > spec.max);
+          field.classList.toggle("invalid", bad);
+          if (bad) return;          // leave the last good value in the document
+          node.params[name] = value;
+          input.value = fmt(value);
+        }
+        /* The canvas caption is drawn from these values, so it changes as they
+           do — and a result on screen is now older than the graph that
+           produced it, which the badge has to stop claiming otherwise. */
+        SESSION.captions = {};
+        SESSION.live = false;
+        markProvenance();
+        drawGraph();
+      };
+
+      input.addEventListener("change", commit);
+      if (spec.type !== "bool") input.addEventListener("blur", commit);
+    });
+  }
+
+  const showNode = (n) => {
+    renderInspector(n.type, n.label, VALUES[n.id]);
+    bindFields(n.id);
+  };
   const showManifest = (key) => renderInspector(key, "", null);
 
   /* ---------- Plot colours ------------------------------------------------
@@ -15235,7 +15751,11 @@ verdict, and DESIGN.md
     const c = $("#con-canvas");
     if (!c.parentElement.offsetWidth) return;
     const { ctx, w, h } = sizeCanvas(c);
-    const counts = DATA.constellation.counts;
+    /* The last run's histogram when there was one, otherwise the reference run
+       bundled into the page. Which of the two is on screen is never left to be
+       inferred — the badge in the dock header says so. */
+    const source = SESSION.plots.constellation || DATA.constellation;
+    const counts = source.counts;
     const rows = counts.length, cols = counts[0].length;
 
     ctx.fillStyle = tok("--plot-bg");
@@ -15248,7 +15768,7 @@ verdict, and DESIGN.md
     const x0 = padL + (w - padL - padR - side) / 2;
     const y0 = padT + (h - padT - padB - side) / 2;
 
-    const edges = DATA.constellation.inphase_edges;
+    const edges = source.inphase_edges;
     const lo = edges[0], hi = edges[edges.length - 1];
     const X = (v) => x0 + ((v - lo) / (hi - lo)) * side;
     const Y = (v) => y0 + side - ((v - lo) / (hi - lo)) * side;
@@ -15291,7 +15811,7 @@ verdict, and DESIGN.md
     // visible underneath and an offset is legible instead of covered up.
     const marker = Math.max(3, side / 60);
     ctx.strokeStyle = tok("--symbol"); ctx.lineWidth = 1.2;
-    for (const [re, im] of DATA.constellation.reference) {
+    for (const [re, im] of source.reference) {
       const px = X(re), py = Y(im);
       ctx.beginPath();
       ctx.moveTo(px - marker, py); ctx.lineTo(px + marker, py);
@@ -15413,7 +15933,8 @@ verdict, and DESIGN.md
   }
 
   const LOG = [
-    ["0.000", "graph validated — 17 blocks, 22 links, no type conflicts", "ok"],
+    ["0.000", `graph validated — ${PROJECT.nodes.length} blocks, ` +
+              `${PROJECT.edges.length} links, no type conflicts`, "ok"],
     ["0.006", "scheduling: tx, lo, prbs → {map, ref} → drv → mod → fib → {pm, rx} → cdc → smp → cr → dec"],
     ["0.013", `context: ${(ctxInfo.symbol_rate / 1e9).toFixed(0)} GBd, ` +
               `${ctxInfo.samples_per_symbol} sa/sym, ` +
@@ -15437,6 +15958,97 @@ verdict, and DESIGN.md
     $("#log").innerHTML = LOG.map(([t, msg, cls]) =>
       `<div class="log-line"><span class="log-t">${t}</span>` +
       `<span class="log-m ${cls || ""}">${escapeHtml(msg)}</span></div>`).join("");
+  }
+
+  /* Append one line and keep the newest visible. The log is the only place a
+     failure can be read in full, so it must not require scrolling to find. */
+  function logLine(time, message, cls) {
+    const log = $("#log");
+    const line = document.createElement("div");
+    line.className = "log-line";
+    line.innerHTML = `<span class="log-t">${escapeHtml(time)}</span>` +
+      `<span class="log-m ${cls || ""}">${escapeHtml(message)}</span>`;
+    log.appendChild(line);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function showTab(pane) {
+    const tab = document.querySelector(`.tab[data-pane="${pane}"]`);
+    if (tab) tab.click();
+  }
+
+  /* What a run wrote, in the order the engine produced it. Every line is a fact
+     from the response rather than a plausible-looking transcript. */
+  function logRun(payload, seconds) {
+    const context = payload.context;
+    $("#log").innerHTML = "";
+    logLine("0.000", `graph accepted — ${PROJECT.nodes.length} blocks, ` +
+                     `${PROJECT.edges.length} links`, "ok");
+    logLine("0.000", `context: ${(context.bit_rate / 1e9).toFixed(0)} GBd, ` +
+                     `${context.samples_per_symbol} sa/sym, ` +
+                     `${context.sequence_length.toLocaleString("en-US")} sym, ` +
+                     `${context.num_samples.toLocaleString("en-US")} samples, ` +
+                     `seed ${context.seed}, ${context.precision}`);
+    for (const [id, ports] of Object.entries(payload.results)) {
+      for (const [port, value] of Object.entries(ports)) {
+        logLine("", `${id}.${port} → ${describe(value)}`,
+                value.kind === "opaque" ? "warn" : "");
+      }
+    }
+    logLine(seconds.toFixed(3), `run complete — ${Object.keys(payload.results).length} ` +
+                                `blocks retained a result`, "ok");
+  }
+
+  /* One line per result, in its own terms. The `kind` tag the server puts on
+     every value is what makes this a switch rather than a guess about which
+     fields happen to be present. */
+  function describe(value) {
+    switch (value.kind) {
+      case "power":   return `${value.power_dbm.toFixed(3)} dBm` +
+                             (value.bands.length > 1 ? ` in ${value.bands.length} bands` : "");
+      case "scalar":  return value.value === null ? "∞" : fmt(Number(value.value.toFixed(4)));
+      case "constellation_measurement":
+        return `EVM ${(value.evm * 100).toFixed(2)} %, ` +
+               `${value.symbol_errors}/${value.symbols_evaluated} symbol errors`;
+      case "constellation": return `${value.counts.length}×${value.counts[0].length} histogram`;
+      case "eye":     return `${value.counts.length}×${value.counts[0].length} histogram`;
+      case "eye_measurement": return `Q ${value.q_factor.toFixed(3)}`;
+      case "spectrum": return `${value.frequencies.length} points`;
+      case "propagation":
+        return value.steps ? `${value.steps} split-steps, ` +
+                             `max phase ${value.peak_nonlinear_phase.toFixed(4)} rad`
+                           : "linear, solved exactly";
+      case "dispersion": return `${value.accumulated_dispersion_ps_nm.toFixed(0)} ps/nm removed` +
+                                `, ${value.removed_symbols.toFixed(1)} symbol periods`;
+      case "opaque":  return `${value.type} — nothing here can draw it`;
+      default:        return value.kind;
+    }
+  }
+
+  /* ---------- Provenance ----------------------------------------------------
+     The dock shows either this session's numbers or the reference run baked
+     into the file, and the two must never be mistaken for one another. */
+  function markProvenance() {
+    const badge = $("#provenance");
+    if (!badge) return;
+    badge.classList.toggle("live", SESSION.live);
+    badge.classList.toggle("stale", !SESSION.live && SESSION.hasRun);
+    if (SESSION.live) {
+      badge.textContent = "live";
+      badge.title = "Every number below came from the last run on this session";
+    } else if (SESSION.hasRun) {
+      /* A run happened and then the graph changed. The numbers are still real
+         — they are just answers to a question no longer being asked, which is
+         the most dangerous state for a plot to be in and the one worth naming
+         loudest. */
+      badge.textContent = "stale — graph edited";
+      badge.title = "These numbers came from a run of an earlier version of this graph";
+    } else {
+      badge.textContent = SESSION.api ? "reference — not run yet" : "reference — no session server";
+      badge.title = SESSION.api
+        ? "From the run bundled into this page. Press Run for numbers from the engine."
+        : "From the run bundled into this page. Serve it with python -m maiman.server to run.";
+    }
   }
 
   /* ---------- Interaction ------------------------------------------------ */
@@ -15486,22 +16098,143 @@ verdict, and DESIGN.md
   $("#zoom-out").addEventListener("click", () => setZoom(zoom - 20));
 
   // The one authored motion moment: a run pulses down the wires in signal order.
+  /* ---------- Run ----------------------------------------------------------
+     Posts the project document to the session server and shows what comes
+     back. The button used to wait 1.6 seconds and change a label; the 1.6
+     seconds was the only honest thing about it, and it is now however long the
+     engine actually takes. */
   const runBtn = $("#run-btn"), stopBtn = $("#stop-btn");
-  runBtn.addEventListener("click", () => {
+
+  function setBusy(busy) {
+    SESSION.running = busy;
+    $("#canvas-wrap").classList.toggle("running", busy);
+    runBtn.disabled = busy;
+    stopBtn.disabled = !busy;
+    $("#kernel-dot").classList.toggle("busy", busy);
+  }
+
+  function kernel(text, state) {
+    $("#kernel-text").textContent = text;
+    const dot = $("#kernel-dot");
+    dot.classList.toggle("failed", state === "failed");
+  }
+
+  runBtn.addEventListener("click", async () => {
     if (runBtn.disabled) return;
-    const wrap = $("#canvas-wrap");
-    wrap.classList.add("running");
-    runBtn.disabled = true; stopBtn.disabled = false;
-    $("#kernel-dot").classList.add("busy");
-    $("#kernel-text").textContent = "running…";
-    setTimeout(() => {
-      wrap.classList.remove("running");
-      runBtn.disabled = false; stopBtn.disabled = true;
-      $("#kernel-dot").classList.remove("busy");
-      $("#kernel-text").textContent = "engine ready";
-      $("#sb-time").textContent = "last run 0.47 s";
-    }, 1600);
+    if (!SESSION.api) {
+      /* Opened from a file. Saying so beats a progress animation for something
+         that is not going to happen. */
+      kernel("no session server — open via python -m maiman.server", "failed");
+      logLine("—", "run needs the session server; this page was opened from disk", "warn");
+      showTab("log");
+      return;
+    }
+    setBusy(true);
+    kernel("running…");
+    const started = performance.now();
+    try {
+      const payload = await callApi("/api/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(PROJECT)
+      });
+      const seconds = (performance.now() - started) / 1000;
+      applyRun(payload, seconds);
+      kernel("engine ready");
+      $("#sb-time").textContent = `last run ${seconds.toFixed(2)} s`;
+    } catch (error) {
+      /* The server distinguishes a request it could not read (400) from one it
+         read and will not run (422) and one too large to attempt (413). That
+         distinction is the useful part of the message, so it is kept. */
+      /* Only a response carries a status. Anything without one is either a
+         dead server or a fault in this page, and calling the second one
+         "unreachable" sends whoever reads it to look in the wrong place — it
+         did, for a TypeError thrown while rendering a result that had arrived
+         perfectly well. */
+      const status = error.status || 0;
+      const kind = status === 422 ? "graph will not run"
+                 : status === 413 ? "too large to run"
+                 : status === 400 ? "project rejected"
+                 : status ? `server error ${status}`
+                 : error instanceof TypeError && !/fetch|network/i.test(error.message)
+                   ? "the interface failed to render the result"
+                   : "session server unreachable";
+      kernel(kind, "failed");
+      logLine("—", `${kind}: ${error.message}`, "fail");
+      if (error.detail) logLine("", error.detail, "warn");
+      showTab("log");
+    } finally {
+      setBusy(false);
+    }
   });
+
+  /* ---------- What a run changes ------------------------------------------- */
+  function applyRun(payload, seconds) {
+    SESSION.live = true;
+    SESSION.hasRun = true;
+    SESSION.results = payload.results;
+    const at = (id, port) => (payload.results[id] || {})[port];
+
+    /* Block captions that a measurement can fill in truthfully. */
+    SESSION.captions = {};
+    for (const node of PROJECT.nodes) {
+      const out = at(node.id, "out");
+      if (!out) continue;
+      if (out.kind === "power" && out.power_dbm !== null)
+        SESSION.captions[node.id] = `${out.power_dbm.toFixed(1)} dBm`;
+      else if (out.kind === "constellation_measurement")
+        /* Which number to show depends on what the block is looking at. An
+           analyser on the recovered symbols has a real EVM and that is its
+           useful figure; one on the *decided* symbols coming out of a decoder
+           sees points sitting exactly on the constellation, so its EVM is
+           legitimately zero and says nothing — there, the error count is the
+           measurement. Deciding by the value rather than by the block means no
+           list to keep up to date. */
+        SESSION.captions[node.id] = out.evm * 100 >= 0.05
+          ? `EVM ${(out.evm * 100).toFixed(1)} %`
+          : `${out.symbol_errors} / ${out.symbols_evaluated}`;
+      else if (out.kind === "constellation" || out.kind === "eye")
+        SESSION.captions[node.id] =
+          `${out.counts.length} × ${out.counts[0].length}`;
+      else if (out.kind === "scalar" && out.value !== null)
+        SESSION.captions[node.id] = fmt(Number(out.value.toFixed(2)));
+    }
+    drawGraph();
+
+    const vsa = at("vsa", "out"), ber = at("ber", "out"), pm = at("pm", "out");
+    if (vsa) {
+      $("#m-evm").textContent = (vsa.evm * 100).toFixed(2) + " %";
+      $("#m-snr").textContent = vsa.snr_db === null ? "∞" : vsa.snr_db.toFixed(1) + " dB";
+      $("#c-mer").textContent = vsa.mer_db === null ? "∞" : vsa.mer_db.toFixed(2) + " dB";
+      $("#c-off").textContent = (vsa.frequency_offset / 1e6).toFixed(1) + " MHz";
+      $("#c-sym").textContent = vsa.symbols_evaluated.toLocaleString("en-US");
+      const estimated = vsa.ber_estimated;
+      $("#m-ber").textContent = estimated === null ? "0" : estimated.toExponential(2);
+      $("#m-ber").classList.toggle("pass", estimated === null || estimated <= 1e-3);
+    }
+    if (ber) {
+      $("#m-err").textContent = `${ber.symbol_errors} / ${ber.symbols_evaluated}`;
+      $("#c-bit").textContent =
+        `${ber.bit_errors} / ${ber.bits_evaluated.toLocaleString("en-US")}`;
+    }
+    if (pm && pm.power_dbm !== null) $("#c-rx").textContent = pm.power_dbm.toFixed(1) + " dBm";
+
+    const context = payload.context;
+    $("#c-rate").textContent =
+      ((context.bit_rate * (param("map", "bits_per_symbol") || 1)) / 1e9).toFixed(0) + " Gb/s";
+    $("#s-sps").textContent = context.samples_per_symbol + " sa/sym";
+    $("#s-tr").textContent = (context.sequence_length / 2).toLocaleString("en-US");
+
+    /* The constellation is redrawn from this run when the graph contains a
+       block that produces one. If it does not, the panel says so rather than
+       leaving the reference plot up looking current. */
+    const diagram = at("cd", "out");
+    SESSION.plots.constellation = diagram && diagram.kind === "constellation" ? diagram : null;
+
+    markProvenance();
+    logRun(payload, seconds);
+    redrawActivePlot();
+  }
 
   /* ---------- Helpers ---------------------------------------------------- */
   function escapeHtml(s) {
@@ -15518,12 +16251,45 @@ verdict, and DESIGN.md
     return String(Number(v.toFixed(6)));
   }
 
+  $("#sb-blocks").textContent = `${PROJECT.nodes.length} blocks`;
+  $("#sb-links").textContent = `${PROJECT.edges.length} links`;
   buildPalette();
   drawGraph();
   showNode(NODES.find((n) => n.id === "map"));
   fillResults();
   fillLog();
+  markProvenance();
   requestAnimationFrame(() => { drawConstellation(); });
+
+  /* When the page is served rather than opened, the palette comes from the
+     engine that is actually running: a component installed from a plugin
+     package appears without this file being rebuilt, and one that has been
+     removed stops being offered. The bundled manifests are the fallback, not
+     the source of truth. */
+  if (SESSION.api) {
+    callApi("/api/health")
+      .then((health) => {
+        kernel(`engine ready — ${health.components} components`);
+        return callApi("/api/manifests");
+      })
+      .then((body) => {
+        const before = Object.keys(DATA.manifests).length;
+        DATA.manifests = body.manifests;
+        const after = Object.keys(DATA.manifests).length;
+        buildPalette($("#palette-search") ? $("#palette-search").value : "");
+        drawGraph();
+        if (after !== before) {
+          logLine("—", `palette refreshed from the engine: ${before} → ${after} components`,
+                  "ok");
+        }
+      })
+      .catch((error) => {
+        kernel("session server unreachable", "failed");
+        logLine("—", `could not reach the session server: ${error.message}`, "fail");
+      });
+  } else {
+    kernel("no session server — reference data");
+  }
 
   let resizeTimer;
   window.addEventListener("resize", () => {
