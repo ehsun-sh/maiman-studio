@@ -291,23 +291,31 @@ def test_the_format_is_edited_link_wide() -> None:
     assert run_project(document_)["results"], "a link-wide format change must run"
 
 
-def test_every_plot_in_the_dock_is_produced_by_a_block_on_the_canvas() -> None:
-    """What the interface draws must be something the schematic contains.
-
-    The eye was computed beside the graph rather than by it — a call to
-    ``eye_histogram`` in the export script — so the dock drew an eye no block
-    produced, and went on drawing it after a live run under a badge reading
-    "live". Both plots now come from blocks, which is the only arrangement in
-    which they can respond to an edit.
-    """
+def test_the_constellation_in_the_dock_is_produced_by_a_block_on_the_canvas() -> None:
+    """What the interface draws must be something the schematic contains."""
     project = embedded()["project"]
-    types = {node["type"] for node in project["nodes"]}
-    assert "EyeDiagram" in types, "the eye in the dock has no block behind it"
-    assert "ConstellationDiagram" in types
-
+    assert "ConstellationDiagram" in {node["type"] for node in project["nodes"]}
     results = run_project(project)["results"]
     kinds = {value["kind"] for ports in results.values() for value in ports.values()}
-    assert {"eye", "constellation"} <= kinds
+    assert "constellation" in kinds
+
+
+def test_the_coherent_link_has_no_eye_and_does_not_pretend_to() -> None:
+    """A coherent receiver has no eye, so the shipped graph has no Eye Diagram.
+
+    The rails only mean something relative to a recovered carrier phase, and the
+    constellation arrives rotated by whatever two free-running lasers happen to
+    differ by — measured at 35 to 45 degrees, and drifting. Folding either rail
+    gives a smear. An EyeDiagram wired there would draw one, and it would be
+    meaningless, which is worse than an empty panel.
+    """
+    project = embedded()["project"]
+    assert "EyeDiagram" not in {node["type"] for node in project["nodes"]}
+
+    text = STUDIO.read_text(encoding="utf-8")
+    assert 'const canProduce = PROJECT.nodes.some((n) => n.type === "EyeDiagram");' in text, (
+        "the eye pane must show the reference only while the graph on canvas could produce one"
+    )
 
 
 def test_the_dock_draws_the_run_s_plots_and_not_the_bundled_ones() -> None:
@@ -336,14 +344,43 @@ def test_the_dock_draws_the_run_s_plots_and_not_the_bundled_ones() -> None:
     assert "No eye in this run" in text
 
 
-def test_the_bundled_eye_is_the_one_that_block_produces() -> None:
-    """Not merely present: the same numbers, so the reference is reproducible."""
-    data = embedded()
-    results = run_project(data["project"])["results"]
-    live = next(v for ports in results.values() for v in ports.values() if v["kind"] == "eye")
+def eye_openness(counts: list[list[int]]) -> float:
+    """Fraction of the histogram's central column that no trace crosses.
 
-    assert live["counts"] == data["eye"]["counts"]
-    assert [round(t * 1e12, 3) for t in live["time_edges"]] == data["eye"]["time_ps"]
+    What "is the eye open" means, measured without assuming how many levels the
+    format has. A first attempt split the samples into equal groups by value and
+    compared their spreads; it scored a *noiseless* four-level signal worse than
+    a noisy one, and everything it had measured was thrown away.
+    """
+    column = [row[len(row) // 2] for row in counts]
+    return sum(1 for value in column if value == 0) / len(column)
+
+
+def test_the_shipped_eye_is_an_open_one() -> None:
+    """The panel exists to show what an eye looks like, so it must show one.
+
+    Around 83 per cent of the central column crossed by nothing. The coherent
+    rails that used to feed this panel scored 24 per cent, which is what a
+    closed eye looks like.
+    """
+    assert eye_openness(embedded()["eye"]["counts"]) > 0.7
+
+
+def test_the_shipped_eye_comes_from_the_project_beside_it() -> None:
+    """And that project opens, runs, and produces exactly that eye.
+
+    The reference is no longer the graph on the canvas — it cannot be, since
+    that link has no eye — so it ships with the project it did come from, which
+    anyone can open from the File menu and take further.
+    """
+    project = json.loads((ROOT / "examples" / "ook_eye.maiman").read_text(encoding="utf-8"))
+    assert "EyeDiagram" in {node["type"] for node in project["nodes"]}
+    assert all("ui" in node for node in project["nodes"]), "it should open laid out"
+
+    results = run_project(project)["results"]
+    live = next(v for ports in results.values() for v in ports.values() if v["kind"] == "eye")
+    assert live["counts"] == embedded()["eye"]["counts"]
+    assert eye_openness(live["counts"]) > 0.7
 
 
 def test_a_two_point_alphabet_passes_through_the_differential_decoder() -> None:
@@ -369,3 +406,40 @@ def test_a_two_point_alphabet_passes_through_the_differential_decoder() -> None:
     out = DifferentialDecoder(label="dec").run(ctx, {"in": signal})["out"]
     assert np.array_equal(np.asarray(out.symbols), symbols)
     assert np.array_equal(np.asarray(out.constellation), points)
+
+
+def test_the_dock_reads_the_analyser_that_is_measuring_the_signal() -> None:
+    """A link may hold two constellation analysers and they are not alike.
+
+    One on the recovered symbols measures modulation quality. One after a
+    decision device sees points sitting exactly on the constellation and reports
+    an EVM of zero however bad the link is — DifferentialDecoder's own docstring
+    says not to measure EVM after it. Taking whichever came first put that zero
+    in the dock under a badge reading live.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    assert 'allOfKind("constellation_measurement")' in text
+    assert "m.evm > best.evm" in text, "the dock must pick the analyser with a real EVM"
+
+    results = run_project(embedded()["project"])["results"]
+    evms = sorted(
+        value["evm"]
+        for ports in results.values()
+        for value in ports.values()
+        if value["kind"] == "constellation_measurement"
+    )
+    assert len(evms) >= 2, "the shipped link should still have both analysers"
+    assert evms[0] < 1e-6 < evms[-1], f"one analyser should read ~0 and one a real EVM, got {evms}"
+
+
+def test_the_dock_is_cleared_before_a_run_writes_to_it() -> None:
+    """A field the new run says nothing about must not keep the last one's answer.
+
+    Opening a direct-detection link over a coherent one left EVM, SNR and BER
+    reading the coherent link's values, and the error count reading
+    "undefined / undefined" — that one at least was visible.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    assert 'for (const id of ["m-evm", "m-snr", "m-ber", "m-err"' in text
+    # And the headings move with the measurement, so a Q never sits under "SNR".
+    assert 'label("k-evm", "Q")' in text

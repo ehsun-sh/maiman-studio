@@ -21,6 +21,7 @@ import numpy as np
 
 from maiman import Graph, SimulationContext, manifests, sweep
 from maiman.components import (
+    BERAnalyzer,
     CarrierRecovery,
     CoherentReceiver,
     ConstellationAnalyzer,
@@ -28,16 +29,20 @@ from maiman.components import (
     CWLaser,
     DifferentialDecoder,
     DispersionCompensator,
+    ElectricalFilter,
     EyeDiagram,
     Fiber,
     IQDriver,
     IQModulator,
     IQSampler,
+    MachZehnderModulator,
+    NRZDriver,
+    PINPhotodiode,
     PowerMeter,
     PRBSGenerator,
     QAMMapper,
 )
-from maiman.project import graph_to_dict
+from maiman.project import graph_to_dict, save
 
 V_PI = 4.0
 SYMBOL_RATE = 32e9
@@ -48,6 +53,69 @@ DISPERSION = 17.0  # ps/nm/km, standard single-mode fiber at 1550 nm
 # difference, and a two-point constellation has none. A binary format resolves its
 # ambiguity by other means, and the mapper says so rather than silently coping.
 FORMATS = {2: "QPSK", 4: "16-QAM", 6: "64-QAM", 8: "256-QAM"}
+
+
+#: Where the direct-detection project is written, so the studio has a link with
+#: an eye in it to open.
+OOK_PROJECT = Path(__file__).parent / "ook_eye.maiman"
+
+#: Positions for it, so it opens laid out rather than stacked on a grid. The
+#: format carries them and the editor reads them back.
+OOK_LAYOUT = {
+    "prbs": {"x": 30.0, "y": 220.0},
+    "drv": {"x": 168.0, "y": 220.0},
+    "tx": {"x": 168.0, "y": 60.0},
+    "mzm": {"x": 306.0, "y": 220.0},
+    "fib": {"x": 444.0, "y": 220.0},
+    "pin": {"x": 582.0, "y": 220.0},
+    "lpf": {"x": 720.0, "y": 220.0},
+    "eye": {"x": 858.0, "y": 130.0},
+    "ber": {"x": 858.0, "y": 310.0},
+}
+
+
+def ook_link() -> Graph:
+    """On-off keying into a photodiode: the link an eye diagram is *for*.
+
+    Direct detection squares the field, so what reaches the eye is intensity
+    against time and one threshold decides the bit. That is the whole premise of
+    the instrument, and it is why the coherent link beside this one has no eye
+    to show: there, the rails only mean something relative to a carrier phase
+    nothing has recovered yet.
+
+    Deliberately short at 20 km. The point of the shipped project is that the
+    eye is *open* when it opens, so someone can see what one looks like before
+    they start closing it — and stretching the span is the first thing to try.
+    """
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=32, sequence_length=512, seed=4)
+    graph = Graph(ctx)
+    prbs = graph.add(PRBSGenerator(order=7.0, label="prbs"))
+    driver = graph.add(NRZDriver(v_low=4.0, v_high=0.0, label="drv"))
+    laser = graph.add(CWLaser(power=0.0, wavelength=1550.0, label="tx"))
+    modulator = graph.add(MachZehnderModulator(v_pi=4.0, extinction_ratio=30.0, label="mzm"))
+    fiber = graph.add(Fiber(length=20.0, attenuation=0.2, dispersion=17.0, label="fib"))
+    diode = graph.add(PINPhotodiode(responsivity=0.8, label="pin"))
+    filter_ = graph.add(ElectricalFilter(bandwidth=7.0, label="lpf"))
+    eye = graph.add(EyeDiagram(span_symbols=2.0, time_bins=64.0, amplitude_bins=72.0, label="eye"))
+    analyzer = graph.add(BERAnalyzer(label="ber"))
+
+    graph.chain(prbs, driver)
+    graph.connect(laser, modulator["optical_in"])
+    graph.connect(driver, modulator["electrical_in"])
+    graph.chain(modulator, fiber, diode, filter_)
+    graph.connect(filter_, eye["in"])
+    graph.connect(filter_, analyzer["in"])
+    graph.connect(prbs["out"], analyzer["reference"])
+    return graph
+
+
+def ook_eye() -> Any:
+    """The eye the studio ships, and the project it came from, written to disk."""
+    graph = ook_link()
+    eye_block = of_type(graph, EyeDiagram)
+    histogram = graph.run()[eye_block]
+    save(graph, OOK_PROJECT, ui=OOK_LAYOUT)
+    return histogram
 
 
 def build(sequence_length: int = 4096) -> Graph:
@@ -103,14 +171,6 @@ def build(sequence_length: int = 4096) -> Graph:
     meter = graph.add(PowerMeter(label="pm"))
     lo = graph.add(CWLaser(power=10.0, wavelength=1550.0, linewidth=100.0, label="lo"))
     receiver = graph.add(CoherentReceiver(responsivity=0.8, label="rx"))
-    # The eye is a block on the canvas now, not a call beside it. It was
-    # computed here with eye_histogram and shipped as data, which meant the
-    # interface drew an eye no graph on screen produced — and kept drawing it
-    # after a live run, under a badge that said "live". A measurement the
-    # picture shows should be a measurement the schematic contains.
-    eye_block = graph.add(
-        EyeDiagram(span_symbols=2.0, time_bins=64.0, amplitude_bins=72.0, label="eye")
-    )
     compensator = graph.add(
         DispersionCompensator(
             accumulated_dispersion=DISPERSION * SPAN_KM, wavelength=1550.0, label="cdc"
@@ -138,7 +198,6 @@ def build(sequence_length: int = 4096) -> Graph:
     graph.connect(fiber, meter["in"])
     graph.connect(fiber, receiver["in"])
     graph.connect(lo, receiver["lo"])
-    graph.connect(receiver["i"], eye_block["in"])
     graph.connect(receiver["i"], compensator["i"])
     graph.connect(receiver["q"], compensator["q"])
     graph.connect(compensator["i"], sampler["i"])
@@ -172,11 +231,19 @@ def main() -> None:
     counted = results[errors]
     histogram = results[diagram]
 
-    # The I-quadrature eye of a coherent receiver: a real thing to look at, and
-    # for 16-QAM it shows the four levels the format actually carries. Taken off
-    # the block in the graph, so this file and the session server produce it the
-    # same way.
-    eye = results[of_type(graph, EyeDiagram)]
+    # No eye from this link, and none is possible.
+    #
+    # An eye diagram is a direct-detection instrument. A coherent receiver's I
+    # and Q rails mean nothing until a carrier phase has been recovered — the
+    # constellation arrives rotated by whatever the two free-running lasers
+    # happen to differ by, measured here at 35 to 45 degrees and drifting — so
+    # folding either rail gives a smear rather than four levels. Recovery, when
+    # it comes, outputs one sample per symbol, and there is no waveform left to
+    # fold.
+    #
+    # So the eye the studio ships comes from a direct-detection link instead,
+    # written beside this one as a project anyone can open.
+    eye = ook_eye()
 
     # Required received power per format, from the same graph re-run.
     sensitivity: list[dict[str, Any]] = []
