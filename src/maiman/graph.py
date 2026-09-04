@@ -76,6 +76,17 @@ class Results:
     def __contains__(self, component: Component) -> bool:
         return any(label == component.label for label, _ in self._values)
 
+    def items(self) -> list[tuple[tuple[str, str], Signal]]:
+        """Every retained result, as ``((label, port name), signal)`` pairs.
+
+        Public because the session server needs it and the server is an ordinary
+        client of this API — it gets no privileged access, so anything it can do
+        is something a script can do. Returns a list rather than a view: callers
+        iterate it while the results outlive the run, and a snapshot cannot be
+        invalidated underneath them.
+        """
+        return sorted(self._values.items())
+
     def __repr__(self) -> str:
         keys = ", ".join(f"{label}.{name}" for label, name in sorted(self._values))
         return f"Results({keys})"

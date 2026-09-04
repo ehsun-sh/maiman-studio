@@ -6,7 +6,7 @@ An open-source simulator for optical communication links and photonic systems. E
 link as a block diagram — laser, modulator, fiber, amplifier, detector — run it, and read the
 result as an eye diagram, a BER number, an OSNR figure.
 
-The engine exists and is validated: 295 tests, every physics block checked against a closed-form
+The engine exists and is validated: 618 tests, every physics block checked against a closed-form
 result in CI. What does not exist yet is the interface.
 
 The name is **Theodore Maiman's**, who built the first working laser at Hughes Research

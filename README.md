@@ -35,7 +35,10 @@ link in this simulator descends from.*
 > each channel's phase at twice the rate its own does, sliding past under walk-off derived from
 > the dispersion — and triplets of channels mix to put light where nobody launched it.
 >
-> **Not implemented yet:** the GUI. See the [roadmap](#roadmap).
+> The session server is in: `python -m maiman.server` puts the engine behind an HTTP API and a
+> browser can build a link, post it, and get real numbers back. What is still missing is the
+> editor — the canvas that lets you draw the graph instead of describing it. See the
+> [roadmap](#roadmap).
 >
 > This is not yet a useful simulator. It is a foundation with the expensive decisions made and
 > tested. Criticism of those decisions is worth more right now than any feature —
@@ -45,11 +48,17 @@ link in this simulator descends from.*
 
 ## The interface
 
-**Not a running application — a build of the planned one.** The schematic, the component palette,
-the parameter panel and every number in the results dock come from a real engine run, exported by
-[`examples/export_ui_data.py`](examples/export_ui_data.py); what is missing is the session server
-that would let you press Run and get a new one. Open
-[`docs/ui-mockup.html`](docs/ui-mockup.html) in a browser to click through it, and
+**The engine is behind an API; the canvas is not wired to it yet.** The schematic, the component
+palette, the parameter panel and every number in the results dock come from a real engine run,
+exported by [`examples/export_ui_data.py`](examples/export_ui_data.py). What has changed is that
+those numbers no longer have to be exported ahead of time — see
+[the session server](#the-session-server) below. What has not changed is the page: it still draws
+one fixed schematic, and making it an editor is the next piece of work.
+
+    python -m maiman.server
+
+serves it at `http://127.0.0.1:8765/`, or open
+[`docs/ui-mockup.html`](docs/ui-mockup.html) directly to click through it. See
 [DESIGN.md](DESIGN.md) for why it looks like this.
 
 ![The Maiman Studio schematic editor on its paper ground](docs/images/studio-paper.png)
@@ -447,6 +456,55 @@ no band is sampled at. Not putting the channels on one grid is what makes a WDM 
 all, and that choice has to be paid for somewhere. See
 [`examples/wdm_nonlinear.py`](examples/wdm_nonlinear.py).
 
+## The session server
+
+    python -m maiman.server
+
+Three routes, no dependencies beyond the ones the engine already has, bound to loopback.
+
+| route | what it does |
+| :--- | :--- |
+| `GET /api/manifests` | Every registered component: parameters with units and bounds, ports with types |
+| `POST /api/run` | A `.maiman` project document in, results out |
+| `GET /api/health` | Whether it is up, and how many components it knows |
+
+**It is an ordinary client of the public Python API.** Every route is a thin wrapper over something
+a script can already call — `manifests()`, `graph_from_dict()`, `Graph.run()`. Nothing in the
+server knows any physics and nothing in the engine knows the server exists, which is what stops
+the two drifting apart: a feature unreachable from Python is unreachable from the interface too.
+The `Results.items()` the server needs is public for the same reason.
+
+**Reduction happens in the engine, never in the browser.** A run holds tens of thousands of samples
+per port; an eye diagram drawn from them is a 96×96 histogram. So a signal-carrying port encodes to
+a *summary* — how many samples, at what rate, how much power — and anything meant to be looked at
+arrives already reduced, from a measurement component the graph contains explicitly. A full
+coherent run is **52 kB of JSON**. That is not a size optimisation: it is what keeps a second,
+untested implementation of the physics from growing in JavaScript.
+
+Every encoded value carries a `kind`, so a client switches on a string rather than guessing from
+which fields happen to be present. A result type nothing knows how to draw arrives tagged `opaque`
+rather than failing the run or being guessed at — which is the honest answer for a plugin's own
+metric, and a test asserts it is never the answer for anything shipped here.
+
+Non-finite numbers become `null`. `json.dumps` emits bare `NaN` and `Infinity`, which are not JSON
+and which `JSON.parse` rejects outright, so one infinite Q factor would fail a whole response
+rather than one field — and infinities are a normal result here, not an error.
+
+**Errors say whose fault they are.** 400 means the request could not be read, 422 means it was read
+and will not run, 413 means it was too big to attempt:
+
+| | |
+| :--- | :--- |
+| `no component registered as 'FluxCapacitor'. If it comes from a plugin package…` | 400 |
+| `a window of 32000000 samples exceeds the server limit of 4194304` | 413 |
+| `pm.in is not connected` | 422 |
+
+`POST /api/run` executes the graph it is given, so the socket binds to 127.0.0.1 unless a host is
+passed explicitly, and a run is refused *before* it starts if its window is too large. The registry
+already does the harder half of this: a project file may only **name** components that are already
+registered and can never import a dotted path, so opening someone else's project is not equivalent
+to running their code.
+
 ## What this is
 
 A block-diagram simulator for optical systems: drop components on a canvas, wire a link, run it,
@@ -581,7 +639,7 @@ time window, and results are reproducible.
 | **1 — MVP: linear link** *(essentially done)* | ✅ PRBS → NRZ → laser → MZM → fiber (α + CD) → PIN → filter → eye/Q/BER, validated end to end. **Python only, no GUI.** | ~2–3 months |
 | **1.5 — Nonlinear & amplified** ✅ | Adaptive-step SSFM, Kerr, EDFA with ASE, OSNR, PMD, APD | ~2 months |
 | **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier phase recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
-| **3 — GUI & WDM** | ✅ Wavelength-selective filters, an OSA, and coupled-channel propagation: cross-phase modulation with walk-off, and four-wave mixing. Session server, React Flow graph editor · 400G/800G references, CuPy back-end | ~6 months |
+| **3 — GUI & WDM** | ✅ Wavelength-selective filters, an OSA, coupled-channel propagation (XPM with walk-off, FWM), and the session server. React Flow graph editor · 400G/800G references, CuPy back-end | ~6 months |
 | **4 — PIC** | Waveguides, ring resonators, MMI, MZI via integration with an existing S-matrix solver; PDK import | — |
 
 ¹ One developer, part-time. Estimates, not commitments.
