@@ -375,3 +375,63 @@ def test_a_default_outside_its_own_choices_is_refused() -> None:
     """A parameter that starts at a value it will not accept is a trap."""
     with pytest.raises(ValueError, match="not one of the declared choices"):
         Param(3.0, choices=(1.0, 2.0, 4.0))
+
+
+def test_settings_that_disagree_are_caught_before_anything_runs() -> None:
+    """Two parameters, each legal alone, that cannot both hold.
+
+    Differential encoding relabels the alphabet by quadrant, and BPSK has no
+    quadrants. Neither a range nor a set of choices on either parameter can see
+    that, so the component says it itself — and says it during validation, so
+    the run is refused rather than abandoned partway through.
+    """
+    from maiman.components import QAMMapper
+
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=4, sequence_length=32, seed=1)
+    graph = Graph(ctx)
+    prbs = graph.add(PRBSGenerator(order=7.0, bits_per_symbol=1.0, label="prbs"))
+    graph.connect(
+        prbs, graph.add(QAMMapper(bits_per_symbol=1.0, differential=True, label="map"))["in"]
+    )
+
+    with pytest.raises(ValueError, match="no quadrants"):
+        graph.run()
+
+    # Turning it off is the fix the message names, and it then runs.
+    graph.run(overrides={("map", "differential"): False})
+
+
+def test_validation_happens_before_the_first_block_runs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Not merely before the offending block: before any of them.
+
+    A settings problem found halfway through a run has already spent the work,
+    and reports itself further from its cause than it needs to.
+
+    Patched rather than subclassed. Defining a Component subclass registers it
+    — that is how plugins work — so a throwaway one in a test stays in the
+    registry for every test after it, and the palette check downstream then
+    sees a component that exists nowhere else. It did.
+    """
+    from maiman.components import QAMMapper
+
+    ran: list[str] = []
+    original = PRBSGenerator.run
+
+    def watched(self: PRBSGenerator, ctx: object, inputs: object) -> object:
+        ran.append(self.label)
+        return original(self, ctx, inputs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(PRBSGenerator, "run", watched)
+
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=4, sequence_length=32, seed=1)
+    graph = Graph(ctx)
+    prbs = graph.add(PRBSGenerator(order=7.0, bits_per_symbol=1.0, label="prbs"))
+    graph.connect(
+        prbs, graph.add(QAMMapper(bits_per_symbol=1.0, differential=True, label="map"))["in"]
+    )
+
+    with pytest.raises(ValueError, match="no quadrants"):
+        graph.run()
+    assert ran == [], "a block ran before the settings were checked"

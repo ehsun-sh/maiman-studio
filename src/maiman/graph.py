@@ -169,6 +169,9 @@ class Graph:
             for name in component.inputs:
                 if (component.label, name) not in self._edges:
                     raise GraphError(f"{component.label}.{name} is not connected")
+            # Settings that disagree with each other, reported before the first
+            # block runs rather than when the offending one is reached.
+            component.validate()
 
     def _topological_order(self) -> list[Component]:
         by_label = {c.label: c for c in self._components}

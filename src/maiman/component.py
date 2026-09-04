@@ -296,6 +296,22 @@ class Component:
             },
         }
 
+    def validate(self) -> None:
+        """Refuse a combination of this component's own parameters.
+
+        Called once for every block before any of them runs, so a settings
+        problem is reported instead of discovered part way through a
+        simulation. Each parameter is already checked on its own where it is
+        declared — a range, a set of choices — and this is for the rarer case
+        where two of them are each fine and disagree with each other.
+
+        Rare enough to be worth naming: at the time of writing exactly one
+        component needs it. Everything else a block can object to is about its
+        *input* rather than its settings, and cannot be known until the input
+        arrives. That is why this is a method to override and not a schema in
+        the manifest: one constraint does not need a language.
+        """
+
     def si(self, name: str) -> float:
         """The value of parameter ``name`` converted to its SI base unit."""
         spec = self.param_specs().get(name)

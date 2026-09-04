@@ -43,11 +43,35 @@ class QAMMapper(Component):
         doc="1 BPSK, 2 QPSK, 4 16-QAM, 6 64-QAM, 8 256-QAM",
     )
     differential = BoolParam(
-        False, doc="Encode the quadrant differentially, so a quarter-turn ambiguity costs nothing"
+        False,
+        doc="Encode the quadrant differentially, so a quarter-turn ambiguity costs "
+        "nothing. Needs at least 2 bits per symbol — BPSK has no quadrants",
     )
 
     inputs = {"in": PortType.BINARY}
     outputs = {"out": PortType.SYMBOL}
+
+    def validate(self) -> None:
+        """The one pair of settings in this library that can disagree.
+
+        Differential encoding here works by relabelling the alphabet as
+        (quadrant, position), so a quarter-turn ambiguity becomes a constant
+        offset the decoder removes. BPSK has two points on a line and no
+        quadrants at all, so there is nothing to relabel. Both settings are
+        perfectly legal on their own, which is why neither the range nor the
+        choices on either one can catch the combination.
+
+        Checked here rather than in ``run``: this is knowable before the
+        simulation starts, and finding out halfway through one wastes the work
+        already done and reports the problem further from its cause.
+        """
+        if self.differential and int(self.bits_per_symbol) < 2:
+            raise ValueError(
+                f"{self.label}: differential quadrant encoding needs at least 2 bits "
+                f"per symbol, got {int(self.bits_per_symbol)}. BPSK has no quadrants "
+                f"to difference — turn differential off, and take any Differential "
+                f"Decoder out of the chain with it."
+            )
 
     def constellation(self) -> np.ndarray:
         """The alphabet, relabelled by quadrant when differential encoding is on."""
