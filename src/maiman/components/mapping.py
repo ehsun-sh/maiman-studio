@@ -146,10 +146,22 @@ class DifferentialDecoder(Component):
         encoded = np.asarray(received.constellation)
         quarter = encoded.shape[0] // 4
         if quarter < 1:
-            raise ValueError(
-                f"{self.label}: a {encoded.shape[0]}-point constellation has no quadrant "
-                f"structure to difference"
-            )
+            # A two-point alphabet passes straight through, and that is the
+            # correct operation rather than a concession.
+            #
+            # There are no quadrants on a line, so QAMMapper refuses to
+            # differentially encode BPSK at all — which means nothing was
+            # encoded, and undoing nothing is the identity. This block is not
+            # quietly declining to do its job; its job here is genuinely to do
+            # nothing, and a link built for a higher format still works when
+            # someone drops it to BPSK to see what happens.
+            #
+            # What it cannot do is claim the benefit. BPSK carries the same
+            # quarter-turn ambiguity every blind stage upstream leaves, and the
+            # differential trick is unavailable to remove it — so a receiver
+            # that settles a quarter turn away is still wrong, and that is a
+            # property of the format, not of this block.
+            return {"out": received}
 
         indices = nearest_indices(np.asarray(received.symbols), encoded)
         decoded = differential_decode(indices, quarter)

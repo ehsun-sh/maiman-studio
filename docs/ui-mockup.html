@@ -15101,6 +15101,15 @@ verdict, and DESIGN.md
     }
    },
    {
+    "id": "eye",
+    "type": "EyeDiagram",
+    "params": {
+     "span_symbols": 2.0,
+     "time_bins": 64.0,
+     "amplitude_bins": 72.0
+    }
+   },
+   {
     "id": "cdc",
     "type": "DispersionCompensator",
     "params": {
@@ -15230,6 +15239,16 @@ verdict, and DESIGN.md
     ],
     "to": [
      "drv",
+     "in"
+    ]
+   },
+   {
+    "from": [
+     "rx",
+     "i"
+    ],
+    "to": [
+     "eye",
      "in"
     ]
    },
@@ -15432,6 +15451,7 @@ verdict, and DESIGN.md
     pm:   { x: 720, y:  30 },
     prbs: { x:  30, y: 220 }, map: { x: 168, y: 220 }, drv: { x: 306, y: 220 },
     mod:  { x: 444, y: 220 }, fib: { x: 582, y: 220 }, rx:  { x: 720, y: 220 },
+    eye:  { x: 858, y: 220 },
     cdc:  { x:  30, y: 410 }, smp: { x: 168, y: 410 }, cr:  { x: 306, y: 410 },
     dec:  { x: 444, y: 410 }, cd:  { x: 582, y: 410 }, vsa: { x: 720, y: 410 },
     ber:  { x: 858, y: 410 }
@@ -15485,7 +15505,7 @@ verdict, and DESIGN.md
        here rather than beside the run code because applyTheme() redraws the
        plots while the page is still loading, so a plot cannot read anything
        declared further down the file. */
-    plots: { constellation: null }
+    plots: { constellation: null, eye: null }
   };
 
   async function callApi(path, options) {
@@ -16172,11 +16192,45 @@ verdict, and DESIGN.md
     return { ctx, w: c.width / dpr, h: c.height / dpr };
   }
 
+  /* The eye to draw, in the units the axes are labelled in.
+
+     The bundled reference carries picoseconds and microamps because it was
+     written that way; a live result carries SI, because that is what the engine
+     works in and what every other encoded value uses. Converted here, in one
+     place, rather than by teaching the plot two vocabularies. */
+  function eyeSource() {
+    const live = SESSION.plots.eye;
+    if (!live) return { ...DATA.eye, live: false };
+    return {
+      counts: live.counts,
+      time_ps: live.time_edges.map((s) => s * 1e12),
+      amplitude_ua: live.amplitude_edges.map((a) => a * 1e6),
+      unit: live.unit,
+      live: true
+    };
+  }
+
+  function drawNoEye(ctx, w, h) {
+    ctx.fillStyle = tok("--plot-bg"); ctx.fillRect(0, 0, w, h);
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillStyle = tok("--ink-3");
+    ctx.font = "600 13px " + getComputedStyle(document.body).fontFamily;
+    ctx.fillText("No eye in this run", w / 2, h / 2 - 10);
+    ctx.fillStyle = tok("--ink-4"); ctx.font = MONO_10;
+    ctx.fillText("This graph has no Eye Diagram block.", w / 2, h / 2 + 10);
+    ctx.fillText("Add one from the palette and wire it to an electrical port.", w / 2, h / 2 + 26);
+  }
+
   function drawEye() {
     const c = $("#eye-canvas");
     if (!c.parentElement.offsetWidth) return;
     const { ctx, w, h } = sizeCanvas(c);
-    const counts = DATA.eye.counts;
+    /* A run that produced no eye must not leave the reference one on screen
+       looking current. The graph simply has no Eye Diagram in it, and saying so
+       is the only honest thing the panel can do. */
+    if (SESSION.hasRun && !SESSION.plots.eye) { drawNoEye(ctx, w, h); return; }
+    const source = eyeSource();
+    const counts = source.counts;
     const rows = counts.length, cols = counts[0].length;
 
     ctx.fillStyle = tok("--plot-bg");
@@ -16213,7 +16267,7 @@ verdict, and DESIGN.md
       }
     }
 
-    const amp = DATA.eye.amplitude_ua, time = DATA.eye.time_ps;
+    const amp = source.amplitude_ua, time = source.time_ps;
     const a0 = amp[0], a1 = amp[amp.length - 1];
     const yFor = (uA) => padT + ph - ((uA - a0) / (a1 - a0)) * ph;
 
@@ -16238,7 +16292,9 @@ verdict, and DESIGN.md
     ctx.textAlign = "right"; ctx.textBaseline = "middle";
     for (const v of [a0, (a0 + a1) / 2, a1]) ctx.fillText(v.toFixed(0), padL - 6, yFor(v));
     ctx.save(); ctx.translate(11, padT + ph / 2); ctx.rotate(-Math.PI / 2);
-    ctx.textAlign = "center"; ctx.fillText("µA", 0, 0); ctx.restore();
+    ctx.textAlign = "center";
+    ctx.fillText(source.unit === "A" ? "µA" : "µ" + (source.unit || ""), 0, 0);
+    ctx.restore();
 
     ctx.textAlign = "center"; ctx.textBaseline = "top";
     ctx.fillText("0", padL, padT + ph + 5);
@@ -17424,8 +17480,21 @@ verdict, and DESIGN.md
     /* The constellation is redrawn from this run when the graph contains a
        block that produces one. If it does not, the panel says so rather than
        leaving the reference plot up looking current. */
-    const diagram = at("cd", "out");
-    SESSION.plots.constellation = diagram && diagram.kind === "constellation" ? diagram : null;
+    /* Found by kind rather than by block name: whichever block produced a
+       histogram is the one that drew it, whatever it happens to be called. */
+    const firstOfKind = (kind) => {
+        for (const ports of Object.values(payload.results)) {
+          for (const value of Object.values(ports)) {
+            if (value.kind === kind) return value;
+          }
+        }
+        return null;
+      };
+    SESSION.plots.constellation = firstOfKind("constellation");
+    SESSION.plots.eye = firstOfKind("eye");
+    if (vsa) {
+      $("#s-lvl").textContent = String(Math.round(Math.sqrt(1 << vsa.bits_per_symbol)));
+    }
 
     markProvenance();
     logRun(payload, seconds);

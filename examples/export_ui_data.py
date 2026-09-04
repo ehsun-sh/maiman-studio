@@ -20,7 +20,6 @@ from typing import Any
 import numpy as np
 
 from maiman import Graph, SimulationContext, manifests, sweep
-from maiman.analysis import eye_histogram
 from maiman.components import (
     CarrierRecovery,
     CoherentReceiver,
@@ -29,6 +28,7 @@ from maiman.components import (
     CWLaser,
     DifferentialDecoder,
     DispersionCompensator,
+    EyeDiagram,
     Fiber,
     IQDriver,
     IQModulator,
@@ -103,6 +103,14 @@ def build(sequence_length: int = 4096) -> Graph:
     meter = graph.add(PowerMeter(label="pm"))
     lo = graph.add(CWLaser(power=10.0, wavelength=1550.0, linewidth=100.0, label="lo"))
     receiver = graph.add(CoherentReceiver(responsivity=0.8, label="rx"))
+    # The eye is a block on the canvas now, not a call beside it. It was
+    # computed here with eye_histogram and shipped as data, which meant the
+    # interface drew an eye no graph on screen produced — and kept drawing it
+    # after a live run, under a badge that said "live". A measurement the
+    # picture shows should be a measurement the schematic contains.
+    eye_block = graph.add(
+        EyeDiagram(span_symbols=2.0, time_bins=64.0, amplitude_bins=72.0, label="eye")
+    )
     compensator = graph.add(
         DispersionCompensator(
             accumulated_dispersion=DISPERSION * SPAN_KM, wavelength=1550.0, label="cdc"
@@ -130,6 +138,7 @@ def build(sequence_length: int = 4096) -> Graph:
     graph.connect(fiber, meter["in"])
     graph.connect(fiber, receiver["in"])
     graph.connect(lo, receiver["lo"])
+    graph.connect(receiver["i"], eye_block["in"])
     graph.connect(receiver["i"], compensator["i"])
     graph.connect(receiver["q"], compensator["q"])
     graph.connect(compensator["i"], sampler["i"])
@@ -164,17 +173,10 @@ def main() -> None:
     histogram = results[diagram]
 
     # The I-quadrature eye of a coherent receiver: a real thing to look at, and
-    # for 16-QAM it shows the four levels the format actually carries.
-    current = results.port(receiver, "i")
-    eye = eye_histogram(
-        np.asarray(current.samples),
-        graph.ctx.samples_per_symbol,
-        graph.ctx.bit_rate,
-        span_symbols=2,
-        time_bins=64,
-        amplitude_bins=72,
-        unit=current.unit,
-    )
+    # for 16-QAM it shows the four levels the format actually carries. Taken off
+    # the block in the graph, so this file and the session server produce it the
+    # same way.
+    eye = results[of_type(graph, EyeDiagram)]
 
     # Required received power per format, from the same graph re-run.
     sensitivity: list[dict[str, Any]] = []

@@ -255,8 +255,10 @@ Two findings worth keeping:
 - The mockup shows a single-carrier link. The dual-polarization link is in
   [`examples/dualpol_link.py`](examples/dualpol_link.py) and is not on the
   canvas: at ~20 blocks the node text stops being readable at this canvas size,
-  and a schematic nobody can read is not a better demonstration. At 17 blocks
-  the current graph is already close to that ceiling.
+  and a schematic nobody can read is not a better demonstration. At 18 blocks
+  the current graph is already close to that ceiling — the eighteenth is an Eye
+  Diagram, added because the eye in the results dock had been computed beside
+  the graph rather than by it, and so never changed when the graph did.
 - No motion beyond the run pulse and the control transitions.
 - The running, failed and stale states are now real, because the page calls the
   engine. A run in flight dims the canvas and swaps Run for Stop; a failure

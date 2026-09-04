@@ -289,3 +289,83 @@ def test_the_format_is_edited_link_wide() -> None:
         if node["type"] in carriers:
             node["params"]["bits_per_symbol"] = 2.0
     assert run_project(document_)["results"], "a link-wide format change must run"
+
+
+def test_every_plot_in_the_dock_is_produced_by_a_block_on_the_canvas() -> None:
+    """What the interface draws must be something the schematic contains.
+
+    The eye was computed beside the graph rather than by it — a call to
+    ``eye_histogram`` in the export script — so the dock drew an eye no block
+    produced, and went on drawing it after a live run under a badge reading
+    "live". Both plots now come from blocks, which is the only arrangement in
+    which they can respond to an edit.
+    """
+    project = embedded()["project"]
+    types = {node["type"] for node in project["nodes"]}
+    assert "EyeDiagram" in types, "the eye in the dock has no block behind it"
+    assert "ConstellationDiagram" in types
+
+    results = run_project(project)["results"]
+    kinds = {value["kind"] for ports in results.values() for value in ports.values()}
+    assert {"eye", "constellation"} <= kinds
+
+
+def test_the_dock_draws_the_run_s_plots_and_not_the_bundled_ones() -> None:
+    """Both halves: the page takes a plot off the run, and the plot reads it.
+
+    Same shape of guard as the canvas markup. A run's results reaching
+    ``SESSION.plots`` and the drawing code reading them are in different parts
+    of one file, and severing either leaves the dock showing the reference run
+    for ever, silently, under a badge that says live. That is what the eye did
+    before there was a block behind it.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    for stored, read in (
+        ('SESSION.plots.eye = firstOfKind("eye")', "const live = SESSION.plots.eye;"),
+        (
+            'SESSION.plots.constellation = firstOfKind("constellation")',
+            "SESSION.plots.constellation || DATA.constellation",
+        ),
+    ):
+        assert stored in text, f"a run's plots no longer reach: {stored}"
+        assert read in text, f"nothing draws from it: {read}"
+
+    # And the pane says so rather than drawing the reference, when a run
+    # produced no plot of that kind at all.
+    assert "SESSION.hasRun && !SESSION.plots.eye" in text
+    assert "No eye in this run" in text
+
+
+def test_the_bundled_eye_is_the_one_that_block_produces() -> None:
+    """Not merely present: the same numbers, so the reference is reproducible."""
+    data = embedded()
+    results = run_project(data["project"])["results"]
+    live = next(v for ports in results.values() for v in ports.values() if v["kind"] == "eye")
+
+    assert live["counts"] == data["eye"]["counts"]
+    assert [round(t * 1e12, 3) for t in live["time_edges"]] == data["eye"]["time_ps"]
+
+
+def test_a_two_point_alphabet_passes_through_the_differential_decoder() -> None:
+    """BPSK has no quadrants, so there is nothing to undo, so it is the identity.
+
+    Not the block declining to work: QAMMapper refuses to differentially encode
+    BPSK at all, so nothing was encoded, and undoing nothing is a pass-through.
+    A link built for a higher format keeps running when someone drops it to
+    BPSK to see what happens.
+    """
+    import numpy as np
+
+    from maiman import SimulationContext
+    from maiman.components import DifferentialDecoder
+    from maiman.modulation import qam_constellation
+    from maiman.signals import SymbolSignal
+
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=4, sequence_length=8, seed=1)
+    points = qam_constellation(1)
+    symbols = points[np.array([0, 1, 1, 0, 1, 0, 0, 1])]
+    signal = SymbolSignal(symbols=symbols, symbol_rate=10e9, constellation=points)
+
+    out = DifferentialDecoder(label="dec").run(ctx, {"in": signal})["out"]
+    assert np.array_equal(np.asarray(out.symbols), symbols)
+    assert np.array_equal(np.asarray(out.constellation), points)
