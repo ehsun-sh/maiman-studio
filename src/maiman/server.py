@@ -275,6 +275,14 @@ class StudioHandler(BaseHTTPRequestHandler):
     server_version = "maiman"
     sys_version = ""
 
+    #: http.server speaks HTTP/1.0 unless told otherwise, which costs a fresh
+    #: connection per request and leaves cache directives on weaker footing than
+    #: they should be — `Cache-Control: no-store` is an HTTP/1.1 header, and the
+    #: page is edited between reloads constantly. Every response here already
+    #: carries an accurate Content-Length, which is what 1.1 requires to keep a
+    #: connection open, so this is an unset switch rather than a change.
+    protocol_version = "HTTP/1.1"
+
     # -- plumbing ---------------------------------------------------------
 
     def _send(self, status: HTTPStatus, payload: dict[str, Any]) -> None:
