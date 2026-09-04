@@ -265,6 +265,11 @@ Two findings worth keeping:
   opens the log with the engine's own message in it; a graph edited since the
   last run marks the results dock stale rather than leaving numbers on screen
   that answer a question no longer being asked.
-- What is still missing is the *empty* state, because there is no way yet to
-  empty the canvas — blocks cannot be added or deleted. It arrives with the
-  editing, not before it.
+- The empty state exists now that the canvas can be emptied. It names the next
+  action rather than describing the situation: someone looking at a blank canvas
+  has already worked out that it is blank, and what they need is where to start
+  and that ctrl+Z brings back what they just deleted.
+- A refused connection is answered on the canvas, in one line at the bottom,
+  rather than in the log. The log is for what a run did; this answers something
+  the hand is still doing, and by the time you have looked at a panel to find it
+  the gesture is over.

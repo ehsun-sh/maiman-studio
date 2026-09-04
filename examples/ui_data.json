@@ -66,6 +66,7 @@
      "doc": "Ionisation coefficient ratio k; lower is quieter"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "optical"
@@ -90,6 +91,7 @@
      "doc": "Attenuation"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "optical"
@@ -126,6 +128,7 @@
      "doc": "Sampling instant within the symbol when timing is fixed"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "electrical",
@@ -167,6 +170,7 @@
      "doc": "Times the sequence is run through"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "x": "symbol",
@@ -207,6 +211,7 @@
      "doc": "Lorentzian FWHM linewidth; 0 disables phase noise"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {},
     "outputs": {
@@ -237,6 +242,7 @@
      "doc": "Symbols averaged per estimate; longer is quieter but slips sooner"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "symbol"
@@ -290,6 +296,7 @@
      "doc": "Add LO-ASE beat noise"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "optical",
@@ -316,8 +323,14 @@
      "doc": "Insertion loss applied to every input"
     }
    },
+   "structural": {
+    "num_inputs": 2
+   },
    "ports": {
-    "inputs": {},
+    "inputs": {
+     "in0": "optical",
+     "in1": "optical"
+    },
     "outputs": {
      "out": "optical"
     }
@@ -343,6 +356,7 @@
      "doc": "Estimate and remove a carrier frequency offset before measuring"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "symbol",
@@ -375,6 +389,7 @@
      "doc": "Half-width of the window, in outermost-point magnitudes"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "symbol"
@@ -398,6 +413,7 @@
      "doc": "Output voltage"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {},
     "outputs": {
@@ -412,6 +428,7 @@
    "category": "DSP",
    "version": "0.1.0",
    "parameters": {},
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "symbol"
@@ -442,6 +459,7 @@
      "doc": "Signal wavelength, for the lambda^2 in b2"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "i": "electrical",
@@ -498,6 +516,7 @@
      "doc": "Add LO-ASE beat noise"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "optical",
@@ -554,6 +573,7 @@
      "doc": "Optical bandwidth over which ASE is emitted"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "optical"
@@ -578,6 +598,7 @@
      "doc": "3 dB power bandwidth"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "electrical"
@@ -616,6 +637,7 @@
      "doc": "Vertical resolution"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "electrical"
@@ -705,6 +727,7 @@
      "doc": "Waveplates used to build the PMD realisation"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "optical"
@@ -750,6 +773,7 @@
      "doc": "Vacuum wavelength"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {},
     "outputs": {
@@ -806,6 +830,7 @@
      "doc": "RRC length in symbols; longer leaves less residual ISI"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "symbol"
@@ -856,6 +881,7 @@
      "doc": "Excess loss, on top of the intrinsic 3 dB"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "optical_in": "optical",
@@ -907,6 +933,7 @@
      "doc": "RRC length in symbols"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "i": "electrical",
@@ -953,6 +980,7 @@
      "doc": "Loss at peak transmission"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "optical_in": "optical",
@@ -983,6 +1011,7 @@
      "doc": "Voltage representing a 1"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "binary"
@@ -1007,6 +1036,7 @@
      "doc": "Reference bandwidth; 12.5 GHz is 0.1 nm at 1550 nm"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "optical"
@@ -1061,6 +1091,7 @@
      "doc": "Out-of-band rejection floor; 0 disables the floor"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "optical"
@@ -1108,6 +1139,7 @@
      "doc": "Instrument resolution; 12.5 GHz is 0.1 nm at 1550 nm"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "optical"
@@ -1168,6 +1200,7 @@
      "doc": "Add signal-ASE and ASE-ASE beat noise"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "optical"
@@ -1201,6 +1234,7 @@
      "doc": "Bits each downstream symbol carries; scales how many bits are emitted"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {},
     "outputs": {
@@ -1223,6 +1257,7 @@
      "doc": "Excess loss; an ideal PBC has none"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "x": "optical",
@@ -1253,6 +1288,7 @@
      "doc": "Retardation between the two axes"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "optical"
@@ -1269,6 +1305,7 @@
    "category": "Measurements",
    "version": "0.1.0",
    "parameters": {},
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "optical"
@@ -1299,6 +1336,7 @@
      "doc": "Encode the quadrant differentially, so a quarter-turn ambiguity costs nothing"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "binary"
@@ -1337,6 +1375,7 @@
      "doc": "Vacuum wavelength"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {},
     "outputs": {
@@ -1359,11 +1398,17 @@
      "doc": "Loss beyond the ideal 10*log10(N) split"
     }
    },
+   "structural": {
+    "num_outputs": 2
+   },
    "ports": {
     "inputs": {
      "in": "optical"
     },
-    "outputs": {}
+    "outputs": {
+     "out0": "optical",
+     "out1": "optical"
+    }
    }
   }
  },

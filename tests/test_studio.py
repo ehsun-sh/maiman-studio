@@ -123,3 +123,54 @@ def test_the_page_still_works_without_a_server() -> None:
         "the page must decide whether it has a server from the protocol it was "
         "loaded over, not assume one"
     )
+
+
+def test_the_canvas_marks_up_what_can_be_edited() -> None:
+    """The editor hangs one handler on the SVG and reads the target's markup.
+
+    That is what lets it keep working across the redraw that every edit causes —
+    per-element listeners would have to be rebuilt each time. It also means a
+    redraw that stops emitting these attributes breaks dragging, wiring and
+    selection *silently*: nothing errors, the canvas simply stops responding.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    # Both halves of each pair: what the canvas writes, and what the handler
+    # reads. Checking only that an attribute appears somewhere is satisfied by
+    # any one of its uses, which is no guard at all — dropping it from just the
+    # inputs would leave every "data-dir" in the file and break every drop.
+    for emitted, read in (
+        ('"data-dir": "in"', 'dataset.dir === "in"'),
+        ('"data-dir": "out"', 'dataset.dir === "out"'),
+        # Tied to the block group specifically. The same literal also appears on
+        # every port, so a bare presence check passes while dragging a block by
+        # its body is broken — which is exactly what happened when this was
+        # written loosely.
+        ('role: "button", "data-node": n.id', "[data-node]"),
+        ('"data-port": name', "[data-port]"),
+        ('"data-edge": index', "[data-edge]"),
+    ):
+        assert emitted in text, f"the canvas no longer emits {emitted}"
+        assert read in text, f"nothing reads {read} any more"
+
+
+def test_an_input_can_only_have_one_source() -> None:
+    """The rule the editor enforces while wiring, pinned against the engine.
+
+    The editor refuses a second wire into an input and says which port already
+    has a source. It is not inventing that rule — the engine holds it too, and
+    raises. What the editor adds is the timing: the same refusal arrives while
+    the wire is being dragged rather than when Run is pressed, which is the
+    difference between a rule you can feel and one you discover.
+    """
+    from maiman import Graph, GraphError, SimulationContext
+    from maiman.components import CWLaser, Fiber
+
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=4, sequence_length=16, seed=1)
+    graph = Graph(ctx)
+    first = graph.add(CWLaser(label="a"))
+    second = graph.add(CWLaser(label="b"))
+    fiber = graph.add(Fiber(label="span"))
+    graph.connect(first, fiber["in"])
+    with pytest.raises(GraphError, match="exactly one connection"):
+        graph.connect(second, fiber["in"])
+    assert len(graph.edges) == 1

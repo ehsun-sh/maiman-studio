@@ -17,6 +17,7 @@ from maiman import (
     registered_names,
     save,
 )
+from maiman.component import PortType
 from maiman.components import (
     BERAnalyzer,
     Combiner,
@@ -88,6 +89,62 @@ def test_manifests_cover_every_registered_component() -> None:
     generated = manifests()
     assert set(generated) == set(registered_names())
     assert generated["CWLaser"]["ports"] == {"inputs": {}, "outputs": {"out": "optical"}}
+
+
+def test_a_configurable_port_count_is_reported_as_a_default_instance_has_it() -> None:
+    """The ports a block will have when someone drops one on a canvas.
+
+    A component whose port count is an argument binds its ports in ``__init__``,
+    so the class attribute is empty for exactly the components an editor most
+    needs to draw — a combiner used to report no inputs at all, and could not be
+    drawn or wired. Reading them off a default instance reports the two it will
+    actually have.
+    """
+    generated = manifests()
+    assert generated["Combiner"]["ports"]["inputs"] == {"in0": "optical", "in1": "optical"}
+    assert generated["Splitter"]["ports"]["outputs"] == {"out0": "optical", "out1": "optical"}
+
+
+def test_structural_arguments_are_listed_apart_from_parameters() -> None:
+    """They are not the same kind of thing and an editor must not treat them alike.
+
+    A parameter changes a number and can be edited in place; changing the port
+    count invalidates every wire already drawn to the block. The manifest keeps
+    them in separate sections so that distinction survives into the interface.
+    """
+    generated = manifests()
+    assert generated["Combiner"]["structural"] == {"num_inputs": 2}
+    assert generated["Splitter"]["structural"] == {"num_outputs": 2}
+    assert generated["CWLaser"]["structural"] == {}
+    assert "num_inputs" not in generated["Combiner"]["parameters"]
+
+
+def test_port_types_are_one_vocabulary_on_both_sides() -> None:
+    """The editor decides whether a wire is legal by comparing these strings.
+
+    It refuses a connection when the source's output type is not equal to the
+    target's input type. That comparison is only meaningful if both sides are
+    spelled from the same small vocabulary — one side emitting "PortType.OPTICAL"
+    while the other emits "optical" would refuse every connection ever
+    attempted, and refuse it for a reason nobody could see.
+    """
+    vocabulary = {kind.value for kind in PortType}
+    for name, manifest in manifests().items():
+        for side in ("inputs", "outputs"):
+            for port, kind in manifest["ports"][side].items():
+                assert kind in vocabulary, f"{name}.{port} has port type {kind!r}"
+
+
+def test_a_manifest_describes_something_that_can_actually_be_built() -> None:
+    """Every entry in the palette must be constructible with no arguments.
+
+    Clicking a component adds it with its defaults, so a component that cannot
+    be built that way would put an entry in the palette that fails the moment it
+    is used. The manifest survives such a component — it falls back to the class
+    — but the palette should not contain one unnoticed.
+    """
+    for name in registered_names():
+        lookup(name)(label="probe")
 
 
 # --------------------------------------------------------------------------

@@ -6,7 +6,7 @@ An open-source simulator for optical communication links and photonic systems. E
 link as a block diagram — laser, modulator, fiber, amplifier, detector — run it, and read the
 result as an eye diagram, a BER number, an OSNR figure.
 
-The engine exists and is validated: 618 tests, every physics block checked against a closed-form
+The engine exists and is validated: 631 tests, every physics block checked against a closed-form
 result in CI. What does not exist yet is the interface.
 
 The name is **Theodore Maiman's**, who built the first working laser at Hughes Research
@@ -64,7 +64,10 @@ constantly and any latency compounds.
   binned histogram of fixed size; the browser never receives a raw sample buffer.
 * **Port types are enforced**: optical, electrical, binary, symbol, metric. The editor must make
   a type mismatch visibly impossible rather than merely erroring on run.
-* Web-first, React Flow for the canvas. Optional desktop wrapper is packaging, not architecture.
+* Web-first. The canvas is hand-drawn SVG rather than React Flow: React Flow needs npm and a
+  bundler, and the project has no build step, which is what lets the page open straight off disk
+  with nothing installed. Revisit if the canvas grows past what that can carry. Optional desktop
+  wrapper is packaging, not architecture.
 
 ## Brand commitments
 

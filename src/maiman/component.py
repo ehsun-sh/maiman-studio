@@ -232,7 +232,33 @@ class Component:
 
         Generated from the class, never hand-written, so the schema cannot drift
         away from the implementation.
+
+        **The ports are a default instance's, not the class's.** A component
+        whose port count is configurable binds its own in ``__init__`` — an
+        N-way combiner has as many inputs as it was asked for — so the class
+        attribute is empty for exactly the components an editor most needs to
+        draw. Reading them off a default instance reports two inputs for a
+        combiner rather than none, which is what it will have if someone drops
+        one on a canvas.
+
+        ``structural`` carries the arguments that decide that shape, with the
+        values the default instance was built with. They are listed separately
+        from ``parameters`` because they are not the same kind of thing: a
+        parameter changes a number and can be edited in place, while changing
+        the port count invalidates every wire already drawn to it.
+
+        Instantiating is guarded. A component that cannot be built without
+        arguments still gets a manifest, described from its class as before,
+        because a palette missing an entry is worse than one describing it
+        incompletely.
         """
+        try:
+            probe: Component | None = cls()
+        except Exception:  # a manifest must not fail to exist
+            probe = None
+        inputs = probe.inputs if probe is not None else cls.inputs
+        outputs = probe.outputs if probe is not None else cls.outputs
+
         return {
             "name": cls.display_name or cls.__name__,
             "type": cls.type_name(),
@@ -240,9 +266,10 @@ class Component:
             "category": cls.category,
             "version": cls.version,
             "parameters": {name: spec.to_dict() for name, spec in cls.param_specs().items()},
+            "structural": probe.structural_config() if probe is not None else {},
             "ports": {
-                "inputs": {name: str(t) for name, t in cls.inputs.items()},
-                "outputs": {name: str(t) for name, t in cls.outputs.items()},
+                "inputs": {name: str(t) for name, t in inputs.items()},
+                "outputs": {name: str(t) for name, t in outputs.items()},
             },
         }
 

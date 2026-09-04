@@ -14,7 +14,7 @@ package is imported.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .component import Component
@@ -63,11 +63,18 @@ def registered_names() -> tuple[str, ...]:
     return tuple(sorted(_REGISTRY))
 
 
-def manifests() -> dict[str, dict[str, object]]:
+def manifests() -> dict[str, dict[str, Any]]:
     """Generated manifests for every registered component.
 
-    This is the component palette the GUI will be built from — derived from the
+    This is the component palette the GUI is built from — derived from the
     classes themselves, so it cannot drift away from what the engine actually
     does.
+
+    The values are ``Any`` rather than ``object`` because a manifest is a nested
+    structure and every real caller reaches into it: ``["ports"]["inputs"]`` is
+    the whole point of having one. Annotating the outside as ``object`` did not
+    make anything safer, it only meant nobody could read a manifest without a
+    cast — which is a worse guarantee than none, because the cast is where the
+    real mistakes get made.
     """
     return {name: cls.manifest() for name, cls in sorted(_REGISTRY.items())}

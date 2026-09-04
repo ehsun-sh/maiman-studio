@@ -35,9 +35,8 @@ link in this simulator descends from.*
 > each channel's phase at twice the rate its own does, sliding past under walk-off derived from
 > the dispersion — and triplets of channels mix to put light where nobody launched it.
 >
-> The interface runs: `python -m maiman.server`, open the page, press Run, and the numbers come
-> from the engine. What is still missing is the *editing* — the canvas draws a fixed schematic,
-> so you can change what a block does but not which blocks there are. See the
+> The interface runs and is editable: `python -m maiman.server`, open the page, build a link by
+> dragging blocks and wires, press Run, and the numbers come from the engine. See the
 > [roadmap](#roadmap).
 >
 > This is not yet a useful simulator. It is a foundation with the expensive decisions made and
@@ -66,9 +65,21 @@ back. So the picture on the canvas, the values in the inspector and the graph th
 are one description instead of three kept in agreement by hand — the hand-written copy that used
 to live in the page had already drifted, and was missing four of the fiber's parameters.
 
-**What it is not yet: an editor.** You can select a block, change its parameters and run. You
-cannot add a block, delete one, move one, or draw a wire — the canvas is still a fixed schematic.
-That is the React Flow work, and it is the next piece.
+**It is an editor.** Drag a block to move it. Drag from an output port to an input to wire them.
+Click a component in the palette to add it, select a block or a wire and press Delete to remove it,
+ctrl+Z to take it back. Then Run, on a graph that did not exist a minute ago.
+
+A connection is refused while it is being dragged rather than when Run is pressed, and the refusal
+says why — `binary cannot drive optical`, `fib.in already has a source`, `a block cannot feed
+itself`. Port types are what make that possible, and it is the reason they have been in the signal
+model since the first commit. An input with nothing feeding it is drawn hollow, because the engine
+will refuse to run the graph and showing which port is the problem beats reporting it afterwards.
+
+Built without React Flow, on the SVG canvas that was already there. That was a judgement call
+against what PRODUCT.md had written down, taken because React Flow means npm and a bundler and this
+project has no build step at all — the page still opens straight off disk with nothing installed,
+which is how the README asks you to read it. The interaction layer is the part that would have had
+to be written either way.
 
 The page also still opens straight off disk with nothing running, which is how it should be read
 if you only want to look. It says which mode it is in rather than leaving it to be inferred: a
@@ -655,7 +666,7 @@ time window, and results are reproducible.
 | **1 — MVP: linear link** *(essentially done)* | ✅ PRBS → NRZ → laser → MZM → fiber (α + CD) → PIN → filter → eye/Q/BER, validated end to end. **Python only, no GUI.** | ~2–3 months |
 | **1.5 — Nonlinear & amplified** ✅ | Adaptive-step SSFM, Kerr, EDFA with ASE, OSNR, PMD, APD | ~2 months |
 | **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier phase recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
-| **3 — GUI & WDM** | ✅ Wavelength-selective filters, an OSA, coupled-channel propagation (XPM with walk-off, FWM), the session server, and a browser that runs the graph and edits its parameters. React Flow canvas — add, wire and move blocks · 400G/800G references, CuPy back-end | ~6 months |
+| **3 — GUI & WDM** | ✅ Wavelength-selective filters, an OSA, coupled-channel propagation (XPM with walk-off, FWM), the session server, and a schematic editor: add, wire, move and delete blocks, edit parameters, run · Sweeps and project save/open from the browser, 400G/800G references, CuPy back-end | ~6 months |
 | **4 — PIC** | Waveguides, ring resonators, MMI, MZI via integration with an existing S-matrix solver; PDK import | — |
 
 ¹ One developer, part-time. Estimates, not commitments.

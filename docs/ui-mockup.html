@@ -510,6 +510,47 @@ verdict, and DESIGN.md
     color: var(--ink);
   }
   .metric .v.pass { color: var(--good); }
+
+  /* ---- The editor ------------------------------------------------------
+     A canvas you can change needs to say what is grabbable before it is
+     grabbed. Ports grow on hover because they are the smallest target on
+     screen and the one that starts a wire. */
+  .node-g { cursor: grab; }
+  .node-g:active { cursor: grabbing; }
+  .port { transition: r 90ms ease, stroke-width 90ms ease; }
+  .port.out { cursor: crosshair; }
+  .port.out:hover { r: 6; }
+  /* An input with nothing feeding it. The engine will refuse to run the graph,
+     so it is drawn as a gap rather than left looking finished. */
+  .port.open { fill: var(--panel) !important; stroke: currentColor; stroke-width: 1.5; }
+  .wire-grab { stroke: transparent; stroke-width: 12; fill: none; cursor: pointer; }
+  .wire.selected { stroke-width: 3; filter: drop-shadow(0 0 3px currentColor); }
+  .wire.pending { stroke-dasharray: 4 3; opacity: 0.9; }
+  /* The wire being dragged follows the cursor, so without this it is the
+     topmost thing under it and the drop resolves to the preview instead of the
+     port beneath — the connection is then refused for having no target, which
+     is both wrong and impossible to work out from the outside. */
+  #pending { pointer-events: none; }
+  .canvas-empty .empty-head {
+    font-size: 15px; font-weight: 600; fill: var(--ink-3);
+  }
+  .canvas-empty .empty-sub {
+    font-size: 11.5px; fill: var(--ink-4); font-family: var(--mono);
+  }
+  /* One line, bottom centre, for the reason an edit was refused. It sits over
+     the canvas rather than in the log because it answers something the hand is
+     still doing. */
+  #canvas-hint {
+    position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+    padding: 5px 12px; border-radius: 4px; font-size: 11.5px; font-family: var(--mono);
+    background: var(--overlay); border: 1px solid var(--rule); color: var(--ink-2);
+    pointer-events: none; opacity: 0; transition: opacity 140ms ease;
+    white-space: nowrap; z-index: 5;
+  }
+  #canvas-hint.shown { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) {
+    #canvas-hint, .port { transition: none; }
+  }
   /* A field the engine would refuse. Marked, not corrected: silently clamping
      someone's number is worse than telling them it is out of range. */
   .field.invalid input { border-color: var(--bad); color: var(--bad); }
@@ -730,6 +771,7 @@ verdict, and DESIGN.md
         <div class="canvas-grid"></div>
         <svg id="graph" viewBox="0 0 1000 530" preserveAspectRatio="xMidYMid meet"
              role="img" aria-label="Optical link schematic"></svg>
+        <div id="canvas-hint" role="status" aria-live="polite"></div>
         <div class="canvas-badge">
           <span>Ports</span>
           <span class="legend"><i style="background:var(--optical)"></i>optical</span>
@@ -901,6 +943,7 @@ verdict, and DESIGN.md
      "doc": "Ionisation coefficient ratio k; lower is quieter"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "optical"
@@ -925,6 +968,7 @@ verdict, and DESIGN.md
      "doc": "Attenuation"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "optical"
@@ -961,6 +1005,7 @@ verdict, and DESIGN.md
      "doc": "Sampling instant within the symbol when timing is fixed"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "electrical",
@@ -1002,6 +1047,7 @@ verdict, and DESIGN.md
      "doc": "Times the sequence is run through"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "x": "symbol",
@@ -1042,6 +1088,7 @@ verdict, and DESIGN.md
      "doc": "Lorentzian FWHM linewidth; 0 disables phase noise"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {},
     "outputs": {
@@ -1072,6 +1119,7 @@ verdict, and DESIGN.md
      "doc": "Symbols averaged per estimate; longer is quieter but slips sooner"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "symbol"
@@ -1125,6 +1173,7 @@ verdict, and DESIGN.md
      "doc": "Add LO-ASE beat noise"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "optical",
@@ -1151,8 +1200,14 @@ verdict, and DESIGN.md
      "doc": "Insertion loss applied to every input"
     }
    },
+   "structural": {
+    "num_inputs": 2
+   },
    "ports": {
-    "inputs": {},
+    "inputs": {
+     "in0": "optical",
+     "in1": "optical"
+    },
     "outputs": {
      "out": "optical"
     }
@@ -1178,6 +1233,7 @@ verdict, and DESIGN.md
      "doc": "Estimate and remove a carrier frequency offset before measuring"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "symbol",
@@ -1210,6 +1266,7 @@ verdict, and DESIGN.md
      "doc": "Half-width of the window, in outermost-point magnitudes"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "symbol"
@@ -1233,6 +1290,7 @@ verdict, and DESIGN.md
      "doc": "Output voltage"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {},
     "outputs": {
@@ -1247,6 +1305,7 @@ verdict, and DESIGN.md
    "category": "DSP",
    "version": "0.1.0",
    "parameters": {},
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "symbol"
@@ -1277,6 +1336,7 @@ verdict, and DESIGN.md
      "doc": "Signal wavelength, for the lambda^2 in b2"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "i": "electrical",
@@ -1333,6 +1393,7 @@ verdict, and DESIGN.md
      "doc": "Add LO-ASE beat noise"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "optical",
@@ -1389,6 +1450,7 @@ verdict, and DESIGN.md
      "doc": "Optical bandwidth over which ASE is emitted"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "optical"
@@ -1413,6 +1475,7 @@ verdict, and DESIGN.md
      "doc": "3 dB power bandwidth"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "electrical"
@@ -1451,6 +1514,7 @@ verdict, and DESIGN.md
      "doc": "Vertical resolution"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "electrical"
@@ -1540,6 +1604,7 @@ verdict, and DESIGN.md
      "doc": "Waveplates used to build the PMD realisation"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "optical"
@@ -1585,6 +1650,7 @@ verdict, and DESIGN.md
      "doc": "Vacuum wavelength"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {},
     "outputs": {
@@ -1641,6 +1707,7 @@ verdict, and DESIGN.md
      "doc": "RRC length in symbols; longer leaves less residual ISI"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "symbol"
@@ -1691,6 +1758,7 @@ verdict, and DESIGN.md
      "doc": "Excess loss, on top of the intrinsic 3 dB"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "optical_in": "optical",
@@ -1742,6 +1810,7 @@ verdict, and DESIGN.md
      "doc": "RRC length in symbols"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "i": "electrical",
@@ -1788,6 +1857,7 @@ verdict, and DESIGN.md
      "doc": "Loss at peak transmission"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "optical_in": "optical",
@@ -1818,6 +1888,7 @@ verdict, and DESIGN.md
      "doc": "Voltage representing a 1"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "binary"
@@ -1842,6 +1913,7 @@ verdict, and DESIGN.md
      "doc": "Reference bandwidth; 12.5 GHz is 0.1 nm at 1550 nm"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "optical"
@@ -1896,6 +1968,7 @@ verdict, and DESIGN.md
      "doc": "Out-of-band rejection floor; 0 disables the floor"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "optical"
@@ -1943,6 +2016,7 @@ verdict, and DESIGN.md
      "doc": "Instrument resolution; 12.5 GHz is 0.1 nm at 1550 nm"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "optical"
@@ -2003,6 +2077,7 @@ verdict, and DESIGN.md
      "doc": "Add signal-ASE and ASE-ASE beat noise"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "optical"
@@ -2036,6 +2111,7 @@ verdict, and DESIGN.md
      "doc": "Bits each downstream symbol carries; scales how many bits are emitted"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {},
     "outputs": {
@@ -2058,6 +2134,7 @@ verdict, and DESIGN.md
      "doc": "Excess loss; an ideal PBC has none"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "x": "optical",
@@ -2088,6 +2165,7 @@ verdict, and DESIGN.md
      "doc": "Retardation between the two axes"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "optical"
@@ -2104,6 +2182,7 @@ verdict, and DESIGN.md
    "category": "Measurements",
    "version": "0.1.0",
    "parameters": {},
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "optical"
@@ -2134,6 +2213,7 @@ verdict, and DESIGN.md
      "doc": "Encode the quadrant differentially, so a quarter-turn ambiguity costs nothing"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {
      "in": "binary"
@@ -2172,6 +2252,7 @@ verdict, and DESIGN.md
      "doc": "Vacuum wavelength"
     }
    },
+   "structural": {},
    "ports": {
     "inputs": {},
     "outputs": {
@@ -2194,11 +2275,17 @@ verdict, and DESIGN.md
      "doc": "Loss beyond the ideal 10*log10(N) split"
     }
    },
+   "structural": {
+    "num_outputs": 2
+   },
    "ports": {
     "inputs": {
      "in": "optical"
     },
-    "outputs": {}
+    "outputs": {
+     "out0": "optical",
+     "out1": "optical"
+    }
    }
   }
  },
@@ -15422,7 +15509,10 @@ verdict, and DESIGN.md
         b.innerHTML =
           `<span class="swatch" style="background:${portVar(CATEGORY_PORT[cat])}"></span>
            <span class="nm">${escapeHtml(m.name)}</span>`;
-        b.addEventListener("click", () => showManifest(key));
+        /* A palette in an editor is for adding, not for browsing. Clicking one
+           puts a block on the canvas and selects it, so the inspector shows the
+           thing that now exists rather than a description of a thing that could. */
+        b.addEventListener("click", () => addComponent(key));
         list.appendChild(b);
       }
       wrap.querySelector(".cat-head").addEventListener("click", () => {
@@ -15465,12 +15555,226 @@ verdict, and DESIGN.md
     return e;
   }
 
+  /* ---------- Editing the graph ---------------------------------------------
+     The canvas was a picture of a link. This is what makes it one you can
+     change: drag a block to move it, drag from an output to an input to wire
+     them, click the palette to add, Delete to remove.
+
+     Every edit rewrites PROJECT, which is the document Run posts, so there is
+     no separate editor model that has to be translated into one — the thing on
+     screen is the thing that gets executed. */
+
+  let selectedEdge = null;   // index into PROJECT.edges, or null
+  let drag = null;           // { id, dx, dy, moved } while a block is being moved
+  let wiring = null;         // { from, x, y } while a wire is being pulled
+
+  /* Snapshots for undo. A destructive editor without one is a trap: deleting a
+     block takes its wires with it, and rebuilding those by hand is exactly the
+     kind of tedium that makes someone stop trusting a tool. Positions are
+     folded in because moving a block is an edit like any other. */
+  const HISTORY = [];
+  const HISTORY_LIMIT = 100;
+
+  function snapshot() {
+    HISTORY.push(JSON.stringify({
+      nodes: PROJECT.nodes, edges: PROJECT.edges, layout: LAYOUT, selected
+    }));
+    if (HISTORY.length > HISTORY_LIMIT) HISTORY.shift();
+  }
+
+  function undo() {
+    const state = HISTORY.pop();
+    if (!state) { flashHint("nothing to undo"); return; }
+    const past = JSON.parse(state);
+    PROJECT.nodes = past.nodes;
+    PROJECT.edges = past.edges;
+    for (const key of Object.keys(LAYOUT)) delete LAYOUT[key];
+    Object.assign(LAYOUT, past.layout);
+    selected = past.selected;
+    selectedEdge = null;
+    afterEdit({ record: false });
+  }
+
+  /* NODES, EDGES and VALUES are views over PROJECT. They are rebuilt rather
+     than patched, so there is only ever one way for them to be wrong. */
+  function rebuildViews() {
+    NODES.length = 0;
+    for (const n of PROJECT.nodes) {
+      NODES.push({
+        id: n.id, type: n.type, label: n.id,
+        x: (LAYOUT[n.id] || {}).x ?? 40, y: (LAYOUT[n.id] || {}).y ?? 40
+      });
+    }
+    EDGES.length = 0;
+    for (const e of PROJECT.edges) EDGES.push({ from: e.from, to: e.to, type: portType(e.from) });
+    for (const key of Object.keys(VALUES)) delete VALUES[key];
+    for (const n of PROJECT.nodes) VALUES[n.id] = n.params;
+  }
+
+  /* One place where an edit is finished. Everything that has to agree with the
+     graph is brought back into agreement here rather than at each call site,
+     which is how the status bar and the provenance badge stay honest without
+     every edit having to remember them. */
+  function afterEdit({ record = true } = {}) {
+    if (record) SESSION.captions = {};
+    SESSION.live = false;
+    markProvenance();
+    $("#sb-blocks").textContent = PROJECT.nodes.length + " blocks";
+    $("#sb-links").textContent = PROJECT.edges.length + " links";
+    rebuildViews();
+    drawGraph();
+    const node = NODES.find((n) => n.id === selected);
+    if (node) showNode(node);
+    else showEmptyInspector();
+  }
+
+  /* ---------- Adding ---------------------------------------------------- */
+
+  /* Labels are the graph's identifiers and have to be unique. The engine would
+     refuse a duplicate, but only at run time and only after the wire had been
+     drawn, so the page picks one that is free. */
+  function freeLabel(type) {
+    const stem = (type.replace(/[^A-Z]/g, "").toLowerCase() || type.slice(0, 3).toLowerCase());
+    const taken = new Set(PROJECT.nodes.map((n) => n.id));
+    if (!taken.has(stem)) return stem;
+    for (let i = 2; ; i += 1) if (!taken.has(stem + i)) return stem + i;
+  }
+
+  /* Somewhere the block can be seen and is not on top of another one. */
+  function freeSpot() {
+    const occupied = Object.values(LAYOUT);
+    for (let row = 0; row < 12; row += 1) {
+      for (let col = 0; col < 7; col += 1) {
+        const x = 30 + col * 138, y = 30 + row * 95;
+        if (!occupied.some((p) => Math.abs(p.x - x) < 20 && Math.abs(p.y - y) < 20)) {
+          return { x, y };
+        }
+      }
+    }
+    return { x: 30, y: 30 };
+  }
+
+  function addComponent(type, at) {
+    const manifest = DATA.manifests[type];
+    if (!manifest) return;
+    snapshot();
+    const id = freeLabel(type);
+    const node = { id, type, params: {} };
+    /* Structural arguments travel with the node. They are not parameters — they
+       decide how many ports it has — and omitting them would hand the engine a
+       differently-shaped block from the one drawn on the canvas. */
+    if (manifest.structural && Object.keys(manifest.structural).length) {
+      node.config = Object.assign({}, manifest.structural);
+    }
+    PROJECT.nodes.push(node);
+    LAYOUT[id] = at || freeSpot();
+    selected = id;
+    selectedEdge = null;
+    afterEdit();
+    flashHint(manifest.name + " added as " + id);
+  }
+
+  /* ---------- Removing -------------------------------------------------- */
+
+  function removeNode(id) {
+    if (!PROJECT.nodes.some((n) => n.id === id)) return;
+    snapshot();
+    const lost = PROJECT.edges.filter((e) => e.from[0] === id || e.to[0] === id).length;
+    PROJECT.nodes = PROJECT.nodes.filter((n) => n.id !== id);
+    /* A wire to a block that is gone is not a wire. Taking them with it is the
+       only consistent choice, and undo is what makes it a safe one. */
+    PROJECT.edges = PROJECT.edges.filter((e) => e.from[0] !== id && e.to[0] !== id);
+    delete LAYOUT[id];
+    if (selected === id) selected = PROJECT.nodes.length ? PROJECT.nodes[0].id : null;
+    afterEdit();
+    flashHint(lost ? id + " deleted with " + lost + " wire(s) — ctrl+Z to undo"
+                   : id + " deleted — ctrl+Z to undo");
+  }
+
+  function removeEdge(index) {
+    if (index < 0 || index >= PROJECT.edges.length) return;
+    snapshot();
+    PROJECT.edges.splice(index, 1);
+    selectedEdge = null;
+    afterEdit();
+    flashHint("wire removed — ctrl+Z to undo");
+  }
+
+  /* ---------- Wiring ---------------------------------------------------- */
+
+  /* Why a connection is refused, or null if it is allowed. A reason rather than
+     a boolean, because it is what lets the canvas say *why* a drop will not
+     take — the difference between a rule and a rebuff. */
+  function connectionProblem(from, to) {
+    if (!from || !to) return "drop on an input port";
+    if (from[0] === to[0]) return "a block cannot feed itself";
+    const source = nodeById(from[0]), target = nodeById(to[0]);
+    if (!source || !target) return "unknown block";
+    const out = DATA.manifests[source.type].ports.outputs[from[1]];
+    const inp = DATA.manifests[target.type].ports.inputs[to[1]];
+    if (!out) return "start from an output port";
+    if (!inp) return "drop on an input port";
+    /* Port types are the whole reason this can be refused while it is being
+       drawn rather than half way through a run. */
+    if (out !== inp) return out + " cannot drive " + inp;
+    if (PROJECT.edges.some((e) => e.to[0] === to[0] && e.to[1] === to[1])) {
+      return to[0] + "." + to[1] + " already has a source";
+    }
+    return null;
+  }
+
+  function connect(from, to) {
+    const problem = connectionProblem(from, to);
+    if (problem) { flashHint(problem); return false; }
+    snapshot();
+    PROJECT.edges.push({ from, to });
+    afterEdit();
+    return true;
+  }
+
+  let hintTimer;
+  function flashHint(message) {
+    const hint = $("#canvas-hint");
+    if (!hint) return;
+    hint.textContent = message;
+    hint.classList.add("shown");
+    clearTimeout(hintTimer);
+    hintTimer = setTimeout(() => hint.classList.remove("shown"), 2400);
+  }
+
+  /* Screen to user units, through the viewBox and whatever the zoom control has
+     done to the element. getScreenCTM knows about both; doing that arithmetic
+     by hand would not survive the next change to either. */
+  function svgPoint(event) {
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return { x: 0, y: 0 };
+    const point = new DOMPoint(event.clientX, event.clientY).matrixTransform(ctm.inverse());
+    return { x: point.x, y: point.y };
+  }
+
+  /* What the canvas says with nothing on it. Reachable for the first time now
+     that blocks can be deleted — before this, an empty schematic could not
+     happen, so there was nothing to say. It names the next action rather than
+     describing the situation: someone looking at an empty canvas already knows
+     it is empty. */
+  function drawEmptyCanvas() {
+    const box = el("g", { class: "canvas-empty" }, svg);
+    const t1 = el("text", { x: 500, y: 240, "text-anchor": "middle", class: "empty-head" }, box);
+    t1.textContent = "No blocks";
+    const t2 = el("text", { x: 500, y: 268, "text-anchor": "middle", class: "empty-sub" }, box);
+    t2.textContent = "Click a component in the palette to add one.";
+    const t3 = el("text", { x: 500, y: 290, "text-anchor": "middle", class: "empty-sub" }, box);
+    t3.textContent = "ctrl+Z brings back what was deleted.";
+  }
+
   function drawGraph() {
     svg.innerHTML = "";
     const wireLayer = el("g", {}, svg);
     const nodeLayer = el("g", {}, svg);
 
-    for (const e of EDGES) {
+    if (!NODES.length) drawEmptyCanvas();
+
+    EDGES.forEach((e, index) => {
       const a = portPos(e.from[0], e.from[1]);
       const b = portPos(e.to[0], e.to[1]);
       // A link that runs right-to-left is the schematic wrapping onto its next
@@ -15481,14 +15785,27 @@ verdict, and DESIGN.md
       const span = Math.abs(b.x - a.x);
       const dx = b.x < a.x ? 44 : Math.max(34, span * 0.45);
       const d = `M${a.x} ${a.y} C${a.x + dx} ${a.y} ${b.x - dx} ${b.y} ${b.x} ${b.y}`;
-      el("path", { d, class: "wire", style: `stroke:${portVar(e.type)}` }, wireLayer);
+      const chosen = index === selectedEdge;
+      el("path", { d, class: "wire" + (chosen ? " selected" : ""),
+                   style: `stroke:${portVar(e.type)}` }, wireLayer);
       el("path", { d, class: "wire-flow" }, wireLayer);
-    }
+      /* A two-pixel curve is not a target anyone can hit. This one is
+         invisible, twelve pixels wide, and is what actually receives the
+         click. */
+      const grab = el("path", { d, class: "wire-grab", "data-edge": index }, wireLayer);
+      grab.addEventListener("pointerdown", (ev) => {
+        ev.stopPropagation();
+        selectedEdge = index;
+        selected = null;
+        drawGraph();
+        showEmptyInspector();
+      });
+    });
 
     for (const n of NODES) {
       const m = DATA.manifests[n.type];
       const g = el("g", { class: "node-g" + (n.id === selected ? " selected" : ""),
-                          tabindex: "0", role: "button",
+                          tabindex: "0", role: "button", "data-node": n.id,
                           "aria-label": m.name + " " + n.label }, nodeLayer);
       el("rect", { x: n.x - 3, y: n.y - 3, width: NODE_W + 6, height: NODE_H + 6,
                    rx: 8, class: "node-halo" }, g);
@@ -15509,23 +15826,32 @@ verdict, and DESIGN.md
       const cap = caption(n);
       t2.textContent = cap ? `${n.label} · ${cap}` : n.label;
 
+      const wired = (port) =>
+        PROJECT.edges.some((e) => e.to[0] === n.id && e.to[1] === port);
       inputs.forEach(([name, type], i) => {
         const y = n.y + (NODE_H * (i + 1)) / (inputs.length + 1);
+        /* An unconnected input is drawn hollow. The engine refuses to run a
+           graph with one, so showing which they are beats reporting it after
+           the fact. */
         const c = el("circle", { cx: n.x, cy: y, r: 4, style: `fill:${portVar(type)}`,
-                                 class: "port" }, g);
-        el("title", {}, c).textContent = `${name} · ${type}`;
+                                 class: "port" + (wired(name) ? "" : " open"),
+                                 "data-port": name, "data-node": n.id, "data-dir": "in" }, g);
+        el("title", {}, c).textContent = `${name} · ${type}` +
+          (wired(name) ? "" : " · not connected");
       });
       outputs.forEach(([name, type], i) => {
         const y = n.y + (NODE_H * (i + 1)) / (outputs.length + 1);
         const c = el("circle", { cx: n.x + NODE_W, cy: y, r: 4, style: `fill:${portVar(type)}`,
-                                 class: "port" }, g);
-        el("title", {}, c).textContent = `${name} · ${type}`;
+                                 class: "port out", "data-port": name, "data-node": n.id,
+                                 "data-dir": "out" }, g);
+        el("title", {}, c).textContent = `${name} · ${type} — drag to connect`;
       });
 
-      const select = () => { selected = n.id; drawGraph(); showNode(n); };
-      g.addEventListener("click", select);
       g.addEventListener("keydown", (ev) => {
-        if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); select(); }
+        if (ev.key === "Enter" || ev.key === " ") {
+          ev.preventDefault();
+          selected = n.id; selectedEdge = null; drawGraph(); showNode(n);
+        }
       });
     }
   }
@@ -15641,7 +15967,6 @@ verdict, and DESIGN.md
     renderInspector(n.type, n.label, VALUES[n.id]);
     bindFields(n.id);
   };
-  const showManifest = (key) => renderInspector(key, "", null);
 
   /* ---------- Plot colours ------------------------------------------------
      A canvas has no cascade, so the plots read the same tokens as everything
@@ -16098,6 +16423,195 @@ verdict, and DESIGN.md
   $("#zoom-out").addEventListener("click", () => setZoom(zoom - 20));
 
   // The one authored motion moment: a run pulses down the wires in signal order.
+
+  /* ---------- Pointer interaction ------------------------------------------
+     Bound once on the SVG rather than per element, because drawGraph replaces
+     everything it drew every time the graph changes and per-element listeners
+     would have to be rebuilt with it. The target carries what it is in data
+     attributes; the handler reads them. */
+
+  /* Pointer capture keeps the drag alive when the cursor leaves the block, and
+     throws if the pointer is not currently active — which a synthetic event
+     never is, and a real one stops being the moment it is released. Neither
+     case should take the drag down with it. */
+  function capture(event) {
+    try { svg.setPointerCapture(event.pointerId); } catch { /* not capturable */ }
+  }
+  function release(event) {
+    try {
+      if (svg.hasPointerCapture(event.pointerId)) svg.releasePointerCapture(event.pointerId);
+    } catch { /* already gone */ }
+  }
+
+  svg.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    const port = event.target.closest("[data-port]");
+    const node = event.target.closest("[data-node]");
+
+    if (port && port.dataset.dir === "out") {
+      /* Wires are pulled from an output. Starting at an input would work too,
+         but allowing both doubles the states for no gain — signal flows one
+         way and the schematic reads left to right. */
+      const at = svgPoint(event);
+      wiring = { from: [port.dataset.node, port.dataset.port], x: at.x, y: at.y };
+      capture(event);
+      event.preventDefault();
+      return;
+    }
+
+    if (node) {
+      const id = node.dataset.node;
+      const at = svgPoint(event);
+      const position = LAYOUT[id] || { x: 0, y: 0 };
+      drag = { id, dx: at.x - position.x, dy: at.y - position.y, moved: false };
+      selectedEdge = null;
+      if (selected !== id) {
+        selected = id;
+        drawGraph();
+        showNode(NODES.find((n) => n.id === id));
+      }
+      capture(event);
+      event.preventDefault();
+      return;
+    }
+
+    /* Empty canvas: clear the selection rather than leaving a block highlighted
+       that the Delete key would then remove. */
+    const wire = event.target.closest("[data-edge]");
+    if (!wire) {
+      selectedEdge = null;
+      selected = null;
+      drawGraph();
+      showEmptyInspector();
+    }
+  });
+
+  svg.addEventListener("pointermove", (event) => {
+    if (wiring) {
+      const at = svgPoint(event);
+      wiring.x = at.x; wiring.y = at.y;
+      drawPendingWire();
+      return;
+    }
+    if (!drag) return;
+    const at = svgPoint(event);
+    const next = { x: Math.round(at.x - drag.dx), y: Math.round(at.y - drag.dy) };
+    if (!drag.moved) {
+      /* A click and a drag start identically. The snapshot is taken on the
+         first movement so that clicking a block does not fill the undo stack
+         with states nothing changed. */
+      if (Math.abs(next.x - LAYOUT[drag.id].x) < 2 && Math.abs(next.y - LAYOUT[drag.id].y) < 2) {
+        return;
+      }
+      snapshot();
+      drag.moved = true;
+    }
+    LAYOUT[drag.id] = next;
+    rebuildViews();
+    drawGraph();
+  });
+
+  function endPointer(event) {
+    if (wiring) {
+      const port = document.elementFromPoint(event.clientX, event.clientY);
+      const target = port && port.closest("[data-port]");
+      if (target && target.dataset.dir === "in") {
+        connect(wiring.from, [target.dataset.node, target.dataset.port]);
+      } else {
+        flashHint("drop on an input port of the same colour");
+      }
+      wiring = null;
+      drawPendingWire();
+    }
+    if (drag) {
+      /* Moving a block changes where it is drawn and nothing about what it
+         computes, so the results on screen are still answers to this graph. */
+      if (drag.moved) { markProvenance(); }
+      drag = null;
+    }
+    release(event);
+  }
+  svg.addEventListener("pointerup", endPointer);
+  svg.addEventListener("pointercancel", endPointer);
+
+  /* The wire being pulled lives in its own layer so that dragging it does not
+     redraw the whole graph on every pointer move. */
+  function drawPendingWire() {
+    let layer = svg.querySelector("#pending");
+    if (!wiring) { if (layer) layer.remove(); return; }
+    if (!layer) { layer = el("g", { id: "pending" }, svg); }
+    layer.innerHTML = "";
+    const start = portPos(wiring.from[0], wiring.from[1]);
+    const type = portType(wiring.from);
+    const dx = Math.max(30, Math.abs(wiring.x - start.x) * 0.5);
+    const d = `M ${start.x} ${start.y} C ${start.x + dx} ${start.y}, ` +
+              `${wiring.x - dx} ${wiring.y}, ${wiring.x} ${wiring.y}`;
+    el("path", { d, class: "wire pending", style: `stroke:${portVar(type)}` }, layer);
+    el("circle", { cx: wiring.x, cy: wiring.y, r: 3.5, class: "port pending-end",
+                   style: `fill:${portVar(type)}` }, layer);
+  }
+
+  /* ---------- Keyboard --------------------------------------------------- */
+  document.addEventListener("keydown", (event) => {
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+    if (typing) return;
+
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+      event.preventDefault();
+      undo();
+      return;
+    }
+    if (event.key === "Delete" || event.key === "Backspace") {
+      if (selectedEdge !== null) { event.preventDefault(); removeEdge(selectedEdge); }
+      else if (selected) { event.preventDefault(); removeNode(selected); }
+      return;
+    }
+    if (event.key === "Escape") {
+      if (wiring) { wiring = null; drawPendingWire(); }
+      selectedEdge = null;
+      drawGraph();
+    }
+  });
+
+  /* ---------- The empty inspector ----------------------------------------
+     What the panel says when nothing is selected. It used to be impossible to
+     have nothing selected; now a block can be deleted, and a panel left
+     showing the properties of something that no longer exists would be worse
+     than a blank one. */
+  function showEmptyInspector() {
+    if (selectedEdge !== null) {
+      const edge = PROJECT.edges[selectedEdge];
+      const type = portType(edge.from);
+      inspector.innerHTML =
+        `<div class="insp-title"><h2>Connection</h2>
+           <div class="insp-meta"><span class="chip">${escapeHtml(type)}</span></div></div>
+         <div class="field">
+           <div class="field-row"><label>from</label>
+             <span class="field-input"><input type="text" readonly
+               value="${escapeHtml(edge.from[0] + "." + edge.from[1])}"></span></div>
+         </div>
+         <div class="field">
+           <div class="field-row"><label>to</label>
+             <span class="field-input"><input type="text" readonly
+               value="${escapeHtml(edge.to[0] + "." + edge.to[1])}"></span></div>
+         </div>
+         <div class="field" style="border-bottom:0">
+           <p class="field-doc">Delete removes this wire. Nothing else is affected —
+           the blocks at either end stay where they are.</p>
+         </div>`;
+      $("#sb-sel").textContent =
+        `${edge.from[0]}.${edge.from[1]} → ${edge.to[0]}.${edge.to[1]} selected`;
+      return;
+    }
+    inspector.innerHTML =
+      `<div class="insp-title"><h2>Nothing selected</h2></div>
+       <div class="field" style="border-bottom:0">
+         <p class="field-doc">Click a block to edit its parameters, or a wire to inspect it.
+         Click a component in the palette to add one.</p>
+       </div>`;
+    $("#sb-sel").textContent = "nothing selected";
+  }
+
   /* ---------- Run ----------------------------------------------------------
      Posts the project document to the session server and shows what comes
      back. The button used to wait 1.6 seconds and change a label; the 1.6
