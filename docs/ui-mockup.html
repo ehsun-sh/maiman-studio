@@ -197,6 +197,17 @@ verdict, and DESIGN.md
   }
 
   * { box-sizing: border-box; }
+  /* The `hidden` attribute means hidden, whatever else a rule says.
+
+     A browser hides it through its own stylesheet, and *any* author
+     declaration of `display` beats the whole user-agent sheet regardless of
+     specificity. So `.menu-pop { display: flex }` quietly un-hid the File menu:
+     the attribute was set, `element.hidden` read true, and the menu sat on
+     screen anyway — including in the screenshot in the README, which shipped
+     with it hanging open over the toolbar. Declared once, for everything,
+     because the next component with a display rule and a hidden state will not
+     remember either. */
+  [hidden] { display: none !important; }
 
   body {
     margin: 0;
@@ -16045,6 +16056,43 @@ verdict, and DESIGN.md
      surviving until a run comes back and has to explain itself. When they
      disagree the engine wins — the field is marked and the value is left for
      the server to reject in its own words. */
+  /* Parameters that belong to the link rather than to a block.
+
+     The modulation format is one property of one signal, and three blocks in a
+     coherent graph each have to be told it: the mapper that builds the
+     constellation, the reference mapper that scores it, and the generator
+     upstream, whose only use for the number is to know how many bits to emit.
+     Set them differently and nothing runs — the mapper counts its input and
+     refuses. There is no arrangement of them that is useful and unequal.
+
+     So editing one edits them all, and says which. This is a named special
+     case, not a general rule inferred from the manifest, and it is better for
+     being named: a rule like "same parameter name on connected blocks" would
+     look principled while being this same exception wearing a disguise, and it
+     would fire on parameters that genuinely differ per block. The real fix is
+     in the engine — a generator should not need to be told what its consumer
+     will do with its bits — and until that exists this is where the seam
+     shows.
+
+     One snapshot already covers it, so ctrl+Z takes back the whole edit. */
+  const LINK_WIDE = new Set(["bits_per_symbol"]);
+
+  function spreadLinkWide(name, value, originId) {
+    if (!LINK_WIDE.has(name)) return [];
+    const changed = [];
+    for (const other of PROJECT.nodes) {
+      if (other.id === originId) continue;
+      const specs = DATA.manifests[other.type];
+      if (!specs || !(name in specs.parameters)) continue;
+      const before = other.params[name] !== undefined
+        ? other.params[name] : specs.parameters[name].default;
+      if (Number(before) === Number(value)) continue;
+      other.params[name] = value;
+      changed.push(other.id);
+    }
+    return changed;
+  }
+
   function bindFields(nodeId) {
     if (!nodeId) return;
     const node = nodeById(nodeId);
@@ -16059,17 +16107,22 @@ verdict, and DESIGN.md
       if (!spec) return;
 
       const commit = () => {
+        let shared = [];
+        let applied = null;   // declared out here: the hint below needs it
         if (spec.type === "bool") {
           node.params[name] = input.checked;
         } else {
           const value = Number(input.value);
+          applied = value;
           const bad = !Number.isFinite(value)
+            || (spec.choices && !spec.choices.some((c) => Number(c) === value))
             || (spec.min !== undefined && value < spec.min)
             || (spec.max !== undefined && value > spec.max);
           field.classList.toggle("invalid", bad);
           if (bad) return;          // leave the last good value in the document
           node.params[name] = value;
-          input.value = fmt(value);
+          input.value = spec.choices ? String(value) : fmt(value);
+          shared = spreadLinkWide(name, value, node.id);
         }
         /* The canvas caption is drawn from these values, so it changes as they
            do — and a result on screen is now older than the graph that
@@ -16078,6 +16131,9 @@ verdict, and DESIGN.md
         SESSION.live = false;
         markProvenance();
         drawGraph();
+        if (shared.length) {
+          flashHint(`${name} = ${applied} applied to ${shared.join(", ")} as well`);
+        }
       };
 
       input.addEventListener("change", commit);

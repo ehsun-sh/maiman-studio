@@ -238,3 +238,54 @@ def test_opening_a_project_does_not_reach_the_server() -> None:
     source = Path(server.__file__).read_text(encoding="utf-8")
     for route in ("/api/open", "/api/load", "/api/save"):
         assert f'route == "{route}"' not in source, f"the server should have no {route} route"
+
+
+def test_hidden_actually_hides() -> None:
+    """The page must declare it, because the browser's own rule is not enough.
+
+    A browser hides ``[hidden]`` through its user-agent stylesheet, and *any*
+    author declaration of ``display`` beats that entire sheet regardless of
+    specificity. So one rule like ``.menu-pop { display: flex }`` un-hides
+    every element of that class that carries the attribute — silently, with
+    ``element.hidden`` still reading true.
+
+    That is exactly what happened to the File menu: the logic was right, every
+    test that asked the DOM said hidden, and the menu sat open on screen. It
+    shipped in the README screenshot that way. A test that reads the flag
+    cannot see it; this one checks that the page declares the rule that makes
+    the flag mean something.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    assert "[hidden] { display: none !important; }" in text, (
+        "the page needs a global [hidden] rule that outranks its own display "
+        "declarations, or any hidden element with a display rule stays visible"
+    )
+
+
+def test_the_format_is_edited_link_wide() -> None:
+    """Bits per symbol is a property of the signal, not of a block.
+
+    Three blocks in the shipped graph each carry it — the mapper, the reference
+    mapper, and the generator whose only use for it is knowing how many bits to
+    emit — and no unequal setting of them runs. The page edits them together;
+    this pins the engine behaviour that makes that the only sensible choice.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    assert 'LINK_WIDE = new Set(["bits_per_symbol"])' in text
+
+    carriers = {
+        name
+        for name, manifest in __import__("maiman").manifests().items()
+        if "bits_per_symbol" in manifest["parameters"]
+    }
+    assert carriers == {"PRBSGenerator", "QAMMapper"}, (
+        f"a new component carries bits_per_symbol: {sorted(carriers)}. The editor "
+        "spreads the value to every block that has it, so this is a note that the "
+        "set grew, not necessarily a fault."
+    )
+
+    document_ = embedded()["project"]
+    for node in document_["nodes"]:
+        if node["type"] in carriers:
+            node["params"]["bits_per_symbol"] = 2.0
+    assert run_project(document_)["results"], "a link-wide format change must run"
