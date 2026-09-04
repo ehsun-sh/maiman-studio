@@ -174,3 +174,67 @@ def test_an_input_can_only_have_one_source() -> None:
     with pytest.raises(GraphError, match="exactly one connection"):
         graph.connect(second, fiber["in"])
     assert len(graph.edges) == 1
+
+
+def test_the_sweep_form_offers_the_axis_the_server_expects() -> None:
+    """The form's fields and the endpoint's request must be the same shape.
+
+    The page builds ``{"node", "parameter", "values"}`` and the server reads
+    exactly those three. They are in different languages in different files, so
+    nothing but a test connects them, and a rename on either side would be
+    answered as a 400 that looks like the user's fault.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    assert "axis: { node, parameter, values }" in text
+    for field in ("sw-node", "sw-param", "sw-from", "sw-to", "sw-steps", "sw-runs", "sw-run"):
+        assert f'id="{field}"' in text, f"the sweep form lost {field}"
+
+
+def test_a_saved_project_is_one_the_engine_can_open() -> None:
+    """What Save writes has to be what load() reads — it is one format, not two.
+
+    The page adds ``ui`` positions to each node, which is what the format
+    provides for and what ``ui_from_dict`` reads back. This checks the engine
+    accepts a document shaped that way rather than merely tolerating it.
+    """
+    from maiman.project import graph_to_dict, ui_from_dict
+
+    positions = {"tx": {"x": 10.0, "y": 20.0}, "span": {"x": 30.0, "y": 40.0}}
+    saved = graph_to_dict(_simple_graph(), ui=positions)
+    assert ui_from_dict(saved) == positions
+    payload = run_project(saved)
+    assert payload["ui"] == positions
+    assert payload["results"]
+
+
+def _simple_graph():  # type: ignore[no-untyped-def]
+    from maiman import Graph, SimulationContext
+    from maiman.components import CWLaser, Fiber, PowerMeter
+
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=4, sequence_length=32, seed=3)
+    graph = Graph(ctx)
+    laser = graph.add(CWLaser(power=5.0, label="tx"))
+    fiber = graph.add(Fiber(length=100.0, attenuation=0.25, label="span"))
+    meter = graph.add(PowerMeter(label="pm"))
+    graph.connect(laser, fiber["in"])
+    graph.connect(fiber, meter["in"])
+    return graph
+
+
+def test_opening_a_project_does_not_reach_the_server() -> None:
+    """A file is chosen in the operating system's picker and read locally.
+
+    A server that opened or wrote a path it was handed would be a different and
+    much worse program. Nothing in the page posts a project to be read, and
+    there is no route that would accept one — both halves are pinned here,
+    because either alone would leave the other free to drift.
+    """
+    from maiman import server
+
+    text = STUDIO.read_text(encoding="utf-8")
+    assert 'type="file"' in text, "opening must go through the file picker"
+    assert "readAsText" in text, "the file is read in the browser"
+
+    source = Path(server.__file__).read_text(encoding="utf-8")
+    for route in ("/api/open", "/api/load", "/api/save"):
+        assert f'route == "{route}"' not in source, f"the server should have no {route} route"

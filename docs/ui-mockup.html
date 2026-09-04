@@ -254,6 +254,20 @@ verdict, and DESIGN.md
     font: inherit; font-size: 12.5px; padding: 4px 9px; border-radius: 4px; cursor: pointer;
   }
   .menu-item:hover { background: var(--raised); color: var(--ink); }
+  .menu-wrap { position: relative; }
+  .menu-pop {
+    position: absolute; top: 100%; left: 0; z-index: 40; min-width: 190px;
+    background: var(--panel); border: 1px solid var(--rule); border-radius: 4px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.18); padding: 4px; display: flex;
+    flex-direction: column;
+  }
+  .menu-pop button {
+    display: flex; justify-content: space-between; align-items: center; gap: 18px;
+    font: inherit; font-size: 12px; color: var(--ink-2); background: none; border: 0;
+    padding: 5px 8px; border-radius: 3px; cursor: pointer; text-align: left;
+  }
+  .menu-pop button:hover { background: var(--raised); color: var(--ink); }
+  .menu-key { font-family: var(--mono); font-size: 10.5px; color: var(--ink-4); }
   .menubar-right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
   .kernel {
     display: flex; align-items: center; gap: 6px;
@@ -511,6 +525,32 @@ verdict, and DESIGN.md
   }
   .metric .v.pass { color: var(--good); }
 
+  /* ---- Sweep form ------------------------------------------------------
+     Dense on purpose. It sits beside the curve it produces, in a panel a
+     couple of hundred pixels wide, and every row it takes is a row of plot
+     someone is not looking at. */
+  .sweep-form { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+  .sweep-row { display: flex; align-items: center; gap: 6px; font-size: 11px;
+               color: var(--ink-3); }
+  .sweep-row > span { width: 62px; flex: none; }
+  .sweep-row select { flex: 1; min-width: 0; }
+  .sweep-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .sweep-grid label { display: flex; align-items: center; gap: 5px; font-size: 11px;
+                      color: var(--ink-3); }
+  .sweep-grid label > span { width: 44px; flex: none; }
+  .sweep-form select, .sweep-form input, .plot-side select {
+    font: inherit; font-family: var(--mono); font-size: 11px; color: var(--ink);
+    background: var(--panel); border: 1px solid var(--rule); border-radius: 3px;
+    padding: 3px 5px; min-width: 0; width: 100%;
+  }
+  .sweep-go {
+    margin-top: 2px; padding: 5px 8px; font: inherit; font-size: 11.5px;
+    color: var(--on-accent); background: var(--run-bg); border: 0; border-radius: 3px;
+    cursor: pointer;
+  }
+  .sweep-go:hover { background: var(--run-bg-hover); }
+  .sweep-go:disabled { opacity: 0.55; cursor: default; }
+
   /* ---- The editor ------------------------------------------------------
      A canvas you can change needs to say what is grabbable before it is
      grabbed. Ports grow on hover because they are the smallest target on
@@ -656,7 +696,18 @@ verdict, and DESIGN.md
       </svg>
       <span class="brand-name">Maiman<span>&nbsp;Studio</span></span>
     </div>
-    <button class="menu-item">File</button>
+    <div class="menu-wrap">
+      <button class="menu-item" id="file-btn" aria-haspopup="true"
+              aria-expanded="false">File</button>
+      <div class="menu-pop" id="file-menu" role="menu" hidden>
+        <button role="menuitem" id="file-open">Open…<span class="menu-key">.maiman</span></button>
+        <button role="menuitem" id="file-save">Save<span class="menu-key">ctrl+S</span></button>
+      </div>
+    </div>
+    <!-- Reading a project is a file the user picks, not a path the server is
+         told to open: a server that opens arbitrary paths on request is a
+         different and much worse program. -->
+    <input type="file" id="file-input" accept=".maiman,.json,application/json" hidden>
     <button class="menu-item">Edit</button>
     <button class="menu-item">Simulate</button>
     <button class="menu-item">View</button>
@@ -675,7 +726,7 @@ verdict, and DESIGN.md
         </svg>
       </button>
       <div class="kernel"><span class="dot" id="kernel-dot"></span><span id="kernel-text">engine ready</span></div>
-      <span class="num" style="color:var(--ink-4)">coherent_16qam.maiman</span>
+      <span class="num" style="color:var(--ink-4)" id="project-name">coherent_16qam.maiman</span>
     </div>
   </div>
 
@@ -693,7 +744,7 @@ verdict, and DESIGN.md
       </svg>
       Stop
     </button>
-    <button class="tb">
+    <button class="tb" id="sweep-btn" title="Set up a parameter sweep">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor"
            stroke-width="1.4" stroke-linecap="round" aria-hidden="true">
         <path d="M2 12.5h3.2L8 3.5l2.8 9H14"/>
@@ -845,14 +896,26 @@ verdict, and DESIGN.md
         <div class="pane" data-pane="sens">
           <div class="plot-wrap"><canvas id="sens-canvas"></canvas></div>
           <div class="plot-side">
+            <!-- The sweep is set up where its result appears. A modal would
+                 cover the curve you are trying to compare against. -->
             <p class="side-title">Sweep</p>
-            <dl style="margin:0">
-              <div class="stat"><dt>Axis</dt><dd>tx.power</dd></div>
-              <div class="stat"><dt>Formats</dt><dd id="s-fmts">—</dd></div>
-              <div class="stat"><dt>Points each</dt><dd id="s-pts">—</dd></div>
-            </dl>
-            <p class="side-title">BER 1e-3 at</p>
-            <dl style="margin:0" id="s-thresholds"></dl>
+            <div class="sweep-form">
+              <label class="sweep-row"><span>Block</span>
+                <select id="sw-node"></select></label>
+              <label class="sweep-row"><span>Parameter</span>
+                <select id="sw-param"></select></label>
+              <div class="sweep-grid">
+                <label><span>From</span><input id="sw-from" type="text" value="-30"></label>
+                <label><span>To</span><input id="sw-to" type="text" value="0"></label>
+                <label><span>Steps</span><input id="sw-steps" type="text" value="13"></label>
+                <label><span>Repeats</span><input id="sw-runs" type="text" value="1"></label>
+              </div>
+              <button class="sweep-go" id="sw-run" type="button">Run sweep</button>
+            </div>
+            <p class="side-title">Plot</p>
+            <label class="sweep-row"><span>Y axis</span>
+              <select id="sw-metric"></select></label>
+            <dl style="margin:0" id="s-summary"></dl>
           </div>
         </div>
         <div class="pane" data-pane="log">
@@ -15623,6 +15686,7 @@ verdict, and DESIGN.md
     $("#sb-links").textContent = PROJECT.edges.length + " links";
     rebuildViews();
     drawGraph();
+    fillSweepForm();
     const node = NODES.find((n) => n.id === selected);
     if (node) showNode(node);
     else showEmptyInspector();
@@ -16248,12 +16312,14 @@ verdict, and DESIGN.md
     $("#s-sps").textContent = ctxInfo.samples_per_symbol + " sa/sym";
     $("#s-tr").textContent = (ctxInfo.sequence_length / 2).toLocaleString("en-US");
 
-    $("#s-fmts").textContent = String(DATA.sensitivity.length);
-    $("#s-pts").textContent = String(DATA.sensitivity[0].points.length);
-    $("#s-thresholds").innerHTML = DATA.sensitivity.map((s) => {
+    /* The sweep panel's summary shows the bundled reference until a sweep of
+       your own replaces it — the power each format needs to reach the FEC
+       threshold, which is what that reference curve is for. */
+    $("#s-summary").innerHTML = DATA.sensitivity.map((s) => {
       const crossing = s.points.find((p) => p.ber <= 1e-3);
       const value = crossing ? crossing.received_dbm.toFixed(0) + " dBm" : "off scale";
-      return `<div class="stat"><dt>${escapeHtml(s.name)}</dt><dd>${value}</dd></div>`;
+      return `<div class="stat"><dt>${escapeHtml(s.name)} at 1e-3</dt>` +
+             `<dd>${value}</dd></div>`;
     }).join("");
   }
 
@@ -16382,7 +16448,7 @@ verdict, and DESIGN.md
     if (!active) return;
     if (active.dataset.pane === "con") drawConstellation();
     if (active.dataset.pane === "eye") drawEye();
-    if (active.dataset.pane === "sens") drawSens();
+    if (active.dataset.pane === "sens") { SWEEP.points ? drawSweep() : drawSens(); }
   }
 
   document.querySelectorAll(".tab").forEach((tab) => {
@@ -16419,6 +16485,14 @@ verdict, and DESIGN.md
     svg.style.transform = `scale(${zoom / 100})`;
     svg.style.transformOrigin = "center center";
   };
+  $("#sw-run").addEventListener("click", runSweep);
+  /* The toolbar button takes you to the form rather than opening a second one.
+     The sweep is set up where its curve appears. */
+  $("#sweep-btn").addEventListener("click", () => {
+    showTab("sens");
+    fillSweepForm();
+    $("#sw-node").focus();
+  });
   $("#zoom-in").addEventListener("click", () => setZoom(zoom + 20));
   $("#zoom-out").addEventListener("click", () => setZoom(zoom - 20));
 
@@ -16556,6 +16630,11 @@ verdict, and DESIGN.md
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
     if (typing) return;
 
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+      event.preventDefault();
+      saveProject();
+      return;
+    }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
       event.preventDefault();
       undo();
@@ -16610,6 +16689,477 @@ verdict, and DESIGN.md
          Click a component in the palette to add one.</p>
        </div>`;
     $("#sb-sel").textContent = "nothing selected";
+  }
+
+
+
+  /* ---------- Open and save ------------------------------------------------
+     A `.maiman` file is the same document the canvas draws and the server runs,
+     so saving is writing out what is already in hand and opening is reading one
+     in. There is no import step and no conversion, which is the point of having
+     had one format from the beginning.
+
+     Both go through the browser rather than the server. Saving posts nothing
+     and opening sends nothing: the file is chosen in the operating system's own
+     picker and read locally. A server endpoint that wrote or read a path it was
+     handed would be a different and much worse program, and it would gain
+     nothing — the file belongs to the person at the keyboard, not to the
+     engine. */
+
+  let projectName = "coherent_16qam";
+
+  function currentDocument() {
+    /* Positions are written into the document as the format provides for, so a
+       saved project reopens looking like it did — layout is not physics, but a
+       schematic someone arranged and then found rearranged has lost work. */
+    const document_ = JSON.parse(JSON.stringify(PROJECT));
+    for (const node of document_.nodes) {
+      const at = LAYOUT[node.id];
+      if (at) node.ui = { x: at.x, y: at.y };
+    }
+    return document_;
+  }
+
+  function saveProject() {
+    const text = JSON.stringify(currentDocument(), null, 1);
+    const blob = new Blob([text], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${projectName}.maiman`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    /* Revoked on the next turn of the loop rather than immediately: some
+       browsers have not started the download by the time click() returns. */
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    flashHint(`saved ${projectName}.maiman`);
+  }
+
+  function openProject(file) {
+    const reader = new FileReader();
+    reader.onerror = () => {
+      flashHint("could not read that file");
+      logLine("—", `could not read ${file.name}`, "fail");
+    };
+    reader.onload = () => {
+      let document_;
+      try {
+        document_ = JSON.parse(String(reader.result));
+      } catch (error) {
+        flashHint("that file is not a project");
+        logLine("—", `${file.name} is not valid JSON: ${error.message}`, "fail");
+        showTab("log");
+        return;
+      }
+      const problem = projectProblem(document_);
+      if (problem) {
+        flashHint(problem);
+        logLine("—", `${file.name}: ${problem}`, "fail");
+        showTab("log");
+        return;
+      }
+      loadProject(document_, file.name.replace(/\.(maiman|json)$/i, ""));
+    };
+    reader.readAsText(file);
+  }
+
+  /* Enough of a check to give a useful message before anything is replaced.
+     The engine validates properly when the graph is run — this exists so that
+     opening the wrong file does not empty the canvas first and explain second. */
+  function projectProblem(document_) {
+    if (!document_ || typeof document_ !== "object" || Array.isArray(document_)) {
+      return "that file is not a project";
+    }
+    if (document_.schema_version === undefined) return "no schema_version — not a project file";
+    if (!Array.isArray(document_.nodes)) return "the project has no nodes";
+    if (!Array.isArray(document_.edges)) return "the project has no edges";
+    if (typeof document_.context !== "object") return "the project has no context";
+    const unknown = document_.nodes
+      .map((n) => n && n.type)
+      .filter((type) => type && !DATA.manifests[type]);
+    if (unknown.length) {
+      return `this build has no ${[...new Set(unknown)].join(", ")}`;
+    }
+    return null;
+  }
+
+  function loadProject(document_, name) {
+    snapshot();
+    PROJECT.schema_version = document_.schema_version;
+    PROJECT.maiman_version = document_.maiman_version;
+    PROJECT.context = document_.context;
+    PROJECT.nodes = document_.nodes.map((n) => ({
+      id: n.id, type: n.type, params: n.params || {},
+      ...(n.config ? { config: n.config } : {})
+    }));
+    PROJECT.edges = document_.edges.map((e) => ({ from: e.from, to: e.to }));
+
+    for (const key of Object.keys(LAYOUT)) delete LAYOUT[key];
+    document_.nodes.forEach((n, i) => {
+      /* A project saved by something that did not keep positions still has to
+         open. Laying those blocks out on a grid is not a good arrangement, but
+         it is a visible one, and everything can then be dragged. */
+      LAYOUT[n.id] = n.ui && Number.isFinite(n.ui.x) && Number.isFinite(n.ui.y)
+        ? { x: n.ui.x, y: n.ui.y }
+        : { x: 30 + (i % 7) * 138, y: 30 + Math.floor(i / 7) * 95 };
+    });
+
+    projectName = name || "untitled";
+    $("#project-name").textContent = `${projectName}.maiman`;
+    selected = PROJECT.nodes.length ? PROJECT.nodes[0].id : null;
+    selectedEdge = null;
+    /* Results on screen belong to the project that was open a moment ago. */
+    SESSION.live = false;
+    SESSION.hasRun = false;
+    SESSION.captions = {};
+    SESSION.plots.constellation = null;
+    SWEEP.points = null;
+    afterEdit({ record: false });
+    flashHint(`opened ${projectName}.maiman — ${PROJECT.nodes.length} blocks`);
+    logLine("—", `opened ${projectName}.maiman: ${PROJECT.nodes.length} blocks, ` +
+                 `${PROJECT.edges.length} links`, "ok");
+  }
+
+  /* ---- Menu ---- */
+  const fileMenu = $("#file-menu"), fileBtn = $("#file-btn");
+  function toggleFileMenu(show) {
+    const open = show === undefined ? fileMenu.hidden : show;
+    fileMenu.hidden = !open;
+    fileBtn.setAttribute("aria-expanded", String(open));
+  }
+  fileBtn.addEventListener("click", (event) => { event.stopPropagation(); toggleFileMenu(); });
+  document.addEventListener("click", () => toggleFileMenu(false));
+  fileMenu.addEventListener("click", (event) => event.stopPropagation());
+  $("#file-save").addEventListener("click", () => { toggleFileMenu(false); saveProject(); });
+  $("#file-open").addEventListener("click", () => {
+    toggleFileMenu(false);
+    $("#file-input").click();
+  });
+  $("#file-input").addEventListener("change", (event) => {
+    const file = event.target.files && event.target.files[0];
+    if (file) openProject(file);
+    event.target.value = "";   // so the same file can be opened twice running
+  });
+
+  /* ---------- Sweeps --------------------------------------------------------
+     A single run answers "what does this link do". A sweep answers "how far can
+     it go", which is the question that gets asked more often and the one that
+     used to require writing a loop.
+
+     The form sits beside the plot rather than in a dialog, because setting up
+     the next sweep while looking at the last one is the whole activity. */
+
+  const SWEEP = { axis: null, points: null, runs: 1, metric: null, metrics: [] };
+
+  /* Only numeric parameters can be swept. A flag has two values and a sweep of
+     it is two runs, which is quicker to do by hand than to describe. */
+  function numericParams(type) {
+    const manifest = DATA.manifests[type];
+    if (!manifest) return [];
+    return Object.entries(manifest.parameters)
+      .filter(([, spec]) => spec.type !== "bool")
+      .map(([name]) => name);
+  }
+
+  function fillSweepForm() {
+    const nodeSelect = $("#sw-node"), paramSelect = $("#sw-param");
+    if (!nodeSelect) return;
+    const previous = nodeSelect.value;
+    nodeSelect.innerHTML = PROJECT.nodes
+      .filter((n) => numericParams(n.type).length)
+      .map((n) => `<option value="${escapeHtml(n.id)}">${escapeHtml(n.id)} · ` +
+                  `${escapeHtml(DATA.manifests[n.type].name)}</option>`)
+      .join("");
+    if (previous && [...nodeSelect.options].some((o) => o.value === previous)) {
+      nodeSelect.value = previous;
+    } else if (selected && [...nodeSelect.options].some((o) => o.value === selected)) {
+      nodeSelect.value = selected;
+    }
+    fillSweepParams();
+    function fillSweepParams() {
+      const node = nodeById(nodeSelect.value);
+      if (!node) { paramSelect.innerHTML = ""; return; }
+      const before = paramSelect.value;
+      paramSelect.innerHTML = numericParams(node.type)
+        .map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)
+        .join("");
+      if (before && [...paramSelect.options].some((o) => o.value === before)) {
+        paramSelect.value = before;
+      }
+      seedSweepRange();
+    }
+    nodeSelect.onchange = fillSweepParams;
+    paramSelect.onchange = seedSweepRange;
+  }
+
+  /* Start the range somewhere sensible: around the value the block already has,
+     inside whatever bounds the parameter declares. Someone sweeping launch
+     power does not want to type -30 and 0 every time, and a range that starts
+     outside the allowed one is a refusal waiting to happen. */
+  function seedSweepRange() {
+    const node = nodeById($("#sw-node").value);
+    const name = $("#sw-param").value;
+    if (!node || !name) return;
+    const spec = DATA.manifests[node.type].parameters[name];
+    const current = Number(param(node.id, name));
+    const base = Number.isFinite(current) && current !== 0 ? Math.abs(current) : 1;
+    let from = current - base, to = current + base;
+    if (spec.min !== undefined) from = Math.max(from, spec.min);
+    if (spec.max !== undefined) to = Math.min(to, spec.max);
+    $("#sw-from").value = fmt(from);
+    $("#sw-to").value = fmt(to);
+  }
+
+  function sweepValues() {
+    const from = Number($("#sw-from").value);
+    const to = Number($("#sw-to").value);
+    const steps = Math.round(Number($("#sw-steps").value));
+    if (!Number.isFinite(from) || !Number.isFinite(to)) return { error: "from and to must be numbers" };
+    if (!Number.isFinite(steps) || steps < 2) return { error: "a sweep needs at least 2 steps" };
+    if (steps > 256) return { error: "at most 256 steps" };
+    const values = [];
+    for (let i = 0; i < steps; i += 1) values.push(from + ((to - from) * i) / (steps - 1));
+    return { values };
+  }
+
+  async function runSweep() {
+    if (!SESSION.api) {
+      flashHint("a sweep needs the session server");
+      showTab("log");
+      logLine("—", "sweep needs the session server; this page was opened from disk", "warn");
+      return;
+    }
+    const node = $("#sw-node").value, parameter = $("#sw-param").value;
+    if (!node || !parameter) { flashHint("pick a block and a parameter"); return; }
+    const { values, error } = sweepValues();
+    if (error) { flashHint(error); return; }
+    const runs = Math.max(1, Math.round(Number($("#sw-runs").value) || 1));
+
+    const button = $("#sw-run");
+    button.disabled = true;
+    button.textContent = "sweeping…";
+    kernel(`sweeping ${node}.${parameter}…`);
+    const started = performance.now();
+    try {
+      const payload = await callApi("/api/sweep", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project: PROJECT, axis: { node, parameter, values }, runs })
+      });
+      const seconds = (performance.now() - started) / 1000;
+      applySweep(payload, seconds);
+      kernel("engine ready");
+      $("#sb-time").textContent = `sweep ${seconds.toFixed(2)} s`;
+    } catch (err) {
+      const status = err.status || 0;
+      const kind = status === 422 ? "graph will not run"
+                 : status === 413 ? "sweep too large"
+                 : status === 400 ? "sweep rejected"
+                 : "session server unreachable";
+      kernel(kind, "failed");
+      logLine("—", `${kind}: ${err.message}`, "fail");
+      if (err.detail) logLine("", err.detail, "warn");
+      showTab("log");
+    } finally {
+      button.disabled = false;
+      button.textContent = "Run sweep";
+    }
+  }
+
+  function applySweep(payload, seconds) {
+    SWEEP.axis = payload.axis;
+    SWEEP.points = payload.points;
+    SWEEP.runs = payload.runs;
+
+    /* Which metrics this sweep can plot: every scalar that came back at every
+       point, listed as "block.port.field". Built from the response rather than
+       from a list here, so a component added later is plottable the day it
+       lands. */
+    const seen = new Map();
+    for (const point of payload.points) {
+      for (const run of point.runs) {
+        for (const [port, values] of Object.entries(run)) {
+          for (const [name, value] of Object.entries(values)) {
+            if (typeof value === "number") seen.set(`${port}.${name}`, true);
+          }
+        }
+      }
+    }
+    SWEEP.metrics = [...seen.keys()].sort();
+    const select = $("#sw-metric");
+    const preferred = defaultMetric();
+    if (!SWEEP.metric || !SWEEP.metrics.includes(SWEEP.metric)) SWEEP.metric = preferred;
+    select.innerHTML = SWEEP.metrics
+      .map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
+    select.value = SWEEP.metric;
+    select.onchange = () => { SWEEP.metric = select.value; drawSweep(); fillSweepSummary(); };
+
+    fillSweepSummary();
+    logSweep(payload, seconds);
+    showTab("sens");
+    drawSweep();
+  }
+
+  /* Which curve to show first: the one that moved.
+     A sweep is run to watch something change, so the metric that changed most
+     is the one worth opening on. Restricted to the figures a link is actually
+     judged by, because plenty of other numbers move — a split-step count
+     varies enormously and means nothing here. Within those, the widest
+     relative spread wins, which is what stops it opening on the analyser
+     downstream of the decoder, whose EVM is exactly zero at every point
+     because it is looking at decided symbols. It did. */
+  const JUDGED_BY = /\.(evm|ber_estimated|ber_counted|snr_db|q_factor|power_dbm|mer_db)$/;
+
+  function defaultMetric() {
+    const spread = (metric) => {
+      const ys = sweepSeries(metric).map((p) => p.y).filter((v) => typeof v === "number");
+      if (ys.length < 2) return 0;
+      const lo = Math.min(...ys), hi = Math.max(...ys);
+      if (hi === lo) return 0;
+      const scale = Math.max(Math.abs(lo), Math.abs(hi));
+      return scale > 0 ? (hi - lo) / scale : 0;
+    };
+    const judged = SWEEP.metrics.filter((m) => JUDGED_BY.test(m));
+    const candidates = judged.length ? judged : SWEEP.metrics;
+    let best = candidates[0], bestSpread = -1;
+    for (const metric of candidates) {
+      const value = spread(metric);
+      if (value > bestSpread) { best = metric; bestSpread = value; }
+    }
+    return best;
+  }
+
+  /* One value per point: the mean over repeats, which is what a repeated
+     measurement is for. */
+  function sweepSeries(metric) {
+    if (!SWEEP.points || !metric) return [];
+    const [port, ...rest] = splitMetric(metric);
+    const field = rest.join(".");
+    return SWEEP.points.map((point) => {
+      const samples = point.runs
+        .map((run) => (run[port] || {})[field])
+        .filter((v) => typeof v === "number");
+      const mean = samples.length
+        ? samples.reduce((a, b) => a + b, 0) / samples.length : null;
+      return { x: point.value, y: mean, n: samples.length,
+               lo: samples.length ? Math.min(...samples) : null,
+               hi: samples.length ? Math.max(...samples) : null };
+    });
+  }
+
+  /* A metric name is "label.port.field" and a field can itself contain dots in
+     principle, so the split is from the left and the remainder is the field. */
+  function splitMetric(metric) {
+    const parts = metric.split(".");
+    return [parts.slice(0, 2).join("."), ...parts.slice(2)];
+  }
+
+  function fillSweepSummary() {
+    const series = sweepSeries(SWEEP.metric).filter((p) => p.y !== null);
+    const box = $("#s-summary");
+    if (!box) return;
+    if (!series.length) { box.innerHTML = ""; return; }
+    const ys = series.map((p) => p.y);
+    const best = series[ys.indexOf(Math.min(...ys))];
+    const worst = series[ys.indexOf(Math.max(...ys))];
+    const axis = `${SWEEP.axis.node}.${SWEEP.axis.parameter}`;
+    box.innerHTML =
+      `<div class="stat"><dt>Axis</dt><dd>${escapeHtml(axis)}</dd></div>` +
+      `<div class="stat"><dt>Points</dt><dd>${series.length}` +
+      `${SWEEP.runs > 1 ? ` × ${SWEEP.runs}` : ""}</dd></div>` +
+      `<div class="stat"><dt>Lowest</dt><dd>${fmt(Number(best.y.toPrecision(4)))} ` +
+      `at ${fmt(Number(best.x.toPrecision(4)))}</dd></div>` +
+      `<div class="stat"><dt>Highest</dt><dd>${fmt(Number(worst.y.toPrecision(4)))} ` +
+      `at ${fmt(Number(worst.x.toPrecision(4)))}</dd></div>`;
+  }
+
+  function logSweep(payload, seconds) {
+    $("#log").innerHTML = "";
+    const axis = `${payload.axis.node}.${payload.axis.parameter}`;
+    logLine("0.000", `sweep ${axis} over ${payload.points.length} points` +
+                     `${payload.runs > 1 ? `, ${payload.runs} runs each` : ""}`, "ok");
+    for (const point of payload.points) {
+      const shown = SWEEP.metric ? sweepSeries(SWEEP.metric)[point.index] : null;
+      logLine("", `${axis} = ${fmt(Number(point.value.toPrecision(6)))}` +
+                  (shown && shown.y !== null
+                    ? ` → ${SWEEP.metric} = ${fmt(Number(shown.y.toPrecision(6)))}` : ""));
+    }
+    logLine(seconds.toFixed(3),
+            `sweep complete — ${payload.points.length * payload.runs} simulations`, "ok");
+  }
+
+  /* The swept curve. Kept apart from drawSens, which draws the bundled
+     BER-against-power reference on a fixed log axis with an FEC line on it —
+     one function trying to be both would be worse at each. */
+  function drawSweep() {
+    const c = $("#sens-canvas");
+    if (!c.parentElement.offsetWidth) return;
+    const { ctx, w, h } = sizeCanvas(c);
+    ctx.fillStyle = tok("--plot-bg"); ctx.fillRect(0, 0, w, h);
+
+    const series = sweepSeries(SWEEP.metric).filter((p) => p.y !== null);
+    if (series.length < 2) { drawSens(); return; }
+
+    const padL = 58, padB = 30, padT = 12, padR = 14;
+    const pw = w - padL - padR, ph = h - padT - padB;
+    const xs = series.map((p) => p.x), ys = series.map((p) => p.y);
+    const x0 = Math.min(...xs), x1 = Math.max(...xs);
+    /* Log when the values span decades, which is what a BER does and what an
+       EVM does not. Deciding from the numbers rather than from the metric's
+       name means a metric nobody anticipated still gets a readable axis. */
+    const positive = ys.every((v) => v > 0);
+    const span = positive ? Math.max(...ys) / Math.min(...ys) : 1;
+    const log = positive && span > 100;
+    const f = (v) => (log ? Math.log10(v) : v);
+    let y0 = Math.min(...ys.map(f)), y1 = Math.max(...ys.map(f));
+    if (y1 - y0 < 1e-12) { y0 -= 1; y1 += 1; }
+    const pad = (y1 - y0) * 0.08;
+    y0 -= pad; y1 += pad;
+    const X = (v) => padL + (x1 === x0 ? pw / 2 : ((v - x0) / (x1 - x0)) * pw);
+    const Y = (v) => padT + ph - ((f(v) - y0) / (y1 - y0)) * ph;
+
+    ctx.font = MONO_10;
+    ctx.strokeStyle = tok("--rule-soft"); ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i += 1) {
+      const value = y0 + ((y1 - y0) * i) / 4;
+      const y = padT + ph - (i / 4) * ph;
+      ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
+      ctx.fillStyle = tok("--ink-4"); ctx.textAlign = "right"; ctx.textBaseline = "middle";
+      const shown = log ? `1e${value.toFixed(1)}` : Number(value.toPrecision(3));
+      ctx.fillText(String(shown), padL - 6, y);
+    }
+    ctx.strokeStyle = tok("--rule"); ctx.beginPath();
+    ctx.moveTo(padL, padT); ctx.lineTo(padL, padT + ph); ctx.lineTo(w - padR, padT + ph);
+    ctx.stroke();
+
+    ctx.fillStyle = tok("--ink-4"); ctx.textAlign = "center"; ctx.textBaseline = "top";
+    for (let i = 0; i <= 4; i += 1) {
+      const value = x0 + ((x1 - x0) * i) / 4;
+      ctx.fillText(String(Number(value.toPrecision(4))), X(value), padT + ph + 7);
+    }
+    ctx.textAlign = "left";
+    ctx.fillText(`${SWEEP.axis.node}.${SWEEP.axis.parameter}`, padL, padT + ph + 19);
+    ctx.textAlign = "right";
+    ctx.fillText(SWEEP.metric, w - padR, padT + ph + 19);
+
+    const colour = tok("--accent");
+    /* With repeats, the spread at each point is the measurement. Drawing only
+       the mean would hide exactly what repeating was for. */
+    if (SWEEP.runs > 1) {
+      ctx.strokeStyle = alpha(colour, 0.45); ctx.lineWidth = 1;
+      for (const p of series) {
+        if (p.lo === null || p.lo === p.hi) continue;
+        ctx.beginPath(); ctx.moveTo(X(p.x), Y(p.lo)); ctx.lineTo(X(p.x), Y(p.hi)); ctx.stroke();
+      }
+    }
+    ctx.strokeStyle = colour; ctx.lineWidth = 1.75; ctx.beginPath();
+    series.forEach((p, i) => (i ? ctx.lineTo(X(p.x), Y(p.y)) : ctx.moveTo(X(p.x), Y(p.y))));
+    ctx.stroke();
+    ctx.fillStyle = colour;
+    for (const p of series) {
+      ctx.beginPath(); ctx.arc(X(p.x), Y(p.y), 2.2, 0, Math.PI * 2); ctx.fill();
+    }
   }
 
   /* ---------- Run ----------------------------------------------------------
@@ -16769,6 +17319,7 @@ verdict, and DESIGN.md
   $("#sb-links").textContent = `${PROJECT.edges.length} links`;
   buildPalette();
   drawGraph();
+  fillSweepForm();
   showNode(NODES.find((n) => n.id === "map"));
   fillResults();
   fillLog();

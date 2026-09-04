@@ -353,6 +353,21 @@ def encode(value: object) -> dict[str, Any]:
     }
 
 
+def scalars(encoded: dict[str, Any]) -> dict[str, float | int | bool | None]:
+    """The numeric fields of an encoded result, dropping everything shaped.
+
+    What a sweep sends back. A curve is made of numbers, and a point on one is
+    an EVM or a Q factor, never a histogram — returning the full result at every
+    point would move megabytes of pictures nobody asked to see, twenty times
+    over, to draw a line. If you want the picture at a point, run that point.
+    """
+    return {
+        key: value
+        for key, value in encoded.items()
+        if key != "kind" and (value is None or isinstance(value, int | float))
+    }
+
+
 def encode_results(results: Results) -> dict[str, dict[str, Any]]:
     """Every retained port of a run, keyed by component label then port name."""
     encoded: dict[str, dict[str, Any]] = {}

@@ -9,6 +9,7 @@ every mistake as a 500 teaches its user nothing.
 
 from __future__ import annotations
 
+import itertools
 import json
 import math
 import urllib.error
@@ -47,7 +48,17 @@ from maiman.encoding import (
 )
 from maiman.project import graph_to_dict
 from maiman.registry import lookup
-from maiman.server import MAX_BODY, MAX_SAMPLES, RequestError, run_project, serve
+from maiman.server import (
+    MAX_BODY,
+    MAX_SAMPLES,
+    MAX_SWEEP_POINTS,
+    MAX_SWEEP_RUNS,
+    MAX_SWEEP_TOTAL,
+    RequestError,
+    run_project,
+    run_sweep,
+    serve,
+)
 from maiman.signals import ElectricalSignal, EyeMeasurement, PowerReading
 
 
@@ -532,3 +543,195 @@ def test_the_studio_page_is_served(session: str) -> None:
         assert response.status == HTTPStatus.OK
         assert response.headers["Content-Type"].startswith("text/html")
         assert b"Maiman Studio" in response.read()
+
+
+# ---------------------------------------------------------------------------
+# Sweeps
+# ---------------------------------------------------------------------------
+
+
+def coherent_document() -> dict[str, Any]:
+    """The shipped coherent link, small.
+
+    Used here rather than the two-block link above because a sweep has to be
+    shown dropping the *pictures* — and this is the graph that has one, a
+    ConstellationDiagram producing a 96x96 histogram at every point.
+    """
+    import sys
+    from pathlib import Path as _Path
+
+    sys.path.insert(0, str(_Path(__file__).resolve().parent.parent / "examples"))
+    from export_ui_data import build
+
+    return graph_to_dict(build(sequence_length=256))
+
+
+def sweep_request(**overrides: Any) -> dict[str, Any]:
+    request: dict[str, Any] = {
+        "project": coherent_document(),
+        "axis": {"node": "tx", "parameter": "power", "values": [-6.0, -3.0, 0.0, 3.0]},
+        "runs": 1,
+    }
+    request.update(overrides)
+    return request
+
+
+def test_a_sweep_returns_one_point_per_value_in_order() -> None:
+    payload = run_sweep(sweep_request())
+    assert [point["value"] for point in payload["points"]] == [-6.0, -3.0, 0.0, 3.0]
+    assert [point["index"] for point in payload["points"]] == [0, 1, 2, 3]
+    assert payload["axis"] == {"node": "tx", "parameter": "power", "values": [-6.0, -3.0, 0.0, 3.0]}
+
+
+def test_a_sweep_actually_varies_the_parameter() -> None:
+    """The point of the whole endpoint: the value has to reach the engine.
+
+    Launch power into a fixed span comes straight back out of the power meter,
+    so a sweep of it is the one curve whose answer can be written down in
+    advance — three decibels in, three decibels out, at every step.
+    """
+    payload = run_sweep(sweep_request())
+    received = [point["runs"][0]["pm.out"]["power_dbm"] for point in payload["points"]]
+    steps = [b - a for a, b in itertools.pairwise(received)]
+    assert all(step == pytest.approx(3.0, abs=1e-6) for step in steps), received
+
+
+def test_a_sweep_sends_numbers_and_not_pictures() -> None:
+    """A curve is made of scalars; shipping a histogram per point is megabytes.
+
+    The graph swept here contains a ConstellationDiagram, whose result is a
+    96x96 grid. It must not appear.
+    """
+    payload = run_sweep(sweep_request())
+    for point in payload["points"]:
+        for run in point["runs"]:
+            for port, values in run.items():
+                for name, value in values.items():
+                    assert value is None or isinstance(value, int | float), (
+                        f"{port}.{name} came back as {type(value).__name__}"
+                    )
+    assert run_sweep(sweep_request())["points"][0]["runs"][0]["cd.out"] == {}
+    assert len(json.dumps(payload, allow_nan=False)) < 32 * 1024
+
+
+def test_repeats_are_independent_draws_of_the_same_point() -> None:
+    """Repeats are how one noisy measurement becomes a distribution.
+
+    Same point, same graph, different seeds — so the EVM must move. If repeats
+    returned the same number they would be a waste of time dressed as rigour.
+    """
+    payload = run_sweep(sweep_request(runs=3))
+    for point in payload["points"]:
+        assert len(point["runs"]) == 3
+    evms = [run["vsa.out"]["evm"] for run in payload["points"][0]["runs"]]
+    assert len(set(evms)) == 3, evms
+
+
+def test_a_single_run_is_not_reseeded() -> None:
+    """One run of a swept point must match running that graph directly.
+
+    ``sweep`` only derives per-run seeds when there is more than one run, so a
+    one-run sweep is the same simulation as a plain run at the same setting —
+    and it has to be, or a curve would not pass through the point you measured.
+    """
+    swept = run_sweep(sweep_request(axis={"node": "tx", "parameter": "power", "values": [3.0]}))[
+        "points"
+    ][0]["runs"][0]
+
+    direct = coherent_document()
+    for node in direct["nodes"]:
+        if node["id"] == "tx":
+            node["params"]["power"] = 3.0
+    plain = run_project(direct)["results"]
+
+    assert swept["pm.out"]["power_dbm"] == pytest.approx(
+        plain["pm"]["out"]["power_dbm"], rel=1e-12, abs=0.0
+    )
+
+
+def test_the_graph_is_left_as_it_was_found() -> None:
+    """A sweep that leaked its last value would contaminate everything after it."""
+    request = sweep_request()
+    before = json.dumps(request["project"], sort_keys=True)
+    run_sweep(request)
+    assert json.dumps(request["project"], sort_keys=True) == before
+
+
+def test_an_unknown_block_lists_the_ones_that_exist() -> None:
+    with pytest.raises(RequestError) as caught:
+        run_sweep(sweep_request(axis={"node": "nope", "parameter": "power", "values": [1.0]}))
+    assert caught.value.status == HTTPStatus.BAD_REQUEST
+    assert "tx" in (caught.value.detail or "")
+
+
+def test_an_unknown_parameter_lists_the_ones_that_exist() -> None:
+    with pytest.raises(RequestError) as caught:
+        run_sweep(sweep_request(axis={"node": "tx", "parameter": "colour", "values": [1.0]}))
+    assert caught.value.status == HTTPStatus.BAD_REQUEST
+    assert "wavelength" in (caught.value.detail or "")
+
+
+@pytest.mark.parametrize(
+    "axis",
+    [
+        {"node": "tx", "parameter": "power", "values": []},
+        {"node": "tx", "parameter": "power", "values": ["loud"]},
+        {"node": "tx", "parameter": "power", "values": [True]},
+        {"node": "tx", "parameter": "power"},
+        {"node": "tx", "values": [1.0]},
+    ],
+)
+def test_a_malformed_axis_is_refused(axis: dict[str, Any]) -> None:
+    """Including ``True``, which is a number in Python and not a setting here."""
+    with pytest.raises(RequestError) as caught:
+        run_sweep(sweep_request(axis=axis))
+    assert caught.value.status == HTTPStatus.BAD_REQUEST
+
+
+def test_too_many_points_is_refused_before_any_of_them_run() -> None:
+    with pytest.raises(RequestError) as caught:
+        run_sweep(
+            sweep_request(
+                axis={
+                    "node": "tx",
+                    "parameter": "power",
+                    "values": [float(i) for i in range(MAX_SWEEP_POINTS + 1)],
+                }
+            )
+        )
+    assert caught.value.status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+
+
+def test_the_product_of_points_and_repeats_is_bounded_too() -> None:
+    """Each limit can be satisfied while the two together are still too much."""
+    values = [float(i) for i in range(MAX_SWEEP_POINTS)]
+    runs = (MAX_SWEEP_TOTAL // MAX_SWEEP_POINTS) + 1
+    assert len(values) <= MAX_SWEEP_POINTS and runs <= MAX_SWEEP_RUNS
+    with pytest.raises(RequestError) as caught:
+        run_sweep(
+            sweep_request(axis={"node": "tx", "parameter": "power", "values": values}, runs=runs)
+        )
+    assert caught.value.status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+    assert "simulations" in caught.value.message
+
+
+@pytest.mark.parametrize("runs", [0, -1, MAX_SWEEP_RUNS + 1])
+def test_an_impossible_repeat_count_is_refused(runs: int) -> None:
+    with pytest.raises(RequestError) as caught:
+        run_sweep(sweep_request(runs=runs))
+    assert caught.value.status == HTTPStatus.BAD_REQUEST
+
+
+def test_a_sweep_of_a_graph_that_cannot_run_is_unprocessable() -> None:
+    broken = coherent_document()
+    broken["edges"] = []
+    with pytest.raises(RequestError) as caught:
+        run_sweep(sweep_request(project=broken))
+    assert caught.value.status == HTTPStatus.UNPROCESSABLE_ENTITY
+
+
+def test_a_sweep_over_http(session: str) -> None:
+    status, body = post(f"{session}/api/sweep", sweep_request())
+    assert status == HTTPStatus.OK
+    assert len(body["points"]) == 4
+    assert body["context"]["sequence_length"] == 256

@@ -35,9 +35,9 @@ link in this simulator descends from.*
 > each channel's phase at twice the rate its own does, sliding past under walk-off derived from
 > the dispersion — and triplets of channels mix to put light where nobody launched it.
 >
-> The interface runs and is editable: `python -m maiman.server`, open the page, build a link by
-> dragging blocks and wires, press Run, and the numbers come from the engine. See the
-> [roadmap](#roadmap).
+> The interface is a working application: `python -m maiman.server`, open the page, build a link by
+> dragging blocks and wires, press Run, sweep a parameter, save the project. Every number on screen
+> comes from the engine. See the [roadmap](#roadmap).
 >
 > This is not yet a useful simulator. It is a foundation with the expensive decisions made and
 > tested. Criticism of those decisions is worth more right now than any feature —
@@ -80,6 +80,26 @@ against what PRODUCT.md had written down, taken because React Flow means npm and
 project has no build step at all — the page still opens straight off disk with nothing installed,
 which is how the README asks you to read it. The interaction layer is the part that would have had
 to be written either way.
+
+**Sweeps.** A single run answers *what does this link do*; a sweep answers *how far can it go*,
+which is the question that gets asked more often. Pick a block and a parameter, give it a range,
+and the curve appears beside the form that made it. Repeats draw the spread at each point, because
+one BER estimate at a marginal operating point is a sample and not an answer. The endpoint sends
+back **numbers, not pictures** — a curve is made of scalars, and shipping a 96×96 histogram at
+every point would be megabytes to draw a line. Seven points of a coherent link is 6 kB.
+
+The plot opens on the metric that *moved*. A sweep is run to watch something change, so the one
+that changed most is the one worth showing — which is also what stops it opening on the analyser
+downstream of the decoder, whose EVM is exactly zero at every point because it is looking at
+symbols that have already been decided.
+
+**Open and save.** `File → Save` writes a `.maiman` file: the same document the canvas draws, the
+same one the server runs, with the block positions folded in. `File → Open` reads one back. Both
+go through the browser — the file is chosen in the operating system's own picker and read locally,
+and nothing is posted. A server that opened or wrote a path it was handed would be a different and
+much worse program, and it would gain nothing: the file belongs to the person at the keyboard.
+A file that is not a project says so and leaves the canvas alone rather than emptying it first and
+explaining second.
 
 The page also still opens straight off disk with nothing running, which is how it should be read
 if you only want to look. It says which mode it is in rather than leaving it to be inferred: a
@@ -493,6 +513,7 @@ Three routes, no dependencies beyond the ones the engine already has, bound to l
 | :--- | :--- |
 | `GET /api/manifests` | Every registered component: parameters with units and bounds, ports with types |
 | `POST /api/run` | A `.maiman` project document in, results out |
+| `POST /api/sweep` | A project, an axis and a range in; a curve out, as numbers |
 | `GET /api/health` | Whether it is up, and how many components it knows |
 
 **It is an ordinary client of the public Python API.** Every route is a thin wrapper over something
@@ -666,7 +687,7 @@ time window, and results are reproducible.
 | **1 — MVP: linear link** *(essentially done)* | ✅ PRBS → NRZ → laser → MZM → fiber (α + CD) → PIN → filter → eye/Q/BER, validated end to end. **Python only, no GUI.** | ~2–3 months |
 | **1.5 — Nonlinear & amplified** ✅ | Adaptive-step SSFM, Kerr, EDFA with ASE, OSNR, PMD, APD | ~2 months |
 | **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier phase recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
-| **3 — GUI & WDM** | ✅ Wavelength-selective filters, an OSA, coupled-channel propagation (XPM with walk-off, FWM), the session server, and a schematic editor: add, wire, move and delete blocks, edit parameters, run · Sweeps and project save/open from the browser, 400G/800G references, CuPy back-end | ~6 months |
+| **3 — GUI & WDM** | ✅ Wavelength-selective filters, an OSA, coupled-channel propagation (XPM with walk-off, FWM), the session server, and a schematic editor: add, wire, move and delete blocks, edit parameters, run, sweep, open and save · 400G/800G references, CuPy back-end | ~6 months |
 | **4 — PIC** | Waveguides, ring resonators, MMI, MZI via integration with an existing S-matrix solver; PDK import | — |
 
 ¹ One developer, part-time. Estimates, not commitments.

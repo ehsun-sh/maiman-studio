@@ -42,10 +42,11 @@ from pathlib import Path
 from typing import Any
 
 from . import manifests
-from .encoding import EncodingError, encode_results
-from .graph import GraphError
+from .encoding import EncodingError, encode, encode_results, scalars
+from .graph import Graph, GraphError, Results
 from .project import ProjectError, graph_from_dict, ui_from_dict
 from .registry import UnknownComponentError
+from .sweep import sweep
 
 #: Largest simulation window a request may ask for, in samples per port.
 #: ``sequence_length * samples_per_symbol``. Generous for interactive work — the
@@ -76,11 +77,11 @@ class RequestError(Exception):
         self.detail = detail
 
 
-def run_project(document: dict[str, Any]) -> dict[str, Any]:
-    """Build the graph a project document describes, run it, and reduce the results.
+def _build(document: dict[str, Any]) -> Graph:
+    """The graph a project document describes, or a refusal saying whose fault it is.
 
-    The whole of what the server does that is worth testing, separated from the
-    HTTP that carries it so that it can be tested without a socket.
+    Shared by every endpoint that takes a project, so that a malformed document
+    is answered the same way whether it arrived to be run once or swept.
 
     The window is checked *before* the graph is built, because the point is to
     refuse the work rather than to discover part-way through that it was too
@@ -101,7 +102,7 @@ def run_project(document: dict[str, Any]) -> dict[str, Any]:
             )
 
     try:
-        graph = graph_from_dict(document)
+        return graph_from_dict(document)
     except UnknownComponentError as error:
         raise RequestError(HTTPStatus.BAD_REQUEST, str(error)) from error
     except (ProjectError, GraphError, ValueError, TypeError, KeyError) as error:
@@ -109,8 +110,23 @@ def run_project(document: dict[str, Any]) -> dict[str, Any]:
             HTTPStatus.BAD_REQUEST, f"the project could not be built: {error}"
         ) from error
 
+
+def _context(graph: Graph) -> dict[str, Any]:
+    """What the run was actually done at, echoed back so the client need not assume."""
+    return {
+        "bit_rate": graph.ctx.bit_rate,
+        "samples_per_symbol": graph.ctx.samples_per_symbol,
+        "sequence_length": graph.ctx.sequence_length,
+        "seed": graph.ctx.seed,
+        "precision": graph.ctx.precision,
+        "num_samples": graph.ctx.num_samples,
+    }
+
+
+def _execute(graph: Graph) -> Results:
+    """Run a graph, mapping the two ways it can refuse onto the caller's fault."""
     try:
-        results = graph.run()
+        return graph.run()
     except GraphError as error:
         # A wiring or validation problem: the graph as described cannot run, and
         # the person who described it is the one who can fix it.
@@ -120,6 +136,15 @@ def run_project(document: dict[str, Any]) -> dict[str, Any]:
         # caller's to fix, and its message is written for them.
         raise RequestError(HTTPStatus.UNPROCESSABLE_ENTITY, str(error)) from error
 
+
+def run_project(document: dict[str, Any]) -> dict[str, Any]:
+    """Build the graph a project document describes, run it, and reduce the results.
+
+    The whole of what the server does that is worth testing, separated from the
+    HTTP that carries it so that it can be tested without a socket.
+    """
+    graph = _build(document)
+    results = _execute(graph)
     try:
         encoded = encode_results(results)
     except EncodingError as error:
@@ -127,15 +152,120 @@ def run_project(document: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "results": encoded,
-        "context": {
-            "bit_rate": graph.ctx.bit_rate,
-            "samples_per_symbol": graph.ctx.samples_per_symbol,
-            "sequence_length": graph.ctx.sequence_length,
-            "seed": graph.ctx.seed,
-            "precision": graph.ctx.precision,
-            "num_samples": graph.ctx.num_samples,
-        },
+        "context": _context(graph),
         "ui": ui_from_dict(document),
+    }
+
+
+#: Most points one sweep may ask for. A curve is read, not counted: past a
+#: couple of hundred the line stops gaining shape and starts costing minutes.
+MAX_SWEEP_POINTS = 256
+
+#: Most repeated runs per point. Repeats are how a noisy measurement becomes a
+#: distribution rather than one sample, and the cost is multiplied by the point
+#: count, so the product is bounded too.
+MAX_SWEEP_RUNS = 64
+
+#: And the product of the two, which is what actually decides how long a browser
+#: sits waiting.
+MAX_SWEEP_TOTAL = 1024
+
+
+def run_sweep(request: dict[str, Any]) -> dict[str, Any]:
+    """Run one parameter over a range and return the numbers at each point.
+
+    ``{"project": {...}, "axis": {"node": "tx", "parameter": "power",
+    "values": [...]}, "runs": 1}``
+
+    One axis, because that is what a curve is and what the interface offers.
+    :func:`maiman.sweep` takes any number of them and this is a thin wrapper
+    over it, so a script that wants a surface still has one.
+
+    Only the scalar results come back — see :func:`maiman.encoding.scalars`.
+    """
+    if not isinstance(request, dict):
+        raise RequestError(HTTPStatus.BAD_REQUEST, "the request body must be a JSON object")
+
+    document = request.get("project")
+    if not isinstance(document, dict):
+        raise RequestError(HTTPStatus.BAD_REQUEST, "no 'project' in the request")
+
+    axis = request.get("axis")
+    if not isinstance(axis, dict):
+        raise RequestError(HTTPStatus.BAD_REQUEST, "no 'axis' in the request")
+    node = axis.get("node")
+    parameter = axis.get("parameter")
+    values = axis.get("values")
+    if not isinstance(node, str) or not isinstance(parameter, str):
+        raise RequestError(HTTPStatus.BAD_REQUEST, "the axis needs a 'node' and a 'parameter'")
+    if not isinstance(values, list) or not values:
+        raise RequestError(HTTPStatus.BAD_REQUEST, "the axis needs a non-empty 'values' list")
+    if not all(isinstance(v, int | float) and not isinstance(v, bool) for v in values):
+        raise RequestError(HTTPStatus.BAD_REQUEST, "axis values must be numbers")
+    if len(values) > MAX_SWEEP_POINTS:
+        raise RequestError(
+            HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+            f"{len(values)} points exceeds the server limit of {MAX_SWEEP_POINTS}",
+        )
+
+    try:
+        runs = int(request.get("runs", 1))
+    except (TypeError, ValueError) as error:
+        raise RequestError(HTTPStatus.BAD_REQUEST, "'runs' must be a whole number") from error
+    if runs < 1 or runs > MAX_SWEEP_RUNS:
+        raise RequestError(
+            HTTPStatus.BAD_REQUEST, f"'runs' must be between 1 and {MAX_SWEEP_RUNS}, got {runs}"
+        )
+    if len(values) * runs > MAX_SWEEP_TOTAL:
+        raise RequestError(
+            HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+            f"{len(values)} points x {runs} runs is {len(values) * runs} simulations, "
+            f"over the server limit of {MAX_SWEEP_TOTAL}",
+            "Run it from Python, where nothing is holding a browser open while it works.",
+        )
+
+    graph = _build(document)
+    target = next((c for c in graph.components if c.label == node), None)
+    if target is None:
+        raise RequestError(
+            HTTPStatus.BAD_REQUEST,
+            f"no block labelled {node!r} in this project",
+            f"blocks are: {', '.join(sorted(c.label for c in graph.components))}",
+        )
+    if parameter not in type(target).param_specs():
+        raise RequestError(
+            HTTPStatus.BAD_REQUEST,
+            f"{node} has no parameter {parameter!r}",
+            f"its parameters are: {', '.join(sorted(type(target).param_specs()))}",
+        )
+
+    try:
+        result = sweep(graph, {(node, parameter): list(values)}, runs=runs)
+    except GraphError as error:
+        raise RequestError(HTTPStatus.UNPROCESSABLE_ENTITY, str(error)) from error
+    except (ValueError, TypeError) as error:
+        raise RequestError(HTTPStatus.UNPROCESSABLE_ENTITY, str(error)) from error
+
+    key = f"{node}.{parameter}"
+    points = [
+        {
+            "index": point.index,
+            "value": point.values[key],
+            "runs": [
+                {
+                    f"{label}.{port}": scalars(encode(signal))
+                    for (label, port), signal in run.items()
+                }
+                for run in point.runs
+            ],
+        }
+        for point in result.points
+    ]
+    return {
+        "axis": {"node": node, "parameter": parameter, "values": list(values)},
+        "runs": runs,
+        "points": points,
+        "context": _context(graph),
     }
 
 
@@ -213,9 +343,12 @@ class StudioHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         route = self.path.split("?", 1)[0].rstrip("/")
         try:
-            if route != "/api/run":
+            if route == "/api/run":
+                self._send(HTTPStatus.OK, run_project(self._body()))
+            elif route == "/api/sweep":
+                self._send(HTTPStatus.OK, run_sweep(self._body()))
+            else:
                 raise RequestError(HTTPStatus.NOT_FOUND, f"no route {route!r}")
-            self._send(HTTPStatus.OK, run_project(self._body()))
         except RequestError as error:
             self._fail(error)
         except Exception as error:
