@@ -9,6 +9,7 @@ every mistake as a 500 teaches its user nothing.
 
 from __future__ import annotations
 
+import argparse
 import itertools
 import json
 import math
@@ -21,7 +22,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-from maiman import Graph, SimulationContext, registered_names
+from maiman import Graph, SimulationContext, cli, registered_names, server
 from maiman.component import PortType
 from maiman.components import (
     EDFA,
@@ -761,3 +762,55 @@ def test_a_sweep_over_http(session: str) -> None:
     assert status == HTTPStatus.OK
     assert len(body["points"]) == 4
     assert body["context"]["sequence_length"] == 256
+
+
+# -- the command line -------------------------------------------------------
+#
+# Two front doors reach the same server: `maiman serve`, which is what exists
+# after an install, and `python -m maiman.server`, which is what a checkout
+# uses. They are worth testing because the failure mode is silent — a flag added
+# to one and not the other works everywhere it is tried and is missing exactly
+# where someone reads about it.
+
+
+def serve_options(parser: argparse.ArgumentParser) -> dict[str, Any]:
+    """Every option a parser accepts, with its default, keyed by flag."""
+    return {
+        flag: action.default
+        for action in parser._actions
+        for flag in action.option_strings
+        if flag != "-h"
+    }
+
+
+def test_both_front_doors_take_the_same_options() -> None:
+    module_parser = argparse.ArgumentParser()
+    server.add_serve_arguments(module_parser)
+
+    subcommands = cli.build_parser()._subparsers
+    assert subcommands is not None
+    choices = subcommands._group_actions[0].choices
+    assert isinstance(choices, dict)
+
+    assert serve_options(choices["serve"]) == serve_options(module_parser)
+
+
+def test_serve_dispatches_the_parsed_options(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[argparse.Namespace] = []
+
+    def record(args: argparse.Namespace) -> int:
+        seen.append(args)
+        return 0
+
+    monkeypatch.setattr(server, "serve_from_args", record)
+
+    assert cli.main(["serve", "--port", "9123", "--host", "localhost"]) == 0
+    assert (seen[0].port, seen[0].host) == (9123, "localhost")
+
+
+def test_the_bare_command_asks_for_a_subcommand(capsys: pytest.CaptureFixture[str]) -> None:
+    """Rather than starting a server nobody named."""
+    with pytest.raises(SystemExit) as caught:
+        cli.main([])
+    assert caught.value.code == 2
+    assert "command" in capsys.readouterr().err

@@ -35,7 +35,7 @@ link in this simulator descends from.*
 > each channel's phase at twice the rate its own does, sliding past under walk-off derived from
 > the dispersion — and triplets of channels mix to put light where nobody launched it.
 >
-> The interface is a working application: `python -m maiman.server`, open the page, build a link by
+> The interface is a working application: `maiman serve`, open the page, build a link by
 > dragging blocks and wires, press Run, sweep a parameter, save the project. Every number on screen
 > comes from the engine. See the [roadmap](#roadmap).
 >
@@ -49,9 +49,12 @@ link in this simulator descends from.*
 
 **It runs.**
 
-    python -m maiman.server
+    pip install git+https://github.com/ehsun-sh/maiman-studio
+    maiman serve
 
-then open `http://127.0.0.1:8765/`. Press Run and the page posts its graph to the engine and draws
+then open `http://127.0.0.1:8765/`. The interface is a file inside the package, so installing the
+engine installs it — there is nothing to build and no checkout to be standing in. From a checkout,
+`python -m maiman.server` is the same command by another name. Press Run and the page posts its graph to the engine and draws
 what comes back: the constellation, the measurements, the block captions, and a log in which every
 line is a fact from the response. Change a parameter in the inspector and run again, and the
 numbers move because the physics moved — set the fiber to 200 km and the received power drops by
@@ -123,6 +126,12 @@ invisible.
 ---
 
 ## Try it
+
+```bash
+pip install git+https://github.com/ehsun-sh/maiman-studio && maiman serve
+```
+
+or, to work on it:
 
 ```bash
 pip install -e ".[dev]" && pytest
@@ -505,7 +514,7 @@ all, and that choice has to be paid for somewhere. See
 
 ## The session server
 
-    python -m maiman.server
+    maiman serve
 
 Three routes, no dependencies beyond the ones the engine already has, bound to loopback.
 

@@ -25,7 +25,8 @@ window big enough will occupy a core for a long time. So the socket binds to
 127.0.0.1 unless a host is given explicitly, and a run is refused before it
 starts if its window exceeds :data:`MAX_SAMPLES`.
 
-Run it with ``python -m maiman.server`` and open the printed URL.
+Run it with ``maiman serve`` (or ``python -m maiman.server``) and open the
+printed URL.
 """
 
 from __future__ import annotations
@@ -38,7 +39,7 @@ import traceback
 from collections.abc import Callable
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
+from importlib import resources
 from typing import Any
 
 from . import manifests
@@ -60,7 +61,14 @@ MAX_BODY = 8 * 1024 * 1024
 
 #: Where the interface is served from. The studio is a single file with no build
 #: step, which is what lets the whole application be opened from a checkout.
-STUDIO = Path(__file__).resolve().parent.parent.parent / "docs" / "ui-mockup.html"
+#:
+#: It lives *inside the package* so that it also travels in the wheel. It used to
+#: sit in ``docs/``, three directories above this one — which resolves from a
+#: checkout and nowhere else, so ``pip install maiman`` produced a server with no
+#: interface to serve. Reached through :mod:`importlib.resources` rather than
+#: ``__file__`` because that is what a packaged resource is addressed by, and it
+#: keeps working if the distribution is ever imported from an archive.
+STUDIO = resources.files("maiman") / "studio" / "index.html"
 
 
 class RequestError(Exception):
@@ -377,7 +385,8 @@ class StudioHandler(BaseHTTPRequestHandler):
             raise RequestError(
                 HTTPStatus.NOT_FOUND,
                 "the studio page is not present",
-                f"expected it at {STUDIO}. Serving the API alone still works; "
+                f"expected it at {STUDIO}, inside the package — an installation "
+                "missing it is incomplete. Serving the API alone still works; "
                 "point a client at /api/manifests and /api/run.",
             )
         body = STUDIO.read_bytes()
@@ -406,19 +415,24 @@ def serve(
     return httpd
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        prog="python -m maiman.server", description="Run the Maiman Studio session server."
-    )
+def add_serve_arguments(parser: argparse.ArgumentParser) -> None:
+    """Declare the options :func:`serve_from_args` reads.
+
+    Split out because two front doors lead here — ``maiman serve`` and
+    ``python -m maiman.server`` — and a flag that exists on one of them and not
+    the other is a bug waiting to be reported as a documentation error.
+    """
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument(
         "--host",
         default="127.0.0.1",
-        help="Interface to bind. Defaults to loopback; see this module's docstring "
-        "before changing it, because /api/run executes the graph it is given.",
+        help="Interface to bind. Defaults to loopback; read maiman/server.py's "
+        "docstring before changing it: /api/run executes the graph it is given.",
     )
-    args = parser.parse_args(argv)
 
+
+def serve_from_args(args: argparse.Namespace) -> int:
+    """Start the server on the parsed options and block until interrupted."""
     if args.host not in ("127.0.0.1", "localhost", "::1"):
         print(
             f"  warning: binding {args.host}, not loopback. /api/run executes the graph\n"
@@ -436,6 +450,14 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         httpd.shutdown()
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="python -m maiman.server", description="Run the Maiman Studio session server."
+    )
+    add_serve_arguments(parser)
+    return serve_from_args(parser.parse_args(argv))
 
 
 if __name__ == "__main__":

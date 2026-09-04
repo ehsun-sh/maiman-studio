@@ -1,6 +1,6 @@
 """Regenerate the README's interface screenshots from the mockup.
 
-Run after any change to ``docs/ui-mockup.html``, so the front page shows what the
+Run after any change to ``src/maiman/studio/index.html``, so the front page shows what the
 current build renders rather than an older one. The README is the first thing a
 visitor sees; a screenshot that has drifted from the build is worse than none,
 because it is wrong rather than merely missing.
@@ -28,7 +28,7 @@ import tempfile
 from pathlib import Path
 
 DOCS = Path(__file__).parent
-MOCKUP = DOCS / "ui-mockup.html"
+STUDIO = DOCS.parent / "src" / "maiman" / "studio" / "index.html"
 OUTPUT = DOCS / "images"
 
 #: The viewport the design is specified at. DESIGN.md's layout numbers and every
@@ -87,17 +87,17 @@ def capture(browser: str, page: Path, destination: Path) -> None:
 
 
 def main() -> None:
-    if not MOCKUP.is_file():
-        raise SystemExit(f"{MOCKUP} not found")
+    if not STUDIO.is_file():
+        raise SystemExit(f"{STUDIO} not found")
     browser = find_browser()
-    source = MOCKUP.read_text(encoding="utf-8")
+    source = STUDIO.read_text(encoding="utf-8")
     if THEME_DEFAULT not in source:
         raise SystemExit(
-            "the mockup's theme bootstrap has changed; update THEME_DEFAULT to match, "
+            "the studio page's theme bootstrap has changed; update THEME_DEFAULT to match, "
             "or the graphite capture will silently be a second paper one"
         )
 
-    capture(browser, MOCKUP, OUTPUT / "studio-paper.png")
+    capture(browser, STUDIO, OUTPUT / "studio-paper.png")
 
     with tempfile.TemporaryDirectory() as work:
         forced = Path(work) / "graphite.html"

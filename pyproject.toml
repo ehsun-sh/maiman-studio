@@ -26,13 +26,28 @@ classifiers = [
 dependencies = ["numpy>=1.26"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "mypy>=1.11", "ruff>=0.6"]
+# hatchling and build are here so the packaging test can assemble a real wheel
+# without network isolation. It is the only test that can prove the studio page
+# reaches an installed copy, which is the whole reason the page lives in the
+# package rather than in docs/.
+dev = ["pytest>=8", "mypy>=1.11", "ruff>=0.6", "build>=1.2", "hatchling>=1.25"]
+
+[project.scripts]
+# The front door. `python -m maiman.server` still works and is what a checkout
+# uses; this is what exists after `pip install maiman`, where there is no source
+# tree to know the layout of.
+maiman = "maiman.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/ehsun-sh/maiman-studio"
 Documentation = "https://github.com/ehsun-sh/maiman-studio/blob/main/docs/ARCHITECTURE.md"
 
 [tool.hatch.build.targets.wheel]
+# Everything under the package ships, including src/maiman/studio/index.html —
+# the interface is data, and a wheel without it installs a server that answers
+# every API route and 404s the page it exists to serve. Asserted by
+# tests/test_packaging.py against an actually-built wheel, because a default
+# that is relied on and never checked is a default that changes.
 packages = ["src/maiman"]
 
 [tool.pytest.ini_options]

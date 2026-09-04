@@ -24,7 +24,7 @@ from maiman import registered_names
 from maiman.server import run_project
 
 ROOT = Path(__file__).resolve().parent.parent
-STUDIO = ROOT / "docs" / "ui-mockup.html"
+STUDIO = ROOT / "src" / "maiman" / "studio" / "index.html"
 EXPORT = ROOT / "examples" / "ui_data.json"
 DATA_TAG = '<script id="maiman-data" type="application/json">'
 
@@ -45,7 +45,7 @@ def test_the_page_carries_the_current_export() -> None:
     not done after the export was regenerated.
     """
     assert embedded() == json.loads(EXPORT.read_text(encoding="utf-8")), (
-        "docs/ui-mockup.html carries a stale copy of examples/ui_data.json. "
+        "the studio page carries a stale copy of examples/ui_data.json. "
         "Re-run the export and splice the result back into the page."
     )
 
