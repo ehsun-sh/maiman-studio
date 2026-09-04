@@ -374,15 +374,41 @@ def test_a_graph_that_cannot_run_is_unprocessable_not_malformed() -> None:
     assert caught.value.status == HTTPStatus.UNPROCESSABLE_ENTITY
 
 
-def test_a_component_rejecting_its_parameters_is_also_unprocessable() -> None:
-    doc = document()
+def test_a_component_rejecting_its_input_is_also_unprocessable() -> None:
+    """422 is for a graph that builds and then will not run.
+
+    Every value a component can reject *on its own* is now refused when it is
+    set — that is what parameter choices and ranges are for, and those come back
+    as 400 because the project could not be built at all. What is left for 422
+    is a block that only discovers the problem when it sees its input: here a
+    mapper asked for 8 bits per symbol while the generator upstream still emits
+    4, which neither block can know alone.
+    """
+    doc = coherent_document()
     for node in doc["nodes"]:
-        if node["id"] == "prbs" or node["type"] == "PRBSGenerator":
-            node["params"]["order"] = 12.0
-    doc["nodes"].append({"id": "bad", "type": "PRBSGenerator", "params": {"order": 12.0}})
+        if node["id"] == "map":
+            node["params"]["bits_per_symbol"] = 8.0
     with pytest.raises(RequestError) as caught:
         run_project(doc)
     assert caught.value.status == HTTPStatus.UNPROCESSABLE_ENTITY
+    assert "bits" in caught.value.message
+
+
+def test_a_parameter_the_engine_will_not_accept_is_refused_as_malformed() -> None:
+    """And the other side of that line: a value no block would ever accept.
+
+    A PRBS order of 12 has no maximal-length polynomial, so the project cannot
+    be built at all — 400, not 422, because there is nothing here that could
+    have run.
+    """
+    doc = coherent_document()
+    for node in doc["nodes"]:
+        if node["type"] == "PRBSGenerator":
+            node["params"]["order"] = 12.0
+    with pytest.raises(RequestError) as caught:
+        run_project(doc)
+    assert caught.value.status == HTTPStatus.BAD_REQUEST
+    assert "7, 9, 11, 15, 23, 31" in caught.value.message
 
 
 # ---------------------------------------------------------------------------

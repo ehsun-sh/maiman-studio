@@ -7,6 +7,7 @@ import numpy as np
 from ..component import BoolParam, Component, Param, PortType
 from ..context import SimulationContext
 from ..dsp import root_raised_cosine, shape_symbols
+from ..modulation import QAM_FORMATS
 from ..signals import BinarySignal, ElectricalSignal, Signal, SymbolSignal
 
 #: Maximal-length LFSR feedback taps, as (order, tap) exponent pairs.
@@ -38,24 +39,33 @@ class PRBSGenerator(Component):
     display_name = "PRBS Generator"
     category = "Electrical Sources"
 
-    order = Param(7.0, unit="", min=7.0, max=31.0, doc="LFSR order n; period is 2**n - 1")
+    #: Offered as the set it is, taken from the tap table above rather than
+    #: restated: an order between two of these has no maximal-length polynomial
+    #: here, and declaring 7..31 meant the interface accepted 12.
+    order = Param(
+        7.0,
+        unit="",
+        choices=tuple(float(n) for n in sorted(PRBS_TAPS)),
+        doc="LFSR order n; period is 2**n - 1. Only these have a standard "
+        "maximal-length polynomial",
+    )
     bits_per_symbol = Param(
         1.0,
         unit="",
-        min=1.0,
-        max=8.0,
+        choices=QAM_FORMATS,
         doc="Bits each downstream symbol carries; scales how many bits are emitted",
     )
 
     outputs = {"out": PortType.BINARY}
 
     def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
+        # No order check here any more. It used to live in this method and fire
+        # at run time; now `order` declares the tap table as its choices, so
+        # every supported way of setting it -- construction, loading a project,
+        # a sweep override -- is refused by Param.validate when it is set. A
+        # guard that cannot fire is worse than no guard: it reads as protection
+        # and tests nothing.
         order = int(self.order)
-        if order not in PRBS_TAPS:
-            raise ValueError(
-                f"{self.label}: PRBS order {order} is not a standard maximal-length "
-                f"polynomial; available orders are {sorted(PRBS_TAPS)}"
-            )
         n, tap = PRBS_TAPS[order]
 
         # Seed the register from the run seed so the pattern is reproducible but

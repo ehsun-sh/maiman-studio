@@ -35,6 +35,13 @@ def gray_pam_levels(bits_per_axis: int) -> np.ndarray:
     return levels
 
 
+#: The formats :func:`qam_constellation` can build: BPSK, then square QAM.
+#: Odd orders above 1 are cross constellations and are not implemented, so the
+#: legal values are a *set* rather than the range 1..8 they used to be declared
+#: as — a parameter offering "1 … 8" invites 3, and 8-QAM does not exist here.
+QAM_FORMATS: tuple[float, ...] = (1.0, 2.0, 4.0, 6.0, 8.0)
+
+
 def qam_constellation(bits_per_symbol: int) -> np.ndarray:
     """Gray-coded QAM constellation of unit mean power, indexed by bit pattern.
 

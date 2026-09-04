@@ -7,6 +7,7 @@ import numpy as np
 from ..component import BoolParam, Component, Param, PortType
 from ..context import SimulationContext
 from ..modulation import (
+    QAM_FORMATS,
     bits_to_indices,
     differential_decode,
     differential_encode,
@@ -36,7 +37,10 @@ class QAMMapper(Component):
     category = "Modulation"
 
     bits_per_symbol = Param(
-        2.0, unit="", min=1.0, max=8.0, doc="1 BPSK, 2 QPSK, 4 16-QAM, 6 64-QAM, 8 256-QAM"
+        2.0,
+        unit="",
+        choices=QAM_FORMATS,
+        doc="1 BPSK, 2 QPSK, 4 16-QAM, 6 64-QAM, 8 256-QAM",
     )
     differential = BoolParam(
         False, doc="Encode the quadrant differentially, so a quarter-turn ambiguity costs nothing"

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, ClassVar, overload
@@ -44,12 +45,22 @@ class Port:
 
 
 class Param:
-    """A component parameter, declared once, with its unit and valid range.
+    """A component parameter, declared once, with its unit and valid values.
 
     The unit is part of the declaration rather than a comment, so that
     :meth:`Component.si` can convert consistently and the GUI manifest can be
     generated from the same source. Declaring parameters twice — once in code
     and once in a manifest file — guarantees they drift apart.
+
+    ``min``/``max`` bound a continuous quantity. ``choices`` is for the other
+    kind: a parameter whose legal values are a *set*, not an interval. A PRBS
+    order may be 7, 9, 11, 15, 23 or 31 and nothing between; a QAM format is 1,
+    2, 4, 6 or 8 bits per symbol and never 3. Declaring those as a range was a
+    quiet lie — the field said "1 … 8", the editor accepted 3, and only the
+    engine knew that 8-QAM is a cross constellation nobody has implemented. An
+    interface can offer a set as a list to choose from and cannot offer an
+    interval as anything but a box to type in, so the distinction earns its
+    keep on screen as well as in validation.
     """
 
     def __init__(
@@ -59,6 +70,7 @@ class Param:
         unit: str = "",
         min: float | None = None,
         max: float | None = None,
+        choices: Sequence[float] | None = None,
         doc: str = "",
     ) -> None:
         if unit not in known_units():
@@ -67,8 +79,13 @@ class Param:
         self.unit = unit
         self.min = min
         self.max = max
+        self.choices = tuple(choices) if choices is not None else None
         self.doc = doc
         self.name = "<unbound>"
+        if self.choices is not None and default not in self.choices:
+            raise ValueError(
+                f"default {default} is not one of the declared choices {list(self.choices)}"
+            )
 
     def __set_name__(self, owner: type, name: str) -> None:
         self.name = name
@@ -90,6 +107,10 @@ class Param:
         value = float(value)
         if math.isnan(value):
             raise ValueError(f"{self.name} must not be NaN")
+        if self.choices is not None and value not in self.choices:
+            raise ValueError(
+                f"{self.name}={value:g} is not one of {', '.join(f'{c:g}' for c in self.choices)}"
+            )
         if self.min is not None and value < self.min:
             raise ValueError(f"{self.name}={value} {self.unit} is below the minimum {self.min}")
         if self.max is not None and value > self.max:
@@ -103,6 +124,8 @@ class Param:
             d["min"] = self.min
         if self.max is not None:
             d["max"] = self.max
+        if self.choices is not None:
+            d["choices"] = list(self.choices)
         if self.doc:
             d["doc"] = self.doc
         return d

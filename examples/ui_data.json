@@ -1221,16 +1221,27 @@
      "type": "float",
      "default": 7.0,
      "unit": "",
-     "min": 7.0,
-     "max": 31.0,
-     "doc": "LFSR order n; period is 2**n - 1"
+     "choices": [
+      7.0,
+      9.0,
+      11.0,
+      15.0,
+      23.0,
+      31.0
+     ],
+     "doc": "LFSR order n; period is 2**n - 1. Only these have a standard maximal-length polynomial"
     },
     "bits_per_symbol": {
      "type": "float",
      "default": 1.0,
      "unit": "",
-     "min": 1.0,
-     "max": 8.0,
+     "choices": [
+      1.0,
+      2.0,
+      4.0,
+      6.0,
+      8.0
+     ],
      "doc": "Bits each downstream symbol carries; scales how many bits are emitted"
     }
    },
@@ -1326,8 +1337,13 @@
      "type": "float",
      "default": 2.0,
      "unit": "",
-     "min": 1.0,
-     "max": 8.0,
+     "choices": [
+      1.0,
+      2.0,
+      4.0,
+      6.0,
+      8.0
+     ],
      "doc": "1 BPSK, 2 QPSK, 4 16-QAM, 6 64-QAM, 8 256-QAM"
     },
     "differential": {

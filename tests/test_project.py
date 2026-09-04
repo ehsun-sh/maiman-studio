@@ -17,7 +17,7 @@ from maiman import (
     registered_names,
     save,
 )
-from maiman.component import PortType
+from maiman.component import Param, PortType
 from maiman.components import (
     BERAnalyzer,
     Combiner,
@@ -30,6 +30,8 @@ from maiman.components import (
     PowerMeter,
     PRBSGenerator,
 )
+from maiman.components.electrical import PRBS_TAPS
+from maiman.modulation import QAM_FORMATS, qam_constellation
 from maiman.project import SCHEMA_VERSION, graph_to_dict, ui_from_dict
 from maiman.registry import lookup
 
@@ -333,3 +335,43 @@ def test_port_type_checking_still_applies_on_load(tmp_path: Path) -> None:
     path.write_text(json.dumps(data), encoding="utf-8")
     with pytest.raises(ProjectError, match="port types differ"):
         load(path)
+
+
+def test_a_parameter_may_declare_a_set_instead_of_a_range() -> None:
+    """Some parameters are legal at a handful of values and nowhere between.
+
+    A PRBS order is 7, 9, 11, 15, 23 or 31 — the polynomials the tap table
+    holds. Declaring that as ``min=7, max=31`` said something false, and the
+    editor believed it: the field read "range 7 … 31" and accepted 12, which
+    only the engine knew was not a polynomial.
+    """
+    with pytest.raises(ValueError, match="is not one of 7, 9, 11, 15, 23, 31"):
+        PRBSGenerator(order=12.0)
+    assert PRBSGenerator(order=15.0).order == 15.0
+
+
+def test_the_choices_come_from_the_table_that_decides_them() -> None:
+    """Not restated. A second list is a list that goes stale."""
+    generated = manifests()
+    assert generated["PRBSGenerator"]["parameters"]["order"]["choices"] == [
+        float(n) for n in sorted(PRBS_TAPS)
+    ]
+    assert generated["QAMMapper"]["parameters"]["bits_per_symbol"]["choices"] == list(QAM_FORMATS)
+
+
+def test_every_declared_choice_actually_works() -> None:
+    """The strongest form of the claim: each offered value builds a constellation.
+
+    A list the interface offers is a promise. This runs it — an odd order above
+    1 is a cross constellation nobody has implemented, so if one ever appeared
+    in QAM_FORMATS the promise would be broken at the click and not before.
+    """
+    for bits in QAM_FORMATS:
+        points = qam_constellation(int(bits))
+        assert points.shape == (1 << int(bits),)
+
+
+def test_a_default_outside_its_own_choices_is_refused() -> None:
+    """A parameter that starts at a value it will not accept is a trap."""
+    with pytest.raises(ValueError, match="not one of the declared choices"):
+        Param(3.0, choices=(1.0, 2.0, 4.0))

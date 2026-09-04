@@ -72,12 +72,25 @@ def test_prbs_is_reproducible_for_a_given_seed() -> None:
     assert not np.array_equal(_prbs_bits(7, 127, seed=3), _prbs_bits(7, 127, seed=4))
 
 
-def test_unsupported_prbs_order_is_rejected_by_name() -> None:
+def test_unsupported_prbs_order_is_rejected_when_it_is_set() -> None:
+    """Refused on the way in, not on the way out.
+
+    The valid orders are a set, not a range, and the parameter now declares
+    them. That moves the refusal from ``run()`` to the moment the value is
+    given — which is where it is useful, because the editor can then say so
+    while someone is choosing rather than after they press Run. The message
+    lists what is allowed, which the old one did too.
+    """
+    with pytest.raises(ValueError, match="is not one of 7, 9, 11, 15, 23, 31"):
+        PRBSGenerator(order=8.0)
+
+    # And through a project file and a sweep override, which are the other two
+    # ways a value can arrive.
     ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=2, sequence_length=16)
-    g = Graph(ctx)
-    g.add(PRBSGenerator(order=8.0))
-    with pytest.raises(ValueError, match="not a standard maximal-length"):
-        g.run()
+    graph = Graph(ctx)
+    graph.add(PRBSGenerator(order=7.0, label="prbs"))
+    with pytest.raises(ValueError, match="is not one of"):
+        graph.run(overrides={("prbs", "order"): 8.0})
 
 
 def test_supported_orders_are_the_standard_telecom_polynomials() -> None:

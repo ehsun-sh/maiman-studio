@@ -593,6 +593,11 @@ verdict, and DESIGN.md
   }
   /* A field the engine would refuse. Marked, not corrected: silently clamping
      someone's number is worse than telling them it is out of range. */
+  .field-input select {
+    font: inherit; font-family: var(--mono); font-size: 12px; color: var(--ink);
+    background: transparent; border: 0; outline: none; width: 100%; min-width: 0;
+    padding: 0; cursor: pointer;
+  }
   .field.invalid input { border-color: var(--bad); color: var(--bad); }
   .field.invalid .field-range { color: var(--bad); }
   /* Provenance. Deliberately quiet when it says "reference" — that is the
@@ -2161,16 +2166,27 @@ verdict, and DESIGN.md
      "type": "float",
      "default": 7.0,
      "unit": "",
-     "min": 7.0,
-     "max": 31.0,
-     "doc": "LFSR order n; period is 2**n - 1"
+     "choices": [
+      7.0,
+      9.0,
+      11.0,
+      15.0,
+      23.0,
+      31.0
+     ],
+     "doc": "LFSR order n; period is 2**n - 1. Only these have a standard maximal-length polynomial"
     },
     "bits_per_symbol": {
      "type": "float",
      "default": 1.0,
      "unit": "",
-     "min": 1.0,
-     "max": 8.0,
+     "choices": [
+      1.0,
+      2.0,
+      4.0,
+      6.0,
+      8.0
+     ],
      "doc": "Bits each downstream symbol carries; scales how many bits are emitted"
     }
    },
@@ -2266,8 +2282,13 @@ verdict, and DESIGN.md
      "type": "float",
      "default": 2.0,
      "unit": "",
-     "min": 1.0,
-     "max": 8.0,
+     "choices": [
+      1.0,
+      2.0,
+      4.0,
+      6.0,
+      8.0
+     ],
      "doc": "1 BPSK, 2 QPSK, 4 16-QAM, 6 64-QAM, 8 256-QAM"
     },
     "differential": {
@@ -15490,7 +15511,7 @@ verdict, and DESIGN.md
     CWLaser:               (id) => `${fmt(param(id, "power"))} dBm`,
     Fiber:                 (id) => `${fmt(param(id, "length"))} km`,
     PRBSGenerator:         (id) => `PRBS-${fmt(param(id, "order"))}`,
-    QAMMapper:             (id) => `${1 << param(id, "bits_per_symbol")}-QAM` +
+    QAMMapper:             (id) => formatName(param(id, "bits_per_symbol")) +
                                    (param(id, "differential") ? " diff" : ""),
     IQDriver:              (id) => `Vπ ${fmt(param(id, "v_pi"))} V`,
     IQModulator:           (id) => `Vπ ${fmt(param(id, "v_pi"))} V`,
@@ -15923,15 +15944,52 @@ verdict, and DESIGN.md
   /* ---------- Inspector -------------------------------------------------- */
   const inspector = $("#inspector");
 
+  /* What a choice reads as. The number alone is right but not always legible:
+     "4" is 16-QAM and someone choosing a format is thinking in constellation
+     points. Only for the names where the mapping is standard; anything else
+     shows the number, which is never wrong. */
+  /* What a modulation format is called. 2 points is BPSK and 4 is QPSK — nobody
+     writes 2-QAM or 4-QAM — and above that the constellation size is the name.
+     One function, used by the parameter list, the block caption and the results
+     dock, so the same format cannot be called two things on one screen. It was:
+     the dock said 16-QAM while the block under it said 4-QAM. */
+  function formatName(bitsPerSymbol) {
+    const points = 1 << Number(bitsPerSymbol);
+    return { 2: "BPSK", 4: "QPSK" }[points] || `${points}-QAM`;
+  }
+
+  function choiceLabel(name, value) {
+    if (name === "bits_per_symbol") return `${value} · ${formatName(value)}`;
+    return `${value}`;
+  }
+
   function fieldFor(name, spec, value) {
     const isBool = spec.type === "bool";
     const shown = value === undefined ? spec.default : value;
-    const range = (spec.min !== undefined || spec.max !== undefined)
+    /* No range line under a list: the options *are* the range, and printing
+       "1 … 8" beside a list containing 1, 2, 4, 6, 8 states something false. */
+    const range = spec.choices
+      ? ""
+      : (spec.min !== undefined || spec.max !== undefined)
       ? `${spec.min !== undefined ? spec.min : "−∞"} … ${spec.max !== undefined ? spec.max : "∞"}`
       : "";
+    /* Three kinds of control for three kinds of parameter. A flag is a switch.
+       A parameter whose legal values are a *set* is a list — offering a text box
+       for one is an invitation to type a value that will be refused, which is
+       what "range 1 … 8" did to anyone who tried 3. Everything else is a
+       quantity on an interval, and a box is the only thing that can be. */
     const control = isBool
       ? `<input class="toggle" type="checkbox" ${shown ? "checked" : ""}
                 aria-label="${escapeHtml(name)}">`
+      : spec.choices
+      ? `<span class="field-input">
+           <select aria-label="${escapeHtml(name)}">
+             ${spec.choices.map((c) =>
+               `<option value="${c}"${Number(c) === Number(shown) ? " selected" : ""}>` +
+               `${escapeHtml(choiceLabel(name, c))}</option>`).join("")}
+           </select>
+           <span class="unit">${escapeHtml(spec.unit || "")}</span>
+         </span>`
       : `<span class="field-input">
            <input type="text" value="${fmt(shown)}" aria-label="${escapeHtml(name)}">
            <span class="unit">${escapeHtml(spec.unit || "")}</span>
@@ -15994,7 +16052,7 @@ verdict, and DESIGN.md
     const specs = DATA.manifests[node.type].parameters;
     inspector.querySelectorAll(".field").forEach((field) => {
       const label = field.querySelector("label");
-      const input = field.querySelector("input");
+      const input = field.querySelector("input, select");
       if (!label || !input) return;
       const name = label.textContent;
       const spec = specs[name];
@@ -16646,6 +16704,7 @@ verdict, and DESIGN.md
       return;
     }
     if (event.key === "Escape") {
+      if (!fileMenu.hidden) { toggleFileMenu(false); return; }
       if (wiring) { wiring = null; drawPendingWire(); }
       selectedEdge = null;
       drawGraph();
@@ -16828,9 +16887,21 @@ verdict, and DESIGN.md
     fileMenu.hidden = !open;
     fileBtn.setAttribute("aria-expanded", String(open));
   }
-  fileBtn.addEventListener("click", (event) => { event.stopPropagation(); toggleFileMenu(); });
-  document.addEventListener("click", () => toggleFileMenu(false));
-  fileMenu.addEventListener("click", (event) => event.stopPropagation());
+  fileBtn.addEventListener("click", () => toggleFileMenu());
+  /* Closed on pointerdown, not click.
+
+     The canvas calls preventDefault() in its own pointerdown handler so that
+     dragging a block does not also select text — and preventDefault on
+     pointerdown suppresses the compatibility mouse events that follow it,
+     click among them. So a click listener here never heard the most natural
+     way to dismiss the menu, which is clicking on the schematic, and the menu
+     sat open until something outside the canvas was clicked. pointerdown
+     always arrives. */
+  document.addEventListener("pointerdown", (event) => {
+    if (fileMenu.hidden) return;
+    if (fileMenu.contains(event.target) || fileBtn.contains(event.target)) return;
+    toggleFileMenu(false);
+  });
   $("#file-save").addEventListener("click", () => { toggleFileMenu(false); saveProject(); });
   $("#file-open").addEventListener("click", () => {
     toggleFileMenu(false);
@@ -17271,6 +17342,11 @@ verdict, and DESIGN.md
       $("#m-snr").textContent = vsa.snr_db === null ? "∞" : vsa.snr_db.toFixed(1) + " dB";
       $("#c-mer").textContent = vsa.mer_db === null ? "∞" : vsa.mer_db.toFixed(2) + " dB";
       $("#c-off").textContent = (vsa.frequency_offset / 1e6).toFixed(1) + " MHz";
+      /* The format the run actually used. It used to keep saying 16-QAM after a
+         run at QPSK, because it was written once from the bundled reference and
+         never again — a number on screen that no run produced. */
+      $("#c-fmt").textContent =
+        `${formatName(vsa.bits_per_symbol)} · ${vsa.bits_per_symbol} b/sym`;
       $("#c-sym").textContent = vsa.symbols_evaluated.toLocaleString("en-US");
       const estimated = vsa.ber_estimated;
       $("#m-ber").textContent = estimated === null ? "0" : estimated.toExponential(2);
