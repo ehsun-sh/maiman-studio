@@ -447,6 +447,37 @@ noise bins rendered onto one grid, the way an instrument shows them. Its resolut
 not cosmetic — widening it raises the ASE trace decibel for decibel and leaves a carrier exactly
 where it is, which is the clearest demonstration of why OSNR needs a stated reference bandwidth.
 
+## The short wavelengths pump the long ones
+
+A photon can scatter off a silica vibration and come out at a lower frequency, and the process is
+stimulated — light already there at the lower frequency makes it more likely. So in a comb the
+short-wavelength channels pump the long-wavelength ones, and a flat launch does not arrive flat.
+Set `raman_gain_slope` on the fibre. One 80 km span of standard fibre, everything launched at
+0 dBm:
+
+| comb | total | span | tilt |
+| :--- | ---: | ---: | ---: |
+| 4 × 100 GHz | 6.0 dBm | 0.30 THz | +0.00 dB |
+| 40 × 100 GHz | 16.0 dBm | 3.90 THz | +0.40 dB |
+| 80 × 50 GHz | 19.0 dBm | 3.95 THz | +0.81 dB |
+| 80 × 100 GHz | 19.0 dBm | 7.90 THz | +1.63 dB |
+
+A filled C band loses most of a decibel across itself every span, and it accumulates. That is a
+large fraction of the margin a link is designed with, and it is why a line system is built with a
+tilt to undo rather than assumed flat. A four-channel comb — which is what every other WDM number
+here is measured on — moves by three thousandths of a decibel, which is why this was never missed.
+
+**Power is moved, not lost.** The tilt is a closed form (Zirngibl, *Electron. Lett.* 34(8), 1998)
+and the sum over channels is unchanged to floating point; the quantum defect the lattice keeps is a
+part in ten thousand at these separations and is not modelled. That conservation is also what makes
+a sign error impossible to hide — the two ends have to move in opposite directions or the sum
+cannot come out.
+
+The gain is taken as rising linearly with separation, which it does up to about 13 THz and not past
+it, so a comb spanning the C and L bands together has its far pairs over the peak and the transfer
+between them over-predicted. The `diagnostics` port reports the tilt in dB, so what happened is a
+number rather than an assumption.
+
 ## An orthogonal neighbour is not an absent one
 
 The Kerr coupling used to be scalar per polarization: a channel was modulated by its neighbours'
@@ -814,7 +845,7 @@ time window, and results are reproducible.
 | :--- | :--- | :--- |
 | **0 — Foundations** ✅ | Signal model, context, port types, component base, registry, scheduler, `.maiman` project format, sweeps, CI | ~1 month |
 | **1 — MVP: linear link** *(essentially done)* | ✅ PRBS → NRZ → laser → MZM → fiber (α + CD) → PIN → filter → eye/Q/BER, validated end to end. **Python only, no GUI.** | ~2–3 months |
-| **1.5 — Nonlinear & amplified** ✅ | Adaptive-step SSFM, Kerr, EDFA with ASE, OSNR, PMD, APD, dispersion slope and its third-order term | ~2 months |
+| **1.5 — Nonlinear & amplified** ✅ | Adaptive-step SSFM, Kerr, EDFA with ASE, OSNR, PMD, APD, dispersion slope and its third-order term, cross-polarization Kerr coupling, inter-channel stimulated Raman scattering | ~2 months |
 | **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier phase recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km with blind estimation of the accumulated value, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
 | **3 — GUI & WDM** | ✅ Wavelength-selective filters, an OSA, coupled-channel propagation (XPM with walk-off, FWM), the session server, and a schematic editor: add, wire, move and delete blocks, edit parameters, run, sweep, open and save · 400G/800G references, CuPy back-end | ~6 months |
 | **4 — PIC** | Waveguides, ring resonators, MMI, MZI via integration with an existing S-matrix solver; PDK import | — |

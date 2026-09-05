@@ -65,10 +65,17 @@ from maiman.kernels import (
     effective_length,
     fwm_efficiency,
     fwm_phase_mismatch,
+    raman_tilt,
     walkoff_from_dispersion,
 )
 from maiman.signals import Band, OpticalSignal
-from maiman.units import C_LIGHT, dbm_to_w, w_to_dbm, wavelength_to_frequency
+from maiman.units import (
+    C_LIGHT,
+    dbm_to_w,
+    to_si,
+    w_to_dbm,
+    wavelength_to_frequency,
+)
 
 ANCHOR = 1550.0  # nm — channel 0
 SPACING = 100e9  # Hz
@@ -353,6 +360,27 @@ def main() -> None:
     print("     Two and two thirds: orthogonal cross-phase modulation is exactly a")
     print("     third of co-polarized. Uncoupled it is zero, which is the model")
     print("     saying a channel across the polarization is not there at all.")
+
+    # ------------------------------------------------------------------
+    print("\n  7. Raman: the short wavelengths pump the long ones")
+    print("     One 80 km span, standard fibre, C_R = 0.028 1/W/km/THz.")
+    print("     Power is moved between channels, not lost — the sum is unchanged.\n")
+    slope = to_si(0.028, "1/W/km/THz")
+    print(f"     {'comb':>22} {'total':>8} {'span':>9} {'tilt':>9}")
+    print("     " + "-" * 52)
+    for count, grid in ((CHANNELS, 100e9), (40, 100e9), (80, 50e9), (80, 100e9)):
+        anchor = wavelength_to_frequency(ANCHOR * 1e-9)
+        tones = [anchor + index * grid for index in range(count)]
+        watts = [dbm_to_w(0.0)] * count
+        ratios = raman_tilt(tones, watts, gain_slope=slope, effective_length=L_EFF)
+        tilt = 10.0 * math.log10(ratios[0] / ratios[-1])
+        print(
+            f"     {count:3d} x {grid / 1e9:5.0f} GHz{'':>5} {w_to_dbm(sum(watts)):6.1f} dBm "
+            f"{(tones[-1] - tones[0]) / 1e12:6.2f} THz {tilt:+7.2f} dB"
+        )
+    print("     A filled C band loses most of a decibel across itself every span,")
+    print("     and it accumulates: this is why a line system is designed with a")
+    print("     tilt to undo rather than assumed flat.")
 
 
 if __name__ == "__main__":

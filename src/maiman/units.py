@@ -87,6 +87,9 @@ _TO_SI: dict[str, Callable[[float], float]] = {
     "ps/nm^2": lambda x: x * 1e6,
     # Nonlinearity: 1/(W*km) -> 1/(W*m)
     "1/W/km": lambda x: x * 1e-3,
+    # Raman gain slope: 1/(W*km*THz) -> 1/(W*m*Hz). Both denominators grow, so
+    # the factor is 1e-15 and not the 1e-3 the nonlinearity above it takes.
+    "1/W/km/THz": lambda x: x * 1e-15,
     # PMD coefficient: ps/sqrt(km) -> s/sqrt(m)
     "ps/sqrt(km)": lambda x: x * 1e-12 / math.sqrt(1e3),
     # Length
@@ -123,6 +126,7 @@ _FROM_SI: dict[str, Callable[[float], float]] = {
     "ps/nm^2/km": lambda x: x * 1e-3,
     "ps/nm^2": lambda x: x * 1e-6,
     "1/W/km": lambda x: x * 1e3,
+    "1/W/km/THz": lambda x: x * 1e15,
     "ps/sqrt(km)": lambda x: x * 1e12 * math.sqrt(1e3),
     "m": lambda x: x,
     "km": lambda x: x * 1e-3,

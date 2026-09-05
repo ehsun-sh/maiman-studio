@@ -25,10 +25,12 @@ from ..kernels import (
     differential_group_delay,
     dispersion_slope_to_beta3,
     dispersion_to_beta2,
+    effective_length,
     fwm_phase_mismatch,
     fwm_product_power,
     propagate_coupled_ssfm,
     propagate_dispersion,
+    raman_tilt,
     random_pmd_sections,
     walkoff_from_dispersion,
 )
@@ -112,12 +114,24 @@ class Fiber(Component):
     one axis the setting changes nothing, which is why it is safe to leave on for
     a dual-polarization link and pointless for a single-polarization one.
 
-    Not yet modelled: Raman scattering. The coherent polarization term
+    **Stimulated Raman scattering tilts the comb.** A photon can scatter off a
+    silica vibration and come out at a lower frequency, and the process is
+    stimulated, so the short-wavelength channels pump the long-wavelength ones
+    and a flat launch does not arrive flat. Set ``raman_gain_slope`` and a filled
+    C band — 80 channels at 0 dBm on a 50 GHz grid — comes out of one 80 km span
+    with 0.81 dB between its ends, which is a large fraction of the margin a link
+    is designed with. Power is moved, not lost: the sum over channels is
+    unchanged to floating point.
+
+    Not yet modelled: the coherent polarization term
     ``A_x* A_y**2``, which exchanges power between the axes rather than only
     dephasing them, is left out — it is the part that averages away first under
     real birefringence. Mixing products accumulate from span to span in power
     rather than in field, which understates the coherent build-up a
-    dispersion-managed link produces. Pump depletion is not modelled, which
+    dispersion-managed link produces. The Raman gain is taken as rising linearly
+    with separation, which it does up to about 13 THz and not past it, so a comb
+    spanning the C and L bands together has its far pairs over the peak and the
+    transfer between them over-predicted. Pump depletion is not modelled, which
     matters only at powers no link is operated at.
     """
 
@@ -164,6 +178,12 @@ class Fiber(Component):
         unit="dB",
         min=0.0,
         doc="Discard mixing products this far below the strongest band",
+    )
+    raman_gain_slope = Param(
+        0.0,
+        unit="1/W/km/THz",
+        min=0.0,
+        doc="Raman gain slope C_R (0 disables; 0.028 is typical for SSMF at 1550 nm)",
     )
     pmd_coefficient = Param(0.0, unit="ps/sqrt(km)", min=0.0, doc="PMD coefficient (0 disables)")
     pmd_sections = Param(60.0, unit="", min=1.0, doc="Waveplates used to build the PMD realisation")
@@ -274,6 +294,9 @@ class Fiber(Component):
             Band(Ex=ex.astype(ctx.complex_dtype), Ey=ey.astype(ctx.complex_dtype), f0=b.f0, fs=b.fs)
             for (ex, ey), b in zip(fields, signal.bands, strict=True)
         ]
+
+        bands, tilt = self._raman(signal, bands, alpha=alpha, distance=distance)
+        diagnostics = replace(diagnostics, raman_tilt=tilt)
 
         if gamma != 0.0 and self.four_wave_mixing:
             bands, emitted = self._mix(ctx, signal, bands, gamma=gamma, alpha=alpha)
@@ -426,6 +449,49 @@ class Fiber(Component):
             max_walkoff_slip=self.max_walkoff_slip,
         )
         return out, diag if diag.steps > best.steps else best
+
+    # -- stimulated Raman scattering --------------------------------------
+
+    def _raman(
+        self,
+        signal: OpticalSignal,
+        bands: list[Band],
+        *,
+        alpha: float,
+        distance: float,
+    ) -> tuple[list[Band], float]:
+        """Move power from the short wavelengths to the long ones.
+
+        Applied to the propagated bands as one redistribution rather than
+        integrated along the span, which is what the closed form in
+        :func:`maiman.kernels.raman_tilt` is for. The ratios come from the
+        *launched* powers, because that is what the formula is written in terms
+        of and because the loss is common to every channel and cancels out of it.
+
+        Mixing products are added afterwards and are not tilted. They are forty
+        decibels down and a decibel of tilt on them is a hundredth of a decibel
+        anywhere it could be measured, but it is an approximation and not an
+        oversight.
+        """
+        slope = self.si("raman_gain_slope")
+        if slope <= 0.0 or len(bands) < 2 or distance <= 0.0:
+            return bands, 0.0
+
+        ratios = raman_tilt(
+            [band.f0 for band in signal.bands],
+            [band.average_power() for band in signal.bands],
+            gain_slope=slope,
+            effective_length=effective_length(alpha, distance),
+        )
+        order = sorted(range(len(ratios)), key=lambda index: signal.bands[index].f0)
+        lowest, highest = ratios[order[0]], ratios[order[-1]]
+        tilt = 10.0 * math.log10(lowest / highest) if highest > 0.0 else 0.0
+
+        scaled = [
+            replace(band, Ex=band.Ex * math.sqrt(ratio), Ey=band.Ey * math.sqrt(ratio))
+            for band, ratio in zip(bands, ratios, strict=True)
+        ]
+        return scaled, tilt
 
     # -- four-wave mixing -------------------------------------------------
 

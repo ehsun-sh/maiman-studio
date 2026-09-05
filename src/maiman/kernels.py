@@ -188,6 +188,13 @@ class PropagationDiagnostics:
     mixing_products: int = 0
     """Four-wave mixing products emitted at distinct frequencies."""
 
+    raman_tilt: float = 0.0
+    """Power the comb's extreme channels exchanged, in dB [longest minus shortest].
+
+    Positive means the long-wavelength end gained, which is the only direction
+    stimulated Raman scattering runs. Zero when the effect is switched off or
+    when there is only one channel to tilt."""
+
     def __repr__(self) -> str:
         pmd = (
             f", DGD {self.differential_group_delay * 1e12:.2f} ps"
@@ -196,9 +203,10 @@ class PropagationDiagnostics:
         )
         walkoff = f", walk-off {self.walkoff_span * 1e12:.1f} ps" if self.walkoff_span else ""
         fwm = f", {self.mixing_products} FWM tones" if self.mixing_products else ""
+        raman = f", Raman tilt {self.raman_tilt:+.2f} dB" if self.raman_tilt else ""
         return (
             f"PropagationDiagnostics({self.steps} steps over {self.distance / 1e3:.1f} km, "
-            f"max phase {self.peak_nonlinear_phase:.4f} rad{pmd}{walkoff}{fwm})"
+            f"max phase {self.peak_nonlinear_phase:.4f} rad{pmd}{walkoff}{fwm}{raman})"
         )
 
 
@@ -530,6 +538,77 @@ def _total_power(fields: Sequence[np.ndarray]) -> np.ndarray:
     for field in fields[1:]:
         total += np.abs(field) ** 2
     return total
+
+
+#: Separation past which a triangular Raman gain profile stops being the truth.
+#:
+#: Silica's Raman gain rises roughly linearly with frequency separation, peaks
+#: near 13.2 THz and falls away after it. Below this the linear approximation is
+#: the standard one and is what :func:`raman_tilt` assumes; a comb wider than it
+#: — the C and L bands together, say — has its far pairs past the peak, where the
+#: model over-predicts the transfer. The fibre block reports how wide the comb it
+#: was given actually is, so the case is visible rather than silent.
+RAMAN_TRIANGLE_LIMIT = 13.2e12
+
+
+def raman_tilt(
+    frequencies: Sequence[float],
+    powers: Sequence[float],
+    *,
+    gain_slope: float,
+    effective_length: float,
+) -> list[float]:
+    """Power each channel keeps after stimulated Raman scattering, as a ratio.
+
+    A photon can scatter off a silica vibration and come out at a lower
+    frequency, and the process is stimulated: light already present at the lower
+    frequency makes it more likely. So in a wavelength comb the short-wavelength
+    channels pump the long-wavelength ones, and a flat launch does not arrive
+    flat. Over one 80 km span of a filled C band it is most of a decibel, which
+    is a large fraction of the margin a link is designed with.
+
+    Closed form, from Zirngibl (*Electron. Lett.* 34(8), 1998), assuming the gain
+    rises linearly with separation and every channel sees the same loss::
+
+        P_n(L) = P_n(0) * P_total * exp(-C_R * P_total * L_eff * df_n)
+                 / sum_m P_m(0) * exp(-C_R * P_total * L_eff * df_m)
+
+    What is returned is the second factor alone — the redistribution, with the
+    common ``exp(-alpha L)`` left out, because the caller has already applied the
+    loss and applying it twice is the obvious way to get this wrong.
+
+    **It conserves power.** Raman scattering moves power between channels; the
+    quantum defect it loses to the lattice is a part in ten thousand at these
+    separations and is not modelled. So ``sum(P_n * ratio_n) == sum(P_n)``, to
+    floating point, and the tests hold it there — which is also what makes a
+    sign error impossible to miss, since the two ends have to move in opposite
+    directions by construction.
+
+    ``df_n`` is measured from the mean of ``frequencies`` rather than from zero.
+    The reference cancels between numerator and denominator, so this is not
+    physics; it is what keeps the exponent near zero for a comb sitting at
+    193 THz instead of asking ``exp`` for the ratio of two underflowed numbers.
+
+    ``gain_slope`` is ``C_R`` in 1/(W·m·Hz) — 2.8e-17, or 0.028 1/(W·km·THz),
+    for standard fibre at 1550 nm. ``effective_length`` is the span's, from
+    :func:`effective_length`, because the transfer happens where the pump is
+    still bright.
+    """
+    if len(frequencies) != len(powers):
+        raise ValueError(
+            f"one power per frequency, got {len(powers)} for {len(frequencies)} channels"
+        )
+    total = float(sum(powers))
+    if gain_slope == 0.0 or total <= 0.0 or len(frequencies) < 2:
+        return [1.0] * len(frequencies)
+
+    offsets = np.asarray(frequencies, dtype=float)
+    offsets = offsets - offsets.mean()
+    weights = np.exp(-gain_slope * total * effective_length * offsets)
+    normaliser = float(np.dot(np.asarray(powers, dtype=float), weights))
+    if normaliser <= 0.0:
+        return [1.0] * len(frequencies)
+    return [float(total * w / normaliser) for w in weights]
 
 
 def walkoff_from_dispersion(beta2: float, frequency_offset: float) -> float:

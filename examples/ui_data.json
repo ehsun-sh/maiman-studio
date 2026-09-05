@@ -748,6 +748,13 @@
      "min": 0.0,
      "doc": "Discard mixing products this far below the strongest band"
     },
+    "raman_gain_slope": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "1/W/km/THz",
+     "min": 0.0,
+     "doc": "Raman gain slope C_R (0 disables; 0.028 is typical for SSMF at 1550 nm)"
+    },
     "pmd_coefficient": {
      "type": "float",
      "default": 0.0,
