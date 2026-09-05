@@ -480,8 +480,28 @@ bench, so the blind butterfly equaliser has nothing to undo and should be free. 
 64-QAM it diverges and costs eleven decibels: nine constellation radii sit close enough together
 that a noisy sample snaps to the wrong one, and the correction that follows is large and in the
 wrong direction. A single tap recovers all of it and a step ten times smaller most of it, so the
-structure is right and the adaptation is not. A normalised update is the textbook fix, it moves
-every other format's answer with it, and it is therefore its own piece of work.
+structure is right and the adaptation is not.
+
+That was chased down. It is not the step and not the decision: freezing the radius-directed stage
+entirely still leaves 3249 errors, which is what identified the **first** stage as the culprit.
+Driving every sample onto one radius is right for QPSK, survivable for 16-QAM, and destructive for a
+constellation whose points run from 0.218 to 1.528 on a unit-power grid — the amplitude structure
+the format carries is the thing being flattened. And the same stage is what carries a rotated
+channel, so there is no setting that does both:
+
+| `cma_fraction` | 0° | 15° | 30° | 45° | 72° | 90° |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0.5 (default) | 3568 | 3552 | 2950 | 5397 | 3762 | 3048 |
+| 0.0625 | 1493 | 1333 | 7496 | 7390 | 7298 | 1530 |
+| 0.0 | 0 | 395 | 7056 | 7466 | 7497 | 0 |
+
+Four ways out were measured — gating the second stage's decision on whether the ring it picked was
+credible, normalising the update by the window energy so gradient noise stops scaling with the tap
+count, annealing the second stage's step, and shortening the first stage. Only the last moves
+anything, and it moves it the other way. What this needs is a different first stage — multi-modulus,
+or a partial constellation — which is a piece of work rather than a parameter. `cma_fraction` is now
+reachable so the trade is at least the user's to make, and there is a test that will fail when a
+first stage that does both arrives.
 
 With the DSP out of the way, the 800G choice is two numbers:
 

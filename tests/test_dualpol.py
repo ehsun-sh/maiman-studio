@@ -19,6 +19,7 @@ from typing import Any, cast
 import numpy as np
 import pytest
 
+import maiman.components.dsp as block
 from maiman import Graph, SimulationContext
 from maiman.components import (
     ButterflyEqualizer,
@@ -470,3 +471,88 @@ def test_power_is_conserved_from_the_combiner_to_the_rotator() -> None:
 
     assert rotated.signal_power() == pytest.approx(0.7**2 + 0.4**2, rel=1e-12)
     assert math.isclose(combined.signal_power(), rotated.signal_power(), rel_tol=1e-12)
+
+
+# ---------------------------------------------------------------------------
+# what the first stage costs
+# ---------------------------------------------------------------------------
+
+
+def errors_at(rotation: float, bits: int, cma_fraction: float) -> int:
+    """Symbol errors over both tributaries, resolving the blind swap."""
+    import dualpol_link
+
+    saved = dualpol_link.BITS_PER_SYMBOL
+    try:
+        dualpol_link.BITS_PER_SYMBOL = bits
+        graph, analyzers = dualpol_link.build(rotation, equalize=True)
+        equalizer = next(c for c in graph.components if c.label == "eq")
+        equalizer._values = {**equalizer._values, "cma_fraction": cma_fraction}
+        taken = {key: graph.run(keep=[])[analyzer] for key, analyzer in analyzers.items()}
+    finally:
+        dualpol_link.BITS_PER_SYMBOL = saved
+    direct = taken["xx"].symbol_errors + taken["yy"].symbol_errors
+    swapped = taken["xy"].symbol_errors + taken["yx"].symbol_errors
+    return min(direct, swapped)
+
+
+@pytest.mark.parametrize("rotation", [0.0, 15.0, 30.0, 45.0, 72.0, 90.0])
+@pytest.mark.parametrize("bits", [2, 4])
+def test_the_default_recovers_every_rotation_at_the_low_orders(rotation: float, bits: int) -> None:
+    """Which is what the single-radius first stage is there for."""
+    assert errors_at(rotation, bits, 0.5) == 0
+
+
+def test_the_first_stage_carries_the_rotation_and_ruins_64_qam(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """The trade, pinned, because there is no setting that does both.
+
+    Driving every sample onto one radius is right for QPSK, survivable for
+    16-QAM, and destructive for a constellation whose points run from 0.218 to
+    1.528 — the amplitude structure the format carries is the thing being
+    flattened. Turn the stage off and an unrotated 64-QAM link comes back exactly;
+    turn it off and a rotated one is not recovered at all.
+
+    This test exists to fail. A first stage that could do both — multi-modulus,
+    or a partial constellation — is a piece of work rather than a parameter, and
+    when it lands these numbers are how it will announce itself.
+    """
+    # Off: the unrotated channel is recovered exactly, the rotated one not at all.
+    assert errors_at(0.0, 6, 0.0) == 0
+    assert errors_at(30.0, 6, 0.0) > 5000
+
+    # On: every rotation is equally broken, including the one that needs nothing.
+    assert errors_at(0.0, 6, 0.5) > 2000
+    assert errors_at(30.0, 6, 0.5) > 2000
+
+    # And 16-QAM needs it on: without it the 45-degree case collapses.
+    assert errors_at(45.0, 4, 0.0) > 5000
+    assert errors_at(45.0, 4, 0.5) == 0
+
+
+def test_the_fraction_reaches_the_kernel() -> None:
+    """A parameter the component accepts and then ignores is worse than none."""
+    import dualpol_link
+
+    saved = dualpol_link.BITS_PER_SYMBOL
+    try:
+        dualpol_link.BITS_PER_SYMBOL = 6
+        graph, _ = dualpol_link.build(0.0, equalize=True)
+    finally:
+        dualpol_link.BITS_PER_SYMBOL = saved
+    equalizer = next(c for c in graph.components if c.label == "eq")
+
+    seen: list[int | None] = []
+    original = block.butterfly_equalize
+
+    def record(*args: object, **kwargs: object) -> object:
+        seen.append(kwargs.get("cma_symbols"))  # type: ignore[arg-type]
+        return original(*args, **kwargs)  # type: ignore[arg-type]
+
+    block.butterfly_equalize = record  # type: ignore[assignment]
+    try:
+        equalizer._values = {**equalizer._values, "cma_fraction": 0.25}
+        graph.run(keep=[])
+    finally:
+        block.butterfly_equalize = original
+
+    assert seen == [1024], seen  # a quarter of the 4096-symbol window

@@ -232,6 +232,16 @@ class ButterflyEqualizer(Component):
     :class:`~maiman.components.coherent.CarrierRecovery` has. A deployed link
     resolves both by framing and differential encoding; here the measurement
     block resolves them because it holds the reference.
+
+    **It does not work at 64-QAM, and ``cma_fraction`` is where that lives.** The
+    single-radius stage is what carries a rotated channel and what flattens the
+    amplitude structure a nine-ring constellation is made of, and no value of
+    this parameter does both: at the default of 0.5 every rotation is recovered
+    at QPSK and 16-QAM and none is at 64-QAM, and at 0.0 an unrotated 64-QAM link
+    is recovered exactly and a rotated one is not recovered at all. The numbers
+    are in :func:`maiman.dsp.butterfly_equalize`, along with the three other
+    approaches that were measured and did not help. Leave it alone unless the
+    channel's polarization is known not to rotate.
     """
 
     display_name = "Butterfly Equalizer"
@@ -240,6 +250,13 @@ class ButterflyEqualizer(Component):
     taps = Param(7.0, unit="", min=1.0, max=65.0, doc="Filter length; must be odd")
     step = Param(3e-3, unit="", min=1e-6, doc="Adaptation step size")
     passes = Param(2.0, unit="", min=1.0, max=8.0, doc="Times the sequence is run through")
+    cma_fraction = Param(
+        0.5,
+        unit="",
+        min=0.0,
+        max=1.0,
+        doc="Share of the first pass spent on the single-radius stage before switching",
+    )
 
     inputs = {"x": PortType.SYMBOL, "y": PortType.SYMBOL}
     outputs = {"x_out": PortType.SYMBOL, "y_out": PortType.SYMBOL}
@@ -270,6 +287,7 @@ class ButterflyEqualizer(Component):
             constellation,
             taps=taps,
             step=self.step,
+            cma_symbols=int(tributary_x.num_symbols * self.cma_fraction),
             passes=int(self.passes),
         )
         return {

@@ -598,6 +598,35 @@ def butterfly_equalize(
     radii, which is what actually closes it. On QPSK the two stages are identical
     because there is only one radius.
 
+    **The first stage is also what stops this working at 64-QAM, and the two are
+    the same mechanism.** Driving every sample onto one radius is exactly right
+    for QPSK, survivable for 16-QAM, and destructive for a constellation whose
+    points run from 0.218 to 1.528 on a unit-power grid: the amplitude structure
+    the format carries is the thing being flattened. Measured on an otherwise
+    ideal link, total symbol errors over both tributaries out of 8192:
+
+    ==================  =====  =====  =====  =====  =====  =====
+    ``cma_symbols``       0°    15°    30°    45°    72°    90°
+    ==================  =====  =====  =====  =====  =====  =====
+    half (the default)   3568   3552   2950   5397   3762   3048
+    a sixteenth          1493   1333   7496   7390   7298   1530
+    none                    0    395   7056   7466   7497      0
+    ==================  =====  =====  =====  =====  =====  =====
+
+    Read down: the stage that carries a rotated channel is the stage that ruins
+    64-QAM, and there is no setting of it that does both. Four ways out were
+    tried and measured — gating the second stage's decision on whether the ring
+    it picked was credible, normalising the update by the window energy so that
+    gradient noise stops scaling with the tap count, annealing the second stage's
+    step, and shortening the first stage. The first three change nothing at
+    64-QAM (freezing the second stage entirely still leaves 3249 errors, which is
+    what identified the first stage as the culprit); the fourth is the table
+    above. What this needs is a different first stage — a multi-modulus or
+    partial-constellation algorithm — and that is a piece of work, not a
+    parameter.
+
+    QPSK and 16-QAM are unaffected by any of it and recover every rotation.
+
     **The singularity.** Nothing in the cost function distinguishes the two
     outputs, so in principle both filters can converge onto the *same* tributary
     and leave the other unrecovered — the well-known failure of blind butterfly

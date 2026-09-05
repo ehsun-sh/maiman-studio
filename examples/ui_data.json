@@ -168,6 +168,14 @@
      "min": 1.0,
      "max": 8.0,
      "doc": "Times the sequence is run through"
+    },
+    "cma_fraction": {
+     "type": "float",
+     "default": 0.5,
+     "unit": "",
+     "min": 0.0,
+     "max": 1.0,
+     "doc": "Share of the first pass spent on the single-radius stage before switching"
     }
    },
    "structural": {},
