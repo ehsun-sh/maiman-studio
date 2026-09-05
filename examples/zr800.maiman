@@ -1,0 +1,662 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.0.1.dev0",
+  "context": {
+    "bit_rate": 119680000000.0,
+    "samples_per_symbol": 4,
+    "sequence_length": 1024,
+    "seed": 2026,
+    "precision": "double"
+  },
+  "nodes": [
+    {
+      "id": "tx",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1550.0,
+        "linewidth": 100.0
+      },
+      "ui": {
+        "x": 190.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "pbs",
+      "type": "Splitter",
+      "params": {},
+      "config": {
+        "num_outputs": 2
+      },
+      "ui": {
+        "x": 190.0,
+        "y": 130.0
+      }
+    },
+    {
+      "id": "prbs_x",
+      "type": "PRBSGenerator",
+      "params": {
+        "order": 23.0,
+        "bits_per_symbol": 4.0
+      },
+      "ui": {
+        "x": 40.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "map_x",
+      "type": "QAMMapper",
+      "params": {
+        "bits_per_symbol": 4.0
+      },
+      "ui": {
+        "x": 40.0,
+        "y": 130.0
+      }
+    },
+    {
+      "id": "drv_x",
+      "type": "IQDriver",
+      "params": {
+        "v_pi": 4.0,
+        "predistort": true,
+        "drive_ratio": 0.4,
+        "pulse_shaping": true,
+        "roll_off": 0.1
+      },
+      "ui": {
+        "x": 40.0,
+        "y": 220.0
+      }
+    },
+    {
+      "id": "mod_x",
+      "type": "IQModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 190.0,
+        "y": 220.0
+      }
+    },
+    {
+      "id": "prbs_y",
+      "type": "PRBSGenerator",
+      "params": {
+        "order": 15.0,
+        "bits_per_symbol": 4.0
+      },
+      "ui": {
+        "x": 40.0,
+        "y": 310.0
+      }
+    },
+    {
+      "id": "map_y",
+      "type": "QAMMapper",
+      "params": {
+        "bits_per_symbol": 4.0
+      },
+      "ui": {
+        "x": 40.0,
+        "y": 400.0
+      }
+    },
+    {
+      "id": "drv_y",
+      "type": "IQDriver",
+      "params": {
+        "v_pi": 4.0,
+        "predistort": true,
+        "drive_ratio": 0.4,
+        "pulse_shaping": true,
+        "roll_off": 0.1
+      },
+      "ui": {
+        "x": 40.0,
+        "y": 490.0
+      }
+    },
+    {
+      "id": "mod_y",
+      "type": "IQModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 190.0,
+        "y": 310.0
+      }
+    },
+    {
+      "id": "pbc",
+      "type": "PolarizationCombiner",
+      "params": {},
+      "ui": {
+        "x": 190.0,
+        "y": 400.0
+      }
+    },
+    {
+      "id": "fib",
+      "type": "Fiber",
+      "params": {
+        "length": 80.0,
+        "attenuation": 0.2,
+        "dispersion": 17.0
+      },
+      "ui": {
+        "x": 340.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "edfa",
+      "type": "EDFA",
+      "params": {
+        "gain": 16.0,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 340.0,
+        "y": 130.0
+      }
+    },
+    {
+      "id": "osnr",
+      "type": "OSNRMeter",
+      "params": {},
+      "ui": {
+        "x": 490.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "lo",
+      "type": "CWLaser",
+      "params": {
+        "power": 13.0,
+        "wavelength": 1550.0,
+        "linewidth": 100.0
+      },
+      "ui": {
+        "x": 340.0,
+        "y": 220.0
+      }
+    },
+    {
+      "id": "rx",
+      "type": "DualPolarizationReceiver",
+      "params": {
+        "responsivity": 0.8
+      },
+      "ui": {
+        "x": 490.0,
+        "y": 130.0
+      }
+    },
+    {
+      "id": "cdc_x",
+      "type": "DispersionCompensator",
+      "params": {
+        "accumulated_dispersion": 1360.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 490.0,
+        "y": 220.0
+      }
+    },
+    {
+      "id": "smp_x",
+      "type": "IQSampler",
+      "params": {
+        "matched_filter": true,
+        "roll_off": 0.1
+      },
+      "ui": {
+        "x": 640.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "cdc_y",
+      "type": "DispersionCompensator",
+      "params": {
+        "accumulated_dispersion": 1360.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 490.0,
+        "y": 310.0
+      }
+    },
+    {
+      "id": "smp_y",
+      "type": "IQSampler",
+      "params": {
+        "matched_filter": true,
+        "roll_off": 0.1
+      },
+      "ui": {
+        "x": 640.0,
+        "y": 130.0
+      }
+    },
+    {
+      "id": "eq",
+      "type": "ButterflyEqualizer",
+      "params": {},
+      "ui": {
+        "x": 640.0,
+        "y": 220.0
+      }
+    },
+    {
+      "id": "cr_x",
+      "type": "CarrierRecovery",
+      "params": {},
+      "ui": {
+        "x": 790.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "vsa_x",
+      "type": "ConstellationAnalyzer",
+      "params": {
+        "ignore_edges": 128.0
+      },
+      "ui": {
+        "x": 790.0,
+        "y": 130.0
+      }
+    },
+    {
+      "id": "cr_y",
+      "type": "CarrierRecovery",
+      "params": {},
+      "ui": {
+        "x": 790.0,
+        "y": 220.0
+      }
+    },
+    {
+      "id": "vsa_y",
+      "type": "ConstellationAnalyzer",
+      "params": {
+        "ignore_edges": 128.0
+      },
+      "ui": {
+        "x": 790.0,
+        "y": 310.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "rx",
+        "xi"
+      ],
+      "to": [
+        "cdc_x",
+        "i"
+      ]
+    },
+    {
+      "from": [
+        "rx",
+        "xq"
+      ],
+      "to": [
+        "cdc_x",
+        "q"
+      ]
+    },
+    {
+      "from": [
+        "rx",
+        "yi"
+      ],
+      "to": [
+        "cdc_y",
+        "i"
+      ]
+    },
+    {
+      "from": [
+        "rx",
+        "yq"
+      ],
+      "to": [
+        "cdc_y",
+        "q"
+      ]
+    },
+    {
+      "from": [
+        "eq",
+        "x_out"
+      ],
+      "to": [
+        "cr_x",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "eq",
+        "y_out"
+      ],
+      "to": [
+        "cr_y",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "map_x",
+        "out"
+      ],
+      "to": [
+        "drv_x",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "map_y",
+        "out"
+      ],
+      "to": [
+        "drv_y",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "fib",
+        "out"
+      ],
+      "to": [
+        "edfa",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "smp_x",
+        "out"
+      ],
+      "to": [
+        "eq",
+        "x"
+      ]
+    },
+    {
+      "from": [
+        "smp_y",
+        "out"
+      ],
+      "to": [
+        "eq",
+        "y"
+      ]
+    },
+    {
+      "from": [
+        "pbc",
+        "out"
+      ],
+      "to": [
+        "fib",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs_x",
+        "out"
+      ],
+      "to": [
+        "map_x",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs_y",
+        "out"
+      ],
+      "to": [
+        "map_y",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "drv_x",
+        "i"
+      ],
+      "to": [
+        "mod_x",
+        "i"
+      ]
+    },
+    {
+      "from": [
+        "pbs",
+        "out0"
+      ],
+      "to": [
+        "mod_x",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "drv_x",
+        "q"
+      ],
+      "to": [
+        "mod_x",
+        "q"
+      ]
+    },
+    {
+      "from": [
+        "drv_y",
+        "i"
+      ],
+      "to": [
+        "mod_y",
+        "i"
+      ]
+    },
+    {
+      "from": [
+        "pbs",
+        "out1"
+      ],
+      "to": [
+        "mod_y",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "drv_y",
+        "q"
+      ],
+      "to": [
+        "mod_y",
+        "q"
+      ]
+    },
+    {
+      "from": [
+        "edfa",
+        "out"
+      ],
+      "to": [
+        "osnr",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "mod_x",
+        "out"
+      ],
+      "to": [
+        "pbc",
+        "x"
+      ]
+    },
+    {
+      "from": [
+        "mod_y",
+        "out"
+      ],
+      "to": [
+        "pbc",
+        "y"
+      ]
+    },
+    {
+      "from": [
+        "tx",
+        "out"
+      ],
+      "to": [
+        "pbs",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "edfa",
+        "out"
+      ],
+      "to": [
+        "rx",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "lo",
+        "out"
+      ],
+      "to": [
+        "rx",
+        "lo"
+      ]
+    },
+    {
+      "from": [
+        "cdc_x",
+        "i"
+      ],
+      "to": [
+        "smp_x",
+        "i"
+      ]
+    },
+    {
+      "from": [
+        "cdc_x",
+        "q"
+      ],
+      "to": [
+        "smp_x",
+        "q"
+      ]
+    },
+    {
+      "from": [
+        "map_x",
+        "out"
+      ],
+      "to": [
+        "smp_x",
+        "reference"
+      ]
+    },
+    {
+      "from": [
+        "cdc_y",
+        "i"
+      ],
+      "to": [
+        "smp_y",
+        "i"
+      ]
+    },
+    {
+      "from": [
+        "cdc_y",
+        "q"
+      ],
+      "to": [
+        "smp_y",
+        "q"
+      ]
+    },
+    {
+      "from": [
+        "map_y",
+        "out"
+      ],
+      "to": [
+        "smp_y",
+        "reference"
+      ]
+    },
+    {
+      "from": [
+        "cr_x",
+        "out"
+      ],
+      "to": [
+        "vsa_x",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "map_x",
+        "out"
+      ],
+      "to": [
+        "vsa_x",
+        "reference"
+      ]
+    },
+    {
+      "from": [
+        "cr_y",
+        "out"
+      ],
+      "to": [
+        "vsa_y",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "map_y",
+        "out"
+      ],
+      "to": [
+        "vsa_y",
+        "reference"
+      ]
+    }
+  ]
+}

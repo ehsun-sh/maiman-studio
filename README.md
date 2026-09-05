@@ -447,6 +447,57 @@ noise bins rendered onto one grid, the way an instrument shows them. Its resolut
 not cosmetic — widening it raises the ASE trace decibel for decibel and leaves a carrier exactly
 where it is, which is the clearest demonstration of why OSNR needs a stated reference bandwidth.
 
+## 400G and 800G, and what they cost
+
+Three reference transceivers, all dual-polarization coherent, all derived from one number and
+arithmetic. 400G is DP-16QAM at 59.84 GBd — the shape a 400ZR module has. 800G is that payload
+doubled, and there are two ways to double it:
+
+| configuration | GBd | line rate | payload | slot | b/s/Hz |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| 400G DP-16QAM | 59.84 | 479 Gb/s | 400 G | 75 GHz | 5.33 |
+| 800G DP-16QAM | 119.68 | 957 Gb/s | 800 G | 150 GHz | 5.33 |
+| 800G DP-64QAM | 79.79 | 957 Gb/s | 800 G | 100 GHz | 8.00 |
+
+Line rate is baud × bits × 2 polarizations; a 400 Gb/s payload inside 479 leaves 16.4 % for forward
+error correction and framing. **Nothing here is quoted from a standard** — the 800G symbol rates
+follow from the 400G one, and the required OSNR below is *measured*: a noise-loaded link, bisected
+until the **counted** bit error rate lands on the threshold, then compared against a relation that
+knows nothing about any of it.
+
+| configuration | closed form | ideal DSP | penalty | blind equaliser |
+| :--- | ---: | ---: | ---: | ---: |
+| 400G DP-16QAM | 19.47 dB | 19.78 dB | +0.31 | 20.25 dB |
+| 800G DP-16QAM | 22.48 dB | 22.86 dB | +0.38 | 23.32 dB |
+| 800G DP-64QAM | 26.41 dB | 27.22 dB | +0.81 | 38.03 dB |
+
+The closed form assumes a perfect transmitter, perfect DSP and a noiseless receiver, so the fourth
+column is the transmitter's implementation penalty — growing with the format order, because a
+denser constellation is less forgiving of the modulator's curvature.
+
+**The fifth column is a finding, not a specification.** Nothing rotates the polarization on this
+bench, so the blind butterfly equaliser has nothing to undo and should be free. At 16-QAM it is. At
+64-QAM it diverges and costs eleven decibels: nine constellation radii sit close enough together
+that a noisy sample snaps to the wrong one, and the correction that follows is large and in the
+wrong direction. A single tap recovers all of it and a step ten times smaller most of it, so the
+structure is right and the adaptation is not. A normalised update is the textbook fix, it moves
+every other format's answer with it, and it is therefore its own piece of work.
+
+With the DSP out of the way, the 800G choice is two numbers:
+
+    twice the baud, same format    +3.08 dB of OSNR, twice the spectrum
+    denser format, less baud       +4.36 dB of OSNR, two thirds of it
+
+The first is the price of bandwidth and is 3 dB in theory: twice the symbol rate collects twice the
+noise and nothing else changes. The second buys a third of the spectrum back, and is what a link
+with filled fibre and optical SNR to spare pays for it.
+
+`maiman.analysis` carries the bridge these rest on — `snr_from_osnr`, `snr_for_ber` and
+`required_osnr` — and the two reference designs ship as
+[`examples/zr400.maiman`](examples/zr400.maiman) and
+[`examples/zr800.maiman`](examples/zr800.maiman), laid out and openable in the studio.
+[`examples/reference_rates.py`](examples/reference_rates.py) builds them and prints the tables.
+
 ## Mixing products add in field, not in power
 
 A link is not one fibre. The four-wave mixing product a span generates arrives on top of the one
@@ -895,7 +946,7 @@ time window, and results are reproducible.
 | **1 — MVP: linear link** *(essentially done)* | ✅ PRBS → NRZ → laser → MZM → fiber (α + CD) → PIN → filter → eye/Q/BER, validated end to end. **Python only, no GUI.** | ~2–3 months |
 | **1.5 — Nonlinear & amplified** ✅ | Adaptive-step SSFM, Kerr, EDFA with ASE, OSNR, PMD, APD, dispersion slope and its third-order term, cross-polarization Kerr coupling, inter-channel stimulated Raman scattering | ~2 months |
 | **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier phase recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km with blind estimation of the accumulated value, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
-| **3 — GUI & WDM** | ✅ Wavelength-selective filters, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, and a schematic editor: add, wire, move and delete blocks, edit parameters, run, sweep, open and save · 400G/800G references, CuPy back-end | ~6 months |
+| **3 — GUI & WDM** | ✅ Wavelength-selective filters, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — and 400G/800G reference designs validated against the OSNR relations · CuPy back-end | ~6 months |
 | **4 — PIC** | Waveguides, ring resonators, MMI, MZI via integration with an existing S-matrix solver; PDK import | — |
 
 ¹ One developer, part-time. Estimates, not commitments.

@@ -15,6 +15,7 @@ import math
 import numpy as np
 
 from .modulation import (
+    ber_qam,
     error_vector_magnitude,
     indices_to_bits,
     nearest_indices,
@@ -118,6 +119,121 @@ def osnr(signal: OpticalSignal, *, reference_bandwidth: float = OSNR_REFERENCE_B
 # --------------------------------------------------------------------------
 # Decision-circuit analysis
 # --------------------------------------------------------------------------
+
+
+def snr_from_osnr(
+    osnr_db: float,
+    *,
+    symbol_rate: float,
+    polarizations: int = 2,
+    reference_bandwidth: float = OSNR_REFERENCE_BANDWIDTH,
+) -> float:
+    """Electrical SNR per tributary [dB] that an optical SNR delivers.
+
+    The two are the same ratio counted over different bandwidths, and the whole
+    conversion is that difference::
+
+        SNR = (2 / polarizations) * OSNR * B_ref / R_s
+
+    OSNR is the *total* signal power over the noise in a fixed 12.5 GHz slice,
+    summed over both polarizations. What a coherent receiver actually sees, after
+    a matched filter has confined the noise to the symbol band, is one
+    tributary's power against the noise in ``R_s``. Three factors take you from
+    one to the other, and the third is the one that catches people out:
+
+    * the reference bandwidth is replaced by the symbol rate, which for a
+      60 GBd channel is a factor of five the wrong way;
+    * on a dual-polarization link each tributary carries half the launched power
+      and hears half the ASE, and those two halvings do *not* cancel, because the
+      reference bandwidth has not halved with them — hence the leading
+      ``2 / polarizations``, which is 1 for a single-polarization link and
+      one half for a dual-polarization one;
+    * nothing here accounts for the transmitter, the DSP or the receiver's own
+      shot and thermal noise. This is the optical limit, and a real link sits
+      below it by its implementation penalty.
+
+    Set ``polarizations=1`` for a single-polarization link, where the receiver
+    hears all of the signal and only the co-polarized half of the ASE, and the
+    relation becomes ``SNR = 2 OSNR B_ref / R_s``.
+    """
+    if symbol_rate <= 0.0:
+        raise ValueError(f"symbol rate must be positive, got {symbol_rate}")
+    if polarizations not in (1, 2):
+        raise ValueError(f"polarizations must be 1 or 2, got {polarizations}")
+    ratio = (2.0 / polarizations) * reference_bandwidth / symbol_rate
+    return osnr_db + 10.0 * math.log10(ratio)
+
+
+def osnr_from_snr(
+    snr_db: float,
+    *,
+    symbol_rate: float,
+    polarizations: int = 2,
+    reference_bandwidth: float = OSNR_REFERENCE_BANDWIDTH,
+) -> float:
+    """The optical SNR a given electrical SNR needs. Inverse of :func:`snr_from_osnr`."""
+    return 2.0 * snr_db - snr_from_osnr(
+        snr_db,
+        symbol_rate=symbol_rate,
+        polarizations=polarizations,
+        reference_bandwidth=reference_bandwidth,
+    )
+
+
+def snr_for_ber(target_ber: float, bits_per_symbol: int) -> float:
+    """Symbol SNR [dB] at which Gray-coded square QAM reaches ``target_ber``.
+
+    :func:`maiman.modulation.ber_qam` run backwards, by bisection rather than by
+    a second closed form: the forward direction is the one derived and tested,
+    and a separately written inverse is a second thing to keep in agreement with
+    it. Bisection over a monotone function costs fifty evaluations of an error
+    function and cannot disagree.
+    """
+    if not 0.0 < target_ber < 1.0:
+        raise ValueError(f"target BER must be in (0, 1), got {target_ber}")
+
+    low, high = -20.0, 60.0  # dB; brackets every square QAM up to 1024 points
+    for _ in range(200):
+        middle = 0.5 * (low + high)
+        if ber_qam(10.0 ** (middle / 10.0), bits_per_symbol) > target_ber:
+            low = middle
+        else:
+            high = middle
+    return 0.5 * (low + high)
+
+
+def required_osnr(
+    target_ber: float,
+    bits_per_symbol: int,
+    *,
+    symbol_rate: float,
+    polarizations: int = 2,
+    reference_bandwidth: float = OSNR_REFERENCE_BANDWIDTH,
+) -> float:
+    """Optical SNR [dB] a format needs to reach ``target_ber``, with ideal everything.
+
+    The number a line system is specified by, and the floor a real transceiver is
+    measured against: it assumes a perfect transmitter, perfect DSP and no
+    receiver noise, so anything built sits above it by its implementation
+    penalty. Measured against this engine's own dual-polarization links that
+    penalty is 0.3 dB at 16-QAM and 0.7 dB at 64-QAM — growing with the format
+    order, because a denser constellation is less forgiving of the modulator's
+    curvature.
+
+    Two things move it and they move it in opposite directions, which is the
+    whole of the 400G-to-800G design choice. Doubling the symbol rate costs 3 dB
+    and nothing else. Going from 16-QAM to 64-QAM at the same bit rate cuts the
+    symbol rate by a third — worth 1.8 dB back — and costs about 5.7 dB in
+    required symbol SNR, for a net 4 dB paid to fit the channel into two thirds
+    of the spectrum.
+    """
+    snr_db = snr_for_ber(target_ber, bits_per_symbol)
+    return osnr_from_snr(
+        snr_db,
+        symbol_rate=symbol_rate,
+        polarizations=polarizations,
+        reference_bandwidth=reference_bandwidth,
+    )
 
 
 def ber_from_q(q: float) -> float:
