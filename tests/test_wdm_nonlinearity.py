@@ -10,6 +10,7 @@ rather than imported from the module under test.
 from __future__ import annotations
 
 import math
+from typing import Any
 
 import numpy as np
 import pytest
@@ -269,7 +270,7 @@ def test_mismatched_time_grids_are_refused() -> None:
 
 
 @pytest.mark.parametrize("bad", [{"max_nonlinear_phase": 0.0}, {"max_walkoff_slip": -1.0}])
-def test_step_bounds_must_be_positive(bad: dict[str, float]) -> None:
+def test_step_bounds_must_be_positive(bad: dict[str, Any]) -> None:
     with pytest.raises(ValueError):
         propagate_coupled_ssfm(
             [cw()],

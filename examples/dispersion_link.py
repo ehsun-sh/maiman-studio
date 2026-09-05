@@ -17,6 +17,12 @@ square still holds every bit of it. One static filter puts it back. A link that
 is stone dead at the photodiode returns to back-to-back quality, out to a
 thousand kilometres, with no penalty that grows with distance.
 
+The third table takes D's constancy away. It is not one number across a band:
+standard fibre gains 0.058 ps/nm/km per nanometre, so a channel sixteen
+nanometres up the C band accumulates 74 ps/nm more over 80 km than one at 1550 —
+which is the same size as the mis-settings in the table above it, arriving
+without anybody having mis-set anything.
+
 The last table takes the number away. A receiver is never told how long its fibre
 is, and the third table shows the compensator measuring it — to within nine ps/nm
 from back to back out to a thousand kilometres, which leaves a link as good as
@@ -47,6 +53,7 @@ from maiman.dsp import dispersive_spread
 from maiman.signals import ConstellationMeasurement
 
 DISPERSION = 17.0  # ps/nm/km — standard single-mode fibre at 1550 nm
+SLOPE = 0.058  # ps/nm^2/km — its slope *at 1550*, not the 0.09 quoted at the zero
 V_PI = 4.0
 SYMBOL_RATE = 32e9
 BITS_PER_SYMBOL = 4
@@ -191,6 +198,34 @@ def main() -> None:
     # The last two columns are the ones to read together. Being right in ps/nm is
     # not the claim; leaving behind a link as good as one that was told the
     # answer is.
+    # The slope: D is not one number, and one setting cannot serve a band.
+    #
+    # Everything above holds D fixed. It is not. Standard fibre gains
+    # 0.058 ps/nm/km of dispersion per nanometre, so a channel at the top of the
+    # C band accumulates measurably more of it than one at 1550 — and the table
+    # of mis-settings above already said what that costs. This is the same
+    # penalty arriving without anyone having mis-set anything.
+    print(f"\n  Slope {SLOPE:g} ps/nm^2/km: one compensator, set for 1550 nm, across the band")
+    print("    channel   D there   D*L there  mismatch        EVM       EVM")
+    print("                                                one setting   its own")
+    print("  " + "-" * 68)
+    graph, analyzer, compensator = build(80.0, compensate_km=80.0)
+    fiber = next(c for c in graph.components if isinstance(c, Fiber))
+    lasers = [c for c in graph.components if c.label in ("tx", "lo")]
+    fiber._values = {**fiber._values, "dispersion_slope": SLOPE}
+    for offset in (0.0, 2.0, 4.0, 8.0, 16.0):
+        wavelength = WAVELENGTH + offset
+        for laser in lasers:
+            laser._values = {**laser._values, "wavelength": wavelength}
+        compensator._values = {**compensator._values, "wavelength": wavelength}
+        here = fiber.dispersion_at(wavelength * 1e-9) * 1e6
+        one = graph.run()[analyzer]
+        own = graph.run(overrides={(compensator, "accumulated_dispersion"): here * 80.0})[analyzer]
+        print(
+            f"  {wavelength:8.0f} nm {here:9.3f} {here * 80.0:11.1f} "
+            f"{(here - DISPERSION) * 80.0:+9.1f}   {one.evm * 100:8.2f}% {own.evm * 100:8.2f}%"
+        )
+
     print("\n  Blind: the compensator is given nothing and finds it")
     print("            accumulated   estimated     error   contrast        EVM       EVM")
     print("  span          [ps/nm]     [ps/nm]   [ps/nm]              declared     blind")

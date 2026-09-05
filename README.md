@@ -447,6 +447,50 @@ noise bins rendered onto one grid, the way an instrument shows them. Its resolut
 not cosmetic — widening it raises the ASE trace decibel for decibel and leaves a carrier exactly
 where it is, which is the clearest demonstration of why OSNR needs a stated reference bandwidth.
 
+## D is not one number
+
+Standard fibre gains 0.058 ps/nm/km of dispersion for every nanometre up the
+band. Set `dispersion_slope` and the fibre stops pretending otherwise — and the same
+coefficient shows up in two places at once, because it is the same coefficient.
+
+**Across a comb**, channels no longer share a dispersion, so one compensator setting cannot serve
+all of them. Over 80 km, with the compensator set for 1550 nm:
+
+| channel | D there | D·L there | mismatch | EVM, one setting | EVM, its own |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1550 nm | 17.000 | 1360.0 | +0.0 | 1.68 % | 1.68 % |
+| 1554 nm | 17.232 | 1378.6 | +18.6 | 4.07 % | 1.68 % |
+| 1558 nm | 17.464 | 1397.1 | +37.1 | 7.76 % | 1.68 % |
+| 1566 nm | 17.928 | 1434.2 | +74.2 | 15.23 % | 1.68 % |
+
+That is the same size of penalty as the mis-settings table above it, arriving without anybody
+having mis-set anything. It is why a single dispersion-compensating fibre never flattened a whole
+C-band, and why coherent receivers carry a per-channel setting.
+
+**Within one channel** the slope is a cubic phase, and cubic phase broadens a pulse
+*asymmetrically* where β₂ broadens it evenly. It is honestly small at these baud rates: over
+1000 km the cubic phase across a 32 GBd band is about 0.04 radians and costs a tenth of a point of
+EVM. `accumulated_slope` on the compensator removes it anyway, and the test that it does is worth
+having because a slope compensation with the wrong sign *doubles* the residue rather than removing
+it — and nothing about the width of a pulse could ever tell you.
+
+**β₃ is not the slope by another name.** Even at zero slope a fibre has a nonzero β₃, because
+holding D flat across wavelength is itself a statement about how β₂ varies:
+
+    beta3 = (lambda^2 / 2*pi*c)^2 * (S + 2*D/lambda)
+
+For standard fibre at 1550 nm, D = 17 and S = 0.058 give β₃ = 0.13 ps³/km, the value the
+literature quotes. Feeding it S = 0.09 — the slope at the *zero-dispersion* wavelength, which is
+the number datasheets lead with — gives 0.18, and is the easiest way to be forty percent wrong.
+
+The cubic term's sign is derived from the same Taylor expansion of β(ω) that gives the group delay
+and the dispersion, not written down, because with this module's transform pair the quadratic and
+cubic terms land on *opposite* signs. Broadening is even in β₃, so a sign error produces exactly
+the right width and exactly the wrong skew; the tests measure the skew.
+
+Left at zero the slope changes nothing. Every number taken before it existed still comes out, on
+the same samples.
+
 ## Finding the dispersion without being told it
 
 A dispersion compensator has to be set to within a few ps/nm. Over 80 km at 32 GBd the true value
@@ -738,7 +782,7 @@ time window, and results are reproducible.
 | :--- | :--- | :--- |
 | **0 — Foundations** ✅ | Signal model, context, port types, component base, registry, scheduler, `.maiman` project format, sweeps, CI | ~1 month |
 | **1 — MVP: linear link** *(essentially done)* | ✅ PRBS → NRZ → laser → MZM → fiber (α + CD) → PIN → filter → eye/Q/BER, validated end to end. **Python only, no GUI.** | ~2–3 months |
-| **1.5 — Nonlinear & amplified** ✅ | Adaptive-step SSFM, Kerr, EDFA with ASE, OSNR, PMD, APD | ~2 months |
+| **1.5 — Nonlinear & amplified** ✅ | Adaptive-step SSFM, Kerr, EDFA with ASE, OSNR, PMD, APD, dispersion slope and its third-order term | ~2 months |
 | **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier phase recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km with blind estimation of the accumulated value, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
 | **3 — GUI & WDM** | ✅ Wavelength-selective filters, an OSA, coupled-channel propagation (XPM with walk-off, FWM), the session server, and a schematic editor: add, wire, move and delete blocks, edit parameters, run, sweep, open and save · 400G/800G references, CuPy back-end | ~6 months |
 | **4 — PIC** | Waveguides, ring resonators, MMI, MZI via integration with an existing S-matrix solver; PDK import | — |

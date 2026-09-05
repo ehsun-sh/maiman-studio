@@ -23,6 +23,7 @@ from ..kernels import (
     apply_pmd,
     attenuation_db_per_m_to_alpha,
     differential_group_delay,
+    dispersion_slope_to_beta3,
     dispersion_to_beta2,
     fwm_phase_mismatch,
     fwm_product_power,
@@ -53,6 +54,17 @@ class Fiber(Component):
     compute beta2. Two channels a few nanometres apart really do see different
     dispersion, and because every band carries its own centre frequency the model
     gets that right for free — a single-carrier signal model could not express it.
+
+    **The slope is what makes that difference real.** ``dispersion`` and
+    ``dispersion_slope`` are both quoted at ``reference_wavelength``, and D at
+    any other wavelength is the first of them plus the second times the offset.
+    Left at zero the slope changes nothing: D is flat, beta3 is switched off, and
+    every number this block produced before the slope existed still comes out.
+    Turn it on and two things happen at once, because they are the same
+    coefficient seen from two directions — channels across a comb stop sharing
+    one dispersion, which is why a single compensator cannot flatten a C-band,
+    and each channel's own spectrum picks up a cubic phase, which broadens a
+    pulse *asymmetrically* where beta2 broadens it evenly.
 
     **Channels interact.** Bands do not propagate independently: each one's phase
     is rotated by every other one's power, at twice the rate its own power
@@ -90,7 +102,7 @@ class Fiber(Component):
     the run's generator, which makes a single run reproducible and a sweep with
     repeats an exploration of the distribution.
 
-    Not yet modelled: the dispersion slope (beta3) and Raman scattering. The
+    Not yet modelled: Raman scattering. The
     Kerr coupling is scalar per polarization throughout, so a channel is
     modulated by its neighbours' co-polarized power and not by their orthogonal
     power, which really contributes a third as much; cross-polarization
@@ -106,7 +118,15 @@ class Fiber(Component):
     length = Param(80.0, unit="km", min=0.0, doc="Fiber span length")
     attenuation = Param(0.2, unit="dB/km", min=0.0, doc="Attenuation coefficient")
     dispersion = Param(
-        0.0, unit="ps/nm/km", doc="Dispersion parameter D at the band wavelength (0 disables)"
+        0.0, unit="ps/nm/km", doc="Dispersion parameter D at the reference wavelength (0 disables)"
+    )
+    dispersion_slope = Param(
+        0.0,
+        unit="ps/nm^2/km",
+        doc="Slope dD/dlambda at the reference wavelength (0.058 is typical for SSMF)",
+    )
+    reference_wavelength = Param(
+        1550.0, unit="nm", min=1.0, doc="Wavelength the dispersion and its slope are quoted at"
     )
     nonlinearity = Param(
         0.0, unit="1/W/km", min=0.0, doc="Kerr coefficient gamma (0 disables, and is exact)"
@@ -144,9 +164,37 @@ class Fiber(Component):
         # si() gives dB/m and metres, so their product is dB.
         return self.si("attenuation") * self.si("length")
 
+    def dispersion_at(self, wavelength: float) -> float:
+        """Dispersion parameter D [s/m²] at ``wavelength`` [m].
+
+        ``D(lambda) = D_ref + S * (lambda - lambda_ref)``, linear because that is
+        all one slope can say. With the slope left at zero D is the same at every
+        wavelength, which is what this block used to assume without a reference
+        wavelength to hang the assumption on.
+        """
+        return self.si("dispersion") + self.si("dispersion_slope") * (
+            wavelength - self.si("reference_wavelength")
+        )
+
     def beta2_at(self, wavelength: float) -> float:
         """Group-velocity dispersion beta2 [s^2/m] at ``wavelength`` [m]."""
-        return dispersion_to_beta2(self.si("dispersion"), wavelength)
+        return dispersion_to_beta2(self.dispersion_at(wavelength), wavelength)
+
+    def beta3_at(self, wavelength: float) -> float:
+        """Third-order dispersion beta3 [s^3/m] at ``wavelength`` [m].
+
+        Nonzero even at zero slope, because holding D flat across wavelength is
+        itself a statement about how beta2 varies — see
+        :func:`maiman.kernels.dispersion_slope_to_beta3`. The block reproduces
+        its own history anyway: with ``dispersion_slope`` at its default the
+        cubic term is switched off entirely rather than set to that residue, so
+        every result taken before the slope existed still holds exactly.
+        """
+        if self.si("dispersion_slope") == 0.0:
+            return 0.0
+        return dispersion_slope_to_beta3(
+            self.dispersion_at(wavelength), self.si("dispersion_slope"), wavelength
+        )
 
     def mean_dgd(self) -> float:
         """Expected differential group delay over this span [s].
@@ -163,8 +211,12 @@ class Fiber(Component):
         Evaluated with beta2 averaged over the two wavelengths, which is the
         trapezoidal value of ``integral beta2 domega`` and so is symmetric in
         the pair — using either end's beta2 alone would make the delay from A to
-        B differ from the delay from B to A by the dispersion slope, an
-        asymmetry this model does not have a beta3 to justify.
+        B differ from the delay from B to A.
+
+        With a dispersion slope beta2 varies linearly with frequency, and the
+        trapezoidal rule is *exact* for a linear integrand. So the averaging that
+        was a symmetry argument when there was no slope to justify it is now the
+        correct answer rather than a defensible one.
         """
         if band.f0 == reference.f0:
             return 0.0
@@ -238,9 +290,21 @@ class Fiber(Component):
         amplitude = power_factor**0.5
         fields = [
             (
-                propagate_dispersion(band.Ex, band.fs, self.beta2_at(band.wavelength), distance)
+                propagate_dispersion(
+                    band.Ex,
+                    band.fs,
+                    self.beta2_at(band.wavelength),
+                    distance,
+                    self.beta3_at(band.wavelength),
+                )
                 * amplitude,
-                propagate_dispersion(band.Ey, band.fs, self.beta2_at(band.wavelength), distance)
+                propagate_dispersion(
+                    band.Ey,
+                    band.fs,
+                    self.beta2_at(band.wavelength),
+                    distance,
+                    self.beta3_at(band.wavelength),
+                )
                 * amplitude,
             )
             for band in signal.bands
@@ -274,6 +338,7 @@ class Fiber(Component):
         for group in groups:
             reference = group[0]
             beta2 = [self.beta2_at(band.wavelength) for band in group]
+            beta3 = [self.beta3_at(band.wavelength) for band in group]
             walkoff = [self.walkoff_of(band, reference) for band in group]
             solved = []
             for axis in ("Ex", "Ey"):
@@ -283,6 +348,7 @@ class Fiber(Component):
                     beta2=beta2,
                     walkoff=walkoff,
                     gamma=gamma,
+                    beta3=beta3,
                     alpha=alpha,
                     distance=distance,
                     max_nonlinear_phase=self.max_nonlinear_phase,

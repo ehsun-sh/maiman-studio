@@ -42,23 +42,62 @@ def dispersion_to_beta2(dispersion: float, wavelength: float) -> float:
     return -dispersion * wavelength**2 / (2.0 * np.pi * C_LIGHT)
 
 
+def dispersion_slope_to_beta3(dispersion: float, slope: float, wavelength: float) -> float:
+    """Convert the dispersion slope S [s/m³] to the third-order parameter β₃ [s³/m].
+
+    ``S = dD/dlambda``, and D is itself a function of β₂, so differentiating
+    ``D = -2*pi*c*beta2/lambda**2`` gives
+
+        ``S = (2*pi*c/lambda**2)**2 * beta3 + (4*pi*c/lambda**3) * beta2``
+
+    which inverts, with ``beta2`` written out through :func:`dispersion_to_beta2`,
+    to
+
+        ``beta3 = (lambda**2 / 2*pi*c)**2 * (S + 2*D/lambda)``
+
+    **The slope is not β₃ by another name, and D has to be passed in.** Even at
+    zero slope a fibre has a nonzero β₃, because holding D constant across
+    wavelength is itself a statement about how β₂ varies: the ``2*D/lambda``
+    term is what a flat D costs. For standard fibre at 1550 nm, D = 17 ps/nm/km
+    and S = 0.058 ps/nm²/km give β₃ = 0.13 ps³/km, which is the value the
+    literature quotes; feeding it S = 0.09 — the slope at the *zero-dispersion*
+    wavelength, which is the number datasheets lead with — gives 0.18 and is the
+    easiest way to be forty percent wrong here.
+    """
+    return (wavelength**2 / (2.0 * np.pi * C_LIGHT)) ** 2 * (slope + 2.0 * dispersion / wavelength)
+
+
 def propagate_dispersion(
-    field: np.ndarray, sample_rate: float, beta2: float, distance: float
+    field: np.ndarray, sample_rate: float, beta2: float, distance: float, beta3: float = 0.0
 ) -> np.ndarray:
-    """Propagate a complex envelope through pure group-velocity dispersion.
+    """Propagate a complex envelope through group-velocity dispersion and its slope.
 
-    Solves the linear part of the NLSE, ``dA/dz = -(i*beta2/2) * d2A/dT2``, which
-    in the frequency domain is an exact all-pass phase rotation::
+    Solves the linear part of the NLSE,
+    ``dA/dz = -(i*beta2/2) d2A/dT2 + (beta3/6) d3A/dT3``, which in the frequency
+    domain is an exact all-pass phase rotation::
 
-        A(z, w) = A(0, w) * exp(i * beta2 * w**2 * z / 2)
+        A(z, w) = A(0, w) * exp(i * (beta2 * w**2 / 2 - beta3 * w**3 / 6) * z)
 
     Because the transfer function has unit magnitude, this conserves energy
     exactly (up to floating-point) and is exactly invertible by propagating
     ``-distance`` — both of which are asserted in the test suite.
 
-    Only β₂ is modelled, so the result is insensitive to the sign convention of
-    the Fourier transform (ω appears squared). That stops being true as soon as
-    β₃ or a group-delay term is added, so this note is worth keeping.
+    **The two terms have opposite signs, and that is not a typo.** With this
+    module's transform pair, ``x(t) = integral X(w) exp(+i w t) dw``, a time
+    derivative is ``+i w``; the β₂ term carries two of them and the β₃ term
+    three, so ``(i w)**2 = -w**2`` and ``(i w)**3 = -i w**3`` land the two on
+    opposite sides. A β₂-only model is insensitive to the transform's sign
+    convention because ω appears squared — that is exactly what stops being true
+    here, which is why the β₃ term is derived from the same expansion of
+    ``beta(omega)`` as the group-delay term in
+    :func:`propagate_coupled_ssfm` rather than written down.
+
+    β₃ is what makes dispersive broadening *asymmetric*: β₂ delays a frequency in
+    proportion to its offset, so the two sides of a pulse spread alike, while β₃
+    delays in proportion to the square and both sides move the same way. The
+    tests measure that as a skewness, because it is the part of the answer a
+    sign error in the cubic term would get wrong while every width still came out
+    right.
 
     The sign of β₂ itself, however, is *not* free — and the unchirped broadening
     formula cannot detect an error in it, being even in β₂. Only the chirped case
@@ -69,11 +108,11 @@ def propagate_dispersion(
     the caller casts the result back. Correctness first; if profiling later shows
     this matters, the precision policy belongs here, in one place.
     """
-    if distance == 0.0 or beta2 == 0.0:
+    if distance == 0.0 or (beta2 == 0.0 and beta3 == 0.0):
         return field.astype(np.complex128, copy=True)
 
     omega = angular_frequency_grid(field.shape[0], sample_rate)
-    transfer = np.exp(0.5j * beta2 * omega**2 * distance)
+    transfer = np.exp(1j * (0.5 * beta2 * omega**2 - beta3 * omega**3 / 6.0) * distance)
     return np.fft.ifft(np.fft.fft(field.astype(np.complex128)) * transfer)
 
 
@@ -220,6 +259,7 @@ def propagate_coupled_ssfm(
     beta2: Sequence[float],
     walkoff: Sequence[float],
     gamma: float,
+    beta3: Sequence[float] | None = None,
     alpha: float,
     distance: float,
     max_nonlinear_phase: float = 0.005,
@@ -229,7 +269,7 @@ def propagate_coupled_ssfm(
     """Co-propagate several channels through one fiber, coupled by the Kerr effect.
 
     ``dA_k/dz = -(alpha/2) A_k - d_k dA_k/dT - (i beta2_k / 2) d2A_k/dT2
-    + i gamma (|A_k|**2 + 2 sum_{j != k} |A_j|**2) A_k``
+    + (beta3_k / 6) d3A_k/dT3 + i gamma (|A_k|**2 + 2 sum_{j != k} |A_j|**2) A_k``
 
     The whole content of the extension is that factor of two. A channel's own
     power rotates its own phase once; every *other* channel's power rotates it
@@ -311,6 +351,11 @@ def propagate_coupled_ssfm(
             f"beta2 and walkoff must have one entry per field, got {len(beta2)} and "
             f"{len(walkoff)} for {len(fields)} fields"
         )
+    slope = [0.0] * len(fields) if beta3 is None else list(beta3)
+    if len(slope) != len(fields):
+        raise ValueError(
+            f"beta3 must have one entry per field, got {len(slope)} for {len(fields)} fields"
+        )
 
     a = [f.astype(np.complex128, copy=True) for f in fields]
     if not a:
@@ -329,7 +374,13 @@ def propagate_coupled_ssfm(
         return a, PropagationDiagnostics(0, 0.0, 0.0, 0.0, 0.0)
 
     omega = angular_frequency_grid(a[0].shape[0], sample_rate)
-    operators = [0.5j * b * omega**2 - 1j * w * omega for b, w in zip(beta2, walkoff, strict=True)]
+    # One expansion of beta(omega), one operator: the group delay, the dispersion
+    # and its slope are the first three terms of the same series, which is what
+    # fixes their relative signs. See propagate_dispersion.
+    operators = [
+        0.5j * b * omega**2 - 1j * w * omega - 1j * b3 * omega**3 / 6.0
+        for b, w, b3 in zip(beta2, walkoff, slope, strict=True)
+    ]
     ceiling = max_step if max_step is not None else distance
 
     travelled = 0.0

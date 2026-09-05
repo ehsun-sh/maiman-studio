@@ -21,7 +21,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .kernels import dispersion_to_beta2, propagate_dispersion
+from .kernels import dispersion_slope_to_beta3, dispersion_to_beta2, propagate_dispersion
 from .units import C_LIGHT
 
 #: Cross-coupling placed in the initial filter to break the 45-degree symmetry.
@@ -41,6 +41,7 @@ def compensate_dispersion(
     *,
     accumulated_dispersion: float,
     wavelength: float,
+    accumulated_slope: float = 0.0,
 ) -> np.ndarray:
     """Undo accumulated chromatic dispersion on a complex baseband.
 
@@ -49,6 +50,15 @@ def compensate_dispersion(
     links with the same total behave identically, so asking for D and L
     separately would invent a distinction that does not exist on this side of the
     fibre. ``wavelength`` is needed because β₂ is D scaled by λ².
+
+    ``accumulated_slope`` is S·L for the same path, in ps/nm², and is what the
+    filter needs to cancel the *cubic* phase the slope leaves behind. It is
+    separate from the quadratic term because a receiver measures the two
+    separately — the slope is a property of the fibre type and is known from the
+    route, while D·L is what acquisition searches for. Leaving it at zero
+    compensates β₂ alone, which is what a receiver that does not know its fibre
+    can do; over a thousand kilometres of standard fibre that residue is tens of
+    radians across a 32 GBd band and is not small.
 
     Chromatic dispersion is a pure phase, ``exp(i β₂ ω² z / 2)``, with unit
     magnitude at every frequency. Nothing is lost and nothing is buried under
@@ -71,7 +81,14 @@ def compensate_dispersion(
     ``ignore_edges`` on the analysers already does.
     """
     beta2 = dispersion_to_beta2(accumulated_dispersion / _UNIT_LENGTH, wavelength)
-    return propagate_dispersion(baseband, sample_rate, beta2, -_UNIT_LENGTH)
+    beta3 = (
+        dispersion_slope_to_beta3(
+            accumulated_dispersion / _UNIT_LENGTH, accumulated_slope / _UNIT_LENGTH, wavelength
+        )
+        if accumulated_slope != 0.0
+        else 0.0
+    )
+    return propagate_dispersion(baseband, sample_rate, beta2, -_UNIT_LENGTH, beta3)
 
 
 def dispersive_spread(

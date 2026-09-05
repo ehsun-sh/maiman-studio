@@ -103,6 +103,13 @@ class DispersionCompensator(Component):
     beside the estimate, which is the useful way to use both: declare what the
     span should be, and read off how close a blind receiver would have got.
 
+    ``accumulated_slope`` is S·L, in ps/nm², and removes the cubic phase the
+    fibre's dispersion slope leaves behind. It is a separate parameter rather
+    than something derived from the first because a receiver knows the two by
+    different means: the slope follows from the fibre type on the route, while
+    D·L is what acquisition measures. The blind search estimates the quadratic
+    term only, so on a link with slope the slope is still declared.
+
     ``wavelength`` must be the *signal* wavelength, since β₂ scales as λ².
     """
 
@@ -111,6 +118,11 @@ class DispersionCompensator(Component):
 
     accumulated_dispersion = Param(
         0.0, unit="ps/nm", doc="Total D*L to remove; positive for standard fiber (0 disables)"
+    )
+    accumulated_slope = Param(
+        0.0,
+        unit="ps/nm^2",
+        doc="Total S*L to remove; the cubic phase the dispersion slope leaves (0 disables)",
     )
     wavelength = Param(1550.0, unit="nm", min=1.0, doc="Signal wavelength, for the lambda^2 in b2")
     estimate = BoolParam(
@@ -149,6 +161,7 @@ class DispersionCompensator(Component):
             )
 
         declared = self.si("accumulated_dispersion")
+        slope = self.si("accumulated_slope")
         wavelength = self.si("wavelength")
 
         baseband = np.asarray(in_phase.samples).astype(np.complex128)
@@ -166,12 +179,13 @@ class DispersionCompensator(Component):
             )
             accumulated, contrast = found.accumulated_dispersion, found.contrast
 
-        if accumulated != 0.0:
+        if accumulated != 0.0 or slope != 0.0:
             baseband = compensate_dispersion(
                 baseband,
                 in_phase.fs,
                 accumulated_dispersion=accumulated,
                 wavelength=wavelength,
+                accumulated_slope=slope,
             )
 
         # Reported against the occupied bandwidth rather than the sample rate: the

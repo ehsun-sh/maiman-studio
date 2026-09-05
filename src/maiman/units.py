@@ -80,6 +80,11 @@ _TO_SI: dict[str, Callable[[float], float]] = {
     # it is what a receiver-side compensator is specified by; the length has
     # already been absorbed and cannot be recovered from it.
     "ps/nm": lambda x: x * 1e-3,
+    # Dispersion slope: ps/(nm^2*km) -> s/m^3. Note the factor is 1e3 and not a
+    # negative power: the two inverse nanometres outweigh the kilometre.
+    "ps/nm^2/km": lambda x: x * 1e3,
+    # Accumulated slope: ps/nm^2 -> s/m^2, the slope integrated over a span.
+    "ps/nm^2": lambda x: x * 1e6,
     # Nonlinearity: 1/(W*km) -> 1/(W*m)
     "1/W/km": lambda x: x * 1e-3,
     # PMD coefficient: ps/sqrt(km) -> s/sqrt(m)
@@ -115,6 +120,8 @@ _FROM_SI: dict[str, Callable[[float], float]] = {
     "dB/km": lambda x: x * 1e3,
     "ps/nm/km": lambda x: x * 1e6,
     "ps/nm": lambda x: x * 1e3,
+    "ps/nm^2/km": lambda x: x * 1e-3,
+    "ps/nm^2": lambda x: x * 1e-6,
     "1/W/km": lambda x: x * 1e3,
     "ps/sqrt(km)": lambda x: x * 1e12 * math.sqrt(1e3),
     "m": lambda x: x,

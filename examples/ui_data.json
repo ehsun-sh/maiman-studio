@@ -451,6 +451,12 @@
      "unit": "ps/nm",
      "doc": "Total D*L to remove; positive for standard fiber (0 disables)"
     },
+    "accumulated_slope": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "ps/nm^2",
+     "doc": "Total S*L to remove; the cubic phase the dispersion slope leaves (0 disables)"
+    },
     "wavelength": {
      "type": "float",
      "default": 1550.0,
@@ -684,7 +690,20 @@
      "type": "float",
      "default": 0.0,
      "unit": "ps/nm/km",
-     "doc": "Dispersion parameter D at the band wavelength (0 disables)"
+     "doc": "Dispersion parameter D at the reference wavelength (0 disables)"
+    },
+    "dispersion_slope": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "ps/nm^2/km",
+     "doc": "Slope dD/dlambda at the reference wavelength (0.058 is typical for SSMF)"
+    },
+    "reference_wavelength": {
+     "type": "float",
+     "default": 1550.0,
+     "unit": "nm",
+     "min": 1.0,
+     "doc": "Wavelength the dispersion and its slope are quoted at"
     },
     "nonlinearity": {
      "type": "float",
