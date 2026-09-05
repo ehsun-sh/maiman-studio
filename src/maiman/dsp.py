@@ -569,6 +569,63 @@ def godard_radius(constellation: np.ndarray) -> float:
     return float(np.mean(moduli**4) / second)
 
 
+def radius_fit(symbols: np.ndarray, constellation: np.ndarray) -> float:
+    """Mean squared distance from each sample's modulus to the nearest ring.
+
+    The statistic the second stage adapts on, read as a score rather than a
+    gradient. A tributary that has been separated sits on the rings; a mixture,
+    or one an over-parameterised filter has smeared, does not.
+    """
+    radii = constellation_radii(np.asarray(constellation).astype(np.complex128))
+    magnitude = np.abs(np.asarray(symbols))
+    nearest = radii[np.argmin(np.abs(magnitude[:, None] - radii[None, :]), axis=1)]
+    return float(np.mean((magnitude - nearest) ** 2))
+
+
+def butterfly_separate(
+    x: np.ndarray,
+    y: np.ndarray,
+    constellation: np.ndarray,
+    **kwargs: object,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, bool]:
+    """Equalise twice — settling the centre tap first, and not — and keep the better.
+
+    Returns ``(out_x, out_y, weights, settled)``.
+
+    The two ways of running the first stage each fail where the other works, and
+    which one a channel needs is not knowable in advance: a rotation is
+    memoryless and wants the centre tap alone, residual dispersion is not and
+    wants every tap. So both are run and :func:`radius_fit` decides, which is not
+    a new criterion — it is the same one the second stage already steers by, read
+    as a score.
+
+    Measured over ten cases, it picks right in all of them: 64-QAM through a
+    rotated channel goes from 3568 symbol errors to zero at every angle, 16-QAM
+    with 60 ps/nm of residual dispersion keeps the 44 it had, and 16-QAM at
+    fifteen taps with nothing to correct improves from 544 to 53. Nothing it was
+    tried on got worse.
+
+    It costs one extra pass of an adaptation that is already the slowest thing in
+    the receiver chain. That is the trade, and it is why the block exposes a way
+    to turn it off.
+    """
+    candidates = []
+    count = np.asarray(x).shape[0]
+    for settle in (0, count):
+        out_x, out_y, weights = butterfly_equalize(
+            x,
+            y,
+            constellation,
+            settle_symbols=settle,
+            **kwargs,  # type: ignore[arg-type]
+        )
+        score = radius_fit(out_x, constellation) + radius_fit(out_y, constellation)
+        candidates.append((score, settle > 0, out_x, out_y, weights))
+
+    _, settled, out_x, out_y, weights = min(candidates, key=lambda entry: entry[0])
+    return out_x, out_y, weights, settled
+
+
 def butterfly_equalize(
     x: np.ndarray,
     y: np.ndarray,
@@ -577,6 +634,7 @@ def butterfly_equalize(
     taps: int = 7,
     step: float = 3e-3,
     cma_symbols: int | None = None,
+    settle_symbols: int = 0,
     passes: int = 2,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Blindly separate two mixed tributaries with an adaptive 2x2 FIR filter.
@@ -598,34 +656,37 @@ def butterfly_equalize(
     radii, which is what actually closes it. On QPSK the two stages are identical
     because there is only one radius.
 
-    **The first stage is also what stops this working at 64-QAM, and the two are
-    the same mechanism.** Driving every sample onto one radius is exactly right
-    for QPSK, survivable for 16-QAM, and destructive for a constellation whose
-    points run from 0.218 to 1.528 on a unit-power grid: the amplitude structure
-    the format carries is the thing being flattened. Measured on an otherwise
-    ideal link, total symbol errors over both tributaries out of 8192:
+    **The first stage used to be what stopped this working at 64-QAM.** Driving
+    every sample onto one radius is exactly right for QPSK, survivable for
+    16-QAM, and destructive for a constellation whose points run from 0.218 to
+    1.528 on a unit-power grid — the amplitude structure the format carries is
+    the thing being flattened. It cost 3568 symbol errors out of 8192 on a
+    channel that needed no equalisation at all.
 
-    ==================  =====  =====  =====  =====  =====  =====
-    ``cma_symbols``       0°    15°    30°    45°    72°    90°
-    ==================  =====  =====  =====  =====  =====  =====
-    half (the default)   3568   3552   2950   5397   3762   3048
-    a sixteenth          1493   1333   7496   7390   7298   1530
-    none                    0    395   7056   7466   7497      0
-    ==================  =====  =====  =====  =====  =====  =====
+    ``settle_symbols`` is what fixed it, and the reason it works says what the
+    problem was. A polarization rotation is *memoryless*: a 2x2 complex matrix,
+    four numbers. Fitting it with seven taps per path means twenty-eight, and the
+    twenty-four that are not needed fill with gradient noise, which the
+    single-radius cost has no per-sample truth to hold down. Adapting only the
+    centre tap while that stage runs leaves 64-QAM at **zero errors at every
+    rotation**, where a single tap had already been measured to leave a residual
+    of 0.0013 against seven taps' 0.29.
 
-    Read down: the stage that carries a rotated channel is the stage that ruins
-    64-QAM, and there is no setting of it that does both. Four ways out were
-    tried and measured — gating the second stage's decision on whether the ring
-    it picked was credible, normalising the update by the window energy so that
-    gradient noise stops scaling with the tap count, annealing the second stage's
-    step, and shortening the first stage. The first three change nothing at
-    64-QAM (freezing the second stage entirely still leaves 3249 errors, which is
-    what identified the first stage as the culprit); the fourth is the table
-    above. What this needs is a different first stage — a multi-modulus or
-    partial-constellation algorithm — and that is a piece of work, not a
-    parameter.
+    It is not free, which is why it is a parameter and not the new behaviour. An
+    eye closed by *memory* rather than by rotation — residual dispersion after an
+    imperfect compensator — needs every tap moving during the smooth first stage,
+    because the radius-directed second one cannot bootstrap from a closed eye. At
+    60 ps/nm of residual, settling the centre tap first costs 16-QAM 1955 errors
+    where letting all the taps run costs 44. Choosing between them is
+    :func:`butterfly_separate`'s job.
 
-    QPSK and 16-QAM are unaffected by any of it and recover every rotation.
+    Four other ways out were tried and measured, and none of them moved anything:
+    gating the second stage's decision on whether the ring it picked was
+    credible, normalising the update by the window energy so gradient noise stops
+    scaling with the tap count, annealing the second stage's step, and leaking
+    the weights towards zero. Freezing the second stage entirely still left 3249
+    errors, which is what identified the first stage as the culprit in the first
+    place.
 
     **The singularity.** Nothing in the cost function distinguishes the two
     outputs, so in principle both filters can converge onto the *same* tributary
@@ -678,6 +739,11 @@ def butterfly_equalize(
 
     if cma_symbols is None:
         cma_symbols = count // 2
+    # During the settling phase only the centre tap moves. A polarization
+    # rotation is memoryless — four complex numbers — and letting the other
+    # twenty-four fit it as well is what fills them with gradient noise.
+    settling = np.zeros(taps)
+    settling[centre] = 1.0
 
     out_x = np.zeros(count, dtype=np.complex128)
     out_y = np.zeros(count, dtype=np.complex128)
@@ -702,10 +768,11 @@ def butterfly_equalize(
                 error_x = radii[np.argmin(np.abs(radii - abs(ox)))] ** 2 - abs(ox) ** 2
                 error_y = radii[np.argmin(np.abs(radii - abs(oy)))] ** 2 - abs(oy) ** 2
 
-            weights[0, 0] += step * error_x * ox * np.conj(window_x)
-            weights[0, 1] += step * error_x * ox * np.conj(window_y)
-            weights[1, 0] += step * error_y * oy * np.conj(window_x)
-            weights[1, 1] += step * error_y * oy * np.conj(window_y)
+            gate = settling if (blind and processed < settle_symbols) else 1.0
+            weights[0, 0] += step * error_x * ox * np.conj(window_x) * gate
+            weights[0, 1] += step * error_x * ox * np.conj(window_y) * gate
+            weights[1, 0] += step * error_y * oy * np.conj(window_x) * gate
+            weights[1, 1] += step * error_y * oy * np.conj(window_y) * gate
 
     # The filter cannot produce an output for the first and last half-window.
     out_x[:centre] = out_x[centre]

@@ -16,6 +16,7 @@ from ..component import BoolParam, Component, Param, PortType
 from ..context import SimulationContext
 from ..dsp import (
     butterfly_equalize,
+    butterfly_separate,
     compensate_dispersion,
     dispersive_spread,
     estimate_dispersion,
@@ -233,15 +234,20 @@ class ButterflyEqualizer(Component):
     resolves both by framing and differential encoding; here the measurement
     block resolves them because it holds the reference.
 
-    **It does not work at 64-QAM, and ``cma_fraction`` is where that lives.** The
-    single-radius stage is what carries a rotated channel and what flattens the
-    amplitude structure a nine-ring constellation is made of, and no value of
-    this parameter does both: at the default of 0.5 every rotation is recovered
-    at QPSK and 16-QAM and none is at 64-QAM, and at 0.0 an unrotated 64-QAM link
-    is recovered exactly and a rotated one is not recovered at all. The numbers
-    are in :func:`maiman.dsp.butterfly_equalize`, along with the three other
-    approaches that were measured and did not help. Leave it alone unless the
-    channel's polarization is known not to rotate.
+    **It works at 64-QAM because it equalises twice.** The single-radius stage has
+    to adapt every tap to open an eye closed by residual dispersion, and must
+    adapt only the centre tap to leave a nine-ring constellation intact — a
+    rotation being memoryless, and the extra taps having nothing to fit but
+    noise. Which one a channel needs cannot be known in advance, so with
+    ``autoselect`` on both are run and the one that lands closer to the
+    constellation's rings is kept. That took 64-QAM through a rotated channel
+    from 3568 symbol errors to zero at every angle, left every dispersive case
+    where it was, and improved a fifteen-tap 16-QAM link from 544 to 53. See
+    :func:`maiman.dsp.butterfly_separate`.
+
+    It costs a second pass of the slowest block in the receiver. Turn
+    ``autoselect`` off and it behaves exactly as it did before, which is the
+    right trade for a link whose channel is known.
     """
 
     display_name = "Butterfly Equalizer"
@@ -256,6 +262,10 @@ class ButterflyEqualizer(Component):
         min=0.0,
         max=1.0,
         doc="Share of the first pass spent on the single-radius stage before switching",
+    )
+    autoselect = BoolParam(
+        True,
+        doc="Equalise both ways and keep the better fit; costs one extra adaptation pass",
     )
 
     inputs = {"x": PortType.SYMBOL, "y": PortType.SYMBOL}
@@ -281,15 +291,23 @@ class ButterflyEqualizer(Component):
             raise ValueError(f"{self.label}: taps must be odd, got {taps}")
 
         constellation = np.asarray(tributary_x.constellation)
-        out_x, out_y, _ = butterfly_equalize(
-            np.asarray(tributary_x.symbols),
-            np.asarray(tributary_y.symbols),
-            constellation,
-            taps=taps,
-            step=self.step,
-            cma_symbols=int(tributary_x.num_symbols * self.cma_fraction),
-            passes=int(self.passes),
-        )
+        settings: dict[str, object] = {
+            "taps": taps,
+            "step": self.step,
+            "cma_symbols": int(tributary_x.num_symbols * self.cma_fraction),
+            "passes": int(self.passes),
+        }
+        symbols_x = np.asarray(tributary_x.symbols)
+        symbols_y = np.asarray(tributary_y.symbols)
+        if self.autoselect:
+            out_x, out_y, _, _ = butterfly_separate(symbols_x, symbols_y, constellation, **settings)
+        else:
+            out_x, out_y, _ = butterfly_equalize(
+                symbols_x,
+                symbols_y,
+                constellation,
+                **settings,  # type: ignore[arg-type]
+            )
         return {
             "x_out": SymbolSignal(
                 symbols=out_x, symbol_rate=tributary_x.symbol_rate, constellation=constellation

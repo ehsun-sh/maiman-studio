@@ -478,19 +478,34 @@ def test_power_is_conserved_from_the_combiner_to_the_rotator() -> None:
 # ---------------------------------------------------------------------------
 
 
-def errors_at(rotation: float, bits: int, cma_fraction: float) -> int:
-    """Symbol errors over both tributaries, resolving the blind swap."""
+def errors_at(rotation: float, bits: int, *, settle: bool) -> int:
+    """Symbol errors over both tributaries, with one first stage or the other.
+
+    The selection is pinned rather than left to the block, so that each half of
+    the trade can be measured on its own; what the block does is run both.
+    """
     import dualpol_link
 
+    from maiman.dsp import butterfly_equalize
+
     saved = dualpol_link.BITS_PER_SYMBOL
+    original = block.butterfly_separate
+
+    def fixed(x, y, constellation, **kwargs):  # type: ignore[no-untyped-def]
+        count = np.asarray(x).shape[0]
+        out_x, out_y, weights = butterfly_equalize(
+            x, y, constellation, settle_symbols=count if settle else 0, **kwargs
+        )
+        return out_x, out_y, weights, settle
+
+    block.butterfly_separate = fixed
     try:
         dualpol_link.BITS_PER_SYMBOL = bits
         graph, analyzers = dualpol_link.build(rotation, equalize=True)
-        equalizer = next(c for c in graph.components if c.label == "eq")
-        equalizer._values = {**equalizer._values, "cma_fraction": cma_fraction}
         taken = {key: graph.run(keep=[])[analyzer] for key, analyzer in analyzers.items()}
     finally:
         dualpol_link.BITS_PER_SYMBOL = saved
+        block.butterfly_separate = original
     direct = taken["xx"].symbol_errors + taken["yy"].symbol_errors
     swapped = taken["xy"].symbol_errors + taken["yx"].symbol_errors
     return min(direct, swapped)
@@ -500,36 +515,80 @@ def errors_at(rotation: float, bits: int, cma_fraction: float) -> int:
 @pytest.mark.parametrize("bits", [2, 4])
 def test_the_default_recovers_every_rotation_at_the_low_orders(rotation: float, bits: int) -> None:
     """Which is what the single-radius first stage is there for."""
-    assert errors_at(rotation, bits, 0.5) == 0
+    assert errors_at(rotation, bits, settle=False) == 0
 
 
-def test_the_first_stage_carries_the_rotation_and_ruins_64_qam(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    """The trade, pinned, because there is no setting that does both.
+def test_settling_the_centre_tap_is_what_makes_64_qam_work() -> None:
+    """And letting every tap run is what carries an eye closed by memory.
 
-    Driving every sample onto one radius is right for QPSK, survivable for
-    16-QAM, and destructive for a constellation whose points run from 0.218 to
-    1.528 — the amplitude structure the format carries is the thing being
-    flattened. Turn the stage off and an unrotated 64-QAM link comes back exactly;
-    turn it off and a rotated one is not recovered at all.
+    A polarization rotation is memoryless — four complex numbers — so fitting it
+    with seven taps per path leaves twenty-four parameters holding nothing but
+    gradient noise, which the single-radius cost has no per-sample truth to pin
+    down. At 64-QAM that noise is the whole margin.
 
-    This test exists to fail. A first stage that could do both — multi-modulus,
-    or a partial constellation — is a piece of work rather than a parameter, and
-    when it lands these numbers are how it will announce itself.
+    Neither setting wins outright, which is why the block runs both. This pins
+    each half of the trade on its own.
     """
-    # Off: the unrotated channel is recovered exactly, the rotated one not at all.
-    assert errors_at(0.0, 6, 0.0) == 0
-    assert errors_at(30.0, 6, 0.0) > 5000
+    assert errors_at(30.0, 6, settle=False) > 2000
+    assert errors_at(30.0, 6, settle=True) == 0
+    assert errors_at(0.0, 6, settle=False) > 2000
+    assert errors_at(0.0, 6, settle=True) == 0
 
-    # On: every rotation is equally broken, including the one that needs nothing.
-    assert errors_at(0.0, 6, 0.5) > 2000
-    assert errors_at(30.0, 6, 0.5) > 2000
-
-    # And 16-QAM needs it on: without it the 45-degree case collapses.
-    assert errors_at(45.0, 4, 0.0) > 5000
-    assert errors_at(45.0, 4, 0.5) == 0
+    # And the low orders do not care either way.
+    for bits in (2, 4):
+        assert errors_at(45.0, bits, settle=False) == 0
+        assert errors_at(45.0, bits, settle=True) == 0
 
 
-def test_the_fraction_reaches_the_kernel() -> None:
+def rotated_errors(rotation: float, bits: int, **settings: object) -> int:
+    import dualpol_link
+
+    saved = dualpol_link.BITS_PER_SYMBOL
+    try:
+        dualpol_link.BITS_PER_SYMBOL = bits
+        graph, analyzers = dualpol_link.build(rotation, equalize=True)
+        if settings:
+            equalizer = next(c for c in graph.components if c.label == "eq")
+            equalizer._values = {**equalizer._values, **settings}
+        taken = {key: graph.run(keep=[])[a] for key, a in analyzers.items()}
+    finally:
+        dualpol_link.BITS_PER_SYMBOL = saved
+    direct = taken["xx"].symbol_errors + taken["yy"].symbol_errors
+    swapped = taken["xy"].symbol_errors + taken["yx"].symbol_errors
+    return min(direct, swapped)
+
+
+@pytest.mark.parametrize("rotation", [0.0, 30.0, 72.0])
+def test_the_block_equalises_both_ways_and_keeps_the_better(rotation: float) -> None:
+    """Which is what lets one setting serve a rotated channel and a dispersed one.
+
+    The score is :func:`maiman.dsp.radius_fit` — the same statistic the second
+    stage steers by, read as a number rather than a gradient — so this adds no
+    new criterion, only a second candidate to apply the old one to.
+    """
+    assert rotated_errors(rotation, 6) == 0
+
+
+def test_turning_the_selection_off_gives_the_old_answer_back() -> None:
+    """A parameter that costs a pass has to be refusable, and mean something."""
+    assert rotated_errors(30.0, 6, autoselect=False) > 2000
+
+
+def test_the_score_prefers_symbols_that_sit_on_the_rings() -> None:
+    """The selection rests on this, so it is checked on its own."""
+    from maiman.dsp import radius_fit
+    from maiman.modulation import qam_constellation
+
+    points = qam_constellation(6)
+    rng = np.random.default_rng(4)
+    clean = points[rng.integers(0, len(points), 4096)]
+    smeared = clean * (1.0 + 0.25 * rng.normal(size=clean.shape))
+
+    assert radius_fit(clean, points) < 1e-18
+    assert radius_fit(smeared, points) > 1e-3
+
+
+def test_the_settings_reach_the_kernel() -> None:
     """A parameter the component accepts and then ignores is worse than none."""
     import dualpol_link
 
@@ -541,18 +600,50 @@ def test_the_fraction_reaches_the_kernel() -> None:
         dualpol_link.BITS_PER_SYMBOL = saved
     equalizer = next(c for c in graph.components if c.label == "eq")
 
-    seen: list[int | None] = []
-    original = block.butterfly_equalize
+    seen: list[tuple[object, object]] = []
+    original = block.butterfly_separate
 
     def record(*args: object, **kwargs: object) -> object:
-        seen.append(kwargs.get("cma_symbols"))  # type: ignore[arg-type]
+        seen.append((kwargs.get("cma_symbols"), kwargs.get("taps")))
         return original(*args, **kwargs)  # type: ignore[arg-type]
 
-    block.butterfly_equalize = record  # type: ignore[assignment]
+    block.butterfly_separate = record  # type: ignore[assignment]
     try:
-        equalizer._values = {**equalizer._values, "cma_fraction": 0.25}
+        equalizer._values = {**equalizer._values, "cma_fraction": 0.25, "taps": 9.0}
         graph.run(keep=[])
     finally:
-        block.butterfly_equalize = original
+        block.butterfly_separate = original
 
-    assert seen == [1024], seen  # a quarter of the 4096-symbol window
+    assert seen == [(1024, 9)], seen  # a quarter of the 4096-symbol window
+
+
+def test_settling_stops_when_the_single_radius_stage_does() -> None:
+    """The taps have to be released for the second stage, or memory is unfixable.
+
+    Settling is what keeps the extra taps out of the single-radius stage's way.
+    Letting it run past that stage would freeze them for good — and on a channel
+    with no memory nothing would notice, because there is nothing for them to do.
+    So this gives the channel memory: a two-tap mixer the centre tap alone cannot
+    invert, and asks whether the filter ever grew the taps to invert it.
+    """
+    from maiman.dsp import butterfly_equalize
+    from maiman.modulation import qam_constellation
+
+    points = qam_constellation(4)
+    rng = np.random.default_rng(11)
+    count = 4096
+    clean_x = points[rng.integers(0, len(points), count)]
+    clean_y = points[rng.integers(0, len(points), count)]
+
+    # One symbol of inter-symbol interference: memoryless filtering cannot undo it.
+    mixed_x = clean_x + 0.35 * np.roll(clean_x, 1)
+    mixed_y = clean_y + 0.35 * np.roll(clean_y, 1)
+
+    _, _, weights = butterfly_equalize(
+        mixed_x, mixed_y, points, taps=7, settle_symbols=count, cma_symbols=count // 2
+    )
+    centre = 3
+    off_centre = float(np.abs(np.delete(weights[0, 0], centre)).max())
+    assert off_centre > 0.05, (
+        f"the taps were never released: largest off-centre weight {off_centre:.3g}"
+    )

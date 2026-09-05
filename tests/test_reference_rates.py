@@ -177,32 +177,22 @@ def test_each_reference_needs_the_osnr_the_relation_predicts(name: str, bits: in
     assert measured - predicted < 1.2, f"{name}: penalty {measured - predicted:.2f} dB"
 
 
-def test_the_blind_equaliser_costs_nothing_at_16_qam_and_diverges_at_64() -> None:
-    """A finding, pinned so that fixing it will show up as this test failing.
+def test_the_blind_equaliser_is_nearly_free_at_every_format() -> None:
+    """Nothing rotates the polarization here, so a perfect separator is the identity.
 
-    Nothing rotates the polarization on this bench, so an ideal separator is the
-    identity and the equaliser should be free. At 16-QAM it is, to within half a
-    decibel. At 64-QAM it costs eleven, because nine constellation radii sit
-    close enough together that a noisy sample snaps to the wrong one and the
-    correction that follows is large and in the wrong direction.
-
-    The structure is not what is wrong — a single tap recovers the whole of it,
-    and so nearly does a step ten times smaller. A normalised update is the
-    textbook fix and moves every other format's answer with it, which is why it
-    is not folded in here.
+    It used to cost eleven decibels at 64-QAM and half a decibel at 16-QAM, which
+    is how the first stage's over-parameterisation was found: a rotation is
+    memoryless, and the taps it does not need fill with gradient noise. The block
+    now equalises both ways and keeps the better fit, and what is left is under a
+    decibel and a half at every format.
     """
     from reference_rates import CONFIGURATIONS, measured_required_osnr
 
-    for name, bits in (("400G DP-16QAM", 4), ("800G DP-16QAM", 4)):
+    for name, bits in (("400G DP-16QAM", 4), ("800G DP-16QAM", 4), ("800G DP-64QAM", 6)):
         rate, _, _ = CONFIGURATIONS[name]
         clean = measured_required_osnr(rate, bits, equalize=False)
         blind = measured_required_osnr(rate, bits, equalize=True)
-        assert blind - clean < 0.6, f"{name}: {blind - clean:.2f} dB"
-
-    rate, _, _ = CONFIGURATIONS["800G DP-64QAM"]
-    clean = measured_required_osnr(rate, 6, equalize=False)
-    blind = measured_required_osnr(rate, 6, equalize=True)
-    assert blind - clean > 5.0, f"64-QAM penalty has changed: {blind - clean:.2f} dB"
+        assert 0.0 < blind - clean < 1.5, f"{name}: {blind - clean:.2f} dB"
 
 
 # ---------------------------------------------------------------------------

@@ -504,41 +504,37 @@ knows nothing about any of it.
 
 | configuration | closed form | ideal DSP | penalty | blind equaliser |
 | :--- | ---: | ---: | ---: | ---: |
-| 400G DP-16QAM | 19.47 dB | 19.78 dB | +0.31 | 20.25 dB |
+| 400G DP-16QAM | 19.47 dB | 19.78 dB | +0.31 | 20.24 dB |
 | 800G DP-16QAM | 22.48 dB | 22.86 dB | +0.38 | 23.32 dB |
-| 800G DP-64QAM | 26.41 dB | 27.22 dB | +0.81 | 38.03 dB |
+| 800G DP-64QAM | 26.41 dB | 27.22 dB | +0.81 | 28.56 dB |
 
 The closed form assumes a perfect transmitter, perfect DSP and a noiseless receiver, so the fourth
 column is the transmitter's implementation penalty — growing with the format order, because a
 denser constellation is less forgiving of the modulator's curvature.
 
-**The fifth column is a finding, not a specification.** Nothing rotates the polarization on this
-bench, so the blind butterfly equaliser has nothing to undo and should be free. At 16-QAM it is. At
-64-QAM it diverges and costs eleven decibels: nine constellation radii sit close enough together
-that a noisy sample snaps to the wrong one, and the correction that follows is large and in the
-wrong direction. A single tap recovers all of it and a step ten times smaller most of it, so the
-structure is right and the adaptation is not.
+**The fifth column is what the DSP costs on top**, and it used to be a finding. Nothing rotates the
+polarization on this bench, so a perfect separator would be the identity and the blind butterfly
+equaliser should be free. At 64-QAM it cost eleven decibels.
 
-That was chased down. It is not the step and not the decision: freezing the radius-directed stage
-entirely still leaves 3249 errors, which is what identified the **first** stage as the culprit.
-Driving every sample onto one radius is right for QPSK, survivable for 16-QAM, and destructive for a
-constellation whose points run from 0.218 to 1.528 on a unit-power grid — the amplitude structure
-the format carries is the thing being flattened. And the same stage is what carries a rotated
-channel, so there is no setting that does both:
+Chasing that down: it is not the step and not the decision — freezing the radius-directed stage
+entirely still left 3249 symbol errors, which identified the *first* stage. A polarization rotation
+is **memoryless**: a 2×2 complex matrix, four numbers. Fitting it with seven taps per path means
+twenty-eight, and the twenty-four that are not needed fill with gradient noise, which the
+single-radius cost has no per-sample truth to hold down. At 64-QAM that noise is the whole margin;
+a single tap had already been measured to leave a residual of 0.0013 where seven left 0.29.
 
-| `cma_fraction` | 0° | 15° | 30° | 45° | 72° | 90° |
-| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 0.5 (default) | 3568 | 3552 | 2950 | 5397 | 3762 | 3048 |
-| 0.0625 | 1493 | 1333 | 7496 | 7390 | 7298 | 1530 |
-| 0.0 | 0 | 395 | 7056 | 7466 | 7497 | 0 |
+Adapting only the centre tap while that stage runs takes 64-QAM through a rotated channel from 3568
+symbol errors to **zero at every angle** — and breaks the other case, where the eye is closed by
+*memory* rather than by rotation and every tap has to move: at 60 ps/nm of residual dispersion it
+costs 16-QAM 1955 errors where letting them all run costs 44. Neither wins outright, and which one a
+channel needs is not knowable in advance, so the block runs both and keeps whichever lands closer to
+the constellation's rings. That is not a new criterion — it is the statistic the second stage already
+steers by, read as a score. Over ten cases it picks right in all of them, and 16-QAM at fifteen taps
+improved from 544 errors to 53 as well.
 
-Four ways out were measured — gating the second stage's decision on whether the ring it picked was
-credible, normalising the update by the window energy so gradient noise stops scaling with the tap
-count, annealing the second stage's step, and shortening the first stage. Only the last moves
-anything, and it moves it the other way. What this needs is a different first stage — multi-modulus,
-or a partial constellation — which is a piece of work rather than a parameter. `cma_fraction` is now
-reachable so the trade is at least the user's to make, and there is a test that will fail when a
-first stage that does both arrives.
+Five other approaches were measured and moved nothing: gating the second stage's decision on whether
+the ring it picked was credible, normalising the update by the window energy, annealing the second
+stage's step, leaking the weights towards zero, and shortening the first stage.
 
 With the DSP out of the way, the 800G choice is two numbers:
 
