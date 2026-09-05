@@ -447,6 +447,114 @@ noise bins rendered onto one grid, the way an instrument shows them. Its resolut
 not cosmetic — widening it raises the ASE trace decibel for decibel and leaves a carrier exactly
 where it is, which is the clearest demonstration of why OSNR needs a stated reference bandwidth.
 
+## A circuit is not a chain
+
+A fibre link is a chain: each block takes a waveform and returns one, and the scheduler runs them in
+order. A photonic integrated circuit is not. Light in a ring goes round, comes back to the coupler it
+entered by, and interferes with itself; a resonance *is* that feedback at steady state. There is no
+order to run the blocks in, because every port's answer depends on every other port's at once.
+
+So [`maiman/circuit.py`](src/maiman/circuit.py) does a different kind of solve. Every device is a
+**scattering matrix** — for unit amplitude into port *j*, `s[i, j]` is what leaves port *i* — and a
+circuit is which ports are wired to which. Split the ports into external and internal, write the
+wires as a permutation `C` that hands each internal port's outgoing wave to its partner, and
+
+```
+a_int = C S_ii a_int + C S_ie a_ext        S = S_ee + S_ei (I - C S_ii)^-1 C S_ie
+b_ext = S_ee a_ext + S_ei a_int
+```
+
+That is the whole solver. It is exact and not iterative: there is no convergence criterion to pick
+and no number of round trips to truncate at. A resonance appears as `(I - C S_ii)^-1` growing large,
+which is the same statement as the round trip approaching unit gain, reached in one step instead of
+summed. The test suite checks it against the summation anyway, because that is a genuinely different
+algorithm: **they agree to 1e-13 over three free spectral ranges.**
+
+**The roadmap said to integrate a solver rather than write one, and that was worth checking before
+believing.** For the *solver* it does not hold — the identity above is thirty lines of numpy. What is
+genuinely large in that ecosystem is the PDK side, and that is still worth integrating. The other
+path was measured rather than argued about: installing SAX resolves to **37 packages**, including jax
+and a 66 MB jaxlib, plus matplotlib, pandas, scipy, sympy, xarray and pydantic — to perform one
+`numpy.linalg.solve`. And `klujax`, its sparse back-end, is **LGPL-2.0-only**; this project already
+refuses FFTW over exactly that question.
+
+Refusing the dependency is not refusing the reference. SAX was installed in a scratch environment and
+given the same two device models, the same wiring and the same grid:
+
+| add-drop ring, 4001 frequencies over 2 THz | max &#124;maiman − sax&#124; |
+| :--- | ---: |
+| in → through | 7.2e-15 |
+| in → drop | 3.2e-15 |
+
+Thirty-three units in the last place of double precision, across a spectrum containing three
+resonances. The comparison is not in CI — nothing that costs 70 MB and a licence review should be —
+but it is the reason the thirty lines are defensible.
+
+### What comes out of it
+
+`python examples/microring_filter.py`. Three blocks
+([`maiman/components/photonic.py`](src/maiman/components/photonic.py)) and two device models
+([`maiman/photonics.py`](src/maiman/photonics.py)), and the ring is **assembled rather than written
+down** — two couplers and two arcs, wired into a loop and handed to the solver. The closed forms from
+Yariv and Bogaerts live in the tests, on the other side of the comparison, where they can disagree;
+they agree to 1e-13.
+
+A 100 µm silicon ring at 3 dB/cm, walked across one resonance:
+
+| offset | critical, κ = 0.00688 | under-coupled, κ/4 | over-coupled, 4κ |
+| ---: | ---: | ---: | ---: |
+| ±20 GHz | −0.01 dB | −0.00 dB | −0.03 dB |
+| ±1 GHz | −2.08 dB | −0.57 dB | −3.07 dB |
+| 0 | **−134 dB** | −4.42 dB | −4.39 dB |
+
+**Critical coupling is a knife edge and a false friend.** Match the coupling to the round-trip loss
+and the field coupled back out of the ring cancels the field that stayed on the bus, exactly. Miss it
+and the notch fills in — by the *same* amount on either side, because the depth
+`|t − a|² / |1 − t a|²` is symmetric in *t* and *a*. Solving for the partner of a given coupling,
+`t₂ = (2a − t₁(1 + a²)) / (1 + a² − 2 a t₁)`, produces pairs that are indistinguishable from the
+through port alone: κ = 0.0199 and κ = 0.00237 both notch −6.22 dB.
+
+**The free spectral range is set by the group index and the resonance position by the effective
+one**, and in silicon those differ by a factor of 1.7. Measured against `c / (n_g L)` across four
+resonances: 713.80 GHz against 713.79. Change `n_eff` and the resonances move without the spacing
+changing; double `n_g` and the spacing halves.
+
+### A ring is an ASE gate, and that needs its linewidth
+
+An amplifier emits across terahertz; a ring's comb passes about one linewidth in every free spectral
+range. Reading the response at the bin's centre would return whatever that one frequency landed on,
+so the noise a ring passes is *integrated* — and how finely is not a free parameter.
+
+A ring 116 MHz wide inside a 714 GHz period is a loaded Q of 1.7 million: good, and buildable.
+Averaging its drop response over a 4 THz amplifier bin, against a converged 2.444e-4:
+
+| how the mean was taken | result | |
+| :--- | ---: | ---: |
+| 4096 points across the whole bin | 4.81e-4 | 97 % high |
+| 4096 points across one free spectral range | 3.13e-4 or 2.14e-4 | 28 % high, or 12 % low |
+| points set from the linewidth | 2.444e-4 | converged |
+
+The middle row is the one worth staring at. **Which way it is wrong depends on where the amplifier's
+band happened to sit** — high when the window landed on the resonance, low when it landed on a real
+EDFA's centre — which is what makes an under-resolved integral worse than a merely inaccurate one.
+So `RingResonator` hands its own linewidth down to the integrator, and the ceiling that stops the
+point count running away is stated in the source rather than discovered.
+
+On an ordinary ring the numbers come out where they should: a 12.44 GHz linewidth in a 714 GHz
+period passes **2.40 %** of a flat spectrum, against 2.74 % for a Lorentzian of the same width — the
+14 % the shape approximation costs once integrated rather than merely evaluated at half depth.
+
+Straightened out, the same waveguide is a delay line, and the arithmetic is bleak: 1 mm of silicon
+holds 14.01 ps and costs 0.2 dB; 10 cm holds 1.40 ns and costs 20 dB. Optical buffering is expensive
+and this is why.
+
+**What is not here.** One response is applied to both polarizations. A strip waveguide is strongly
+birefringent and a real ring resonates at two sets of wavelengths; modelling that needs a
+polarization-resolved scattering matrix, which is a second index on every device. Launch into one
+axis until it exists. The MMI, the Y-junction, the Mach-Zehnder and PDK import are all downstream of
+this framework rather than of new physics — an interferometer is already two couplers and two arms
+in a `Circuit`, and the tests build one.
+
 ## The kernels do not know what they are running on
 
 The propagation kernels are the only part of this worth a GPU: a loop over FFTs on a long array,
@@ -895,8 +1003,8 @@ library, and the UI.
 | [OptiCommPy](https://github.com/edsonportosilva/OptiCommPy) | Python: SSFM, coherent DSP, BER | Reference & cross-validation target |
 | [GNPy](https://github.com/Telecominfraproject/oopt-gnpy) | Optical network planning / OSNR budgets | Complementary — network layer, not waveform layer |
 | [QAMPy](https://github.com/ChalmersPhotonicsLab/QAMpy) | Coherent DSP algorithms | Reference for Phase 3 |
-| [SAX](https://github.com/gdsfactory/sax) | S-matrix photonic circuit solver | **This is Phase 4** — integrate, don't reimplement |
-| [gdsfactory](https://github.com/gdsfactory/gdsfactory) | Photonic layout & PDK ecosystem | PDK path for Phase 4 |
+| [SAX](https://github.com/gdsfactory/sax) | S-matrix photonic circuit solver | **Cross-validation reference, not a dependency.** The reduction is thirty lines and SAX resolves to 37 packages including an LGPL sparse back-end; the two agree to 7e-15 |
+| [gdsfactory](https://github.com/gdsfactory/gdsfactory) | Photonic layout & PDK ecosystem | PDK path for Phase 4 — this is the part still worth integrating |
 | [Meep](https://github.com/NanoComp/meep) | FDTD / full-wave EM | Feeds component models *in*; not a competitor |
 | [GNU Radio](https://www.gnuradio.org/) | Block-based SDR | Architectural reference for dataflow scheduling |
 
@@ -1000,7 +1108,7 @@ time window, and results are reproducible.
 | **1.5 — Nonlinear & amplified** ✅ | Adaptive-step SSFM, Kerr, EDFA with ASE, OSNR, PMD, APD, dispersion slope and its third-order term, cross-polarization Kerr coupling, inter-channel stimulated Raman scattering | ~2 months |
 | **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier phase recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km with blind estimation of the accumulated value, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
 | **3 — GUI & WDM** | ✅ Wavelength-selective filters, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — and 400G/800G reference designs validated against the OSNR relations, and a back-end indirection the propagation kernels dispatch through — CuPy runs it where a device exists; it is not exercised in CI | ~6 months |
-| **4 — PIC** | Waveguides, ring resonators, MMI, MZI via integration with an existing S-matrix solver; PDK import | — |
+| **4 — PIC** | Bidirectional S-matrix circuit solver, waveguide, directional coupler, all-pass and add-drop ring resonators, cross-validated against SAX; MMI, MZI and PDK import still to come | — |
 
 ¹ One developer, part-time. Estimates, not commitments.
 
@@ -1057,6 +1165,16 @@ Every physics block ships with a test against a closed-form result, run in CI
 | FWM efficiency | `η → 1` phase matched; `→ sinc²(Δβ·L/2)` lossless; even in Δβ | ✅ |
 | FWM phase mismatch | `Δβ = −β₂(ω_i−ω_k)(ω_j−ω_k)` — quadratic in spacing, zero at zero dispersion | ✅ |
 | FWM product power | Component reproduces `d²γ²P_iP_jP_k·L_eff²·η·e^{−αL}` to 1e-7; cubic in power; `d = 2−δ_ij` gives non-degenerate products exactly 6.02 dB | ✅ |
+| **Circuit reduction** | Eliminating internal ports agrees with summing round trips lap by lap to 1e-13 — a different algorithm, sharing no code | ✅ |
+| Reduction vs SAX | Same models, same wiring: 7.2e-15 over 4001 frequencies. Not in CI — it costs 37 packages and a licence review | — |
+| Non-reciprocal and reflecting devices | An isolator stays one-way and a mirror returns `r·e^{−2iβL}`; the reduction assumes neither | ✅ |
+| Dangling ports | An unwired port is `a = 0`, not a mirror — a 3 dB coupler with one port open passes exactly half | ✅ |
+| **Ring resonator** | Assembled from a coupler and two arcs, matches Yariv's all-pass and add-drop transfer functions to 1e-13 | ✅ |
+| Free spectral range | `c / (n_g L)` to 1e-4, measured between resonances; `n_eff` moves them and not their spacing | ✅ |
+| Critical coupling | Extinction below 1e-12 at `κ = 1 − a²`; under- and over-coupled partners notch identically | ✅ |
+| Coupler unitarity | `SᴴS = I` at every split ratio — which is what the cross path's factor of j is for | ✅ |
+| Resonance linewidth | Lorentzian `FSR(1−r)/π√r` within 3 % of a measured width from critical coupling to κ = 0.5 | ✅ |
+| Waveguide group delay | `n_g L / c` read off the transfer function's phase slope, to 1e-9 | ✅ |
 
 Component models are derived from published literature and standards (Agrawal, *Nonlinear Fiber
 Optics*; ITU-T G.652 / G.694.1; relevant IEEE 802.3 clauses), cited in each component's

@@ -189,10 +189,21 @@ class Component:
     #: a built-in.
     registry_name: ClassVar[str] = ""
 
+    #: A class that exists to *share* parameters rather than to be placed in a
+    #: graph. It is not registered and never reaches the palette. Set on the base
+    #: itself and read from ``cls.__dict__``, so it is not inherited: a subclass
+    #: of an abstract base is a real block unless it also declares itself
+    #: abstract. Without this, a family of components with a dozen parameters in
+    #: common has to choose between declaring them a dozen times and shipping a
+    #: half-built block to the palette.
+    abstract: ClassVar[bool] = False
+
     def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
         from .registry import register
 
+        if cls.__dict__.get("abstract", False):
+            return
         register(cls)
 
     @classmethod

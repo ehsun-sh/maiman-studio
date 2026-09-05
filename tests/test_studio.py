@@ -55,6 +55,31 @@ def test_the_palette_is_the_whole_library() -> None:
     assert set(embedded()["manifests"]) == set(registered_names())
 
 
+def js_table(name: str, pattern: str) -> set[str]:
+    """The strings in one of the page's small lookup tables."""
+    text = STUDIO.read_text(encoding="utf-8")
+    start = text.index(f"const {name} = ")
+    end = text.index("];" if "[" in text[start : start + 40] else "};", start)
+    return set(re.findall(pattern, text[start:end]))
+
+
+def test_every_category_has_a_place_in_the_palette_and_a_colour() -> None:
+    """A category the page has never heard of does not error — it misfiles itself.
+
+    ``indexOf`` returns -1 for an unknown category, which sorts it above every
+    known one, and the colour lookup returns undefined and falls back to the
+    binary swatch. So a new family of components appears at the top of the
+    palette in the wrong colour and nothing says why. It did, the first time a
+    photonic block was registered.
+    """
+    categories = {manifest["category"] for manifest in embedded()["manifests"].values()}
+    ordered = js_table("CATEGORY_ORDER", r'"([^"]+)"')
+    coloured = js_table("CATEGORY_PORT", r'"([^"]+)":')
+
+    assert categories <= ordered, f"no position in the palette: {sorted(categories - ordered)}"
+    assert categories <= coloured, f"no swatch colour: {sorted(categories - coloured)}"
+
+
 def test_the_schematic_on_the_canvas_is_a_graph_that_runs() -> None:
     """The strongest claim the page makes, and the cheapest one to break.
 

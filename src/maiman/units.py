@@ -74,6 +74,12 @@ _TO_SI: dict[str, Callable[[float], float]] = {
     # Ratios
     "dB": db_to_linear,
     "dB/km": lambda x: x * 1e-3,  # -> dB/m (still logarithmic, per metre)
+    # The same quantity at the other end of the scale. Fibre loss is quoted per
+    # kilometre and integrated-waveguide loss per centimetre, and the numbers are
+    # not close: 0.2 dB/km is a good fibre, 2 dB/cm a good silicon strip — a
+    # factor of a million between them, which is most of why a photonic circuit
+    # is measured in micrometres.
+    "dB/cm": lambda x: x * 1e2,  # -> dB/m
     # Dispersion: ps/(nm*km) -> s/m^2
     "ps/nm/km": lambda x: x * 1e-6,
     # Accumulated dispersion: ps/nm -> s/m. This is D integrated over a span, so
@@ -95,6 +101,7 @@ _TO_SI: dict[str, Callable[[float], float]] = {
     # Length
     "m": lambda x: x,
     "km": lambda x: x * 1e3,
+    "um": lambda x: x * 1e-6,
     "nm": lambda x: x * 1e-9,
     # Frequency
     "Hz": lambda x: x,
@@ -121,6 +128,7 @@ _FROM_SI: dict[str, Callable[[float], float]] = {
     "dBm": w_to_dbm,
     "dB": linear_to_db,
     "dB/km": lambda x: x * 1e3,
+    "dB/cm": lambda x: x * 1e-2,
     "ps/nm/km": lambda x: x * 1e6,
     "ps/nm": lambda x: x * 1e3,
     "ps/nm^2/km": lambda x: x * 1e-3,
@@ -130,6 +138,7 @@ _FROM_SI: dict[str, Callable[[float], float]] = {
     "ps/sqrt(km)": lambda x: x * 1e12 * math.sqrt(1e3),
     "m": lambda x: x,
     "km": lambda x: x * 1e-3,
+    "um": lambda x: x * 1e6,
     "nm": lambda x: x * 1e9,
     "Hz": lambda x: x,
     "kHz": lambda x: x * 1e-3,

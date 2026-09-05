@@ -30,6 +30,7 @@ from .passive import (
     PolarizationRotator,
     Splitter,
 )
+from .photonic import DirectionalCoupler, RingResonator, Waveguide
 from .sources import CWLaser, GaussianPulse, SechPulse
 
 __all__ = [
@@ -46,6 +47,7 @@ __all__ = [
     "ConstellationDiagram",
     "DCVoltage",
     "DifferentialDecoder",
+    "DirectionalCoupler",
     "DispersionCompensator",
     "DualPolarizationReceiver",
     "ElectricalFilter",
@@ -66,6 +68,8 @@ __all__ = [
     "PolarizationRotator",
     "PowerMeter",
     "QAMMapper",
+    "RingResonator",
     "SechPulse",
     "Splitter",
+    "Waveguide",
 ]

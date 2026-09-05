@@ -44,7 +44,7 @@ we should reuse.
 | **OptiCommPy** | Python; SSFM, coherent DSP, constellation/BER | Covers much of Phases 1–3 numerically. Reference and possible dependency. |
 | **GNPy** | Optical transport network planning (TIP) | Network/OSNR-budget layer, not waveform-level. Complementary. |
 | **QAMPy** | Coherent DSP (equalization, carrier recovery) | Reference for Phase 3 DSP algorithms. |
-| **SAX** | JAX-based S-matrix photonic circuit solver | **This is Phase 4.** Integrate, don't reimplement. |
+| **SAX** | JAX-based S-matrix photonic circuit solver | **Cross-validation reference.** Not a dependency: 37 packages, and an LGPL-2.0-only sparse back-end. |
 | **Photontorch**, **Simphony** | Photonic circuit simulation | Same space as SAX; alternative back-ends. |
 | **gdsfactory** | Photonic layout + PDK ecosystem | The layout/PDK side of Phase 4. |
 | **Meep**, **Tidy3D** | FDTD / full-wave EM | Component-level physics. Feeds models *into* us; not a competitor. |
@@ -499,11 +499,30 @@ CuPy back-end for SSFM.
 
 ### Phase 4 — Photonic integrated circuits
 
-**Integrate rather than reimplement.** A bidirectional S-matrix solver is a large project on its
-own and mature open-source implementations exist (SAX, Simphony). The work here is a PIC
-subsystem block that delegates to such a solver, exposing waveguides, ring resonators, MMI
-couplers, Y-junctions and MZIs, plus PDK import via the gdsfactory ecosystem — while the
-top-level link simulation remains dataflow.
+**The premise was checked and it split in two.** This said to integrate rather than reimplement,
+on the grounds that a bidirectional S-matrix solver is a large project. For the *solver* that is
+not so: eliminating a circuit's internal ports is one linear identity,
+`S = S_ee + S_ei (I - C S_ii)^-1 C S_ie`, and it is thirty lines of numpy in
+`maiman/circuit.py`. Taking SAX instead would have cost 37 packages — jax, a 66 MB jaxlib,
+matplotlib, pandas, scipy, sympy, xarray, pydantic — and `klujax`, its sparse back-end, is
+**LGPL-2.0-only**, which is the same question §11 already answers for FFTW. So the reduction is
+written here and SAX is kept as a cross-validation reference: given the same models and wiring the
+two agree to 7e-15 across 4001 frequencies.
+
+For the *ecosystem* the premise stands unchanged. Process design kits, layout, and fitted component
+models are a large body of work with a live open-source home, and PDK import through gdsfactory is
+still integration rather than invention.
+
+Shipped: the scattering framework, a straight waveguide, a directional coupler, and all-pass and
+add-drop ring resonators, with the ring assembled from the other two and solved rather than written
+down. The MMI, the Y-junction and the Mach-Zehnder are compositions of what exists; PDK import is
+downstream of them.
+
+**A circuit meets the dataflow engine as a transfer function.** The solver answers at whatever
+frequencies it is asked about, so a block asks about the ones its incoming band occupies and
+multiplies the spectrum by the answer. The circuit stays a circuit, the link stays a link, and
+neither has to know how the other is executed — which is what keeps the top-level simulation
+dataflow while the PIC inside it is not.
 
 ---
 

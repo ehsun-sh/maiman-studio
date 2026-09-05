@@ -451,6 +451,79 @@
     }
    }
   },
+  "DirectionalCoupler": {
+   "name": "Directional Coupler",
+   "type": "DirectionalCoupler",
+   "class": "maiman.components.photonic.DirectionalCoupler",
+   "category": "Photonic IC",
+   "version": "0.1.0",
+   "parameters": {
+    "reference_wavelength": {
+     "type": "float",
+     "default": 1550.0,
+     "unit": "nm",
+     "min": 1200.0,
+     "max": 1700.0,
+     "doc": "Wavelength the indices are quoted at"
+    },
+    "n_eff": {
+     "type": "float",
+     "default": 2.44,
+     "unit": "",
+     "min": 1.0,
+     "max": 5.0,
+     "doc": "Effective index: sets the phase"
+    },
+    "n_group": {
+     "type": "float",
+     "default": 4.2,
+     "unit": "",
+     "min": 1.0,
+     "max": 10.0,
+     "doc": "Group index: sets the delay, and a ring's free spectral range"
+    },
+    "propagation_loss": {
+     "type": "float",
+     "default": 2.0,
+     "unit": "dB/cm",
+     "min": 0.0,
+     "doc": "Waveguide loss; 2 dB/cm is a typical silicon strip"
+    },
+    "dispersion": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "ps/nm/km",
+     "doc": "Waveguide dispersion D; negligible below a millimetre"
+    },
+    "coupling": {
+     "type": "float",
+     "default": 0.5,
+     "unit": "",
+     "min": 0.0,
+     "max": 1.0,
+     "doc": "Power fraction crossing over"
+    },
+    "insertion_loss": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "dB",
+     "min": 0.0,
+     "doc": "Excess loss through the coupler"
+    }
+   },
+   "structural": {
+    "second_input": false
+   },
+   "ports": {
+    "inputs": {
+     "in1": "optical"
+    },
+    "outputs": {
+     "out1": "optical",
+     "out2": "optical"
+    }
+   }
+  },
   "DispersionCompensator": {
    "name": "CD Compensator",
    "type": "DispersionCompensator",
@@ -1418,6 +1491,87 @@
     }
    }
   },
+  "RingResonator": {
+   "name": "Ring Resonator",
+   "type": "RingResonator",
+   "class": "maiman.components.photonic.RingResonator",
+   "category": "Photonic IC",
+   "version": "0.1.0",
+   "parameters": {
+    "reference_wavelength": {
+     "type": "float",
+     "default": 1550.0,
+     "unit": "nm",
+     "min": 1200.0,
+     "max": 1700.0,
+     "doc": "Wavelength the indices are quoted at"
+    },
+    "n_eff": {
+     "type": "float",
+     "default": 2.44,
+     "unit": "",
+     "min": 1.0,
+     "max": 5.0,
+     "doc": "Effective index: sets the phase"
+    },
+    "n_group": {
+     "type": "float",
+     "default": 4.2,
+     "unit": "",
+     "min": 1.0,
+     "max": 10.0,
+     "doc": "Group index: sets the delay, and a ring's free spectral range"
+    },
+    "propagation_loss": {
+     "type": "float",
+     "default": 2.0,
+     "unit": "dB/cm",
+     "min": 0.0,
+     "doc": "Waveguide loss; 2 dB/cm is a typical silicon strip"
+    },
+    "dispersion": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "ps/nm/km",
+     "doc": "Waveguide dispersion D; negligible below a millimetre"
+    },
+    "length": {
+     "type": "float",
+     "default": 100.0,
+     "unit": "um",
+     "min": 0.1,
+     "doc": "Round-trip circumference"
+    },
+    "coupling": {
+     "type": "float",
+     "default": 0.05,
+     "unit": "",
+     "min": 0.0,
+     "max": 1.0,
+     "doc": "Power coupling to the input bus"
+    },
+    "drop_coupling": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "",
+     "min": 0.0,
+     "max": 1.0,
+     "doc": "Power coupling to the drop bus; 0 is an all-pass ring"
+    }
+   },
+   "structural": {
+    "add_port": false
+   },
+   "ports": {
+    "inputs": {
+     "in": "optical"
+    },
+    "outputs": {
+     "through": "optical",
+     "drop": "optical"
+    }
+   }
+  },
   "SechPulse": {
    "name": "Sech Pulse",
    "type": "SechPulse",
@@ -1480,6 +1634,68 @@
     "outputs": {
      "out0": "optical",
      "out1": "optical"
+    }
+   }
+  },
+  "Waveguide": {
+   "name": "Waveguide",
+   "type": "Waveguide",
+   "class": "maiman.components.photonic.Waveguide",
+   "category": "Photonic IC",
+   "version": "0.1.0",
+   "parameters": {
+    "reference_wavelength": {
+     "type": "float",
+     "default": 1550.0,
+     "unit": "nm",
+     "min": 1200.0,
+     "max": 1700.0,
+     "doc": "Wavelength the indices are quoted at"
+    },
+    "n_eff": {
+     "type": "float",
+     "default": 2.44,
+     "unit": "",
+     "min": 1.0,
+     "max": 5.0,
+     "doc": "Effective index: sets the phase"
+    },
+    "n_group": {
+     "type": "float",
+     "default": 4.2,
+     "unit": "",
+     "min": 1.0,
+     "max": 10.0,
+     "doc": "Group index: sets the delay, and a ring's free spectral range"
+    },
+    "propagation_loss": {
+     "type": "float",
+     "default": 2.0,
+     "unit": "dB/cm",
+     "min": 0.0,
+     "doc": "Waveguide loss; 2 dB/cm is a typical silicon strip"
+    },
+    "dispersion": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "ps/nm/km",
+     "doc": "Waveguide dispersion D; negligible below a millimetre"
+    },
+    "length": {
+     "type": "float",
+     "default": 1000.0,
+     "unit": "um",
+     "min": 0.0,
+     "doc": "Physical length"
+    }
+   },
+   "structural": {},
+   "ports": {
+    "inputs": {
+     "in": "optical"
+    },
+    "outputs": {
+     "out": "optical"
     }
    }
   }
