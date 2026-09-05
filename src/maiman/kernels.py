@@ -252,6 +252,27 @@ def propagate_ssfm(
     return fields[0], diagnostics
 
 
+#: Weight the Kerr term gives power in the *orthogonal* polarization, relative to
+#: power in its own.
+#:
+#: Two thirds, and it is the same two thirds in both places it appears: a
+#: channel's own orthogonal component modulates it at 2/3 of the rate its
+#: co-polarized component does, and a neighbour's orthogonal power at 2/3 of the
+#: rate — which, since co-polarized cross-phase modulation carries the factor of
+#: two, makes orthogonal cross-phase modulation exactly one third of co-polarized
+#: cross-phase modulation. That ratio of three is the textbook number and is what
+#: the tests measure.
+#:
+#: The factor comes from the tensor structure of chi(3) in an isotropic medium
+#: and not from any averaging, so it is the fixed-axis value. A fibre whose
+#: birefringence scrambles the polarization faster than the nonlinearity acts is
+#: described instead by the Manakov equation, where the distinction between the
+#: two components washes out into a single 8/9 on the total power. This model
+#: applies PMD as a separate element rather than interleaving it, so it is the
+#: fixed-axis form that is consistent with the rest of the block.
+ORTHOGONAL_KERR_WEIGHT = 2.0 / 3.0
+
+
 def propagate_coupled_ssfm(
     fields: Sequence[np.ndarray],
     sample_rate: float,
@@ -260,6 +281,7 @@ def propagate_coupled_ssfm(
     walkoff: Sequence[float],
     gamma: float,
     beta3: Sequence[float] | None = None,
+    polarization: Sequence[int] | None = None,
     alpha: float,
     distance: float,
     max_nonlinear_phase: float = 0.005,
@@ -269,7 +291,8 @@ def propagate_coupled_ssfm(
     """Co-propagate several channels through one fiber, coupled by the Kerr effect.
 
     ``dA_k/dz = -(alpha/2) A_k - d_k dA_k/dT - (i beta2_k / 2) d2A_k/dT2
-    + (beta3_k / 6) d3A_k/dT3 + i gamma (|A_k|**2 + 2 sum_{j != k} |A_j|**2) A_k``
+    + (beta3_k / 6) d3A_k/dT3
+    + i gamma (|A_k|**2 + 2 sum_{j != k} |A_j|**2 + (2/3) sum_{orthogonal} |A_j|**2) A_k``
 
     The whole content of the extension is that factor of two. A channel's own
     power rotates its own phase once; every *other* channel's power rotates it
@@ -332,10 +355,20 @@ def propagate_coupled_ssfm(
     and there is no meaningful way to add to it the power of a channel sampled
     on a different grid, so a mismatch raises rather than being papered over.
 
-    Polarization is not handled here. The caller passes co-polarized fields and
-    calls twice, which reproduces the scalar-per-polarization model the rest of
-    the fiber already uses — see :class:`maiman.components.fiber.Fiber` for what
-    that leaves out.
+    **Polarization, when the caller asks for it.** ``polarization`` labels each
+    field 0 or 1, and power on the other label enters the nonlinear term at
+    :data:`ORTHOGONAL_KERR_WEIGHT` instead of the co-polarized weight::
+
+        phase_k = gamma * (2 * P_same - |A_k|**2 + (2/3) * P_other) * step
+
+    Left unset every field is on axis 0, the second sum is empty, and this is the
+    scalar model term for term — which is what lets a caller propagate the two
+    polarizations as two independent problems and get exactly what it got before.
+    Pass both axes in one call with their labels and they couple: a channel is
+    then modulated by its own orthogonal component at two thirds the rate, its
+    neighbours' orthogonal power likewise, and — because the two axes of one
+    channel no longer accumulate the same phase — the state of polarization
+    rotates with the power, which is cross-polarization modulation.
 
     Returns the propagated fields, in input order, and
     :class:`PropagationDiagnostics`.
@@ -356,6 +389,13 @@ def propagate_coupled_ssfm(
         raise ValueError(
             f"beta3 must have one entry per field, got {len(slope)} for {len(fields)} fields"
         )
+    axis = [0] * len(fields) if polarization is None else list(polarization)
+    if len(axis) != len(fields):
+        raise ValueError(
+            f"polarization must have one entry per field, got {len(axis)} for {len(fields)} fields"
+        )
+    if any(value not in (0, 1) for value in axis):
+        raise ValueError(f"polarization entries must be 0 or 1, got {sorted(set(axis))}")
 
     a = [f.astype(np.complex128, copy=True) for f in fields]
     if not a:
@@ -394,13 +434,20 @@ def propagate_coupled_ssfm(
         remaining = distance - travelled
         step = min(ceiling, remaining)
         if gamma != 0.0:
-            # The largest rotation any channel will see is set by the *smallest*
-            # self power against the summed total, because 2*total - |A_k|**2
-            # grows as |A_k|**2 shrinks.
-            floor = np.abs(a[0]) ** 2
-            for field in a[1:]:
-                np.minimum(floor, np.abs(field) ** 2, out=floor)
-            peak_effective = float(np.max(2.0 * _total_power(a) - floor))
+            _axis_power = _power_per_axis(a, axis)
+            # The largest rotation any channel will see. With one polarization
+            # this is the smallest self power against the summed total, because
+            # 2*total - |A_k|**2 grows as |A_k|**2 shrinks; written out per field
+            # so that the orthogonal term is weighted here exactly as it is in
+            # the rotation itself, and a co-polarized run picks the same step it
+            # always did.
+            peak_effective = 0.0
+            for field, ax in zip(a, axis, strict=True):
+                effective = 2.0 * _axis_power[ax] - np.abs(field) ** 2
+                other = _axis_power.get(1 - ax)
+                if other is not None:
+                    effective = effective + ORTHOGONAL_KERR_WEIGHT * other
+                peak_effective = max(peak_effective, float(np.max(effective)))
             if peak_effective > 0.0:
                 step = min(step, max_nonlinear_phase / (abs(gamma) * peak_effective))
             # Only the nonlinear operator cares where the channels sit relative
@@ -416,10 +463,18 @@ def propagate_coupled_ssfm(
         a = [np.fft.ifft(np.fft.fft(f) * h) for f, h in zip(a, half, strict=True)]
 
         if gamma != 0.0:
-            total = _total_power(a)
+            # Summed per polarization, because power in the orthogonal component
+            # modulates at a different rate than power sharing an axis. With one
+            # axis in use the second sum is zero and this is the scalar model
+            # term for term.
+            per_axis = _power_per_axis(a, axis)
             rotated = []
-            for field in a:
-                phase = gamma * (2.0 * total - np.abs(field) ** 2) * step
+            for field, ax in zip(a, axis, strict=True):
+                effective = 2.0 * per_axis[ax] - np.abs(field) ** 2
+                other = per_axis.get(1 - ax)
+                if other is not None:
+                    effective = effective + ORTHOGONAL_KERR_WEIGHT * other
+                phase = gamma * effective * step
                 peak_phase = max(peak_phase, float(np.max(np.abs(phase))))
                 rotated.append(field * np.exp(1j * phase))
             a = rotated
@@ -450,6 +505,23 @@ def propagate_coupled_ssfm(
         walkoff_span=spread * distance,
         peak_walkoff_slip=peak_slip,
     )
+
+
+def _power_per_axis(fields: Sequence[np.ndarray], axis: Sequence[int]) -> dict[int, np.ndarray]:
+    """Summed instantaneous power on each populated polarization axis [W].
+
+    Keyed rather than a two-element list so that an unused axis is absent rather
+    than an array of zeros. Numerically the two are the same — adding two thirds
+    of nothing is nothing — so this buys no accuracy; what it buys is that a
+    co-polarized run, which is every run that does not ask for the coupling,
+    allocates and adds one array per step instead of two.
+    """
+    per_axis: dict[int, np.ndarray] = {}
+    for which in (0, 1):
+        members = [f for f, ax in zip(fields, axis, strict=True) if ax == which]
+        if members:
+            per_axis[which] = _total_power(members)
+    return per_axis
 
 
 def _total_power(fields: Sequence[np.ndarray]) -> np.ndarray:

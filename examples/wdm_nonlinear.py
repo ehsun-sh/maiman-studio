@@ -67,7 +67,8 @@ from maiman.kernels import (
     fwm_phase_mismatch,
     walkoff_from_dispersion,
 )
-from maiman.units import C_LIGHT, w_to_dbm, wavelength_to_frequency
+from maiman.signals import Band, OpticalSignal
+from maiman.units import C_LIGHT, dbm_to_w, w_to_dbm, wavelength_to_frequency
 
 ANCHOR = 1550.0  # nm — channel 0
 SPACING = 100e9  # Hz
@@ -307,6 +308,51 @@ def main() -> None:
     print("     each of the four channels also carries a product folded in at DC,")
     print("     where no filter downstream can reach it. That is what a uniform grid")
     print("     costs, and why unequal channel spacing was once a serious proposal.")
+
+    # ------------------------------------------------------------------
+    print("\n  6. Polarization: an orthogonal neighbour is not an absent one")
+    print("     Two unmodulated channels, 100 km, no loss, no dispersion.")
+    print("     The phase channel 0 picks up beyond its own self-phase modulation:\n")
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=16, sequence_length=64, seed=3)
+    power = dbm_to_w(0.0)
+    unit = GAMMA * 1e-3 * power * 100e3  # gamma * P * L, radians
+
+    def carrier(px: float, py: float, index: int) -> Band:
+        samples = ctx.num_samples
+        return Band(
+            Ex=np.full(samples, np.sqrt(px), dtype=np.complex128),
+            Ey=np.full(samples, np.sqrt(py), dtype=np.complex128),
+            f0=wavelength_to_frequency(channel_wavelength(index) * 1e-9),
+            fs=ctx.sample_rate,
+        )
+
+    def turned(bands: tuple[Band, ...], *, coupled: bool) -> float:
+        span = Fiber(
+            length=100.0,
+            attenuation=0.0,
+            dispersion=0.0,
+            nonlinearity=GAMMA,
+            four_wave_mixing=False,
+            cross_polarization=coupled,
+            label="fib",
+        )
+        out = span.run(ctx, {"in": OpticalSignal(bands=bands, noise=())})["out"]
+        return float(np.angle(out.bands[0].Ex[0])) / unit
+
+    print(f"     {'neighbour':>22}  {'axes uncoupled':>15}  {'axes coupled':>13}")
+    print("     " + "-" * 54)
+    for label, neighbour in (
+        ("co-polarized", carrier(power, 0.0, 1)),
+        ("orthogonal", carrier(0.0, power, 1)),
+    ):
+        alone_off = turned((carrier(power, 0.0, 0),), coupled=False)
+        alone_on = turned((carrier(power, 0.0, 0),), coupled=True)
+        off = turned((carrier(power, 0.0, 0), neighbour), coupled=False) - alone_off
+        on = turned((carrier(power, 0.0, 0), neighbour), coupled=True) - alone_on
+        print(f"     {label:>22}  {off:12.3f} gPL  {on:10.3f} gPL")
+    print("     Two and two thirds: orthogonal cross-phase modulation is exactly a")
+    print("     third of co-polarized. Uncoupled it is zero, which is the model")
+    print("     saying a channel across the polarization is not there at all.")
 
 
 if __name__ == "__main__":

@@ -447,6 +447,38 @@ noise bins rendered onto one grid, the way an instrument shows them. Its resolut
 not cosmetic — widening it raises the ASE trace decibel for decibel and leaves a carrier exactly
 where it is, which is the clearest demonstration of why OSNR needs a stated reference bandwidth.
 
+## An orthogonal neighbour is not an absent one
+
+The Kerr coupling used to be scalar per polarization: a channel was modulated by its neighbours'
+co-polarized power and by nothing else, so a channel polarized across it counted for zero. In an
+isotropic medium orthogonal power counts for exactly two thirds — which, since co-polarized
+cross-phase modulation already carries its factor of two, makes orthogonal cross-phase modulation
+exactly **one third** of co-polarized. Set `cross_polarization` on the fibre:
+
+| neighbour | axes uncoupled | axes coupled |
+| :--- | ---: | ---: |
+| co-polarized | 2.000 γPL | 2.000 γPL |
+| orthogonal | 0.000 γPL | 0.667 γPL |
+
+The same coefficient does two more things, because it is the same coefficient. A channel's own
+orthogonal component modulates it at two thirds the rate, so power split evenly between the axes
+turns each of them by `(0.5 + ⅔·0.5)·γPL` instead of `0.5·γPL`. And the two axes, no longer
+accumulating the same phase, rotate the state of polarization as the power moves — nonlinear
+birefringence, which falls by a factor of three, and cross-polarization modulation, which is that
+rotation being driven by a *different* channel's power.
+
+The value is the fixed-axis one, from the χ⁽³⁾ tensor rather than from any averaging. A fibre whose
+birefringence scrambles faster than the nonlinearity acts is the Manakov regime instead, where the
+distinction washes into a single 8/9 on the total power; this block applies PMD as a separate
+element rather than interleaving it, so the fixed-axis form is the one consistent with the rest of
+it. The coherent `A_x* A_y²` term, which would exchange power between the axes rather than only
+dephase them, is left out — it is the part that averages away first — and the tests assert the
+axes' powers are unchanged to twelve digits, so that omission is a number rather than a sentence.
+
+Off by default, and with all the light on one axis it changes nothing at all — on the samples,
+which is what makes it safe to leave on for a dual-polarization link and pointless for a
+single-polarization one.
+
 ## D is not one number
 
 Standard fibre gains 0.058 ps/nm/km of dispersion for every nanometre up the

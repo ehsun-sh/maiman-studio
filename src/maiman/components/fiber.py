@@ -102,14 +102,23 @@ class Fiber(Component):
     the run's generator, which makes a single run reproducible and a sweep with
     repeats an exploration of the distribution.
 
-    Not yet modelled: Raman scattering. The
-    Kerr coupling is scalar per polarization throughout, so a channel is
-    modulated by its neighbours' co-polarized power and not by their orthogonal
-    power, which really contributes a third as much; cross-polarization
-    modulation is absent for the same reason. Mixing products accumulate from
-    span to span in power rather than in field, which understates the coherent
-    build-up a dispersion-managed link produces. Pump depletion is not modelled,
-    which matters only at powers no link is operated at.
+    **The polarizations couple only if asked.** By default each is propagated as
+    its own scalar problem, which is what every result in this project was taken
+    with. Set ``cross_polarization`` and orthogonal power enters the Kerr term at
+    two thirds the co-polarized weight — so a neighbour polarized across the
+    channel modulates it at exactly one third of the rate a co-polarized one
+    does, and the two axes of one channel, no longer accumulating the same phase,
+    rotate the state of polarization as the power moves. With all the light on
+    one axis the setting changes nothing, which is why it is safe to leave on for
+    a dual-polarization link and pointless for a single-polarization one.
+
+    Not yet modelled: Raman scattering. The coherent polarization term
+    ``A_x* A_y**2``, which exchanges power between the axes rather than only
+    dephasing them, is left out — it is the part that averages away first under
+    real birefringence. Mixing products accumulate from span to span in power
+    rather than in field, which understates the coherent build-up a
+    dispersion-managed link produces. Pump depletion is not modelled, which
+    matters only at powers no link is operated at.
     """
 
     display_name = "Optical Fiber"
@@ -139,6 +148,9 @@ class Fiber(Component):
     )
     cross_phase_modulation = BoolParam(
         True, doc="Couple the bands: each is phase-modulated by the others' power"
+    )
+    cross_polarization = BoolParam(
+        False, doc="Couple the two polarizations: orthogonal power modulates at two thirds"
     )
     max_walkoff_slip = Param(
         0.5,
@@ -316,9 +328,16 @@ class Fiber(Component):
     ) -> tuple[list[tuple[np.ndarray, np.ndarray]], PropagationDiagnostics]:
         """Split-step propagation, with the bands coupled unless told otherwise.
 
-        The two polarizations are propagated as two separate coupled systems,
-        which is what makes the model scalar per polarization: a band's X field
-        is modulated by every other band's X power and by nothing else.
+        By default the two polarizations are propagated as two separate coupled
+        systems, which is what makes the model scalar per polarization: a band's
+        X field is modulated by every other band's X power and by nothing else.
+        Set ``cross_polarization`` and both axes go into one call, labelled, so
+        that orthogonal power enters at :data:`maiman.kernels.ORTHOGONAL_KERR_WEIGHT`.
+
+        The two axes of one band share a linear operator — the same beta2, the
+        same slope, the same walk-off — because birefringence is this block's
+        other business and is applied as a separate element afterwards. What the
+        coupling adds is entirely in the nonlinear step.
         """
         bands = signal.bands
         coupled = self.cross_phase_modulation and len(bands) > 1
@@ -340,25 +359,73 @@ class Fiber(Component):
             beta2 = [self.beta2_at(band.wavelength) for band in group]
             beta3 = [self.beta3_at(band.wavelength) for band in group]
             walkoff = [self.walkoff_of(band, reference) for band in group]
+
+            if self.cross_polarization:
+                # One system, both axes, labelled. The per-field lists are
+                # doubled rather than special-cased in the solver: X and Y of the
+                # same band see the same linear operator.
+                out, diagnostics = self._solve(
+                    [band.Ex for band in group] + [band.Ey for band in group],
+                    reference.fs,
+                    beta2=beta2 * 2,
+                    beta3=beta3 * 2,
+                    walkoff=walkoff * 2,
+                    polarization=[0] * len(group) + [1] * len(group),
+                    gamma=gamma,
+                    alpha=alpha,
+                    distance=distance,
+                    best=diagnostics,
+                )
+                fields.extend(zip(out[: len(group)], out[len(group) :], strict=True))
+                continue
+
             solved = []
             for axis in ("Ex", "Ey"):
-                out, diag = propagate_coupled_ssfm(
+                out, diagnostics = self._solve(
                     [getattr(band, axis) for band in group],
                     reference.fs,
                     beta2=beta2,
-                    walkoff=walkoff,
-                    gamma=gamma,
                     beta3=beta3,
+                    walkoff=walkoff,
+                    polarization=None,
+                    gamma=gamma,
                     alpha=alpha,
                     distance=distance,
-                    max_nonlinear_phase=self.max_nonlinear_phase,
-                    max_walkoff_slip=self.max_walkoff_slip,
+                    best=diagnostics,
                 )
                 solved.append(out)
-                if diag.steps > diagnostics.steps:
-                    diagnostics = diag
             fields.extend(zip(solved[0], solved[1], strict=True))
         return fields, diagnostics
+
+    def _solve(
+        self,
+        fields: list[np.ndarray],
+        sample_rate: float,
+        *,
+        beta2: list[float],
+        beta3: list[float],
+        walkoff: list[float],
+        polarization: list[int] | None,
+        gamma: float,
+        alpha: float,
+        distance: float,
+        best: PropagationDiagnostics,
+    ) -> tuple[list[np.ndarray], PropagationDiagnostics]:
+        """One call into the solver, keeping whichever diagnostics took more steps."""
+        out, diag = propagate_coupled_ssfm(
+            fields,
+            sample_rate,
+            beta2=beta2,
+            walkoff=walkoff,
+            gamma=gamma,
+            beta3=beta3,
+            polarization=polarization,
+            alpha=alpha,
+            distance=distance,
+            max_nonlinear_phase=self.max_nonlinear_phase,
+            max_walkoff_slip=self.max_walkoff_slip,
+        )
+        return out, diag if diag.steps > best.steps else best
 
     # -- four-wave mixing -------------------------------------------------
 

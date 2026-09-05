@@ -724,6 +724,11 @@
      "default": true,
      "doc": "Couple the bands: each is phase-modulated by the others' power"
     },
+    "cross_polarization": {
+     "type": "bool",
+     "default": false,
+     "doc": "Couple the two polarizations: orthogonal power modulates at two thirds"
+    },
     "max_walkoff_slip": {
      "type": "float",
      "default": 0.5,
