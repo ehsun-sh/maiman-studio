@@ -382,6 +382,67 @@ def main() -> None:
     print("     and it accumulates: this is why a line system is designed with a")
     print("     tilt to undo rather than assumed flat.")
 
+    # ------------------------------------------------------------------
+    print("\n  8. Mixing products add across spans in field, not in power")
+    print("     Three carriers at -30 dBm, each span's loss exactly undone.")
+    print("     Four spans against one, as the span length is moved.\n")
+
+    def link(spans: int, dispersion: float, span_km: float) -> float:
+        """Power in the product at 2*f0 - f1 after `spans` amplified spans."""
+        ctx = SimulationContext(
+            bit_rate=10e9, samples_per_symbol=16, sequence_length=16, seed=3, precision="double"
+        )
+        anchor = wavelength_to_frequency(ANCHOR * 1e-9)
+        power = dbm_to_w(-30.0)
+        signal = OpticalSignal(
+            bands=tuple(
+                Band(
+                    Ex=np.full(ctx.num_samples, np.sqrt(power), dtype=np.complex128),
+                    Ey=np.zeros(ctx.num_samples, dtype=np.complex128),
+                    f0=anchor + index * SPACING,
+                    fs=ctx.sample_rate,
+                )
+                for index in range(3)
+            ),
+            noise=(),
+        )
+        for index in range(spans):
+            signal = Fiber(
+                length=span_km,
+                attenuation=ATTENUATION,
+                dispersion=dispersion,
+                nonlinearity=GAMMA,
+                mixing_floor=250.0,
+                label=f"fib{index}",
+            ).run(ctx, {"in": signal})["out"]
+            signal = EDFA(gain=ATTENUATION * span_km, noise_figure=0.0, label=f"amp{index}").run(
+                ctx, {"in": signal}
+            )["out"]
+        target = anchor - SPACING
+        return next(b.average_power() for b in signal.bands if abs(b.f0 - target) < 1e3)
+
+    print(f"     {'span':>8} {'D = 0':>12} {'x one':>8} {'D = 17':>12} {'x one':>8}")
+    print("     " + "-" * 54)
+    for km in (78.0, 80.0, 82.0, 85.0):
+        # `row` is a list of strings elsewhere in this file, so this one is not.
+        measured: list[tuple[float, float]] = []
+        for dispersion in (0.0, 17.0):
+            one = link(1, dispersion, km)
+            four = link(4, dispersion, km)
+            measured.append((four, four / one))
+        print(
+            f"     {km:6.0f}km {w_to_dbm(measured[0][0]):9.2f} dBm {measured[0][1]:8.2f} "
+            f"{w_to_dbm(measured[1][0]):9.2f} dBm {measured[1][1]:8.2f}"
+        )
+    print("     Phase matched, four spans give sixteen times one whatever the")
+    print("     spans are: the contributions are in phase and a boundary is not")
+    print("     a physical thing. Adding them in power would give four, and a")
+    print("     four-span link would be reported 6 dB quieter than it is.")
+    print("     With dispersion each span arrives rotated by the mismatch behind")
+    print("     it, so the answer becomes an interference and moving the span")
+    print("     length by a few kilometres moves it by an order of magnitude.")
+    print("     That is what a dispersion map is designed against.")
+
 
 if __name__ == "__main__":
     main()

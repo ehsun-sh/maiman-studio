@@ -91,7 +91,13 @@ class MachZehnderModulator(Component):
         mean_transmission = float(np.mean(self.power_transmission(drive.samples)))
         noise = tuple(n.scale_power(mean_transmission) for n in optical.noise)
 
-        return {"out": OpticalSignal(bands=bands, noise=noise)}
+        return {
+            "out": OpticalSignal(
+                bands=bands,
+                noise=noise,
+                accumulated_gvd=optical.accumulated_gvd,
+            )
+        }
 
 
 class IQModulator(Component):
@@ -188,4 +194,10 @@ class IQModulator(Component):
         mean_power = float(np.mean(np.abs(transmission) ** 2))
         noise = tuple(n.scale_power(mean_power) for n in optical.noise)
 
-        return {"out": OpticalSignal(bands=bands, noise=noise)}
+        return {
+            "out": OpticalSignal(
+                bands=bands,
+                noise=noise,
+                accumulated_gvd=optical.accumulated_gvd,
+            )
+        }

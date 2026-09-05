@@ -122,4 +122,10 @@ class EDFA(Component):
                 )
             )
 
-        return {"out": OpticalSignal(bands=bands, noise=tuple(noise))}
+        return {
+            "out": OpticalSignal(
+                bands=bands,
+                noise=tuple(noise),
+                accumulated_gvd=signal.accumulated_gvd,
+            )
+        }

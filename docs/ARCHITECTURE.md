@@ -210,7 +210,16 @@ class NoiseBin:
 class OpticalSignal:
     bands: tuple[Band, ...]
     noise: tuple[NoiseBin, ...]
+    accumulated_gvd: float    # sum(beta2 * L) over the path so far [s^2]
 ```
+
+`accumulated_gvd` is the one piece of *path* state the signal carries. Four-wave mixing products
+generated in different spans have to add as fields, and how far apart they have drifted is the
+phase mismatch integrated over the distance travelled — which, because the mismatch is a difference
+of four propagation constants at frequencies satisfying `w_i + w_j = w_k + w_F`, depends on beta2
+alone. Carrying it here rather than tracking each band's absolute phase is not a convenience: over
+80 km `beta_0 * L` is of order 1e11 radians, and reducing that modulo 2*pi in double precision
+would leave about five digits of the answer.
 
 Fields are in units of sqrt(W), so instantaneous power is `|Ex|**2 + |Ey|**2`. The containers
 are tuples and the arrays are read-only: §3.4's immutability rule has to be enforced by the

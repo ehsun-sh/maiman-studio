@@ -708,12 +708,56 @@ def fwm_efficiency(phase_mismatch: float, alpha: float, distance: float) -> floa
     reference = effective_length(alpha, distance)
     if reference <= 0.0:
         return 0.0
+    return float(abs(fwm_mixing_integral(phase_mismatch, alpha, distance)) ** 2 / reference**2)
+
+
+def fwm_mixing_integral(phase_mismatch: float, alpha: float, distance: float) -> complex:
+    """``integral_0^L exp((i delta_beta - alpha) z) dz`` [m], with its phase kept.
+
+    :func:`fwm_efficiency` is this integral's squared magnitude and throws the
+    argument away, which is all a single span needs: one span's product has
+    whatever phase it has. A link of several spans needs the argument, because
+    what decides whether the spans' contributions add or cancel is the phase of
+    each relative to the others — see :func:`fwm_accumulated_phase`.
+
+    Evaluated as the integral rather than as its expanded real form because that
+    stays well behaved in both limits: lossless, where the expanded expression is
+    0/0 and the answer is ``L sinc(delta_beta L / 2)``, and phase matched, where
+    it is ``L_eff``.
+    """
     rate = complex(-alpha, phase_mismatch)
     if abs(rate) * distance < 1e-9:
-        integral = complex(distance)
-    else:
-        integral = (np.exp(rate * distance) - 1.0) / rate
-    return float(abs(integral) ** 2 / reference**2)
+        return complex(distance)
+    return complex((np.exp(rate * distance) - 1.0) / rate)
+
+
+def fwm_accumulated_phase(
+    accumulated_gvd: float, offset_i: float, offset_j: float, offset_k: float
+) -> float:
+    """How far a mixing product has rotated away from its pumps [rad].
+
+    A product generated in the second span of a link is not in phase with the one
+    generated in the first. Over the distance already travelled, the pump
+    combination and the product have advanced at different rates, and the
+    difference is exactly the phase mismatch integrated over that distance::
+
+        delta_phi = integral delta_beta dz = -(sum beta2 L) * (w_i - w_k)(w_j - w_k)
+
+    **This is why one scalar is enough to carry it.** The mismatch is a
+    difference of four propagation constants at frequencies satisfying
+    ``w_i + w_j = w_k + w_F``, so the constant and group-delay terms cancel
+    identically and only the ``beta2`` term survives — see
+    :func:`fwm_phase_mismatch`. Nothing about a band's absolute phase has to be
+    tracked, which is fortunate, because ``beta_0 L`` is of order 1e11 radians
+    over 80 km and reducing that modulo 2*pi in double precision would leave
+    about five digits of the answer.
+
+    Implemented as :func:`fwm_phase_mismatch` evaluated at the *accumulated* GVD
+    rather than at ``beta2``: the two expressions are the same one, differing
+    only in whether the length has been folded in, and writing it twice is how
+    they would come to disagree.
+    """
+    return fwm_phase_mismatch(accumulated_gvd, offset_i, offset_j, offset_k)
 
 
 def fwm_product_power(

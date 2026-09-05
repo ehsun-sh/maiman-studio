@@ -177,7 +177,13 @@ class OpticalFilter(Component):
                 )
             )
 
-        return {"out": OpticalSignal(bands=tuple(bands), noise=tuple(noise))}
+        return {
+            "out": OpticalSignal(
+                bands=tuple(bands),
+                noise=tuple(noise),
+                accumulated_gvd=signal.accumulated_gvd,
+            )
+        }
 
 
 class OpticalSpectrumAnalyzer(Component):

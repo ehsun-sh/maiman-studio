@@ -26,6 +26,8 @@ from ..kernels import (
     dispersion_slope_to_beta3,
     dispersion_to_beta2,
     effective_length,
+    fwm_accumulated_phase,
+    fwm_mixing_integral,
     fwm_phase_mismatch,
     fwm_product_power,
     propagate_coupled_ssfm,
@@ -123,12 +125,18 @@ class Fiber(Component):
     is designed with. Power is moved, not lost: the sum over channels is
     unchanged to floating point.
 
+    **Mixing products add coherently from span to span.** The signal carries the
+    dispersion the path has accumulated, which is all it takes to say how far a
+    product generated in one span has rotated away from its pumps by the time the
+    next span generates another — four lossless spans give sixteen times one
+    span's product where adding in power would give four. What is *not* tracked
+    is the pumps' own nonlinear phase, so the interference between spans is
+    computed from the linear mismatch alone.
+
     Not yet modelled: the coherent polarization term
     ``A_x* A_y**2``, which exchanges power between the axes rather than only
     dephasing them, is left out — it is the part that averages away first under
-    real birefringence. Mixing products accumulate from span to span in power
-    rather than in field, which understates the coherent build-up a
-    dispersion-managed link produces. The Raman gain is taken as rising linearly
+    real birefringence. The Raman gain is taken as rising linearly
     with separation, which it does up to about 13 THz and not past it, so a comb
     spanning the C and L bands together has its far pairs over the peak and the
     transfer between them over-predicted. Pump depletion is not modelled, which
@@ -237,6 +245,21 @@ class Fiber(Component):
         """
         return self.si("pmd_coefficient") * math.sqrt(self.si("length"))
 
+    def reference_beta2(self, signal: OpticalSignal) -> float:
+        """The beta2 the four-wave mixing bookkeeping is written against [s²/m].
+
+        One value for the whole comb, taken at the first band's wavelength — the
+        same band the mismatch offsets are measured from, so the two cannot
+        disagree. It has to be the *first* rather than, say, the lowest in
+        frequency, because mixing products are appended to the band list and some
+        of them land below the comb: a rule that looked at the extremes would
+        pick a different reference in the second span than in the first, and the
+        accumulated phase would be measured against a moving post.
+        """
+        if not signal.bands:
+            return 0.0
+        return self.beta2_at(signal.bands[0].wavelength)
+
     def walkoff_of(self, band: Band, reference: Band) -> float:
         """Inverse-group-velocity offset of ``band`` against ``reference`` [s/m].
 
@@ -306,6 +329,10 @@ class Fiber(Component):
             "out": OpticalSignal(
                 bands=tuple(bands),
                 noise=tuple(n.scale_power(power_factor) for n in signal.noise),
+                # The span's own contribution to the path history, which is what
+                # tells the *next* span how far these products have already
+                # rotated away from their pumps.
+                accumulated_gvd=signal.accumulated_gvd + self.reference_beta2(signal) * distance,
             ),
             "diagnostics": diagnostics,
         }
@@ -506,14 +533,35 @@ class Fiber(Component):
     ) -> tuple[list[Band], int]:
         """Add the mixing products this span generated to the propagated bands.
 
-        Products are accumulated as complex amplitudes rather than as powers,
-        each with its own drawn phase, so that several triplets landing on one
-        frequency add the way independent waves do — on average in power, but
-        with the spread that a link actually sees. A product whose frequency
-        coincides with a band already present is added *into* that band, at DC
-        in its own rotating frame, which is what makes in-band mixing the
-        unfilterable crosstalk it is: on a uniform grid every product lands on a
-        channel, and no receiver can separate it afterwards.
+        Products are accumulated as complex amplitudes rather than as powers, so
+        that several triplets landing on one frequency add the way waves do. A
+        product whose frequency coincides with a band already present is added
+        *into* that band, at DC in its own rotating frame, which is what makes
+        in-band mixing the unfilterable crosstalk it is: on a uniform grid every
+        product lands on a channel, and no receiver can separate it afterwards.
+
+        **Across spans the addition is coherent, and that is not a detail.** A
+        product's phase here is three things multiplied together. The argument of
+        the mixing integral, which is physics and differs between triplets
+        because their mismatches do. The accumulated mismatch over the fibre
+        already behind this span, from :func:`maiman.kernels.fwm_accumulated_phase`
+        — this is what makes span two's contribution add to span one's rather
+        than beside it, and over four lossless spans it is the difference between
+        four times one span's product and sixteen times it. And a phase drawn per
+        *triplet*, standing in for the pump phase combination that the power-only
+        treatment of the pumps has thrown away.
+
+        That draw is keyed on the three pump frequencies and on nothing else — not
+        on the block's label, not on which span it is. It has to be: the same
+        three pumps produce the same product wherever they are, and a phase that
+        was redrawn every span would make the spans add in power, which is
+        exactly the thing this is not doing any more.
+
+        What is still missing is the pumps' *nonlinear* phase: self- and
+        cross-phase modulation rotate the pump combination span by span, and only
+        the linear mismatch is tracked here. At a tenth of a radian per span it
+        moves the interference between spans a little; it does not change which
+        regime the link is in.
         """
         sources = signal.bands
         distance = self.si("length")
@@ -528,11 +576,11 @@ class Fiber(Component):
         floor = strongest * db_to_linear(-self.mixing_floor)
 
         reference = sources[0]
-        beta2 = self.beta2_at(reference.wavelength)
+        beta2 = self.reference_beta2(signal)
+        travelled = signal.accumulated_gvd
         powers = [
             (float(np.mean(np.abs(b.Ex) ** 2)), float(np.mean(np.abs(b.Ey) ** 2))) for b in sources
         ]
-        rng = ctx.rng("Fiber", self.label, "fwm")
 
         found: list[tuple[float, complex, complex]] = []
         for i in range(len(sources)):
@@ -567,7 +615,21 @@ class Fiber(Component):
                     ]
                     if sum(generated) < floor:
                         continue
-                    phasor = np.exp(2j * np.pi * float(rng.random()))
+                    offsets = (
+                        sources[i].f0 - reference.f0,
+                        sources[j].f0 - reference.f0,
+                        sources[k].f0 - reference.f0,
+                    )
+                    # Drawn on the pumps, not on the fibre: the same triplet gets
+                    # the same phase in every span, which is what lets the spans
+                    # add rather than average.
+                    drawn = float(ctx.rng("Fiber", "fwm", *offsets).random())
+                    phase = (
+                        2.0 * np.pi * drawn
+                        + float(np.angle(fwm_mixing_integral(mismatch, alpha, distance)))
+                        + fwm_accumulated_phase(travelled, *offsets)
+                    )
+                    phasor = np.exp(1j * phase)
                     found.append(
                         (
                             frequency,

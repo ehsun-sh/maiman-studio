@@ -24,6 +24,7 @@ in units of sqrt(W). Average power is the mean of that over the time window.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -143,12 +144,65 @@ class NoiseBin:
         return replace(self, psd_x=self.psd_x * factor, psd_y=self.psd_y * factor)
 
 
+def joined_accumulated_gvd(signals: Sequence[OpticalSignal], *, where: str) -> float:
+    """The path history of several optical inputs joined into one, or a refusal.
+
+    :attr:`OpticalSignal.accumulated_gvd` describes a path, and a block that
+    merges two inputs is being handed two paths. When they are the same path —
+    which is every comb built out of lasers and modulators, since none of them
+    has travelled any fibre — there is nothing to decide. When they are not,
+    there is no single answer, and the honest thing is to say so rather than to
+    pick one: the four-wave mixing products of channels that came the long way
+    have rotated away from their pumps and the newly added channel's have not,
+    and one number cannot hold both.
+
+    Signals with no bands are ignored, because an empty arm carries no history to
+    disagree about.
+    """
+    values = [signal.accumulated_gvd for signal in signals if signal.bands]
+    if not values:
+        return 0.0
+    spread = max(values) - min(values)
+    scale = max(abs(value) for value in values)
+    if spread > 1e-9 * scale:
+        raise ValueError(
+            f"{where}: the inputs have travelled different amounts of fibre — accumulated "
+            f"GVD {min(values):.4g} and {max(values):.4g} s². Four-wave mixing needs one path "
+            f"history to say how far a product has rotated from its pumps, and a join like this "
+            f"has two. Combine the channels before the fibre, or give the spans downstream "
+            f"four_wave_mixing=False."
+        )
+    return values[0]
+
+
 @dataclass(frozen=True)
 class OpticalSignal:
     """A set of sampled bands plus the noise accompanying them."""
 
     bands: tuple[Band, ...] = ()
     noise: tuple[NoiseBin, ...] = ()
+
+    accumulated_gvd: float = 0.0
+    """Group-velocity dispersion the path has accumulated so far, ``sum(beta2 * L)`` [s²].
+
+    Carried on the signal rather than on a band because it is a property of the
+    *path*, not of any one carrier: what it exists for is to say how far a
+    four-wave mixing product generated in one span has rotated away from its
+    pumps by the time the next span generates another. That rotation is the phase
+    mismatch integrated over the distance already travelled, and the mismatch is a
+    difference of four propagation constants whose constant and group-delay terms
+    cancel — so this one number carries all of it. See
+    :func:`maiman.kernels.fwm_accumulated_phase`.
+
+    It is not the same as the accumulated dispersion a receiver is set with,
+    which is ``D * L`` in ps/nm; the two differ by ``-lambda**2 / 2 pi c`` and by
+    the fact that this one is signed the way beta2 is.
+
+    Zero on a freshly emitted signal, added to by every span of fibre, and
+    carried through unchanged by everything that does not disperse. A
+    dispersion-compensating span is a fibre with negative D, so it subtracts
+    here on its own.
+    """
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "bands", tuple(self.bands))

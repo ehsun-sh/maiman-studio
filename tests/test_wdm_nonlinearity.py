@@ -379,9 +379,11 @@ def test_product_power_is_cubic_in_the_pump_power() -> None:
 # ---------------------------------------------------------------------------
 
 
-def comb(channels: int, power: float = POWER) -> tuple[SimulationContext, OpticalSignal]:
+def comb(
+    channels: int, power: float = POWER, seed: int = 3
+) -> tuple[SimulationContext, OpticalSignal]:
     """``channels`` unmodulated carriers on a uniform grid, X-polarized."""
-    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=16, sequence_length=64, seed=3)
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=16, sequence_length=64, seed=seed)
     bands = tuple(
         Band(
             Ex=cw(power),
@@ -394,8 +396,10 @@ def comb(channels: int, power: float = POWER) -> tuple[SimulationContext, Optica
     return ctx, OpticalSignal(bands=bands, noise=())
 
 
-def propagate(channels: int, dispersion: float = 0.0, **kwargs: object) -> dict[str, object]:
-    ctx, signal = comb(channels)
+def propagate(
+    channels: int, dispersion: float = 0.0, seed: int = 3, **kwargs: object
+) -> dict[str, object]:
+    ctx, signal = comb(channels, seed=seed)
     kwargs.setdefault("mixing_floor", 200.0)
     fiber = Fiber(
         length=80.0,
@@ -464,17 +468,23 @@ def test_on_a_uniform_grid_the_in_band_products_are_not_separable() -> None:
     channel's own band. No filter downstream can remove it, and the channel's
     power moves — in either direction, because the product arrives with a phase
     nobody controls and can subtract as easily as add.
-    """
-    result = propagate(4)
-    signal: OpticalSignal = result["out"]  # type: ignore[assignment]
-    channels = [band_at(signal, offset) for offset in (0.0, 100.0, 200.0, 300.0)]
-    assert all(band is not None for band in channels)
 
+    Read over several realisations rather than one. Whether a *particular* run
+    happens to show a channel gaining is a property of that run's drawn pump
+    phases; that some do and some do not is the property of the mechanism, and it
+    is the one worth pinning.
+    """
     undisturbed = POWER * 10.0 ** (-16.0 / 10.0)
-    shifts = [
-        10.0 * math.log10(band.average_power() / undisturbed)  # type: ignore[union-attr]
-        for band in channels
-    ]
+    shifts: list[float] = []
+    for seed in range(8):
+        signal: OpticalSignal = propagate(4, seed=seed)["out"]  # type: ignore[assignment]
+        channels = [band_at(signal, offset) for offset in (0.0, 100.0, 200.0, 300.0)]
+        assert all(band is not None for band in channels)
+        shifts.extend(
+            10.0 * math.log10(band.average_power() / undisturbed)  # type: ignore[union-attr]
+            for band in channels
+        )
+
     assert any(shift > 0.05 for shift in shifts)
     assert any(shift < -0.05 for shift in shifts)
     assert all(abs(shift) < 3.0 for shift in shifts)
@@ -523,8 +533,19 @@ def test_coupling_can_be_switched_off_and_it_changes_the_answer() -> None:
     assert phase_difference == pytest.approx(2.0 * GAMMA * POWER * L_EFF, rel=0.05)
 
 
-def test_a_run_is_reproducible_and_the_seed_actually_moves_it() -> None:
-    """Product phases are drawn, so pin both halves of that: same seed, same answer."""
+def test_the_seed_moves_the_product_and_the_label_must_not() -> None:
+    """Product phases are drawn, and *what they are drawn on* is the point.
+
+    Same seed, same answer — the ordinary reproducibility claim. A different
+    context seed, a different answer, because the pump phase combination the
+    draw stands in for is genuinely unknown.
+
+    But a different *label* on the fibre must change nothing at all. The draw is
+    keyed on the three pump frequencies alone, and that is what lets two spans in
+    series produce contributions that add rather than average: a phase redrawn
+    per block would make an eight-span link's products grow as the square root of
+    eight instead of as eight.
+    """
     first = band_at(propagate(3)["out"], -100.0)  # type: ignore[arg-type]
     again = band_at(propagate(3)["out"], -100.0)  # type: ignore[arg-type]
     assert first is not None and again is not None
@@ -532,7 +553,11 @@ def test_a_run_is_reproducible_and_the_seed_actually_moves_it() -> None:
 
     labelled = band_at(propagate(3, label="other")["out"], -100.0)  # type: ignore[arg-type]
     assert labelled is not None
-    assert labelled.average_power() != pytest.approx(first.average_power(), rel=1e-6, abs=0.0)
+    assert labelled.average_power() == pytest.approx(first.average_power(), rel=1e-12, abs=0.0)
+
+    reseeded = band_at(propagate(3, seed=99)["out"], -100.0)  # type: ignore[arg-type]
+    assert reseeded is not None
+    assert reseeded.average_power() != pytest.approx(first.average_power(), rel=1e-6, abs=0.0)
 
 
 def test_channels_on_different_grids_are_refused_by_the_component() -> None:

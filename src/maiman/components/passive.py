@@ -8,7 +8,7 @@ import numpy as np
 
 from ..component import Component, Param, PortType
 from ..context import SimulationContext
-from ..signals import Band, NoiseBin, OpticalSignal, Signal
+from ..signals import Band, NoiseBin, OpticalSignal, Signal, joined_accumulated_gvd
 from ..units import db_to_linear
 
 
@@ -50,8 +50,10 @@ class Combiner(Component):
         bands = []
         noise: list[NoiseBin] = []
         seen: dict[float, str] = {}
+        joined: list[OpticalSignal] = []
         for name in self.inputs:
             signal: OpticalSignal = inputs[name]
+            joined.append(signal)
             for band in signal.bands:
                 if band.f0 in seen:
                     raise ValueError(
@@ -63,7 +65,13 @@ class Combiner(Component):
                 bands.append(band.scale_amplitude(amplitude_factor))
             noise.extend(n.scale_power(power_factor) for n in signal.noise)
 
-        return {"out": OpticalSignal(bands=tuple(bands), noise=tuple(noise))}
+        return {
+            "out": OpticalSignal(
+                bands=tuple(bands),
+                noise=tuple(noise),
+                accumulated_gvd=joined_accumulated_gvd(joined, where=self.label),
+            )
+        }
 
 
 class Splitter(Component):
@@ -101,6 +109,7 @@ class Splitter(Component):
         split = OpticalSignal(
             bands=tuple(b.scale_amplitude(amplitude_factor) for b in signal.bands),
             noise=tuple(n.scale_power(power_factor) for n in signal.noise),
+            accumulated_gvd=signal.accumulated_gvd,
         )
         return {name: split for name in self.outputs}
 
@@ -168,7 +177,13 @@ class PolarizationCombiner(Component):
         noise = tuple(
             n.scale_power(power_factor) for signal in (arm_x, arm_y) for n in signal.noise
         )
-        return {"out": OpticalSignal(bands=tuple(by_frequency.values()), noise=noise)}
+        return {
+            "out": OpticalSignal(
+                bands=tuple(by_frequency.values()),
+                noise=noise,
+                accumulated_gvd=joined_accumulated_gvd((arm_x, arm_y), where=self.label),
+            )
+        }
 
 
 class PolarizationRotator(Component):
@@ -222,7 +237,13 @@ class PolarizationRotator(Component):
                     fs=band.fs,
                 )
             )
-        return {"out": OpticalSignal(bands=tuple(bands), noise=signal.noise)}
+        return {
+            "out": OpticalSignal(
+                bands=tuple(bands),
+                noise=signal.noise,
+                accumulated_gvd=signal.accumulated_gvd,
+            )
+        }
 
 
 class Attenuator(Component):
@@ -244,5 +265,6 @@ class Attenuator(Component):
             "out": OpticalSignal(
                 bands=tuple(b.scale_amplitude(amplitude_factor) for b in signal.bands),
                 noise=tuple(n.scale_power(power_factor) for n in signal.noise),
+                accumulated_gvd=signal.accumulated_gvd,
             )
         }

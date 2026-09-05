@@ -447,6 +447,50 @@ noise bins rendered onto one grid, the way an instrument shows them. Its resolut
 not cosmetic — widening it raises the ASE trace decibel for decibel and leaves a carrier exactly
 where it is, which is the clearest demonstration of why OSNR needs a stated reference bandwidth.
 
+## Mixing products add in field, not in power
+
+A link is not one fibre. The four-wave mixing product a span generates arrives on top of the one
+the span before it generated, and whether those add or cancel is decided by how far the pumps and
+the product have drifted apart over the fibre already behind them. That drift is the phase mismatch
+integrated over the distance travelled, and it used to be thrown away: every span drew its products
+a fresh random phase, so they added in power and a four-span link came out four times one span
+instead of sixteen.
+
+Three carriers at −30 dBm, four 80 km spans against one, each span's loss exactly undone:
+
+| span | D = 0 | × one span | D = 17 | × one span |
+| ---: | ---: | ---: | ---: | ---: |
+| 78 km | −104.06 dBm | 16.00 | −180.98 dBm | 0.03 |
+| 80 km | −104.04 dBm | 16.00 | −154.84 dBm | 13.17 |
+| 82 km | −104.02 dBm | 16.00 | −166.46 dBm | 0.89 |
+| 85 km | −103.99 dBm | 16.00 | −160.89 dBm | 3.12 |
+
+**The sharp form of the claim is that cutting a span in half must change nothing.** A span boundary
+is a bookkeeping decision, not a physical one, so 320 km of lossless fibre must give the same
+product whether it is run as one block or as eight — and it now does, to under a hundredth of a
+decibel, at every dispersion. Adding the pieces in power put eight of them 9 dB below one.
+
+Note what is *not* claimed: that dispersion suppresses the build-up. At the right span length it
+does the opposite — the rotation per span comes back round to a multiple of 2π and the spans stack
+again, which is the 13.17 in the table. That periodic re-phasing is a real property of a
+dispersion-managed link and is why the map is designed rather than chosen; a model that reported
+"less" would be reporting something false.
+
+**One number carries all of it.** The mismatch is a difference of four propagation constants at
+frequencies satisfying `ω_i + ω_j = ω_k + ω_F`, so the constant and group-delay terms cancel
+identically and only the β₂ term survives. The signal therefore carries a single accumulated
+`Σ β₂·L` and nothing about any band's absolute phase — which is fortunate, because `β₀·L` is of
+order 10¹¹ radians over 80 km and reducing that modulo 2π in double precision would leave about
+five digits of the answer. A dispersion-compensating span is a fibre with negative D, so it
+subtracts from that sum on its own; nothing special is done for it.
+
+What remains drawn is one phase per *triplet*, standing in for the pump phase combination that
+modelling the pumps by their powers has thrown away. It is keyed on the three pump frequencies and
+on nothing else — not on the block, not on which span it is — because the same three pumps make the
+same product wherever they are, and a phase redrawn per block is precisely what made the spans
+average instead of add. What is still missing is the pumps' own nonlinear phase: only the linear
+mismatch is tracked between spans.
+
 ## The short wavelengths pump the long ones
 
 A photon can scatter off a silica vibration and come out at a lower frequency, and the process is
@@ -830,10 +874,14 @@ class NoiseBin:
 class OpticalSignal:
     bands: tuple[Band, ...]
     noise: tuple[NoiseBin, ...]
+    accumulated_gvd: float    # sum(beta2 * L) over the path so far [s^2]
 ```
 
 Fields are `sqrt(W)`, so instantaneous power is `|Ex|**2 + |Ey|**2`. Arrays are read-only, which
 is what lets metadata-only blocks share buffers instead of copying a span at a time.
+`accumulated_gvd` is the one piece of *path* state on the signal, and it is there so that mixing
+products generated in different spans can be added as fields — see
+[above](#mixing-products-add-in-field-not-in-power).
 
 Global run parameters (bit rate, oversampling, sequence length, RNG seed) live in a shared
 `SimulationContext`, not in individual signals — so blocks cannot silently disagree about the
@@ -847,7 +895,7 @@ time window, and results are reproducible.
 | **1 — MVP: linear link** *(essentially done)* | ✅ PRBS → NRZ → laser → MZM → fiber (α + CD) → PIN → filter → eye/Q/BER, validated end to end. **Python only, no GUI.** | ~2–3 months |
 | **1.5 — Nonlinear & amplified** ✅ | Adaptive-step SSFM, Kerr, EDFA with ASE, OSNR, PMD, APD, dispersion slope and its third-order term, cross-polarization Kerr coupling, inter-channel stimulated Raman scattering | ~2 months |
 | **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier phase recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km with blind estimation of the accumulated value, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
-| **3 — GUI & WDM** | ✅ Wavelength-selective filters, an OSA, coupled-channel propagation (XPM with walk-off, FWM), the session server, and a schematic editor: add, wire, move and delete blocks, edit parameters, run, sweep, open and save · 400G/800G references, CuPy back-end | ~6 months |
+| **3 — GUI & WDM** | ✅ Wavelength-selective filters, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, and a schematic editor: add, wire, move and delete blocks, edit parameters, run, sweep, open and save · 400G/800G references, CuPy back-end | ~6 months |
 | **4 — PIC** | Waveguides, ring resonators, MMI, MZI via integration with an existing S-matrix solver; PDK import | — |
 
 ¹ One developer, part-time. Estimates, not commitments.
