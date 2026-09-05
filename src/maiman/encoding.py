@@ -290,6 +290,12 @@ def _dispersion(diagnostics: DispersionDiagnostics) -> dict[str, Any]:
         "accumulated_dispersion": number(diagnostics.accumulated_dispersion),
         "accumulated_dispersion_ps_nm": number(diagnostics.accumulated_dispersion * 1e3),
         "removed_symbols": number(diagnostics.removed_symbols),
+        # What was searched for, and what was typed in. Both, so that a blind
+        # estimate arrives next to the value it can be checked against instead of
+        # replacing it silently.
+        "estimated": diagnostics.estimated,
+        "declared_ps_nm": number(diagnostics.declared * 1e3),
+        "contrast": number(diagnostics.contrast),
     }
 
 

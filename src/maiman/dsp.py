@@ -17,6 +17,8 @@ Comm. 28(11), 1980 (the constant-modulus algorithm).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from .kernels import dispersion_to_beta2, propagate_dispersion
@@ -85,6 +87,350 @@ def dispersive_spread(
     """
     wavelength_span = wavelength**2 * bandwidth / C_LIGHT
     return abs(accumulated_dispersion * wavelength_span) * symbol_rate
+
+
+#: Fraction of the beat spectrum's energy the acquisition scan keeps.
+#:
+#: The clock tone is a beat between frequencies one symbol rate apart, so only
+#: bins where the spectrum overlaps its own shifted copy carry any of it; the
+#: rest hold receiver noise. Summing all 65536 instead of the ~3800 that matter
+#: costs a factor of twelve in time and buys nothing: it changes the scan by
+#: 0.5 % of its peak at worst, and on the grid acquisition actually uses — half a
+#: lobe, 61 ps/nm at 32 GBd — it moved the chosen candidate by zero steps at
+#: every span tested. Probed on a ten-times finer grid it moves it by one.
+BEAT_ENERGY_KEPT = 0.999
+
+#: Candidates evaluated per matrix in :func:`scan_clock_tone`.
+SCAN_BLOCK = 64
+
+#: Points per refinement window. Nine leaves four either side of the minimum, so
+#: the parabola through the best three is always fitted to points that bracket it.
+REFINE_POINTS = 9
+
+#: How many windows refinement may *move* before it starts narrowing.
+#:
+#: A window whose minimum sits on its own edge has not bracketed anything, and
+#: narrowing it there would converge on the edge instead of on the answer. Moving
+#: it costs one window and buys three grid steps of reach — about 2900 ps/nm at
+#: 32 GBd over this many moves — which is what carries the estimate in from an
+#: acquisition that is biased rather than merely imprecise. At roll-off 0.05 the
+#: clock tone lands a consistent 950 ps/nm low, and walking is the whole reason
+#: that case still resolves.
+WALK_LIMIT = 16
+
+
+@dataclass(frozen=True)
+class DispersionEstimate:
+    """What a blind search found, and how much to believe it."""
+
+    accumulated_dispersion: float
+    """The estimate [s/m]."""
+
+    acquired: float
+    """Where acquisition put it, before refinement [s/m]."""
+
+    contrast: float
+    """Clock-tone peak over the median of the scan.
+
+    Near 1 the scan found no peak at all. A high value is *not* a promise of
+    accuracy, and the two should not be read as the same measurement: at
+    roll-off 0.05 the scan produced a contrast of 29 — indistinguishable from
+    the 32 of a run that was right — while landing 950 ps/nm low. What rescued
+    that case was refinement walking in, not the contrast warning about it.
+    """
+
+    step: float
+    """Spacing of the acquisition grid [s/m], which is what refinement started from."""
+
+    def __repr__(self) -> str:
+        return (
+            f"DispersionEstimate({self.accumulated_dispersion * 1e3:.1f} ps/nm, "
+            f"acquired {self.acquired * 1e3:.0f}, contrast {self.contrast:.1f})"
+        )
+
+
+def _symbol_rate_bin(num_samples: int, sample_rate: float, symbol_rate: float) -> int:
+    """The FFT bin the symbol rate lands on, refusing a window where it lands between.
+
+    Every window this engine produces has an integer number of samples per
+    symbol, so the symbol rate is always exactly on a bin. Interpolating a line
+    that fell between two of them would be a different estimator with a different
+    error, so the case is refused rather than quietly approximated.
+    """
+    exact = symbol_rate / sample_rate * num_samples
+    if abs(exact - round(exact)) > 1e-9:
+        raise ValueError(
+            f"the symbol rate {symbol_rate:g} Hz does not land on an FFT bin of a "
+            f"{num_samples}-sample window sampled at {sample_rate:g} Hz"
+        )
+    return round(exact)
+
+
+def clock_tone(baseband: np.ndarray, sample_rate: float, *, symbol_rate: float) -> complex:
+    """The symbol-rate line in the spectrum of the received *intensity*.
+
+    A modulated signal is cyclostationary: its intensity repeats at the symbol
+    rate, so ``|A|²`` carries a line there. Two different things about that line
+    are useful, and this returns both in the one complex number.
+
+    Its **magnitude** measures chromatic dispersion. The line is a beat between
+    spectral components one symbol rate apart; dispersion gives every such pair a
+    relative phase that grows with frequency, so their contributions rotate away
+    from each other and partially cancel. Undo the dispersion and they add in
+    phase again, which is the maximum. That is what :func:`estimate_dispersion`
+    searches for.
+
+    Its **phase** is the symbol timing — where in the symbol period the intensity
+    peaks — which is a free clock recovery for anything that wants one. Nothing
+    here does: refinement was written to use it and measured better without it,
+    for which see :func:`intensity_cost`.
+
+    **The line only exists if the signal has excess bandwidth.** Components one
+    symbol rate apart must both fall inside the occupied band, and for a signal
+    shaped to exactly the Nyquist bandwidth there are none: a raised cosine of
+    zero roll-off is not cyclostationary at the symbol rate at all. No amount of
+    processing recovers a tone that is not there, and that is a property of the
+    signal rather than a limit of this implementation.
+    """
+    power = np.abs(np.asarray(baseband)) ** 2
+    index = _symbol_rate_bin(len(power), sample_rate, symbol_rate)
+    return complex(np.fft.fft(power)[index])
+
+
+def clock_tone_lobe(wavelength: float, symbol_rate: float) -> float:
+    """Narrowest the clock tone's peak can be, in accumulated dispersion [s/m].
+
+    The beat between ``ω`` and ``ω + ω_s`` picks up a phase ``θ·ω·ω_s`` under a
+    residual ``θ = A·λ²/2πc``. Summed over an overlap band of width ``Δf`` the
+    contributions cancel once that phase has walked through ``2π`` across the
+    band, which puts the first null at ``A = 2πc/(λ²·Δf·ω_s)``. The overlap band
+    cannot be wider than the symbol rate itself, so the tightest the peak ever
+    gets is
+
+        ``A = c / (λ² · R_s²)``
+
+    — 122 ps/nm at 32 GBd, 1.25 ns/nm at 10 GBd. The *narrowest* case is the one
+    worth knowing, because the acquisition grid has to land inside the peak
+    whatever the transmitter's roll-off turns out to be. Measured against an
+    unshaped 32 GBd signal, whose beat band is the whole of it, the peak was
+    100 ps/nm wide between its half-power points.
+    """
+    return C_LIGHT / (wavelength**2 * symbol_rate**2)
+
+
+def scan_clock_tone(
+    baseband: np.ndarray,
+    sample_rate: float,
+    *,
+    symbol_rate: float,
+    wavelength: float,
+    candidates: np.ndarray,
+    energy_kept: float = BEAT_ENERGY_KEPT,
+) -> np.ndarray:
+    """``|clock_tone|`` after compensating each candidate — without compensating any.
+
+    The obvious implementation runs :func:`compensate_dispersion` and then a
+    transform for every candidate, and a search wide enough to cover a thousand
+    kilometres at 32 GBd has several hundred of them. This computes the same
+    numbers from one forward transform.
+
+    The line at the symbol rate is a correlation of the spectrum with itself,
+    shifted by that rate::
+
+        P[k_s] = (1/N) Σ_m  Y[m] · conj(Y[m - k_s])
+
+    and compensation multiplies ``Y`` by a phase, so the compensated product is
+    the *measured* product times the phase difference between the two bins::
+
+        P_A[k_s] = (1/N) Σ_m  X[m]·conj(X[m-k_s]) · exp(i·θ(A)·(ω_m² - ω_{m-k_s}²)/2)
+
+    The measured product and the frequency lever are computed once; each
+    candidate is then one complex exponential and a dot product, with no
+    transform at all. At ``energy_kept=1`` this is an identity rather than an
+    approximation, and the tests hold it to 1e-12 relative against
+    compensate-then-transform.
+
+    The default keeps only the bins carrying :data:`BEAT_ENERGY_KEPT` of the beat
+    energy, which is where the twelve-fold speed-up over 400 candidates actually
+    comes from. That truncation is *not* exact, and it is least exact where it
+    matters least: near the peak the bins it drops move the answer by 0.4 %,
+    while at a candidate far enough out for the tone to have cancelled they are
+    most of what is left. The peak is what this is read for.
+    """
+    baseband = np.asarray(baseband)
+    n = len(baseband)
+    shift = _symbol_rate_bin(n, sample_rate, symbol_rate)
+
+    omega = 2.0 * np.pi * np.fft.fftfreq(n, 1.0 / sample_rate)
+    spectrum = np.fft.fft(baseband)
+    # Rolled by +shift so entry m holds bin m - shift, wrapping as the
+    # correlation does. The wrap lands where a band-limited signal has nothing.
+    beat = spectrum * np.conj(np.roll(spectrum, shift))
+    lever = (omega**2 - np.roll(omega, shift) ** 2) / 2.0
+
+    energy = np.abs(beat) ** 2
+    total = float(energy.sum())
+    if energy_kept < 1.0 and total > 0.0:
+        order = np.argsort(energy)[::-1]
+        held = np.cumsum(energy[order]) / total
+        keep = order[: int(np.searchsorted(held, energy_kept)) + 1]
+        beat, lever = beat[keep], lever[keep]
+
+    theta = np.asarray(candidates, dtype=float) * wavelength**2 / (2.0 * np.pi * C_LIGHT)
+    strength = np.empty(len(theta))
+    # Blocked so the candidate-by-bin matrix stays a few megabytes rather than
+    # growing with the product of a long window and a wide search.
+    for start in range(0, len(theta), SCAN_BLOCK):
+        block = theta[start : start + SCAN_BLOCK]
+        strength[start : start + SCAN_BLOCK] = np.abs(np.exp(1j * np.outer(block, lever)) @ beat)
+    return strength / n
+
+
+def intensity_cost(
+    baseband: np.ndarray,
+    sample_rate: float,
+    *,
+    wavelength: float,
+    accumulated: float,
+) -> float:
+    """How Gaussian the received intensity looks once a candidate is compensated.
+
+    ``E[p²]/E[p]²`` of ``p = |A|²``, which is 2 for a complex Gaussian field and
+    moves away from it for anything with structure left in it. Dispersion sums
+    many independent symbols into every sample and drives the field towards that
+    Gaussian; removing it puts the structure back. The minimum over
+    ``accumulated`` is the estimate.
+
+    This is the refinement stage, and it exists because the clock tone alone is
+    not sharp enough to be useful. Around the true value the tone is flat — 99 %
+    of its peak across a 140 ps/nm span at 32 GBd — while 20 ps/nm of residual
+    already costs 8 dB of SNR. This cost has curvature exactly where the tone has
+    none.
+
+    **It reads the whole waveform, not one sample per symbol.** That was not the
+    first version. Refinement used to interpolate to the symbol instant carried
+    in :func:`clock_tone`'s phase, on the reasoning that what is being measured
+    is inter-symbol interference and that interference is a property of the
+    decision instants. Deleting the decimation changed no test result, which is
+    how the reasoning was found to be decoration: measured across fifteen links
+    it is not merely unnecessary but slightly worse — worst error 44 ps/nm
+    against 63 — and the whole waveform won every case where noise or a short
+    record made the estimate hard, by 18 ps/nm against 35 through an amplifier
+    and 9 against 15 over a 512-symbol window.
+    """
+    baseband = np.asarray(baseband)
+    compensated = (
+        compensate_dispersion(
+            baseband, sample_rate, accumulated_dispersion=accumulated, wavelength=wavelength
+        )
+        if accumulated != 0.0
+        else baseband
+    )
+    power = np.abs(compensated) ** 2
+    mean = float(power.mean())
+    if mean <= 0.0:
+        return 2.0
+    return float((power**2).mean() / mean**2)
+
+
+def estimate_dispersion(
+    baseband: np.ndarray,
+    sample_rate: float,
+    *,
+    symbol_rate: float,
+    wavelength: float,
+    search_range: float,
+    rounds: int = 5,
+) -> DispersionEstimate:
+    """Find the accumulated dispersion in a received baseband, blind.
+
+    A deployed receiver is not told how long its fibre is. It measures the
+    dispersion during acquisition, from the signal itself, before anything
+    downstream has converged — and that is a large part of what makes a coherent
+    receiver deployable rather than merely correct in a laboratory.
+
+    Two stages, because no one statistic does both jobs. **Acquisition** scans
+    :func:`scan_clock_tone` across the whole of ``±search_range`` on a grid of
+    half a :func:`clock_tone_lobe`: enormous capture range, an error of tens of
+    ps/nm. **Refinement** then minimises :func:`intensity_cost` on successively
+    halved windows around it, re-centring rather than shrinking whenever the
+    minimum lands on an edge, which is what lets it walk in from an acquisition
+    several hundred ps/nm out.
+
+    **What it does, measured.** Over a 32 GBd 16-QAM link with 4096 symbols in
+    the window, spans of 0, 20, 80, 400 and 1000 km — 0 to 17 000 ps/nm — were
+    each estimated to within 9 ps/nm, and the EVM under the estimate was 1.8 to
+    2.4 % against 1.7 % under the exact value. It held at 2, 4 and 16 samples per
+    symbol, at QPSK and 64-QAM, for negative dispersion, at roll-offs from 0.02
+    to 0.35 and with no pulse shaping at all, with a 500 kHz laser, over a window
+    of 512 symbols, and through an amplifier at 5 and 9 dB noise figure.
+
+    **What limits it.** Resolution scales as ``1/R_s²``, because the phase the
+    beat accumulates does: the same link at 10 GBd landed 44 ps/nm out where
+    32 GBd landed 5. Noise costs accuracy too — 18 ps/nm through a 5 dB
+    amplifier. And a link that is *itself* sharply sensitive to residual
+    dispersion is not made safe by a good estimate: unshaped and with no matched
+    filter downstream, 11 ps/nm of residual takes the EVM from 5.1 to 18.1 %,
+    and that margin belongs to the link rather than to anything here.
+
+    **What it needs.** Excess bandwidth, for the reason given under
+    :func:`clock_tone`: at zero roll-off the tone this searches for does not
+    exist. Between there and roll-off 0.1 it exists but is biased — at 0.05 and
+    0.02 acquisition came in a consistent 950 ps/nm low, on both halves of the
+    record and at both 80 and 400 km — and it is refinement walking its window in
+    that recovers those, not the contrast figure, which flagged nothing.
+    """
+    lobe = clock_tone_lobe(wavelength, symbol_rate)
+    step = lobe / 2.0
+    candidates = np.arange(-search_range, search_range + step / 2.0, step)
+    strength = scan_clock_tone(
+        baseband,
+        sample_rate,
+        symbol_rate=symbol_rate,
+        wavelength=wavelength,
+        candidates=candidates,
+    )
+    acquired = float(candidates[int(strength.argmax())])
+    median = float(np.median(strength))
+    contrast = float(strength.max() / median) if median > 0.0 else float("inf")
+
+    centre, span = acquired, 3.0 * step
+    walks = narrowings = 0
+    while walks <= WALK_LIMIT and narrowings < max(rounds, 0):
+        grid = np.linspace(centre - span, centre + span, REFINE_POINTS)
+        cost = np.array(
+            [
+                intensity_cost(
+                    baseband,
+                    sample_rate,
+                    wavelength=wavelength,
+                    accumulated=float(value),
+                )
+                for value in grid
+            ]
+        )
+        best = int(cost.argmin())
+        spacing = float(grid[1] - grid[0])
+        if best in (0, len(grid) - 1):
+            # The minimum is outside the window, so nothing is bracketed yet:
+            # move the window rather than narrow it, and do not spend a round.
+            centre = float(grid[best])
+            walks += 1
+            continue
+
+        low, middle, high = float(cost[best - 1]), float(cost[best]), float(cost[best + 1])
+        curvature = low - 2.0 * middle + high
+        centre = float(grid[best])
+        if curvature > 0.0:
+            centre += 0.5 * spacing * (low - high) / curvature
+        narrowings += 1
+        if span <= 1.5 * spacing:
+            break
+        span = 2.0 * spacing
+
+    return DispersionEstimate(
+        accumulated_dispersion=centre, acquired=acquired, contrast=contrast, step=step
+    )
 
 
 def root_raised_cosine(roll_off: float, span_symbols: int, samples_per_symbol: int) -> np.ndarray:

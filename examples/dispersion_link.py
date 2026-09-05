@@ -17,6 +17,11 @@ square still holds every bit of it. One static filter puts it back. A link that
 is stone dead at the photodiode returns to back-to-back quality, out to a
 thousand kilometres, with no penalty that grows with distance.
 
+The last table takes the number away. A receiver is never told how long its fibre
+is, and the third table shows the compensator measuring it — to within nine ps/nm
+from back to back out to a thousand kilometres, which leaves a link as good as
+one that was handed the answer.
+
 Loss and nonlinearity are switched off here on purpose. This example is about one
 mechanism, and leaving the others in would make it about a power budget instead.
 """
@@ -37,6 +42,7 @@ from maiman.components import (
     PRBSGenerator,
     QAMMapper,
 )
+from maiman.components.dsp import DispersionDiagnostics
 from maiman.dsp import dispersive_spread
 from maiman.signals import ConstellationMeasurement
 
@@ -126,6 +132,18 @@ def measure(length_km: float, *, compensate_km: float | None) -> ConstellationMe
     return graph.run()[analyzer]
 
 
+def measure_blind(length_km: float) -> tuple[ConstellationMeasurement, DispersionDiagnostics]:
+    """The same link, with the compensator told nothing and made to find it.
+
+    The declared parameter is set to zero so that nothing correct is left in the
+    graph for the search to fall back on: whatever the filter removes, it worked
+    out from the signal.
+    """
+    graph, analyzer, compensator = build(length_km, compensate_km=0.0)
+    results = graph.run(overrides={(compensator, "estimate"): True}, keep=[compensator])
+    return results[analyzer], results.port(compensator, "diagnostics")
+
+
 def main() -> None:
     spans = (0.0, 5.0, 20.0, 80.0, 400.0, 1000.0)
     occupied = SYMBOL_RATE * 1.2
@@ -159,6 +177,32 @@ def main() -> None:
         print(
             f"  {setting:8.0f} km {(setting - 80.0) * DISPERSION:+8.0f} ps/nm "
             f"{result.evm * 100:8.2f}% {result.snr_db:8.2f} dB"
+        )
+
+    # And then: not told at all.
+    #
+    # The table above is the reason this one matters. A compensator has to be set
+    # to within a few ps/nm or it is worse than useless, and no deployed receiver
+    # is ever told the number — it measures it during acquisition, from the
+    # signal, before the equaliser or the carrier loop have converged. Switching
+    # `estimate` on does that here: a clock-tone scan across the whole search
+    # range, then a refinement that walks in on the shape of the intensity.
+    #
+    # The last two columns are the ones to read together. Being right in ps/nm is
+    # not the claim; leaving behind a link as good as one that was told the
+    # answer is.
+    print("\n  Blind: the compensator is given nothing and finds it")
+    print("            accumulated   estimated     error   contrast        EVM       EVM")
+    print("  span          [ps/nm]     [ps/nm]   [ps/nm]              declared     blind")
+    print("  " + "-" * 78)
+    for length in spans:
+        accumulated = DISPERSION * length
+        blind, diagnostics = measure_blind(length)
+        declared = measure(length, compensate_km=length)
+        found = diagnostics.accumulated_dispersion * 1e3
+        print(
+            f"  {length:6.0f} km  {accumulated:9.0f}   {found:9.1f} {found - accumulated:+9.1f}   "
+            f"{diagnostics.contrast:8.1f}   {declared.evm * 100:7.2f}% {blind.evm * 100:8.2f}%"
         )
 
 

@@ -1423,6 +1423,18 @@ verdict, and DESIGN.md
      "unit": "nm",
      "min": 1.0,
      "doc": "Signal wavelength, for the lambda^2 in b2"
+    },
+    "estimate": {
+     "type": "bool",
+     "default": false,
+     "doc": "Measure the dispersion from the signal instead of using the declared value"
+    },
+    "search_range": {
+     "type": "float",
+     "default": 20000.0,
+     "unit": "ps/nm",
+     "min": 0.0,
+     "doc": "Half-width of the blind search; only used when estimate is on"
     }
    },
    "structural": {},
@@ -17873,7 +17885,10 @@ verdict, and DESIGN.md
     IQDriver:              (id) => `Vπ ${fmt(param(id, "v_pi"))} V`,
     IQModulator:           (id) => `Vπ ${fmt(param(id, "v_pi"))} V`,
     CoherentReceiver:      (id) => `${fmt(param(id, "responsivity"))} A/W`,
-    DispersionCompensator: (id) => `${fmt(param(id, "accumulated_dispersion"))} ps/nm`,
+    /* With the search on, the declared value is not what the filter removes, so
+       printing it on the block would be a number no run produced. */
+    DispersionCompensator: (id) => param(id, "estimate") ? "blind"
+                                   : `${fmt(param(id, "accumulated_dispersion"))} ps/nm`,
     IQSampler:             (id) => (param(id, "matched_filter") ? "matched" : "no filter"),
     CarrierRecovery:       (id) => `${fmt(param(id, "window"))}-sym BPS`,
     ConstellationDiagram:  (id) => `${fmt(param(id, "bins"))} × ${fmt(param(id, "bins"))}`,
@@ -18913,8 +18928,16 @@ verdict, and DESIGN.md
         return value.steps ? `${value.steps} split-steps, ` +
                              `max phase ${value.peak_nonlinear_phase.toFixed(4)} rad`
                            : "linear, solved exactly";
-      case "dispersion": return `${value.accumulated_dispersion_ps_nm.toFixed(0)} ps/nm removed` +
-                                `, ${value.removed_symbols.toFixed(1)} symbol periods`;
+      case "dispersion": {
+        /* A searched-for value is reported against the one that was typed in,
+           because that is the only way to see whether the search worked. */
+        const how = value.estimated
+          ? ` (found, ${(value.accumulated_dispersion_ps_nm - value.declared_ps_nm).toFixed(1)}` +
+            ` ps/nm from declared)`
+          : "";
+        return `${value.accumulated_dispersion_ps_nm.toFixed(0)} ps/nm removed` +
+               `, ${value.removed_symbols.toFixed(1)} symbol periods${how}`;
+      }
       case "opaque":  return `${value.type} — nothing here can draw it`;
       default:        return value.kind;
     }

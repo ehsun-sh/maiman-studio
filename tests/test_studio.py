@@ -443,3 +443,38 @@ def test_the_dock_is_cleared_before_a_run_writes_to_it() -> None:
     assert 'for (const id of ["m-evm", "m-snr", "m-ber", "m-err"' in text
     # And the headings move with the measurement, so a Q never sits under "SNR".
     assert 'label("k-evm", "Q")' in text
+
+
+def test_the_page_only_reads_dispersion_fields_the_engine_sends() -> None:
+    """Every ``value.x`` in the compensator's log line has to be a key of the encoding.
+
+    The compensator learned to search for its own value, which added three fields
+    to what it reports and a branch in the page that reads two of them. A field
+    renamed on one side of that and not the other prints "undefined" in a log
+    whose whole claim is that every line is a fact from the response — and it
+    would print it only on runs with the search switched on, which is exactly the
+    run nobody re-tests by hand.
+    """
+    from maiman.components.dsp import DispersionDiagnostics
+    from maiman.encoding import encode
+
+    text = STUDIO.read_text(encoding="utf-8")
+    start = text.index('case "dispersion":')
+    body = text[start : text.index('case "opaque"', start)]
+    read = set(re.findall(r"value\.([A-Za-z_][A-Za-z0-9_]*)", body))
+
+    sent = set(
+        encode(
+            DispersionDiagnostics(
+                accumulated_dispersion=1.36,
+                removed_symbols=13.4,
+                estimated=True,
+                declared=1.30,
+                contrast=31.8,
+            )
+        )
+    )
+    assert read, "the dispersion branch reads nothing; the parse is wrong, not the page"
+    assert read <= sent, f"the page reads {sorted(read - sent)}, which the engine never sends"
+    # And the branch that only runs with the search on is present at all.
+    assert "estimated" in read

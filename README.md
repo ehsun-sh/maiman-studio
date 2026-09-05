@@ -447,6 +447,50 @@ noise bins rendered onto one grid, the way an instrument shows them. Its resolut
 not cosmetic — widening it raises the ASE trace decibel for decibel and leaves a carrier exactly
 where it is, which is the clearest demonstration of why OSNR needs a stated reference bandwidth.
 
+## Finding the dispersion without being told it
+
+A dispersion compensator has to be set to within a few ps/nm. Over 80 km at 32 GBd the true value
+is 1360, and being 17 out — one kilometre of fibre — takes the EVM from 1.7 % to 3.8 %, while 136
+out lands the symbols at chance. It is not a knob to be roughly right about, because the residual
+after a mismatch *is* the mismatch.
+
+No deployed receiver is ever told the number. It measures it during acquisition, from the signal,
+before the equaliser or the carrier loop have converged. Set `estimate` on the compensator and it
+does the same:
+
+| span | accumulated | estimated | error | EVM declared | EVM blind |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 0 km | 0 ps/nm | −7.4 | −7.4 | 1.68 % | 2.23 % |
+| 20 km | 340 ps/nm | 336.4 | −3.6 | 1.67 % | 1.82 % |
+| 80 km | 1360 ps/nm | 1355.3 | −4.7 | 1.68 % | 1.92 % |
+| 400 km | 6800 ps/nm | 6793.9 | −6.1 | 1.67 % | 2.05 % |
+| 1000 km | 17000 ps/nm | 16991.5 | −8.5 | 1.68 % | 2.39 % |
+
+The last two columns are the ones to read together: being right in ps/nm is not the claim, leaving
+behind a link as good as one that was handed the answer is.
+
+**Two stages, because no one statistic does both jobs.** The intensity of a modulated signal
+repeats at the symbol rate, so `|A|²` carries a line there — and dispersion gives every pair of
+frequencies a symbol rate apart a relative phase that grows with frequency, so their contributions
+cancel and the line fades. Scanning that line across ±20000 ps/nm acquires the value with an
+enormous capture range and an error of tens of ps/nm. Then a second stage minimises how Gaussian
+the intensity looks, which has curvature exactly where the tone is flat.
+
+The scan never compensates anything. The line at the symbol rate is a correlation of the spectrum
+with itself shifted by that rate, and compensation only multiplies the spectrum by a phase, so
+every candidate is one dot product against a product computed once from a single transform. It is
+an identity, held to 1e-12 against compensate-then-transform in the tests, and it made 400
+candidates over a 65536-sample window twenty times cheaper.
+
+**It needs excess bandwidth**, and says so: at zero roll-off the tone this searches for does not
+exist at all. Between there and roll-off 0.1 it exists but acquisition comes in a consistent
+950 ps/nm low, and what recovers those runs is refinement walking its window in rather than any
+warning from the contrast figure — which scored 29 on a run that was wrong by 950 and 32 on one
+that was right. Resolution also scales as 1/R\_s²: the same link at 10 GBd lands 44 ps/nm out where
+32 GBd lands 5. All of that is in
+[`estimate_dispersion`](src/maiman/dsp.py)'s docstring, measured rather than asserted, and the
+third table of [`examples/dispersion_link.py`](examples/dispersion_link.py) prints it.
+
 ## What channels do to each other
 
 Until recently bands propagated independently through the fiber, which made this a good model of
@@ -695,7 +739,7 @@ time window, and results are reproducible.
 | **0 — Foundations** ✅ | Signal model, context, port types, component base, registry, scheduler, `.maiman` project format, sweeps, CI | ~1 month |
 | **1 — MVP: linear link** *(essentially done)* | ✅ PRBS → NRZ → laser → MZM → fiber (α + CD) → PIN → filter → eye/Q/BER, validated end to end. **Python only, no GUI.** | ~2–3 months |
 | **1.5 — Nonlinear & amplified** ✅ | Adaptive-step SSFM, Kerr, EDFA with ASE, OSNR, PMD, APD | ~2 months |
-| **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier phase recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
+| **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier phase recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km with blind estimation of the accumulated value, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
 | **3 — GUI & WDM** | ✅ Wavelength-selective filters, an OSA, coupled-channel propagation (XPM with walk-off, FWM), the session server, and a schematic editor: add, wire, move and delete blocks, edit parameters, run, sweep, open and save · 400G/800G references, CuPy back-end | ~6 months |
 | **4 — PIC** | Waveguides, ring resonators, MMI, MZI via integration with an existing S-matrix solver; PDK import | — |
 

@@ -457,6 +457,18 @@
      "unit": "nm",
      "min": 1.0,
      "doc": "Signal wavelength, for the lambda^2 in b2"
+    },
+    "estimate": {
+     "type": "bool",
+     "default": false,
+     "doc": "Measure the dispersion from the signal instead of using the declared value"
+    },
+    "search_range": {
+     "type": "float",
+     "default": 20000.0,
+     "unit": "ps/nm",
+     "min": 0.0,
+     "doc": "Half-width of the blind search; only used when estimate is on"
     }
    },
    "structural": {},

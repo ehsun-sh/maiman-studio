@@ -284,7 +284,15 @@ def test_a_quantity_is_sent_in_the_unit_it_is_quoted_in() -> None:
     """
     from maiman.components.dsp import DispersionDiagnostics
 
-    encoded = encode(DispersionDiagnostics(accumulated_dispersion=1.36, removed_symbols=13.4))
+    encoded = encode(
+        DispersionDiagnostics(
+            accumulated_dispersion=1.36,
+            removed_symbols=13.4,
+            estimated=False,
+            declared=1.36,
+            contrast=0.0,
+        )
+    )
     assert encoded["accumulated_dispersion"] == pytest.approx(1.36, abs=0.0, rel=1e-12)
     assert encoded["accumulated_dispersion_ps_nm"] == pytest.approx(1360.0, abs=0.0, rel=1e-12)
 

@@ -12,9 +12,14 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from ..component import Component, Param, PortType
+from ..component import BoolParam, Component, Param, PortType
 from ..context import SimulationContext
-from ..dsp import butterfly_equalize, compensate_dispersion, dispersive_spread
+from ..dsp import (
+    butterfly_equalize,
+    compensate_dispersion,
+    dispersive_spread,
+    estimate_dispersion,
+)
 from ..signals import ElectricalSignal, Signal, SymbolSignal
 
 
@@ -34,10 +39,30 @@ class DispersionDiagnostics:
     removed_symbols: float
     """Symbol periods of smearing that corresponds to."""
 
+    estimated: bool
+    """Whether that value was searched for rather than declared."""
+
+    declared: float
+    """The parameter as set [s/m].
+
+    Reported even when the value was estimated, and *especially* then: it is what
+    turns the blind search from a number to be trusted into a number to be
+    checked. Set the parameter to what the span should be, switch the search on,
+    and the two sit side by side.
+    """
+
+    contrast: float
+    """Sharpness of the acquisition peak, or 0 when nothing was searched for.
+
+    See :class:`maiman.dsp.DispersionEstimate` for why a high value is not a
+    guarantee.
+    """
+
     def __repr__(self) -> str:
+        how = "estimated" if self.estimated else "declared"
         return (
             f"DispersionDiagnostics({self.accumulated_dispersion * 1e3:.1f} ps/nm removed, "
-            f"{self.removed_symbols:.1f} symbols of spread)"
+            f"{how}, {self.removed_symbols:.1f} symbols of spread)"
         )
 
 
@@ -63,10 +88,20 @@ class DispersionCompensator(Component):
     positive for standard fibre. Getting it wrong is not a soft failure: the
     filter then adds dispersion over part of the range instead of removing it,
     so an error of a given size is roughly as damaging as that much uncompensated
-    span. A real receiver estimates it blindly at acquisition; here it is
-    declared, and the ``diagnostics`` port reports how many symbol periods of
-    smearing the declared value corresponds to — so a figure that is wrong by an
-    order of magnitude is visible as a number rather than only as a bad EVM.
+    span — over 80 km at 32 GBd, 20 ps/nm out of 1360 costs eight decibels of
+    SNR. The ``diagnostics`` port reports how many symbol periods of smearing the
+    value corresponds to, so a figure wrong by an order of magnitude is visible
+    as a number rather than only as a bad EVM.
+
+    **Set ``estimate`` and it finds the value itself.** No deployed receiver is
+    told how long its fibre is; it measures the dispersion from the signal during
+    acquisition, before anything downstream has converged. Switching this on does
+    the same thing — a clock-tone scan over ``±search_range`` followed by a
+    modulus refinement, described in :func:`maiman.dsp.estimate_dispersion`,
+    which also gives the measured accuracy and the conditions it needs. The
+    declared value is then ignored as an input and reported in the diagnostics
+    beside the estimate, which is the useful way to use both: declare what the
+    span should be, and read off how close a blind receiver would have got.
 
     ``wavelength`` must be the *signal* wavelength, since β₂ scales as λ².
     """
@@ -78,6 +113,18 @@ class DispersionCompensator(Component):
         0.0, unit="ps/nm", doc="Total D*L to remove; positive for standard fiber (0 disables)"
     )
     wavelength = Param(1550.0, unit="nm", min=1.0, doc="Signal wavelength, for the lambda^2 in b2")
+    estimate = BoolParam(
+        False, doc="Measure the dispersion from the signal instead of using the declared value"
+    )
+    # Wide enough for a thousand kilometres of standard fibre, which is where the
+    # rest of the coherent chain has been validated. Costs one dot product per
+    # grid point, so the default is generous rather than tuned.
+    search_range = Param(
+        20000.0,
+        unit="ps/nm",
+        min=0.0,
+        doc="Half-width of the blind search; only used when estimate is on",
+    )
 
     inputs = {"i": PortType.ELECTRICAL, "q": PortType.ELECTRICAL}
     outputs = {
@@ -101,11 +148,24 @@ class DispersionCompensator(Component):
                 f"{in_phase.fs} and {quadrature.fs} Hz"
             )
 
-        accumulated = self.si("accumulated_dispersion")
+        declared = self.si("accumulated_dispersion")
         wavelength = self.si("wavelength")
 
         baseband = np.asarray(in_phase.samples).astype(np.complex128)
         baseband = baseband + 1j * np.asarray(quadrature.samples)
+
+        contrast = 0.0
+        accumulated = declared
+        if self.estimate:
+            found = estimate_dispersion(
+                baseband,
+                in_phase.fs,
+                symbol_rate=ctx.bit_rate,
+                wavelength=wavelength,
+                search_range=self.si("search_range"),
+            )
+            accumulated, contrast = found.accumulated_dispersion, found.contrast
+
         if accumulated != 0.0:
             baseband = compensate_dispersion(
                 baseband,
@@ -121,6 +181,9 @@ class DispersionCompensator(Component):
         diagnostics = DispersionDiagnostics(
             accumulated_dispersion=accumulated,
             removed_symbols=dispersive_spread(accumulated, occupied, wavelength, ctx.bit_rate),
+            estimated=self.estimate,
+            declared=declared,
+            contrast=contrast,
         )
 
         return {
