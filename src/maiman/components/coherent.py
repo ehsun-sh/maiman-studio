@@ -196,6 +196,19 @@ class DualPolarizationReceiver(CoherentReceiver):
     receives. The two effects cancel in the SNR, which is why polarization
     multiplexing doubles capacity at the same SNR per tributary rather than
     costing 3 dB.
+
+    **The same cancellation is what fixes the ASE term, per axis.** Each hybrid
+    beats half the LO against the amplified spontaneous emission on *its own*
+    polarization, so the beat variance is ``R**2 * (P_lo/2) * psd_axis * B``
+    rather than the single-polarization receiver's sum over both. Halved
+    alongside the signal, it leaves the same SNR — and the two axes draw
+    independently, because ASE on orthogonal states is uncorrelated.
+
+    That term used to be missing here while the single-polarization receiver had
+    it, which meant an amplified dual-polarization link reported an OSNR that
+    moved and a constellation that did not: eighteen decibels of noise loading
+    left the bit error rate at 1.5e-7 throughout. Nothing failed, because nothing
+    was measuring the two against each other.
     """
 
     display_name = "Dual-Pol Coherent Receiver"
@@ -230,7 +243,18 @@ class DualPolarizationReceiver(CoherentReceiver):
         responsivity = self.si("responsivity")
         bandwidth = self.noise_bandwidth(ctx)
         # Each of the two hybrids sees half the LO.
-        shot_variance = Q_ELECTRON * responsivity * (reference.average_power() / 2.0) * bandwidth
+        lo_per_axis = reference.average_power() / 2.0
+        shot_variance = Q_ELECTRON * responsivity * lo_per_axis * bandwidth
+        # Measured at the LO's frequency for the reason given on the
+        # single-polarization receiver, and split by axis: a hybrid hears the ASE
+        # on the state it is looking at and not the other one.
+        ase_variance = {"x": 0.0, "y": 0.0}
+        if self.ase_beat_noise and signal.noise:
+            psd_x, psd_y = signal.noise_psd_at(reference.f0)
+            ase_variance = {
+                "x": responsivity**2 * lo_per_axis * psd_x * bandwidth,
+                "y": responsivity**2 * lo_per_axis * psd_y * bandwidth,
+            }
         thermal_variance = (
             4.0 * K_BOLTZMANN * self.si("temperature") * bandwidth / self.si("load_resistance")
             if self.si("load_resistance") > 0.0
@@ -247,6 +271,11 @@ class DualPolarizationReceiver(CoherentReceiver):
 
             for quadrature, part in (("i", mix.real), ("q", mix.imag)):
                 current = responsivity * part
+                if ase_variance[axis] > 0.0:
+                    rng = ctx.rng(type(self).__name__, self.label, "ase-beat", axis, quadrature)
+                    current = current + rng.normal(
+                        0.0, math.sqrt(ase_variance[axis]), size=ctx.num_samples
+                    )
                 if self.shot_noise and shot_variance > 0.0:
                     rng = ctx.rng(type(self).__name__, self.label, "shot", axis, quadrature)
                     current = current + rng.normal(

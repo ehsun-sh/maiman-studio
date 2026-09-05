@@ -28,7 +28,7 @@ link in this simulator descends from.*
 >
 > Fiber nonlinearity is solved by adaptive-step split-step Fourier, EDFAs emit ASE into the
 > noise-bin model so amplified multi-span links give correct OSNR **and a Q-factor that follows
-> from it** — signal-ASE and ASE-ASE beat noise are modelled in both detector families — and PMD
+> from it** — signal-ASE and ASE-ASE beat noise are modelled in both detector families, and in both polarizations — and PMD
 > is drawn as a random realisation with the right Maxwellian statistics.
 >
 > Channels interact: the split-step propagates them coupled, so a neighbour's power modulates

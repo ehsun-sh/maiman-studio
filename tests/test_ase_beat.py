@@ -37,6 +37,7 @@ from maiman.components import (
     CoherentReceiver,
     ConstellationAnalyzer,
     CWLaser,
+    DualPolarizationReceiver,
     ElectricalFilter,
     Fiber,
     IQDriver,
@@ -47,8 +48,10 @@ from maiman.components import (
     OpticalFilter,
     OSNRMeter,
     PINPhotodiode,
+    PolarizationCombiner,
     PRBSGenerator,
     QAMMapper,
+    Splitter,
 )
 from maiman.signals import NoiseBin, OpticalSignal
 
@@ -421,3 +424,300 @@ def test_lo_ase_beat_is_polarization_selective() -> None:
     assert xx > 20.0 * xy
     assert yy > 20.0 * yx
     assert xx == pytest.approx(yy, rel=0.2)
+
+
+# --------------------------------------------------------------------------
+# Coherent detection, both polarizations
+# --------------------------------------------------------------------------
+
+
+def amplified_dualpol(
+    noise_figure: float, *, ase: bool = True, lo_dbm: float = 13.0
+) -> tuple[float, float, float]:
+    """The same six spans, carrying two QPSK tributaries on one wavelength.
+
+    Deliberately the same laser power, the same spans and the same amplifiers as
+    :func:`amplified_coherent`, so that the two can be compared at one OSNR. The
+    splitter halves the launch onto each polarization and the combiner puts them
+    back, so the *total* launched power is unchanged and so is the OSNR.
+
+    No butterfly equaliser and no rotation: the receiver's axes are the
+    transmitter's here, which is not true of a real link and is exactly what
+    makes this a measurement of the noise rather than of the DSP.
+    """
+    ctx = SimulationContext(
+        bit_rate=SYMBOL_RATE, samples_per_symbol=8, sequence_length=4096, seed=11
+    )
+    graph = Graph(ctx)
+    laser = graph.add(CWLaser(power=3.0, wavelength=1550.0, linewidth=0.0, label="tx"))
+    splitter = graph.add(Splitter(2, label="sp"))
+    graph.connect(laser, splitter["in"])
+
+    mappers, modulators = {}, {}
+    for index, axis in enumerate(("x", "y")):
+        prbs = graph.add(
+            PRBSGenerator(
+                order=23.0 if axis == "x" else 15.0, bits_per_symbol=2.0, label=f"prbs_{axis}"
+            )
+        )
+        mapper = graph.add(QAMMapper(bits_per_symbol=2.0, label=f"map_{axis}"))
+        driver = graph.add(
+            IQDriver(
+                v_pi=4.0,
+                predistort=True,
+                drive_ratio=0.4,
+                pulse_shaping=True,
+                roll_off=0.05,
+                label=f"drv_{axis}",
+            )
+        )
+        modulator = graph.add(IQModulator(v_pi=4.0, label=f"mod_{axis}"))
+        graph.chain(prbs, mapper, driver)
+        graph.connect(splitter[f"out{index}"], modulator["optical_in"])
+        graph.connect(driver["i"], modulator["i"])
+        graph.connect(driver["q"], modulator["q"])
+        mappers[axis], modulators[axis] = mapper, modulator
+
+    combiner = graph.add(PolarizationCombiner(label="pbc"))
+    graph.connect(modulators["x"], combiner["x"])
+    graph.connect(modulators["y"], combiner["y"])
+
+    node: Component = combiner
+    for index in range(6):
+        fiber = graph.add(Fiber(length=80.0, attenuation=0.2, dispersion=0.0, label=f"fib{index}"))
+        amplifier = graph.add(EDFA(gain=16.0, noise_figure=noise_figure, label=f"amp{index}"))
+        graph.connect(node, fiber["in"])
+        graph.connect(fiber, amplifier["in"])
+        node = amplifier
+
+    meter = graph.add(OSNRMeter(label="osnr"))
+    lo = graph.add(CWLaser(power=lo_dbm, wavelength=1550.0, linewidth=0.0, label="lo"))
+    receiver = graph.add(DualPolarizationReceiver(responsivity=0.8, ase_beat_noise=ase, label="rx"))
+    graph.connect(node, meter["in"])
+    graph.connect(node, receiver["in"])
+    graph.connect(lo, receiver["lo"])
+
+    analyzers = {}
+    for axis in ("x", "y"):
+        sampler = graph.add(IQSampler(matched_filter=True, roll_off=0.05, label=f"smp_{axis}"))
+        graph.connect(receiver[f"{axis}i"], sampler["i"])
+        graph.connect(receiver[f"{axis}q"], sampler["q"])
+        graph.connect(mappers[axis]["out"], sampler["reference"])
+        analyzer = graph.add(ConstellationAnalyzer(ignore_edges=64.0, label=f"vsa_{axis}"))
+        graph.connect(sampler["out"], analyzer["in"])
+        graph.connect(mappers[axis]["out"], analyzer["reference"])
+        analyzers[axis] = analyzer
+
+    results = graph.run()
+    return (
+        float(results[meter]),
+        results[analyzers["x"]].snr_db,
+        results[analyzers["y"]].snr_db,
+    )
+
+
+def dualpol_snr_target(osnr_db: float) -> float:
+    """``SNR = OSNR B_ref / R_s`` — half the single-polarization relation.
+
+    Each hybrid hears the ASE on its own polarization, which is half of what the
+    OSNR counts, and the tributary it carries is half the launched power. Both
+    halvings are real and they do not cancel: two tributaries at one wavelength
+    each sit 3 dB below what one tributary would have at the same OSNR, and carry
+    twice the data for it.
+    """
+    return osnr_db + 10.0 * math.log10(OSNR_REFERENCE / SYMBOL_RATE)
+
+
+def test_dualpol_snr_converges_on_the_osnr_relation() -> None:
+    """The same convergence the single-polarization receiver is held to.
+
+    The gap is the receiver's shot and thermal noise plus the transmitter's
+    imperfections, and it has to shrink to nothing as ASE takes over. Asserting
+    the closing rather than one figure is what makes this a test of the beat term.
+    """
+    gaps = []
+    for noise_figure in (4.0, 10.0, 16.0):
+        osnr_db, snr_x, snr_y = amplified_dualpol(noise_figure)
+        assert snr_x == pytest.approx(snr_y, abs=0.3), "the two axes should be alike"
+        gaps.append(dualpol_snr_target(osnr_db) - snr_x)
+
+    assert gaps[0] > gaps[1] > gaps[2]
+    assert gaps[2] < 0.3
+    assert all(gap > 0.0 for gap in gaps)
+
+
+def test_without_the_beat_term_the_dual_pol_link_ignores_its_own_osnr() -> None:
+    """The bug this term was added to fix, written as the number it produced.
+
+    Twelve decibels of amplifier noise figure moved the OSNR by twelve decibels
+    and left the electrical SNR at 22.9 dB either way. Every other measurement on
+    the link — power, spectrum, OSNR itself — came out correct, which is why
+    nothing caught it: the two were never compared.
+    """
+    quiet = amplified_dualpol(4.0, ase=False)
+    loud = amplified_dualpol(16.0, ase=False)
+
+    assert quiet[0] - loud[0] == pytest.approx(12.0, abs=0.1), "the OSNR must still move"
+    assert loud[1] == pytest.approx(quiet[1], abs=0.01), "and without the term, nothing else does"
+    assert loud[1] > 22.0
+
+    # With it, the same twelve decibels cost seventeen.
+    assert amplified_dualpol(4.0)[1] - amplified_dualpol(16.0)[1] > 10.0
+
+
+def test_two_tributaries_sit_three_decibels_below_one() -> None:
+    """The capacity trade, measured against the single-polarization link beside it.
+
+    Same launch power, same spans, same amplifiers, same OSNR — and each of the
+    two tributaries has half the power and hears half the ASE. Half the signal
+    against half the noise would cancel; it does not, because the *reference*
+    bandwidth the OSNR is quoted in has not halved. The gap closes on 3 dB from
+    below as ASE comes to dominate.
+    """
+    gaps = []
+    for noise_figure in (10.0, 16.0):
+        single_osnr, single_snr = amplified_coherent(noise_figure)
+        dual_osnr, dual_snr, _ = amplified_dualpol(noise_figure)
+        assert single_osnr == pytest.approx(dual_osnr, abs=0.05), (
+            "the same OSNR, or nothing follows"
+        )
+        gaps.append(single_snr - dual_snr)
+
+    assert gaps[0] < gaps[1] < 3.0
+    assert gaps[1] > 2.7
+
+
+def test_the_local_oscillator_does_not_change_the_signal_to_noise_ratio() -> None:
+    """Which is the claim the halving in each hybrid is there to keep true.
+
+    More LO gives more signal current and proportionally more of both beat and
+    shot noise. If the ASE term took the whole LO power instead of the half its
+    own hybrid sees, this would tilt.
+    """
+    measured = [amplified_dualpol(16.0, lo_dbm=lo)[1] for lo in (7.0, 13.0, 19.0)]
+    assert measured[0] == pytest.approx(measured[1], abs=0.02)
+    assert measured[2] == pytest.approx(measured[1], abs=0.02)
+
+
+def test_the_two_axes_draw_their_ase_independently() -> None:
+    """Spontaneous emission on orthogonal states is uncorrelated, so the noise is.
+
+    Reusing one stream for both axes would leave a common-mode term that the
+    butterfly equaliser could partly cancel, flattering every dual-polarization
+    result by an amount nothing else would report.
+    """
+    import numpy as np
+
+    from maiman.signals import Band
+
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=8, sequence_length=1024, seed=5)
+    quiet = OpticalSignal(
+        bands=(
+            Band(
+                Ex=np.zeros(ctx.num_samples, dtype=np.complex128),
+                Ey=np.zeros(ctx.num_samples, dtype=np.complex128),
+                f0=193.4e12,
+                fs=ctx.sample_rate,
+            ),
+        ),
+        noise=(NoiseBin(f_start=193.3e12, f_end=193.5e12, psd_x=1e-16, psd_y=1e-16),),
+    )
+    lo = OpticalSignal(
+        bands=(
+            Band(
+                Ex=np.full(ctx.num_samples, 0.1, dtype=np.complex128),
+                Ey=np.full(ctx.num_samples, 0.1, dtype=np.complex128),
+                f0=193.4e12,
+                fs=ctx.sample_rate,
+            ),
+        )
+    )
+    receiver = DualPolarizationReceiver(shot_noise=False, thermal_noise=False, label="rx")
+    out = receiver.run(ctx, {"in": quiet, "lo": lo})
+
+    x = np.asarray(out["xi"].samples, dtype=np.float64)
+    y = np.asarray(out["yi"].samples, dtype=np.float64)
+    assert float(np.std(x)) > 0.0 and float(np.std(y)) > 0.0
+    correlation = float(np.corrcoef(x, y)[0, 1])
+    assert abs(correlation) < 0.1, correlation
+    # And the same axis's two quadratures are independent of each other too.
+    quadrature = np.asarray(out["xq"].samples, dtype=np.float64)
+    assert abs(float(np.corrcoef(x, quadrature)[0, 1])) < 0.1
+
+
+def _dualpol_beat(
+    ctx: SimulationContext, *, psd_x: float, psd_y: float, signal_f0: float = 193.4e12
+) -> tuple[float, float]:
+    """Per-axis photocurrent noise for a dark signal and a chosen ASE split."""
+    import numpy as np
+
+    from maiman.signals import Band
+
+    quiet = OpticalSignal(
+        bands=(
+            Band(
+                Ex=np.zeros(ctx.num_samples, dtype=np.complex128),
+                Ey=np.zeros(ctx.num_samples, dtype=np.complex128),
+                f0=signal_f0,
+                fs=ctx.sample_rate,
+            ),
+        ),
+        noise=(NoiseBin(f_start=193.35e12, f_end=193.45e12, psd_x=psd_x, psd_y=psd_y),),
+    )
+    lo = OpticalSignal(
+        bands=(
+            Band(
+                Ex=np.full(ctx.num_samples, 0.1, dtype=np.complex128),
+                Ey=np.full(ctx.num_samples, 0.1, dtype=np.complex128),
+                f0=193.4e12,
+                fs=ctx.sample_rate,
+            ),
+        )
+    )
+    receiver = DualPolarizationReceiver(shot_noise=False, thermal_noise=False, label="rx")
+    out = receiver.run(ctx, {"in": quiet, "lo": lo})
+    return (
+        float(np.std(np.asarray(out["xi"].samples, dtype=np.float64))),
+        float(np.std(np.asarray(out["yi"].samples, dtype=np.float64))),
+    )
+
+
+def test_each_hybrid_hears_only_the_ase_on_its_own_axis() -> None:
+    """The distinction an amplified link cannot show, because an EDFA is symmetric.
+
+    Every chain test above emits ASE equally into both polarizations, so swapping
+    the two densities in the beat expression changes nothing in any of them — and
+    that sabotage did survive until this test existed, in the same shape as the
+    one the single-polarization receiver needed.
+
+    Feeding ASE onto one axis at a time makes it observable: the hybrid looking
+    at that state must hear it and the other must not.
+    """
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=8, sequence_length=1024, seed=5)
+
+    on_x = _dualpol_beat(ctx, psd_x=1e-16, psd_y=0.0)
+    on_y = _dualpol_beat(ctx, psd_x=0.0, psd_y=1e-16)
+
+    assert on_x[0] > 20.0 * on_x[1], on_x
+    assert on_y[1] > 20.0 * on_y[0], on_y
+    # No axis is special, so the two co-polarized cases must agree.
+    assert on_x[0] == pytest.approx(on_y[1], rel=0.2)
+
+
+def test_the_beat_is_measured_where_the_local_oscillator_is() -> None:
+    """Not where the signal is, which is what the single-polarization receiver says.
+
+    The LO is what everything mixes against: ASE sitting on top of a signal
+    detuned out of the LO's band would not beat down to baseband either. Put the
+    noise under the LO and none under the signal, and the beat has to be there;
+    reading the density at the signal's frequency instead would find nothing and
+    report a noiseless receiver on an amplified link.
+    """
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=8, sequence_length=1024, seed=5)
+
+    aligned = _dualpol_beat(ctx, psd_x=1e-16, psd_y=1e-16)
+    detuned = _dualpol_beat(ctx, psd_x=1e-16, psd_y=1e-16, signal_f0=193.6e12)
+
+    assert aligned[0] > 0.0
+    assert detuned[0] == pytest.approx(aligned[0], rel=1e-9)
+    assert detuned[1] == pytest.approx(aligned[1], rel=1e-9)
