@@ -350,6 +350,15 @@ The original plan specified a C++20 core with pybind11 bindings. Reconsidered:
 GPU, and a native C++/Rust module later if profiling shows a specific kernel needs it. The
 architecture keeps that door open; it does not walk through it on day one.
 
+**Since built:** `maiman.backend` is the door, and it opens onto the propagation kernels only —
+the closed forms and the 2x2 Jones algebra are scalar work a device would slow down. Dispatch is on
+the array's own type rather than on a mode: a kernel handed CuPy arrays runs on CuPy, because the
+kernels are pure functions and a global mode would be the one piece of state that could make the
+same inputs give two answers. The surface a back-end must provide is thirteen names, asserted as an
+equality in `tests/test_backend.py` against a second array library that refuses NumPy's allocating
+API. CuPy itself is not exercised: there is no device in CI, and the part that is untested is
+CuPy's numerics rather than this interface.
+
 ### 6.2 FFT library and licensing — a real constraint
 
 **FFTW is GPL-2.0-or-later** (commercial licenses are sold separately). Linking it makes the

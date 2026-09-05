@@ -19,16 +19,25 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .backend import array_module
 from .units import C_LIGHT
 
 
-def angular_frequency_grid(num_samples: int, sample_rate: float) -> np.ndarray:
+def angular_frequency_grid(
+    num_samples: int, sample_rate: float, *, like: object = None
+) -> np.ndarray:
     """Angular frequency offsets from the band centre [rad/s], in FFT order.
 
     Returned in `numpy.fft` output order (positive frequencies first, then
     negative), so it multiplies an un-shifted spectrum directly.
+
+    ``like`` names the array library to build it on — pass the field it is about
+    to multiply and the grid is created wherever that field lives, which is the
+    difference between one kernel and a device round trip per step. See
+    :mod:`maiman.backend`.
     """
-    return 2.0 * np.pi * np.fft.fftfreq(num_samples, d=1.0 / sample_rate)
+    xp = array_module(like)
+    return 2.0 * xp.pi * xp.fft.fftfreq(num_samples, d=1.0 / sample_rate)
 
 
 def dispersion_to_beta2(dispersion: float, wavelength: float) -> float:
@@ -108,12 +117,13 @@ def propagate_dispersion(
     the caller casts the result back. Correctness first; if profiling later shows
     this matters, the precision policy belongs here, in one place.
     """
+    xp = array_module(field)
     if distance == 0.0 or (beta2 == 0.0 and beta3 == 0.0):
-        return field.astype(np.complex128, copy=True)
+        return field.astype(xp.complex128, copy=True)
 
-    omega = angular_frequency_grid(field.shape[0], sample_rate)
-    transfer = np.exp(1j * (0.5 * beta2 * omega**2 - beta3 * omega**3 / 6.0) * distance)
-    return np.fft.ifft(np.fft.fft(field.astype(np.complex128)) * transfer)
+    omega = angular_frequency_grid(field.shape[0], sample_rate, like=field)
+    transfer = xp.exp(1j * (0.5 * beta2 * omega**2 - beta3 * omega**3 / 6.0) * distance)
+    return xp.fft.ifft(xp.fft.fft(field.astype(xp.complex128)) * transfer)
 
 
 def soliton_peak_power(beta2: float, gamma: float, width: float, order: int = 1) -> float:
@@ -405,7 +415,8 @@ def propagate_coupled_ssfm(
     if any(value not in (0, 1) for value in axis):
         raise ValueError(f"polarization entries must be 0 or 1, got {sorted(set(axis))}")
 
-    a = [f.astype(np.complex128, copy=True) for f in fields]
+    xp = array_module(*fields)
+    a = [f.astype(xp.complex128, copy=True) for f in fields]
     if not a:
         return a, PropagationDiagnostics(0, distance, 0.0, 0.0, 0.0)
 
@@ -421,7 +432,7 @@ def propagate_coupled_ssfm(
     if distance == 0.0:
         return a, PropagationDiagnostics(0, 0.0, 0.0, 0.0, 0.0)
 
-    omega = angular_frequency_grid(a[0].shape[0], sample_rate)
+    omega = angular_frequency_grid(a[0].shape[0], sample_rate, like=a[0])
     # One expansion of beta(omega), one operator: the group delay, the dispersion
     # and its slope are the first three terms of the same series, which is what
     # fixes their relative signs. See propagate_dispersion.
@@ -451,11 +462,11 @@ def propagate_coupled_ssfm(
             # always did.
             peak_effective = 0.0
             for field, ax in zip(a, axis, strict=True):
-                effective = 2.0 * _axis_power[ax] - np.abs(field) ** 2
+                effective = 2.0 * _axis_power[ax] - xp.abs(field) ** 2
                 other = _axis_power.get(1 - ax)
                 if other is not None:
                     effective = effective + ORTHOGONAL_KERR_WEIGHT * other
-                peak_effective = max(peak_effective, float(np.max(effective)))
+                peak_effective = max(peak_effective, float(xp.max(effective)))
             if peak_effective > 0.0:
                 step = min(step, max_nonlinear_phase / (abs(gamma) * peak_effective))
             # Only the nonlinear operator cares where the channels sit relative
@@ -467,8 +478,8 @@ def propagate_coupled_ssfm(
         # without this an extreme peak power would stall the loop.
         step = max(min(step, remaining), remaining * 1e-9)
 
-        half = [np.exp(-alpha * step / 4.0 + op * (step / 2.0)) for op in operators]
-        a = [np.fft.ifft(np.fft.fft(f) * h) for f, h in zip(a, half, strict=True)]
+        half = [xp.exp(-alpha * step / 4.0 + op * (step / 2.0)) for op in operators]
+        a = [xp.fft.ifft(xp.fft.fft(f) * h) for f, h in zip(a, half, strict=True)]
 
         if gamma != 0.0:
             # Summed per polarization, because power in the orthogonal component
@@ -478,16 +489,16 @@ def propagate_coupled_ssfm(
             per_axis = _power_per_axis(a, axis)
             rotated = []
             for field, ax in zip(a, axis, strict=True):
-                effective = 2.0 * per_axis[ax] - np.abs(field) ** 2
+                effective = 2.0 * per_axis[ax] - xp.abs(field) ** 2
                 other = per_axis.get(1 - ax)
                 if other is not None:
                     effective = effective + ORTHOGONAL_KERR_WEIGHT * other
                 phase = gamma * effective * step
-                peak_phase = max(peak_phase, float(np.max(np.abs(phase))))
-                rotated.append(field * np.exp(1j * phase))
+                peak_phase = max(peak_phase, float(xp.max(xp.abs(phase))))
+                rotated.append(field * xp.exp(1j * phase))
             a = rotated
 
-        a = [np.fft.ifft(np.fft.fft(f) * h) for f, h in zip(a, half, strict=True)]
+        a = [xp.fft.ifft(xp.fft.fft(f) * h) for f, h in zip(a, half, strict=True)]
 
         travelled += step
         steps += 1
@@ -500,7 +511,7 @@ def propagate_coupled_ssfm(
         # of the accumulated -1j*w*omega*distance, so it cannot remove anything
         # the propagation put there.
         a = [
-            np.fft.ifft(np.fft.fft(f) * np.exp(1j * w * omega * distance))
+            xp.fft.ifft(xp.fft.fft(f) * xp.exp(1j * w * omega * distance))
             for f, w in zip(a, walkoff, strict=True)
         ]
 
@@ -534,9 +545,10 @@ def _power_per_axis(fields: Sequence[np.ndarray], axis: Sequence[int]) -> dict[i
 
 def _total_power(fields: Sequence[np.ndarray]) -> np.ndarray:
     """Summed instantaneous power of co-propagating fields [W], sample by sample."""
-    total = np.abs(fields[0]) ** 2
+    xp = array_module(fields[0])
+    total = xp.abs(fields[0]) ** 2
     for field in fields[1:]:
-        total += np.abs(field) ** 2
+        total += xp.abs(field) ** 2
     return total
 
 
@@ -918,21 +930,26 @@ def apply_pmd(
     what the DGD measurement reports are the same chain.
     """
     if not sections:
-        return ex.astype(np.complex128, copy=True), ey.astype(np.complex128, copy=True)
+        module = array_module(ex, ey)
+        return (
+            ex.astype(module.complex128, copy=True),
+            ey.astype(module.complex128, copy=True),
+        )
 
-    omega = angular_frequency_grid(ex.shape[0], sample_rate)
-    spectrum_x = np.fft.fft(ex.astype(np.complex128))
-    spectrum_y = np.fft.fft(ey.astype(np.complex128))
+    xp = array_module(ex, ey)
+    omega = angular_frequency_grid(ex.shape[0], sample_rate, like=ex)
+    spectrum_x = xp.fft.fft(ex.astype(xp.complex128))
+    spectrum_y = xp.fft.fft(ey.astype(xp.complex128))
 
     for section in sections:
-        phase = np.exp(0.5j * omega * section.dgd)
+        phase = xp.exp(0.5j * omega * section.dgd)
         delayed_x = spectrum_x * phase
-        delayed_y = spectrum_y * np.conj(phase)
+        delayed_y = spectrum_y * xp.conj(phase)
         u = section.unitary
         spectrum_x = u[0, 0] * delayed_x + u[0, 1] * delayed_y
         spectrum_y = u[1, 0] * delayed_x + u[1, 1] * delayed_y
 
-    return np.fft.ifft(spectrum_x), np.fft.ifft(spectrum_y)
+    return xp.fft.ifft(spectrum_x), xp.fft.ifft(spectrum_y)
 
 
 def gaussian_lowpass_response(frequency: np.ndarray, bandwidth: float) -> np.ndarray:
@@ -943,7 +960,8 @@ def gaussian_lowpass_response(frequency: np.ndarray, bandwidth: float) -> np.nda
     """
     if bandwidth <= 0.0:
         raise ValueError(f"bandwidth must be positive, got {bandwidth}")
-    return np.exp(-0.5 * np.log(2.0) * (frequency / bandwidth) ** 2)
+    xp = array_module(frequency)
+    return xp.exp(-0.5 * math.log(2.0) * (frequency / bandwidth) ** 2)
 
 
 def super_gaussian_response(frequency: np.ndarray, bandwidth: float, order: int) -> np.ndarray:
@@ -964,7 +982,8 @@ def super_gaussian_response(frequency: np.ndarray, bandwidth: float, order: int)
         raise ValueError(f"bandwidth must be positive, got {bandwidth}")
     if order < 1:
         raise ValueError(f"order must be >= 1, got {order}")
-    return np.exp(-0.5 * np.log(2.0) * (2.0 * frequency / bandwidth) ** (2 * order))
+    xp = array_module(frequency)
+    return xp.exp(-0.5 * math.log(2.0) * (2.0 * frequency / bandwidth) ** (2 * order))
 
 
 def super_gaussian_noise_bandwidth(bandwidth: float, order: int) -> float:
@@ -1015,6 +1034,7 @@ def lowpass_filter(samples: np.ndarray, sample_rate: float, bandwidth: float) ->
     window are contaminated by the wrap; analysis blocks drop them.
     """
     n = samples.shape[0]
-    spectrum = np.fft.rfft(samples.astype(np.float64))
-    response = gaussian_lowpass_response(np.fft.rfftfreq(n, d=1.0 / sample_rate), bandwidth)
-    return np.fft.irfft(spectrum * response, n)
+    xp = array_module(samples)
+    spectrum = xp.fft.rfft(samples.astype(xp.float64))
+    frequency = xp.asarray(xp.fft.rfftfreq(n, d=1.0 / sample_rate))
+    return xp.fft.irfft(spectrum * gaussian_lowpass_response(frequency, bandwidth), n)

@@ -447,6 +447,43 @@ noise bins rendered onto one grid, the way an instrument shows them. Its resolut
 not cosmetic — widening it raises the ASE trace decibel for decibel and leaves a carrier exactly
 where it is, which is the clearest demonstration of why OSNR needs a stated reference bandwidth.
 
+## The kernels do not know what they are running on
+
+The propagation kernels are the only part of this worth a GPU: a loop over FFTs on a long array,
+where everything else is scalar arithmetic or a closed form evaluated a few dozen times.
+[`maiman/kernels.py`](src/maiman/kernels.py) was written as array-to-array functions from the
+beginning so that this could be added without touching anything above it, and
+[`maiman/backend.py`](src/maiman/backend.py) is the whole of the addition.
+
+**The arrays decide, not a setting.** A kernel handed CuPy arrays runs on CuPy and returns CuPy
+arrays; handed NumPy arrays it runs on NumPy. There is no global mode and no flag on the context,
+which matters because the kernels are pure functions and a hidden mode would be the one piece of
+state that could make the same inputs give different answers. Dispatch is on the array's own type —
+`type(a).__module__` names the package it came from — so there is no registry to keep in sync.
+
+**CuPy is not exercised here**, and saying otherwise would be the kind of claim this project exists
+to avoid: there is no device and no install in CI. What *is* tested is the half that would actually
+break a port. A second array library — [`tests/hostile_backend.py`](tests/hostile_backend.py) — sets
+`__array_function__` to `None`, which is NumPy's own way for a type to say it is not NumPy's, so
+`np.fft.fft` on one of its arrays raises. Universal functions are deliberately left working, because
+`np.exp` on a CuPy array dispatches and comes back a CuPy array; refusing them would be testing a
+rule that is not true. What breaks a port is anything that *allocates* — `np.fft.fftfreq` and
+`np.zeros` build on the host, and a kernel calling one inside its loop pays a transfer every step.
+
+Every kernel is then run on both libraries and the results compared, and the names the second one
+was asked for are recorded. That set is the contract, and it is asserted as an equality rather than
+a lower bound:
+
+    abs  complex128  conj  exp  float64  max  pi
+    fft.fft  fft.fftfreq  fft.ifft  fft.irfft  fft.rfft  fft.rfftfreq
+
+Thirteen names. A change that reaches for something only NumPy has fails in this repository rather
+than on somebody's GPU, and one that stops needing something fails too. CuPy provides all thirteen.
+
+Only the propagation path is converted. The four-wave-mixing closed forms and the 2×2 Jones algebra
+are scalar work a device would slow down, and there is a test naming which functions are in and
+which are out, so the line is a decision rather than an oversight.
+
 ## 400G and 800G, and what they cost
 
 Three reference transceivers, all dual-polarization coherent, all derived from one number and
@@ -966,7 +1003,7 @@ time window, and results are reproducible.
 | **1 — MVP: linear link** *(essentially done)* | ✅ PRBS → NRZ → laser → MZM → fiber (α + CD) → PIN → filter → eye/Q/BER, validated end to end. **Python only, no GUI.** | ~2–3 months |
 | **1.5 — Nonlinear & amplified** ✅ | Adaptive-step SSFM, Kerr, EDFA with ASE, OSNR, PMD, APD, dispersion slope and its third-order term, cross-polarization Kerr coupling, inter-channel stimulated Raman scattering | ~2 months |
 | **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier phase recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km with blind estimation of the accumulated value, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
-| **3 — GUI & WDM** | ✅ Wavelength-selective filters, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — and 400G/800G reference designs validated against the OSNR relations · CuPy back-end | ~6 months |
+| **3 — GUI & WDM** | ✅ Wavelength-selective filters, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — and 400G/800G reference designs validated against the OSNR relations, and a back-end indirection the propagation kernels dispatch through — CuPy runs it where a device exists; it is not exercised in CI | ~6 months |
 | **4 — PIC** | Waveguides, ring resonators, MMI, MZI via integration with an existing S-matrix solver; PDK import | — |
 
 ¹ One developer, part-time. Estimates, not commitments.
