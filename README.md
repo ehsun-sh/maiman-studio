@@ -1,4 +1,9 @@
-# Maiman Studio
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-wordmark.png">
+    <img src="assets/logo-wordmark-dark.png" alt="Maiman Studio" width="420">
+  </picture>
+</h1>
 
 **An open-source, modular simulator for optical communication links and photonic systems.**
 

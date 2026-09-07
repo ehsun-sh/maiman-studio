@@ -13,6 +13,7 @@ block on it has somewhere to be drawn.
 
 from __future__ import annotations
 
+import base64
 import json
 import math
 import re
@@ -606,3 +607,25 @@ def test_the_spectrum_is_read_in_the_bandwidth_it_was_measured_in() -> None:
     text = STUDIO.read_text(encoding="utf-8")
     assert "`dBm / ${fmt(source.resolution_bandwidth_ghz)} GHz`" in text
     assert "power_per_resolution_w" in text, "the plot must draw what an instrument displays"
+
+
+def test_the_page_carries_the_current_mark() -> None:
+    """The tab icon is the artwork in assets/, byte for byte.
+
+    Inlined because the page has to open straight off disk with nothing running
+    — the server hands out `/` and nothing else — and the cost of that is the
+    same copy the bundled JSON already pays for. Re-export the mark and the page
+    keeps the old one, silently, which is exactly how the palette in this file
+    once went two components short.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    for name, size in (("icon-32.png", "32x32"), ("icon-192.png", "192x192")):
+        expected = base64.b64encode((ROOT / "assets" / name).read_bytes()).decode("ascii")
+        link = (
+            f'<link rel="icon" type="image/png" sizes="{size}" '
+            f'href="data:image/png;base64,{expected}">'
+        )
+        assert link in text, (
+            f"the studio page carries a stale copy of assets/{name}. "
+            f'Re-inline it as a data URI on the <link rel="icon"> for {size}.'
+        )
