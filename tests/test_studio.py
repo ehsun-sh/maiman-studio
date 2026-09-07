@@ -629,3 +629,28 @@ def test_the_page_carries_the_current_mark() -> None:
             f"the studio page carries a stale copy of assets/{name}. "
             f'Re-inline it as a data URI on the <link rel="icon"> for {size}.'
         )
+
+
+def test_the_menubar_wears_the_mark() -> None:
+    """And it is the tight crop, not the padded app icon.
+
+    Two different pieces of artwork for two different jobs. The icon is squared
+    and padded because an operating system draws it in a tile of its own; the
+    menubar sets it beside type, where that padding reads as the mark having
+    drifted away from the words. Picking either one for both is the mistake this
+    guards.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    expected = base64.b64encode((ROOT / "assets" / "logo-mark-tight.png").read_bytes()).decode(
+        "ascii"
+    )
+    assert (
+        f'class="brand-mark" alt="" aria-hidden="true" src="data:image/png;base64,{expected}"'
+        in text
+    ), (
+        "the menubar carries a stale copy of assets/logo-mark-tight.png. "
+        "Re-inline it as the .brand-mark data URI."
+    )
+    # Decorative: the name is right beside it in text, so announcing the mark
+    # too would have a screen reader say the product twice.
+    assert 'class="brand-mark" alt="" aria-hidden="true"' in text
