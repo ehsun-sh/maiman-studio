@@ -96,6 +96,18 @@ that changed most is the one worth showing — which is also what stops it openi
 downstream of the decoder, whose EVM is exactly zero at every point because it is looking at
 symbols that have already been decided.
 
+**The spectrum is drawn, not summarised.** An Optical Spectrum Analyzer anywhere on the graph puts
+its trace in the dock: wavelength across, dBm per resolution bandwidth up, the peak marked at the
+wavelength it was found at. The axis is labelled in the analyser's own resolution because the trace
+*is* — an OSA reports power within its resolution, so widening the setting lifts the ASE floor
+decibel for decibel and leaves the channels, already narrower than either setting, exactly where
+they were. That asymmetry is the whole reason an OSNR figure is meaningless without the bandwidth
+it was quoted in, and it is one parameter and one Run away from being seen rather than described.
+The OSNR beside the trace comes from an OSNR meter on the graph and is left empty when there is
+none: a figure read off the displayed curve would move with the resolution knob and would not be
+the OSNR anyone means. `examples/wdm_osa.maiman` opens four channels on the 100 GHz grid through
+two amplified spans, which is what the trace baked into the page is a run of.
+
 **Open and save.** `File → Save` writes a `.maiman` file: the same document the canvas draws, the
 same one the server runs, with the block positions folded in. `File → Open` reads one back. Both
 go through the browser — the file is chosen in the operating system's own picker and read locally,
@@ -1107,7 +1119,7 @@ time window, and results are reproducible.
 | **1 — MVP: linear link** *(essentially done)* | ✅ PRBS → NRZ → laser → MZM → fiber (α + CD) → PIN → filter → eye/Q/BER, validated end to end. **Python only, no GUI.** | ~2–3 months |
 | **1.5 — Nonlinear & amplified** ✅ | Adaptive-step SSFM, Kerr, EDFA with ASE, OSNR, PMD, APD, dispersion slope and its third-order term, cross-polarization Kerr coupling, inter-channel stimulated Raman scattering | ~2 months |
 | **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier phase recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km with blind estimation of the accumulated value, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
-| **3 — GUI & WDM** | ✅ Wavelength-selective filters, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — and 400G/800G reference designs validated against the OSNR relations, and a back-end indirection the propagation kernels dispatch through — CuPy runs it where a device exists; it is not exercised in CI | ~6 months |
+| **3 — GUI & WDM** | ✅ Wavelength-selective filters, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — the OSA's trace drawn in the dock, and 400G/800G reference designs validated against the OSNR relations, and a back-end indirection the propagation kernels dispatch through — CuPy runs it where a device exists; it is not exercised in CI | ~6 months |
 | **4 — PIC** | Bidirectional S-matrix circuit solver, waveguide, directional coupler, all-pass and add-drop ring resonators, cross-validated against SAX; MMI, MZI and PDK import still to come | — |
 
 ¹ One developer, part-time. Estimates, not commitments.

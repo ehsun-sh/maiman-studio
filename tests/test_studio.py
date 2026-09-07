@@ -14,6 +14,7 @@ block on it has somewhere to be drawn.
 from __future__ import annotations
 
 import json
+import math
 import re
 from pathlib import Path
 from typing import Any
@@ -503,3 +504,105 @@ def test_the_page_only_reads_dispersion_fields_the_engine_sends() -> None:
     assert read <= sent, f"the page reads {sorted(read - sent)}, which the engine never sends"
     # And the branch that only runs with the search on is present at all.
     assert "estimated" in read
+
+
+def test_the_coherent_link_has_no_spectrum_and_does_not_pretend_to() -> None:
+    """One channel and nothing to look at it with, so the pane says so.
+
+    Same guard as the eye, for a plainer reason: the shipped graph has no
+    Optical Spectrum Analyzer on it, so there is nothing for the pane to draw
+    and the bundled trace belongs to a different link. Drawing it anyway under
+    a badge reading live is the mistake the dock already made once.
+    """
+    project = embedded()["project"]
+    assert "OpticalSpectrumAnalyzer" not in {node["type"] for node in project["nodes"]}
+
+    text = STUDIO.read_text(encoding="utf-8")
+    assert (
+        'const canProduce = PROJECT.nodes.some((n) => n.type === "OpticalSpectrumAnalyzer");'
+        in text
+    ), "the spectrum pane must show the reference only while the graph could produce one"
+    assert "SESSION.hasRun && !SESSION.plots.spectrum" in text
+    assert "No spectrum in this run" in text
+
+
+def test_the_dock_draws_the_run_s_spectrum_and_not_the_bundled_one() -> None:
+    """The run's trace has to reach the pane, and the pane has to read it."""
+    text = STUDIO.read_text(encoding="utf-8")
+    assert 'SESSION.plots.spectrum = firstOfKind("spectrum")' in text, (
+        "a run's spectrum no longer reaches the dock"
+    )
+    assert "const live = SESSION.plots.spectrum;" in text, "nothing draws from it"
+
+
+def test_the_readings_are_cleared_with_the_trace_they_describe() -> None:
+    """A pane that has just said there is no spectrum must not list one's numbers.
+
+    The plot and the panel beside it are written by different code, and leaving
+    the bundled readings up next to an empty plot tells exactly the lie the
+    empty plot was careful not to.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    assert text.count("clearSpectrumPanel(); drawNoSpectrum(ctx, w, h); return;") == 2, (
+        "both refusals must clear the readings before drawing the empty state"
+    )
+
+
+def test_the_shipped_spectrum_comes_from_the_project_beside_it() -> None:
+    """And that project opens, runs, and produces exactly that trace.
+
+    Bundled reduced — wavelength and displayed level — because those are the two
+    arrays the plot reads. A live run sends four, so the reduction is redone here
+    from the run's own numbers and has to land on the shipped ones.
+    """
+    project = json.loads((ROOT / "examples" / "wdm_osa.maiman").read_text(encoding="utf-8"))
+    assert "OpticalSpectrumAnalyzer" in {node["type"] for node in project["nodes"]}
+    assert all("ui" in node for node in project["nodes"]), "it should open laid out"
+
+    results = run_project(project)["results"]
+    live = next(v for ports in results.values() for v in ports.values() if v["kind"] == "spectrum")
+    shipped = embedded()["spectrum"]
+
+    assert live["wavelengths_nm"] == pytest.approx(shipped["wavelengths_nm"], abs=1e-4)
+    assert live["resolution_bandwidth"] / 1e9 == pytest.approx(shipped["resolution_bandwidth_ghz"])
+    displayed = [
+        max(10.0 * math.log10(max(w, 1e-18) * 1e3), -90.0) for w in live["power_per_resolution_w"]
+    ]
+    assert displayed == pytest.approx(shipped["dbm"], abs=1e-3)
+
+
+def test_the_shipped_spectrum_shows_a_comb_standing_over_a_floor() -> None:
+    """The pane exists to show what a spectrum looks like, so it must show one.
+
+    Four channels on the 100 GHz grid and an ASE floor beneath them, which is
+    the whole reason the reference link is amplified. A trace with no floor
+    teaches nothing about resolution bandwidth, and one with no channels is not
+    a spectrum anybody would recognise.
+    """
+    shipped = embedded()["spectrum"]
+    dbm = shipped["dbm"]
+    peak = max(dbm)
+    floor = sorted(dbm)[len(dbm) // 2]
+    assert peak - floor > 15.0, "the comb has to stand clear of the noise it sits on"
+
+    # Four channels, counted as maxima within 3 dB of the peak rather than
+    # assumed from the project: if the grid or the span changes, this changes
+    # with it instead of going quietly wrong.
+    tops = [
+        i
+        for i in range(1, len(dbm) - 1)
+        if dbm[i] >= dbm[i - 1] and dbm[i] > dbm[i + 1] and dbm[i] > peak - 3.0
+    ]
+    assert len(tops) == 4, f"expected four channels, found {len(tops)}"
+
+
+def test_the_spectrum_is_read_in_the_bandwidth_it_was_measured_in() -> None:
+    """The axis is labelled per resolution bandwidth, because the trace is.
+
+    An OSA reports power within its own resolution, which is why a carrier and a
+    noise floor answer the setting differently. A trace labelled in bare dBm
+    would be a number nobody could act on.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    assert "`dBm / ${fmt(source.resolution_bandwidth_ghz)} GHz`" in text
+    assert "power_per_resolution_w" in text, "the plot must draw what an instrument displays"

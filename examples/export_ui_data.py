@@ -20,10 +20,13 @@ from typing import Any
 import numpy as np
 
 from maiman import Graph, SimulationContext, manifests, sweep
+from maiman.component import Component
 from maiman.components import (
+    EDFA,
     BERAnalyzer,
     CarrierRecovery,
     CoherentReceiver,
+    Combiner,
     ConstellationAnalyzer,
     ConstellationDiagram,
     CWLaser,
@@ -37,12 +40,15 @@ from maiman.components import (
     IQSampler,
     MachZehnderModulator,
     NRZDriver,
+    OpticalSpectrumAnalyzer,
+    OSNRMeter,
     PINPhotodiode,
     PowerMeter,
     PRBSGenerator,
     QAMMapper,
 )
 from maiman.project import graph_to_dict, save
+from maiman.units import C_LIGHT, wavelength_to_frequency
 
 V_PI = 4.0
 SYMBOL_RATE = 32e9
@@ -116,6 +122,130 @@ def ook_eye() -> Any:
     histogram = graph.run()[eye_block]
     save(graph, OOK_PROJECT, ui=OOK_LAYOUT)
     return histogram
+
+
+#: Where the WDM project is written, so the studio has a link with a spectrum in
+#: it to open. The eye has one of these and the spectrum needs its own: neither
+#: instrument has anything to show on the coherent link the page draws by default.
+WDM_PROJECT = Path(__file__).parent / "wdm_osa.maiman"
+
+#: Channels on the ITU grid, and the amplified line that gives the trace a floor.
+WDM_CHANNELS = 4
+WDM_SPACING = 100e9  # Hz — G.694.1, the spacing every one of these plots is read on
+WDM_ANCHOR = 1550.0  # nm — channel 0
+WDM_SPANS = 2
+
+WDM_LAYOUT = {
+    "prbs": {"x": 30.0, "y": 470.0},
+    "drv": {"x": 168.0, "y": 470.0},
+    **{f"ch{i}": {"x": 30.0, "y": 40.0 + i * 100.0} for i in range(WDM_CHANNELS)},
+    **{f"mzm{i}": {"x": 306.0, "y": 40.0 + i * 100.0} for i in range(WDM_CHANNELS)},
+    "mux": {"x": 444.0, "y": 190.0},
+    "f0": {"x": 582.0, "y": 190.0},
+    "edfa0": {"x": 720.0, "y": 190.0},
+    "f1": {"x": 858.0, "y": 190.0},
+    "edfa1": {"x": 996.0, "y": 190.0},
+    "osa": {"x": 1134.0, "y": 60.0},
+    "pm": {"x": 1134.0, "y": 200.0},
+    "osnr": {"x": 1134.0, "y": 320.0},
+}
+
+
+def wdm_wavelength(index: int) -> float:
+    """Wavelength of channel ``index`` on the 100 GHz grid [nm].
+
+    Derived from the anchor's *frequency*, because the grid is defined in
+    frequency and channels spaced evenly in wavelength would not land on it.
+    """
+    return C_LIGHT / (wavelength_to_frequency(WDM_ANCHOR * 1e-9) + index * WDM_SPACING) * 1e9
+
+
+def wdm_link() -> Graph:
+    """Four channels, amplified twice, into an optical spectrum analyser.
+
+    The link a spectrum is *for*. Everything the OSA pane is meant to teach is
+    on this one trace: four modulated channels sitting on their grid, each one
+    broadened by its own data rather than by an assumption, and underneath them
+    the ASE floor the two amplifiers put there. Widen the analyser's resolution
+    and the floor climbs decibel for decibel while the channels do not move,
+    which is the whole reason an OSNR figure is meaningless without the
+    bandwidth it was quoted in.
+
+    One pattern drives all four modulators. Independent data per channel would
+    cost four more blocks on a schematic that is already the largest the studio
+    ships, and would not change the trace: what sets a channel's width here is
+    the bit rate, not which bits.
+    """
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=16, sequence_length=1024, seed=11)
+    graph = Graph(ctx)
+    prbs = graph.add(PRBSGenerator(order=11.0, label="prbs"))
+    driver = graph.add(NRZDriver(v_low=4.0, v_high=0.0, label="drv"))
+    graph.connect(prbs["out"], driver["in"])
+
+    combiner = graph.add(Combiner(WDM_CHANNELS, label="mux"))
+    for index in range(WDM_CHANNELS):
+        laser = graph.add(CWLaser(power=0.0, wavelength=wdm_wavelength(index), label=f"ch{index}"))
+        modulator = graph.add(MachZehnderModulator(v_pi=4.0, label=f"mzm{index}"))
+        graph.connect(laser, modulator["optical_in"])
+        graph.connect(driver, modulator["electrical_in"])
+        graph.connect(modulator, combiner[f"in{index}"])
+
+    # Amplified back to transparency each span. Without real loss to make up
+    # there is no ASE worth speaking of and the trace has no floor to show.
+    node: Component = combiner
+    for span in range(WDM_SPANS):
+        fiber = graph.add(Fiber(length=80.0, attenuation=0.2, dispersion=17.0, label=f"f{span}"))
+        amplifier = graph.add(EDFA(gain=16.0, noise_figure=6.0, label=f"edfa{span}"))
+        graph.connect(node, fiber["in"])
+        graph.connect(fiber, amplifier["in"])
+        node = amplifier
+
+    # Centred between channels 1 and 2 with a span wide enough to show all four
+    # and some clean floor either side of the comb.
+    osa = graph.add(
+        OpticalSpectrumAnalyzer(
+            center_wavelength=(wdm_wavelength(1) + wdm_wavelength(2)) / 2.0,
+            span=800.0,
+            points=1024,
+            resolution_bandwidth=12.5,
+            label="osa",
+        )
+    )
+    meter = graph.add(PowerMeter(label="pm"))
+    osnr = graph.add(OSNRMeter(label="osnr"))
+    graph.connect(node, osa["in"])
+    graph.connect(node, meter["in"])
+    graph.connect(node, osnr["in"])
+    return graph
+
+
+def wdm_spectrum() -> dict[str, Any]:
+    """The trace the studio ships, and the project it came from, written to disk.
+
+    Reduced to what the plot actually draws — wavelength against the level an
+    instrument displays — rather than shipped raw. A live run sends four arrays
+    because a caller might want any of them; the page only ever reads two, and
+    baking the other two into every copy of the file buys nothing.
+    """
+    graph = wdm_link()
+    block = of_type(graph, OpticalSpectrumAnalyzer)
+    results = graph.run()
+    spectrum = results[block]
+    save(graph, WDM_PROJECT, ui=WDM_LAYOUT)
+
+    peak_frequency, peak_power = spectrum.peak()
+    return {
+        "wavelengths_nm": np.asarray(spectrum.wavelengths_nm).round(4).tolist(),
+        # Floored at -90 dBm so an empty display bin plots on the axis instead
+        # of running off it; the engine's own floor is far lower and would set
+        # the y-range from a bin holding nothing.
+        "dbm": np.maximum(spectrum.power_dbm(), -90.0).round(3).tolist(),
+        "resolution_bandwidth_ghz": spectrum.resolution_bandwidth / 1e9,
+        "total_dbm": round(10.0 * float(np.log10(spectrum.total_power() * 1e3)), 3),
+        "peak_nm": round(C_LIGHT / peak_frequency * 1e9, 4),
+        "peak_dbm": round(10.0 * float(np.log10(max(peak_power, 1e-18) * 1e3)), 3),
+        "osnr_db": round(float(results[of_type(graph, OSNRMeter)]), 3),
+    }
 
 
 def build(sequence_length: int = 4096) -> Graph:
@@ -245,6 +375,12 @@ def main() -> None:
     # written beside this one as a project anyone can open.
     eye = ook_eye()
 
+    # And no spectrum either, for a plainer reason: this link has one channel and
+    # nothing to look at it with. The trace the studio ships comes from the WDM
+    # project written beside it, which is also the one to open to see the OSA's
+    # resolution setting move the noise floor and leave the channels alone.
+    spectrum = wdm_spectrum()
+
     # Required received power per format, from the same graph re-run.
     sensitivity: list[dict[str, Any]] = []
     prbs = of_type(graph, PRBSGenerator)
@@ -305,6 +441,7 @@ def main() -> None:
             "amplitude_ua": (np.asarray(eye.amplitude_edges) * 1e6).round(4).tolist(),
             "unit": eye.unit,
         },
+        "spectrum": spectrum,
         "sensitivity": sensitivity,
         # The graph itself, in the same `.maiman` document format the session
         # server accepts. The interface draws its schematic from this and posts
@@ -336,6 +473,12 @@ def main() -> None:
     print(f"{len(payload['manifests'])} component manifests")
     counts = payload["constellation"]["counts"]
     print(f"constellation histogram {len(counts)}x{len(counts[0])}")
+    print(
+        f"spectrum {len(spectrum['wavelengths_nm'])} points, peak "
+        f"{spectrum['peak_nm']:.3f} nm at {spectrum['peak_dbm']:.2f} dBm per "
+        f"{spectrum['resolution_bandwidth_ghz']:.1f} GHz, "
+        f"OSNR {spectrum['osnr_db']:.2f} dB"
+    )
     print(f"wrote {destination.name} ({destination.stat().st_size / 1024:.0f} kB)")
 
 

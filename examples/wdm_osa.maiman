@@ -1,0 +1,424 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.0.1.dev0",
+  "context": {
+    "bit_rate": 10000000000.0,
+    "samples_per_symbol": 16,
+    "sequence_length": 1024,
+    "seed": 11,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "prbs",
+      "type": "PRBSGenerator",
+      "params": {
+        "order": 11.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 470.0
+      }
+    },
+    {
+      "id": "drv",
+      "type": "NRZDriver",
+      "params": {
+        "v_low": 4.0,
+        "v_high": 0.0
+      },
+      "ui": {
+        "x": 168.0,
+        "y": 470.0
+      }
+    },
+    {
+      "id": "mux",
+      "type": "Combiner",
+      "params": {},
+      "config": {
+        "num_inputs": 4
+      },
+      "ui": {
+        "x": 444.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "ch0",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1550.0000000000002
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "mzm0",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 306.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "ch1",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1549.1990263841478
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "mzm1",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 306.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "ch2",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1548.398880158456
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 240.0
+      }
+    },
+    {
+      "id": "mzm2",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 306.0,
+        "y": 240.0
+      }
+    },
+    {
+      "id": "ch3",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1547.5995600415697
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 340.0
+      }
+    },
+    {
+      "id": "mzm3",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 306.0,
+        "y": 340.0
+      }
+    },
+    {
+      "id": "f0",
+      "type": "Fiber",
+      "params": {
+        "length": 80.0,
+        "attenuation": 0.2,
+        "dispersion": 17.0
+      },
+      "ui": {
+        "x": 582.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "edfa0",
+      "type": "EDFA",
+      "params": {
+        "gain": 16.0,
+        "noise_figure": 6.0
+      },
+      "ui": {
+        "x": 720.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "f1",
+      "type": "Fiber",
+      "params": {
+        "length": 80.0,
+        "attenuation": 0.2,
+        "dispersion": 17.0
+      },
+      "ui": {
+        "x": 858.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "edfa1",
+      "type": "EDFA",
+      "params": {
+        "gain": 16.0,
+        "noise_figure": 6.0
+      },
+      "ui": {
+        "x": 996.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "osa",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "center_wavelength": 1548.7989532713018,
+        "span": 800.0,
+        "points": 1024.0,
+        "resolution_bandwidth": 12.5
+      },
+      "ui": {
+        "x": 1134.0,
+        "y": 60.0
+      }
+    },
+    {
+      "id": "pm",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+        "x": 1134.0,
+        "y": 200.0
+      }
+    },
+    {
+      "id": "osnr",
+      "type": "OSNRMeter",
+      "params": {},
+      "ui": {
+        "x": 1134.0,
+        "y": 320.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "drv",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "f0",
+        "out"
+      ],
+      "to": [
+        "edfa0",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "f1",
+        "out"
+      ],
+      "to": [
+        "edfa1",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "mux",
+        "out"
+      ],
+      "to": [
+        "f0",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "edfa0",
+        "out"
+      ],
+      "to": [
+        "f1",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "mzm0",
+        "out"
+      ],
+      "to": [
+        "mux",
+        "in0"
+      ]
+    },
+    {
+      "from": [
+        "mzm1",
+        "out"
+      ],
+      "to": [
+        "mux",
+        "in1"
+      ]
+    },
+    {
+      "from": [
+        "mzm2",
+        "out"
+      ],
+      "to": [
+        "mux",
+        "in2"
+      ]
+    },
+    {
+      "from": [
+        "mzm3",
+        "out"
+      ],
+      "to": [
+        "mux",
+        "in3"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "out"
+      ],
+      "to": [
+        "mzm0",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "ch0",
+        "out"
+      ],
+      "to": [
+        "mzm0",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "out"
+      ],
+      "to": [
+        "mzm1",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "ch1",
+        "out"
+      ],
+      "to": [
+        "mzm1",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "out"
+      ],
+      "to": [
+        "mzm2",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "ch2",
+        "out"
+      ],
+      "to": [
+        "mzm2",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "out"
+      ],
+      "to": [
+        "mzm3",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "ch3",
+        "out"
+      ],
+      "to": [
+        "mzm3",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "edfa1",
+        "out"
+      ],
+      "to": [
+        "osa",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "edfa1",
+        "out"
+      ],
+      "to": [
+        "osnr",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "edfa1",
+        "out"
+      ],
+      "to": [
+        "pm",
+        "in"
+      ]
+    }
+  ]
+}
