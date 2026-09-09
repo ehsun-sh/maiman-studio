@@ -5,7 +5,8 @@ from __future__ import annotations
 import pytest
 
 from maiman import CycleError, Graph, GraphError, PortType, SimulationContext
-from maiman.components import Attenuator, CWLaser, Fiber, PowerMeter
+from maiman.components import Attenuator, CWLaser, Fiber, NRZDriver, PowerMeter, PRBSGenerator
+from maiman.graph import Progress
 
 
 @pytest.fixture
@@ -247,3 +248,79 @@ def test_ports_are_per_instance_so_port_count_can_be_configured(
     assert set(two.inputs) == {"in0", "in1"}
     assert set(four.inputs) == {"in0", "in1", "in2", "in3"}
     assert two.inputs["in0"] is PortType.OPTICAL
+
+
+# ---------------------------------------------------------------------------
+# Progress
+# ---------------------------------------------------------------------------
+
+
+def test_a_run_says_where_it_has_got_to() -> None:
+    """Monotonic, starting at zero and ending at exactly one.
+
+    A bar that runs backwards is worse than no bar: it tells the person watching
+    that the thing measuring the work does not understand it. And one that stops
+    at 90 % on every successful run teaches them to ignore it.
+    """
+    graph = Graph(SimulationContext(bit_rate=1e9, samples_per_symbol=4, sequence_length=64))
+    source = graph.add(PRBSGenerator(order=7.0, label="a"))
+    driver = graph.add(NRZDriver(label="b"))
+    graph.connect(source["out"], driver["in"])
+
+    seen: list[Progress] = []
+    graph.run(progress=seen.append)
+
+    fractions = [report.fraction for report in seen]
+    assert fractions[0] == 0.0
+    assert fractions[-1] == 1.0
+    assert fractions == sorted(fractions), "the fraction went backwards"
+    assert {report.label for report in seen} == {"a", "b"}
+    assert all(report.total == 2 for report in seen)
+
+
+def test_a_run_without_a_listener_reports_nothing() -> None:
+    """The reporter is installed only when somebody asked, and taken off after.
+
+    ``Component.report`` is called from inside a split step, which is the hottest
+    loop in the engine. It has to be free when nobody is listening, and a
+    reporter left behind after the run would fire into a closure holding a graph
+    that is no longer being used.
+    """
+    graph = Graph(SimulationContext(bit_rate=1e9, samples_per_symbol=4, sequence_length=64))
+    source = graph.add(PRBSGenerator(order=7.0, label="a"))
+    graph.run()
+    assert source._reporter is None
+
+    graph.run(progress=lambda _: None)
+    assert source._reporter is None, "the reporter outlived the run that installed it"
+
+
+def test_the_span_reports_from_inside_itself() -> None:
+    """The one block long enough to be worth watching says so while it works.
+
+    Without this the bar rests on `fib` for the whole of a long run: component
+    counting alone cannot see inside the component that *is* the run. The span
+    below is solved in many split steps, and each one moves the fraction.
+    """
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=8, sequence_length=128, seed=4)
+    graph = Graph(ctx)
+    laser = graph.add(CWLaser(power=10.0, wavelength=1550.0, label="tx"))
+    fiber = graph.add(
+        Fiber(
+            length=200.0,
+            attenuation=0.0,
+            dispersion=17.0,
+            nonlinearity=1.3,
+            max_nonlinear_phase=0.002,
+            label="fib",
+        )
+    )
+    graph.connect(laser, fiber["in"])
+
+    seen: list[Progress] = []
+    graph.run(progress=seen.append)
+
+    within = [r.within for r in seen if r.label == "fib" and r.index < r.total]
+    assert len(within) > 10, f"the span reported {len(within)} times; it is solved in many steps"
+    assert within == sorted(within), "progress within the span went backwards"
+    assert within[-1] == 1.0, "the span never reported itself finished"

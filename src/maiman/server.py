@@ -35,6 +35,7 @@ import argparse
 import json
 import sys
 import threading
+import time
 import traceback
 from collections.abc import Callable
 from http import HTTPStatus
@@ -44,7 +45,7 @@ from typing import Any
 
 from . import manifests
 from .encoding import EncodingError, encode, encode_results, scalars
-from .graph import Graph, GraphError, Results
+from .graph import Graph, GraphError, Progress, Results
 from .project import ProjectError, graph_from_dict, ui_from_dict
 from .registry import UnknownComponentError
 from .sweep import sweep
@@ -131,10 +132,10 @@ def _context(graph: Graph) -> dict[str, Any]:
     }
 
 
-def _execute(graph: Graph) -> Results:
+def _execute(graph: Graph, progress: Callable[[Progress], None] | None = None) -> Results:
     """Run a graph, mapping the two ways it can refuse onto the caller's fault."""
     try:
-        return graph.run()
+        return graph.run(progress=progress)
     except GraphError as error:
         # A wiring or validation problem: the graph as described cannot run, and
         # the person who described it is the one who can fix it.
@@ -145,14 +146,22 @@ def _execute(graph: Graph) -> Results:
         raise RequestError(HTTPStatus.UNPROCESSABLE_ENTITY, str(error)) from error
 
 
-def run_project(document: dict[str, Any]) -> dict[str, Any]:
+def run_project(
+    document: dict[str, Any],
+    *,
+    progress: Callable[[Progress], None] | None = None,
+) -> dict[str, Any]:
     """Build the graph a project document describes, run it, and reduce the results.
 
     The whole of what the server does that is worth testing, separated from the
     HTTP that carries it so that it can be tested without a socket.
+
+    ``progress`` is handed straight to :meth:`Graph.run`. It is called from this
+    thread while the run is in flight, which is the only way a caller learns
+    anything before the run is over.
     """
     graph = _build(document)
-    results = _execute(graph)
+    results = _execute(graph, progress)
     try:
         encoded = encode_results(results)
     except EncodingError as error:
@@ -164,6 +173,11 @@ def run_project(document: dict[str, Any]) -> dict[str, Any]:
         "ui": ui_from_dict(document),
     }
 
+
+#: Shortest gap between two progress lines, in seconds. Twenty a second is
+#: already past what anybody reads off a moving bar, and a split step can report
+#: thousands of times in that window.
+PROGRESS_INTERVAL = 0.05
 
 #: Most points one sweep may ask for. A curve is read, not counted: past a
 #: couple of hundred the line stops gaining shape and starts costing minutes.
@@ -356,11 +370,77 @@ class StudioHandler(BaseHTTPRequestHandler):
         except RequestError as error:
             self._fail(error)
 
+    def _stream_run(self, document: dict[str, Any]) -> None:
+        """A run reported as it happens: NDJSON, one object per line.
+
+        Chunked rather than one JSON body, because the point is to say something
+        before the run is over and a Content-Length cannot be known then. Each
+        line is a complete object — ``{"progress": ...}`` any number of times and
+        then exactly one ``{"result": ...}`` or ``{"error": ...}`` — so a reader
+        that splits on newlines never has to buffer a partial parse.
+
+        The status line goes out **before** the graph is built, which means a run
+        that turns out to be unrunnable reports 200 with an ``error`` line rather
+        than the 4xx the unstreamed route gives. That is the price of saying
+        anything early, and it is why /api/run still exists unchanged: the error
+        contract there is worth keeping for anything that is not a browser
+        drawing a progress bar.
+        """
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Transfer-Encoding", "chunked")
+        self.end_headers()
+
+        def line(obj: dict[str, Any]) -> None:
+            body = (json.dumps(obj, allow_nan=False) + "\n").encode("utf-8")
+            self.wfile.write(b"%x\r\n" % len(body) + body + b"\r\n")
+            self.wfile.flush()
+
+        # A fiber reports after every split step, which on a long span is tens of
+        # thousands of times. Sending each one would spend more time writing
+        # about the run than running it, and no eye reads faster than this.
+        last = 0.0
+
+        def emit(report: Progress) -> None:
+            nonlocal last
+            now = time.monotonic()
+            if now - last < PROGRESS_INTERVAL and report.index < report.total:
+                return
+            last = now
+            line(
+                {
+                    "progress": {
+                        "label": report.label,
+                        "index": report.index,
+                        "total": report.total,
+                        "fraction": report.fraction,
+                    }
+                }
+            )
+
+        try:
+            line({"result": run_project(document, progress=emit)})
+        except RequestError as error:
+            line({"error": error.message, "status": int(error.status)})
+        except Exception as error:
+            traceback.print_exc()
+            line(
+                {
+                    "error": f"{type(error).__name__}: {error}",
+                    "status": int(HTTPStatus.INTERNAL_SERVER_ERROR),
+                }
+            )
+        self.wfile.write(b"0\r\n\r\n")
+        self.wfile.flush()
+
     def do_POST(self) -> None:
         route = self.path.split("?", 1)[0].rstrip("/")
         try:
             if route == "/api/run":
                 self._send(HTTPStatus.OK, run_project(self._body()))
+            elif route == "/api/run/stream":
+                self._stream_run(self._body())
             elif route == "/api/sweep":
                 self._send(HTTPStatus.OK, run_sweep(self._body()))
             else:

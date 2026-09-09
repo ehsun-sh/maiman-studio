@@ -685,3 +685,33 @@ def test_every_kind_the_engine_can_send_has_a_line_to_print() -> None:
         f"the log has no case for {missing}, so each falls through to `default` "
         f"and prints its own kind back. Give it the fact the payload carries."
     )
+
+
+def test_the_dock_shows_a_run_it_cannot_see_the_end_of() -> None:
+    """The bar is drawn from the engine's fraction, never from a timer.
+
+    A bar that fills on a clock is a lie with a progress indicator's authority:
+    it says 90 % at a moment nothing knows anything about, and it has to be
+    walked back or left stuck. What makes this one honest is that every width it
+    takes is a fraction the engine has already reported.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    assert "/api/run/stream" in text, "the page no longer asks for progress"
+    assert "function showProgress" in text
+    assert "report.fraction" in text, "the bar must be drawn from the engine's own fraction"
+    # And it can still run against a server that has no such route.
+    assert "streamError.status !== 404" in text, "no fallback to the unstreamed route"
+
+
+def test_stop_stops_something() -> None:
+    """The button was enabled for the whole of every run and wired to nothing.
+
+    Which is the same class of claim as a plot drawn from the wrong run: the
+    interface offering an action it does not perform. It now aborts the
+    response, and the log says exactly that much — the engine is left to finish,
+    because block-mode execution has no safe place to stop halfway.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    assert 'stopBtn.addEventListener("click"' in text, "Stop is still wired to nothing"
+    assert "RUN.controller.abort()" in text
+    assert 'error.name === "AbortError"' in text, "an abort would be reported as a failure"

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, ClassVar, overload
@@ -385,6 +385,30 @@ class Component:
         and must not hold state between calls.
         """
         raise NotImplementedError(f"{type(self).__name__} does not implement run()")
+
+    #: Where :meth:`report` sends its fraction, installed by the graph around a
+    #: call to :meth:`run` and taken away again afterwards. Not a parameter and
+    #: not state the component may read: it exists so that the *only* thing a
+    #: component knows about progress is how to emit it.
+    _reporter: Callable[[float], None] | None = None
+
+    def report(self, fraction: float) -> None:
+        """Say how far through this component's own work the run has got, 0 to 1.
+
+        Optional, and almost every component ignores it: the ones that finish in
+        a millisecond have nothing to report that anybody could read. It is worth
+        calling from a loop whose length is set by a *parameter* rather than by
+        the window — a span solved in ten thousand split steps is the case this
+        exists for, and it is the difference between an interface that says how
+        far along a run is and one that says only that it has not crashed.
+
+        Cheap when nobody is listening, which is what lets a hot loop call it
+        without guarding: the graph installs a sink only when a caller asked
+        for progress.
+        """
+        reporter = self._reporter
+        if reporter is not None:
+            reporter(0.0 if fraction < 0.0 else 1.0 if fraction > 1.0 else float(fraction))
 
     def __repr__(self) -> str:
         params = ", ".join(f"{k}={v!r}" for k, v in sorted(self._values.items()))

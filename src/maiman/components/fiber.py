@@ -465,6 +465,7 @@ class Fiber(Component):
         out, diag = propagate_coupled_ssfm(
             fields,
             sample_rate,
+            on_progress=self.report,
             beta2=beta2,
             walkoff=walkoff,
             gamma=gamma,

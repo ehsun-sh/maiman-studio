@@ -14,9 +14,9 @@ streaming would buy nothing and complicate every block.
 from __future__ import annotations
 
 from collections import defaultdict, deque
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from itertools import pairwise
 from typing import TypeVar
 
@@ -25,6 +25,49 @@ from .context import SimulationContext
 from .signals import Signal
 
 C = TypeVar("C", bound=Component)
+
+
+@dataclass(frozen=True)
+class Progress:
+    """How far through a run the engine is, as it happens.
+
+    ``fraction`` is what a bar is drawn from. It is deliberately *not* elapsed
+    time over an estimate: a run has no estimate before it starts, and the one
+    honest quantity available is how much of the work is behind it.
+
+    Components are weighted equally, which is a lie in every graph and the least
+    misleading one available. The alternative is a cost model per component, and
+    a cost model that is wrong makes the bar run backwards — a fiber's cost
+    depends on a step size chosen from the peak power it is about to see, which
+    is not knowable until it has seen it. Equal weighting is at worst uneven;
+    it is never wrong about the direction of travel.
+
+    What rescues it in practice is ``within``. A component that spends real time
+    reports its own fraction through :meth:`Component.report`, and the run's
+    fraction advances smoothly across it instead of resting on one block for a
+    minute. In a link with a thousand-kilometre span, that one block *is* the
+    run, and without it the bar would sit still for the whole of it.
+    """
+
+    label: str
+    """Label of the component now running."""
+
+    index: int
+    """Its position in the execution order, from 0."""
+
+    total: int
+    """How many components the run will execute."""
+
+    within: float
+    """How far through *this* component, 0 to 1. Zero unless it reports."""
+
+    @property
+    def fraction(self) -> float:
+        """Fraction of the whole run behind this point, 0 to 1."""
+        return (self.index + self.within) / self.total if self.total else 1.0
+
+    def __str__(self) -> str:
+        return f"{self.fraction * 100:5.1f}%  {self.label}"
 
 
 class GraphError(Exception):
@@ -246,6 +289,7 @@ class Graph:
         *,
         overrides: Mapping[tuple[Component | str, str], float | bool] | None = None,
         seed: int | None = None,
+        progress: Callable[[Progress], None] | None = None,
     ) -> Results:
         """Execute every component once, in dependency order.
 
@@ -258,11 +302,22 @@ class Graph:
         ``(component_or_label, parameter_name)``; the graph is left unchanged.
         ``seed`` replaces the context seed, which is how repeated runs draw
         independent noise from the same graph.
+
+        ``progress`` is called as the run advances, with a :class:`Progress`
+        describing where it has got to. It is called from the running thread,
+        between components and from inside any component that reports, so it
+        must be cheap and must not raise — an exception there aborts a run that
+        was otherwise fine, which is a bad trade for a status bar.
         """
         with self._applied(overrides):
-            return self._run(keep, seed)
+            return self._run(keep, seed, progress)
 
-    def _run(self, keep: list[Component] | None, seed: int | None) -> Results:
+    def _run(
+        self,
+        keep: list[Component] | None,
+        seed: int | None,
+        progress: Callable[[Progress], None] | None = None,
+    ) -> Results:
         ctx = self.ctx if seed is None else replace(self.ctx, seed=seed)
         self._validate()
         order = self._topological_order()
@@ -275,13 +330,29 @@ class Graph:
         live: dict[tuple[str, str], Signal] = {}
         retained: dict[tuple[str, str], Signal] = {}
 
-        for component in order:
+        total = len(order)
+        for index, component in enumerate(order):
             inputs = {}
             for name in component.inputs:
                 src = self._edges[(component.label, name)]
                 inputs[name] = live[(src.component.label, src.name)]
 
-            produced = component.run(ctx, inputs)
+            if progress is None:
+                produced = component.run(ctx, inputs)
+            else:
+                # Announced before it runs, so the label on screen is the block
+                # currently working rather than the one that has just finished.
+                progress(Progress(component.label, index, total, 0.0))
+                component._reporter = lambda within, _i=index, _c=component: progress(
+                    Progress(_c.label, _i, total, within)
+                )
+                try:
+                    produced = component.run(ctx, inputs)
+                finally:
+                    # Off again whatever happened. A reporter left installed
+                    # would outlive the run that owns it and fire into a closure
+                    # holding a graph nobody is using any more.
+                    component._reporter = None
 
             missing = set(component.outputs) - set(produced)
             if missing:
@@ -316,6 +387,12 @@ class Graph:
                 consumers_remaining[src_key] -= 1
                 if consumers_remaining[src_key] == 0 and src_key not in retained:
                     live.pop(src_key, None)
+
+        if progress is not None and order:
+            # One final call at exactly 1.0. Without it the last thing a caller
+            # sees is the last component starting, and a bar that stops at 90%
+            # on every successful run teaches people to distrust it.
+            progress(Progress(order[-1].label, total, total, 0.0))
 
         return Results(retained)
 

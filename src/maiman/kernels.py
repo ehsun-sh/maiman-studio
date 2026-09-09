@@ -14,7 +14,7 @@ not be introduced: it is GPL-2.0-or-later, and linking it — directly or throug
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -305,6 +305,7 @@ def propagate_coupled_ssfm(
     max_nonlinear_phase: float = 0.005,
     max_walkoff_slip: float = 0.5,
     max_step: float | None = None,
+    on_progress: Callable[[float], None] | None = None,
 ) -> tuple[list[np.ndarray], PropagationDiagnostics]:
     """Co-propagate several channels through one fiber, coupled by the Kerr effect.
 
@@ -505,6 +506,12 @@ def propagate_coupled_ssfm(
         shortest = min(shortest, step)
         longest = max(longest, step)
         peak_slip = max(peak_slip, spread * step * sample_rate)
+        if on_progress is not None:
+            # Distance, not step count. The step count is not known in advance —
+            # the size is chosen each time from the peak power the fields
+            # currently have — so a fraction of steps would need a denominator
+            # that does not exist yet. Distance has one from the first line.
+            on_progress(travelled / distance)
 
     if spread > 0.0:
         # Back into each channel's own retarded frame. This is the exact inverse

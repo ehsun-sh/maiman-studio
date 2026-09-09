@@ -772,6 +772,73 @@ def test_a_sweep_over_http(session: str) -> None:
     assert body["context"]["sequence_length"] == 256
 
 
+def ndjson(url: str, payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Every line of a streamed run, in order."""
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(request, timeout=120) as response:
+        assert response.headers.get_content_type() == "application/x-ndjson"
+        return [json.loads(line) for line in response if line.strip()]
+
+
+def test_a_streamed_run_reports_progress_and_then_the_result(session: str) -> None:
+    """Any number of progress lines, then exactly one result, on one connection.
+
+    The point of the route is to say something before the run is over. A stream
+    that only speaks at the end is the unstreamed route with extra parts.
+    """
+    lines = ndjson(f"{session}/api/run/stream", document())
+
+    results = [line["result"] for line in lines if "result" in line]
+    reports = [line["progress"] for line in lines if "progress" in line]
+    assert len(results) == 1, "a run must end with exactly one result"
+    assert lines[-1] is not None and "result" in lines[-1], "the result must come last"
+    assert reports, "the run reported nothing on the way"
+
+    fractions = [report["fraction"] for report in reports]
+    assert fractions[0] == 0.0
+    assert fractions[-1] == 1.0
+    assert fractions == sorted(fractions), "the fraction went backwards"
+    assert all(0 <= r["index"] <= r["total"] for r in reports)
+
+    # And the result is the same object the unstreamed route returns, so the
+    # page has one thing to render rather than two.
+    status, direct = post(f"{session}/api/run", document())
+    assert status == HTTPStatus.OK
+    assert results[0].keys() == direct.keys()
+    assert results[0]["results"].keys() == direct["results"].keys()
+
+
+def test_a_streamed_run_that_cannot_run_says_so_in_the_body(session: str) -> None:
+    """The status line is spent before the graph is built, so refusals arrive late.
+
+    That is the cost of streaming and it is paid deliberately: /api/run keeps the
+    4xx contract for anything that is not a browser drawing a bar. What the
+    stream must not do is fail silently — the refusal has to arrive as a line,
+    carrying the status it would have been.
+    """
+    broken = document()
+    broken["nodes"] = [{"id": "nope", "type": "NoSuchComponent", "params": {}}]
+    broken["edges"] = []
+
+    lines = ndjson(f"{session}/api/run/stream", broken)
+    errors = [line for line in lines if "error" in line]
+    assert len(errors) == 1, f"expected one error line, got {lines}"
+    assert not any("result" in line for line in lines)
+    assert "NoSuchComponent" in errors[0]["error"]
+
+    # The status it carries is the one the unstreamed route answers with, taken
+    # from that route rather than written down here: the two must not be able to
+    # disagree about whose fault a refusal is, and a number copied into a test is
+    # exactly how they would start to.
+    status, direct = post(f"{session}/api/run", broken)
+    assert errors[0]["status"] == status
+    assert errors[0]["error"] == direct["error"]
+
+
 # -- the command line -------------------------------------------------------
 #
 # Two front doors reach the same server: `maiman serve`, which is what exists

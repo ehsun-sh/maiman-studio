@@ -312,6 +312,24 @@ verdict, and DESIGN.md
   .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--good); }
   .dot.busy { background: var(--warn); }
 
+  /* The run bar. It takes no space in the menubar until there is a run to
+     report, because a permanent empty trough on a surface used fifty times an
+     hour is a hundred pixels spent saying nothing. */
+  .run-bar {
+    width: 0; height: 4px; border-radius: 2px;
+    background: var(--raised); overflow: hidden;
+    transition: width 120ms ease;
+  }
+  .run-bar[data-on="true"] { width: 96px; }
+  .run-bar > i {
+    display: block; height: 100%; width: 0;
+    background: var(--accent);
+    /* Slower than the updates arrive, so the fill glides between them instead
+       of stepping. It never runs ahead: the width it eases toward is always a
+       fraction the engine has already reported. */
+    transition: width 180ms linear;
+  }
+
   /* Ground switch. A schematic gets read in daylight and at 2 a.m.; the tool
      ships both and remembers nothing clever about it. */
   .theme-btn {
@@ -760,6 +778,8 @@ verdict, and DESIGN.md
         </svg>
       </button>
       <div class="kernel"><span class="dot" id="kernel-dot"></span><span id="kernel-text">engine ready</span></div>
+      <div class="run-bar" id="run-bar" role="progressbar" aria-hidden="true"
+           aria-valuemin="0" aria-valuemax="100"><i id="run-fill"></i></div>
       <span class="num" style="color:var(--ink-4)" id="project-name">coherent_16qam.maiman</span>
     </div>
   </div>
@@ -22294,12 +22314,85 @@ verdict, and DESIGN.md
      engine actually takes. */
   const runBtn = $("#run-btn"), stopBtn = $("#stop-btn");
 
+  /* The in-flight run, so that Stop has something to stop. Until the run was
+     streamed there was nothing here to hold: the fetch was one awaited call and
+     the button beside it was enabled, unwired, for the whole of every run. */
+  const RUN = { controller: null };
+
+  stopBtn.addEventListener("click", () => {
+    if (stopBtn.disabled || !RUN.controller) return;
+    /* Aborts the *response*. The engine keeps going to the end of the graph —
+       block-mode execution has no safe place to stop halfway, and killing a
+       component mid-array would leave the server holding a torn result. What
+       this buys is the interface back, honestly labelled, instead of a page
+       waiting on numbers nobody wants any more. Saying so beats implying a
+       cancellation that did not happen. */
+    RUN.controller.abort();
+  });
+
   function setBusy(busy) {
     SESSION.running = busy;
     $("#canvas-wrap").classList.toggle("running", busy);
     runBtn.disabled = busy;
     stopBtn.disabled = !busy;
     $("#kernel-dot").classList.toggle("busy", busy);
+    $("#run-bar").dataset.on = String(busy);
+    $("#run-bar").setAttribute("aria-hidden", String(!busy));
+    if (!busy) $("#run-fill").style.width = "0%";
+  }
+
+  /* What the engine last said about where it had got to. The fraction is the
+     engine's own — components behind this point over components in the run,
+     with the fraction *within* the running one folded in when it reports — so
+     the bar never advances on a timer and never has to be walked back. */
+  function showProgress(report) {
+    const percent = Math.max(0, Math.min(100, report.fraction * 100));
+    $("#run-fill").style.width = percent.toFixed(1) + "%";
+    $("#run-bar").setAttribute("aria-valuenow", percent.toFixed(0));
+    kernel(`running ${percent.toFixed(0)} % — ${report.label}`);
+  }
+
+  /* NDJSON down one response: any number of progress lines, then exactly one
+     result or error. Split on newlines rather than parsed as it arrives,
+     because a chunk boundary can fall anywhere and a half-object is not JSON. */
+  async function runStreaming(signal) {
+    const response = await fetch("/api/run/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(PROJECT),
+      signal
+    });
+    if (!response.ok || !response.body) {
+      const error = new Error(`stream refused with ${response.status}`);
+      error.status = response.status;
+      throw error;
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "", payload = null;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const message = JSON.parse(line);
+        if (message.progress) showProgress(message.progress);
+        else if (message.result) payload = message.result;
+        else if (message.error) {
+          /* The stream commits to 200 before the graph is built, so a refusal
+             arrives in the body. Rebuilt into the same shape the unstreamed
+             route throws, so one catch handles both. */
+          const error = new Error(message.error);
+          error.status = message.status;
+          throw error;
+        }
+      }
+    }
+    if (!payload) throw new Error("the run ended without a result");
+    return payload;
   }
 
   function kernel(text, state) {
@@ -22321,12 +22414,25 @@ verdict, and DESIGN.md
     setBusy(true);
     kernel("running…");
     const started = performance.now();
+    RUN.controller = new AbortController();
     try {
-      const payload = await callApi("/api/run", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(PROJECT)
-      });
+      /* Streaming first, because a run that takes a minute must not look like a
+         hung page for the whole of it. An older server has no such route and
+         answers 404; the run still has to happen, so it falls back to the one
+         that has always been there and simply says less on the way. */
+      let payload;
+      try {
+        payload = await runStreaming(RUN.controller.signal);
+      } catch (streamError) {
+        if (streamError.name === "AbortError") throw streamError;
+        if (streamError.status !== 404) throw streamError;
+        logLine("—", "no streaming route on this server; running without progress", "warn");
+        payload = await callApi("/api/run", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(PROJECT)
+        });
+      }
       const seconds = (performance.now() - started) / 1000;
       applyRun(payload, seconds);
       kernel("engine ready");
@@ -22340,6 +22446,15 @@ verdict, and DESIGN.md
          "unreachable" sends whoever reads it to look in the wrong place — it
          did, for a TypeError thrown while rendering a result that had arrived
          perfectly well. */
+      /* Stopping is not failing. The dot stays green and the log says what
+         actually happened — the engine was left running and its answer thrown
+         away — because marking the engine failed would be the page inventing a
+         fault that nobody hit. */
+      if (error.name === "AbortError") {
+        kernel("engine ready");
+        logLine("—", "stopped — the run was left to finish and its result discarded", "warn");
+        return;
+      }
       const status = error.status || 0;
       const kind = status === 422 ? "graph will not run"
                  : status === 413 ? "too large to run"
@@ -22353,6 +22468,7 @@ verdict, and DESIGN.md
       if (error.detail) logLine("", error.detail, "warn");
       showTab("log");
     } finally {
+      RUN.controller = null;
       setBusy(false);
     }
   });

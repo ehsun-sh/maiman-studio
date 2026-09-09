@@ -89,6 +89,20 @@ project has no build step at all — the page still opens straight off disk with
 which is how the README asks you to read it. The interaction layer is the part that would have had
 to be written either way.
 
+**A run says how far along it is.** Not a spinner: the response streams, and the bar in the menubar
+is drawn from a fraction the engine has already reported — components behind this point, plus the
+fraction *within* the one running. That second part is what makes it useful, because in a link with
+a long span one block is the entire run: the split step reports the distance it has travelled after
+every step, so a 16-second span moves the bar 268 times instead of resting on `fib` for the whole
+of it. It is deliberately not a time estimate. A run has no estimate before it starts, and the one
+honest quantity available is how much of the work is behind it.
+
+Stop aborts the response rather than the run. Block-mode execution has no safe place to stop
+halfway, so the engine finishes and its answer is discarded — and the log says that in those words,
+because an interface that implies a cancellation it did not perform is worse than one that cannot
+cancel. The button was enabled for the whole of every run and wired to nothing until there was
+something real to abort.
+
 **Sweeps.** A single run answers *what does this link do*; a sweep answers *how far can it go*,
 which is the question that gets asked more often. Pick a block and a parameter, give it a range,
 and the curve appears beside the form that made it. Repeats draw the spread at each point, because

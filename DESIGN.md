@@ -289,13 +289,19 @@ Two findings worth keeping:
   show — and tests keep both off this canvas rather than trusting that nobody
   wires one on.
 - No motion beyond the run pulse and the control transitions.
-- **No progress on a long run**, which is the one thing PRODUCT.md asks for that
-  the dock does not do. Every run so far comes back fast enough that a spinner
-  would be noise — the shipped coherent link is 0.5 s and the WDM one 0.06 s —
-  so the page says where the numbers came from instead. That stops being an
-  answer the first time a thousand kilometres of split-step goes behind the
-  button, and the honest version is a real fraction from the engine rather than
-  an animation that only signals that nothing has crashed.
+- Progress on a long run is **done**, and done the way this section said it
+  would have to be: a real fraction from the engine rather than an animation
+  that only signals nothing has crashed. The run streams, the bar in the menubar
+  is drawn from components-behind-this-point plus the fraction *within* the one
+  running, and the block whose name is on screen is the block currently working.
+  A 16-second span reports 268 times on the way and lands on exactly 1.0. What
+  it is not is a *time* estimate: a run has no estimate before it starts, and
+  the honest quantity is how much of the work is behind it.
+- Stop aborts the response, not the run. Block-mode execution has no safe place
+  to stop halfway — killing a component mid-array leaves the server holding a
+  torn result — so the engine finishes and its answer is discarded. The log says
+  that in those words rather than implying a cancellation that did not happen,
+  and the engine dot stays green, because stopping is not failing.
 - The running, failed and stale states are now real, because the page calls the
   engine. A run in flight dims the canvas and swaps Run for Stop; a failure
   turns the engine dot red, names the kind of failure from the status the

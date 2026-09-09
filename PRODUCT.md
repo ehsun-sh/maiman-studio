@@ -6,14 +6,12 @@ An open-source simulator for optical communication links and photonic systems. E
 link as a block diagram — laser, modulator, fiber, amplifier, detector — run it, and read the
 result as an eye diagram, a BER number, an OSNR figure.
 
-The engine exists and is validated: 929 tests, every physics block checked against a closed-form
+The engine exists and is validated: 937 tests, every physics block checked against a closed-form
 result in CI. The interface exists too, and is a client of the same public API — `maiman serve`
-opens a schematic editor that builds, runs, sweeps, saves and plots. What it is not yet is
-*finished*: five of the six things below it must do are done, and the section is now a
-specification it is measured against rather than a description of something absent. The one
-outstanding is progress on a long run — every run so far returns fast enough that nothing has had
-to be shown, which will stop being true the first time someone puts a thousand kilometres of
-split-step behind the button.
+opens a schematic editor that builds, runs, sweeps, saves and plots. All six things it must do,
+below, are done — the section is now a specification it is measured against rather than a
+description of something absent. What it is not yet is *finished*: the list is a floor, not a
+ceiling, and the things it does not say are the ones worth arguing about.
 
 The name is **Theodore Maiman's**, who built the first working laser at Hughes Research
 Laboratories in May 1960 — a ruby rod that everything modelled here eventually descends from.
