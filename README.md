@@ -17,7 +17,7 @@ link in this simulator descends from.*
 
 ---
 
-> ### ⚠️ Project status: pre-alpha — Phases 0, 1, 1.5 and 2 complete. No GUI yet.
+> ### ⚠️ Project status: pre-alpha — Phases 0 through 3 complete. Phase 4, the PIC, is under way.
 >
 > Two complete links run end to end and produce numbers that match theory.
 > **Direct detection:** PRBS → NRZ → CW laser → MZM → fiber (loss + dispersion) → PIN → filter →

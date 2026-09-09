@@ -149,7 +149,10 @@ intended one.
 
 ## 6. Plots
 
-Two reduced result types, and they share a visual language because they mean the
+Four plots, in two families, and which family a result belongs to is decided by
+what one mark on it means rather than by what block produced it.
+
+**Histograms.** Two of them, sharing one visual language because they mean the
 same thing: **distance from the page is how many landed there**.
 
 - **Eye diagram** — density ramp bed → cyan → far stop.
@@ -158,14 +161,35 @@ same thing: **distance from the page is how many landed there**.
   points marked with **crosses rather than filled dots**, so a cluster's own
   centre stays visible underneath and a bias offset reads instead of being
   covered by the marker meant to locate it.
+
+**Curves.** Two of them, and they deliberately do *not* borrow the ramp. A point
+on a curve is one measurement, not a count, and shading under it would promise a
+density that is not there.
+
 - **Sensitivity** — one curve per format, each labelled where it crosses the FEC
   threshold rather than in a legend box. The threshold is 1e-3, not Q = 6:
   nobody operates an error-free channel any more, they operate one a
   soft-decision code can close.
+- **Spectrum** — wavelength across, ascending left to right because that is how
+  an OSA is read; the engine's grid ascends in *frequency*, so the axis maps the
+  array backwards rather than the trace being reversed. Up is dBm **per
+  resolution bandwidth**, labelled in the analyser's own setting because the
+  trace is measured in it: widen the resolution and the ASE floor climbs decibel
+  for decibel while the channels, already narrower than either setting, do not
+  move. A bare-dBm label would hide the one asymmetry the instrument exists to
+  show. The vertical range is 80 dB below a decade above the peak, **fixed
+  rather than fitted** to the trace's own minimum — the floor of an unamplified
+  link is the encoder's floor and not a measurement, and letting it set the
+  scale would plot two runs of the same link at different heights.
 
 The ramp's mid stop is placed by **luminance**, at roughly the same fraction of
 each ground's span, which is what keeps sparse outliers subordinate to the dense
 regions on both.
+
+One thing the spectrum pane does *not* draw is an OSNR of its own. The figure
+beside the trace comes from an OSNR meter on the graph and is blank when there
+is none: read off the displayed curve it would move with the resolution knob,
+and it would not be the number anyone means by OSNR.
 
 A canvas has no cascade, so the plots read the same tokens as everything else at
 draw time and are redrawn when the ground changes. Nothing below the token block
@@ -255,11 +279,23 @@ Two findings worth keeping:
 - The mockup shows a single-carrier link. The dual-polarization link is in
   [`examples/dualpol_link.py`](examples/dualpol_link.py) and is not on the
   canvas: at ~20 blocks the node text stops being readable at this canvas size,
-  and a schematic nobody can read is not a better demonstration. At 18 blocks
-  the current graph is already close to that ceiling — the eighteenth is an Eye
-  Diagram, added because the eye in the results dock had been computed beside
-  the graph rather than by it, and so never changed when the graph did.
+  and a schematic nobody can read is not a better demonstration. At 17 blocks
+  the current graph is already close to that ceiling, which is the reason the
+  two instruments that need a link of their own get one instead of a place on
+  it: the eye comes from [`examples/ook_eye.maiman`](examples/ook_eye.maiman)
+  and the spectrum from [`examples/wdm_osa.maiman`](examples/wdm_osa.maiman),
+  both openable from the File menu. Neither could sit here anyway — a coherent
+  receiver has no eye, and a single-carrier link has nothing for an OSA to
+  show — and tests keep both off this canvas rather than trusting that nobody
+  wires one on.
 - No motion beyond the run pulse and the control transitions.
+- **No progress on a long run**, which is the one thing PRODUCT.md asks for that
+  the dock does not do. Every run so far comes back fast enough that a spinner
+  would be noise — the shipped coherent link is 0.5 s and the WDM one 0.06 s —
+  so the page says where the numbers came from instead. That stops being an
+  answer the first time a thousand kilometres of split-step goes behind the
+  button, and the honest version is a real fraction from the engine rather than
+  an animation that only signals that nothing has crashed.
 - The running, failed and stale states are now real, because the page calls the
   engine. A run in flight dims the canvas and swaps Run for Stop; a failure
   turns the engine dot red, names the kind of failure from the status the

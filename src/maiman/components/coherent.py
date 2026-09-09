@@ -309,11 +309,15 @@ class CarrierRecovery(Component):
     here is invariant under a quarter turn, so no blind estimator can tell which
     quadrant it is in; the recovered phase is right modulo pi/2. A deployed link
     resolves this by differentially encoding the quadrant, which costs a little
-    sensitivity. That is not implemented yet, so what remains after this block is
-    a *constant* rotation by some multiple of pi/2 — and the measurement block
-    removes it data-aided, the way a bench analyser does with the pattern in
-    hand. The time-varying part, which is the part that actually costs SNR, is
-    gone by then.
+    sensitivity; that is what :class:`~maiman.components.QAMMapper`'s
+    ``differential`` option and :class:`~maiman.components.DifferentialDecoder`
+    are for, and it needs at least two bits per symbol because BPSK has no
+    quadrants to difference.
+
+    Without them, what remains after this block is a *constant* rotation by some
+    multiple of pi/2, and the measurement block removes it data-aided, the way a
+    bench analyser does with the pattern in hand. Either way the time-varying
+    part, which is the part that actually costs SNR, is gone by here.
 
     A **cycle slip** is the failure mode to know about: if the phase walks faster
     than the window can follow, the estimate latches onto a neighbouring quadrant
