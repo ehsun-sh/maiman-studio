@@ -487,7 +487,13 @@ def test_the_page_only_reads_dispersion_fields_the_engine_sends() -> None:
 
     text = STUDIO.read_text(encoding="utf-8")
     start = text.index('case "dispersion":')
-    body = text[start : text.index('case "opaque"', start)]
+    # To the next case at the same indentation, whichever that turns out to be.
+    # An earlier version ended the slice at `case "opaque"` because that was the
+    # one which happened to follow; four cases were later inserted between them
+    # and the slice swallowed all four.
+    end = re.search('\n      case "', text[start + 1 :])
+    assert end, "the dispersion case is the last one; the slice has nothing to stop at"
+    body = text[start : start + 1 + end.start()]
     read = set(re.findall(r"value\.([A-Za-z_][A-Za-z0-9_]*)", body))
 
     sent = set(
@@ -654,3 +660,28 @@ def test_the_menubar_wears_the_mark() -> None:
     # Decorative: the name is right beside it in text, so announcing the mark
     # too would have a screen reader say the product twice.
     assert 'class="brand-mark" alt="" aria-hidden="true"' in text
+
+
+def test_every_kind_the_engine_can_send_has_a_line_to_print() -> None:
+    """No encoded result may reach the log as the bare word for its own type.
+
+    ``describe()`` ends in a ``default`` that returns ``value.kind``, so a kind
+    with no case of its own logs as "electrical" or "optical" — true, useless,
+    and silent about it. Four did: the raw signals, whose payloads carried rms,
+    sample rate, band powers and noise bins the whole time.
+
+    Enumerated from the encoder rather than listed here, so adding a kind to
+    ``encoding.py`` and forgetting the page fails on the next run instead of
+    shipping a log line nobody can act on.
+    """
+    encoder = (ROOT / "src" / "maiman" / "encoding.py").read_text(encoding="utf-8")
+    kinds = set(re.findall(r'"kind": "([a-z_]+)"', encoder))
+    assert kinds, "no kinds found — has the encoder's shape changed?"
+
+    text = STUDIO.read_text(encoding="utf-8")
+    handled = set(re.findall(r'case "([a-z_]+)":', text))
+    missing = sorted(kinds - handled)
+    assert not missing, (
+        f"the log has no case for {missing}, so each falls through to `default` "
+        f"and prints its own kind back. Give it the fact the payload carries."
+    )

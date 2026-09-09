@@ -21492,6 +21492,33 @@ verdict, and DESIGN.md
         return `${value.accumulated_dispersion_ps_nm.toFixed(0)} ps/nm removed` +
                `, ${value.removed_symbols.toFixed(1)} symbol periods${how}`;
       }
+      /* The four raw signal kinds. None of them can be plotted — the encoder
+         summarises them precisely so that no sample buffer reaches the browser
+         — but a summary is exactly what a log line wants, and each of these
+         used to fall through to `default` and print the word for its own type. */
+      case "optical": {
+        const bands = value.bands.length, bins = value.noise.length;
+        return `${dbm(value.signal_power_w)} in ${bands} band${bands === 1 ? "" : "s"}` +
+               (bins ? `, ASE ${dbm(value.noise_power_w)} across ` +
+                       `${bins} noise bin${bins === 1 ? "" : "s"}` : "");
+      }
+      case "electrical":
+        /* RMS rather than peak: it is what survives a filter, and it is the
+           quantity a noise figure is quoted against. */
+        return `${value.samples.toLocaleString("en-US")} samples at ` +
+               `${si(value.sample_rate, "Sa/s")}, ${si(value.rms, value.unit)} rms`;
+      case "binary": {
+        /* Mark density, because the one thing that goes wrong with a pattern
+           generator is a sequence that is not balanced — and a PRBS of order n
+           is 2^(n-1) marks in 2^n - 1 bits, which is just off half. */
+        const marks = value.bits ? (value.ones / value.bits) * 100 : 0;
+        return `${value.bits.toLocaleString("en-US")} bits, ` +
+               `${marks.toFixed(1)} % marks at ${si(value.symbol_rate, "Bd")}`;
+      }
+      case "symbol":
+        return `${value.symbols.toLocaleString("en-US")} symbols, ` +
+               `${value.order}-point (${value.bits_per_symbol} b/sym) at ` +
+               `${si(value.symbol_rate, "Bd")}`;
       case "opaque":  return `${value.type} — nothing here can draw it`;
       default:        return value.kind;
     }
@@ -22502,6 +22529,26 @@ verdict, and DESIGN.md
     if (typeof v !== "number") return String(v);
     if (v !== 0 && (Math.abs(v) < 1e-3 || Math.abs(v) >= 1e6)) return v.toExponential(2);
     return String(Number(v.toFixed(6)));
+  }
+
+  /* A quantity in the prefix an engineer would have written it in. The engine
+     works in SI and says 0.0000124 A; a datasheet says 12.4 uA, and the log is
+     read against datasheets. */
+  const SI_PREFIXES = [[1e9, "G"], [1e6, "M"], [1e3, "k"], [1, ""],
+                       [1e-3, "m"], [1e-6, "\u00b5"], [1e-9, "n"], [1e-12, "p"]];
+  function si(value, unit) {
+    if (value === null || value === undefined || !isFinite(value)) return "\u2014";
+    const magnitude = Math.abs(value);
+    if (magnitude === 0) return `0 ${unit}`;
+    const [scale, prefix] = SI_PREFIXES.find(([s]) => magnitude >= s)
+      || SI_PREFIXES[SI_PREFIXES.length - 1];
+    return `${Number((value / scale).toPrecision(3))} ${prefix}${unit}`;
+  }
+
+  /* Optical power reads in dBm and nothing else does. Zero is not -inf dB here
+     so much as "nothing arrived", and saying so beats printing an infinity. */
+  function dbm(watts) {
+    return watts > 0 ? `${(10 * Math.log10(watts * 1e3)).toFixed(2)} dBm` : "no power";
   }
 
   $("#sb-blocks").textContent = `${PROJECT.nodes.length} blocks`;
