@@ -23,7 +23,7 @@ link in this simulator descends from.*
 > **Direct detection:** PRBS → NRZ → CW laser → MZM → fiber (loss + dispersion) → PIN → filter →
 > eye/Q/BER. **Coherent:** PRBS → Gray-coded M-QAM → RRC shaping → IQ modulator → **fiber** →
 > 90° hybrid with balanced detection → dispersion compensation → carrier recovery → EVM/SNR and
-> counted errors, up to 256-QAM, and dual polarization at 256 Gb/s with a blind butterfly
+> counted errors, at every whole number of bits per symbol up to 256-QAM, and dual polarization at 256 Gb/s with a blind butterfly
 > equaliser. The coherent chain now runs over a real span: 1000 km of fiber leaves nothing
 > recoverable at the photodiode, and the receiver returns it to back-to-back quality.
 > Every physics block is validated against a closed-form result in CI.
@@ -262,8 +262,11 @@ and finds the received power each format needs for a BER of 1e-3:
 format     rate      launch for BER 1e-3     SNR there   EVM there
 BPSK          32 Gb/s      -38.0 dBm received        6.9 dB     45.2%
 QPSK          64 Gb/s      -35.0 dBm received        9.9 dB     32.0%
+8-QAM         96 Gb/s      -29.7 dBm received       15.2 dB     17.5%
 16-QAM       128 Gb/s      -27.5 dBm received       17.4 dB     13.5%
+32-QAM       160 Gb/s      -23.8 dBm received       21.1 dB      8.8%
 64-QAM       192 Gb/s      -21.7 dBm received       23.2 dB      6.9%
+128-QAM      224 Gb/s      -18.3 dBm received       26.6 dB      4.7%
 256-QAM      256 Gb/s      -16.3 dBm received       28.7 dB      3.7%
 ```
 
@@ -271,6 +274,26 @@ The required-SNR column is the one to check against a textbook: 9.9 / 17.4 / 23.
 the standard figures for QPSK through 256-QAM at 1e-3. The step from BPSK to QPSK costs exactly
 3 dB — the same energy per bit for twice the rate, which is why coherent systems start at QPSK
 and never look back.
+
+**The odd orders are rectangular, not cross.** 8-QAM is 4×2, 32-QAM is 8×4, 128-QAM is 16×8: the
+extra bit goes on I. A cross — a square with its corners cut off — is the better constellation, 2.30
+dB peak-to-average against the rectangle's 3.48 at 32 points, and worth about a decibel of required
+SNR. Two things argued against it. A cross **cannot** be exactly Gray coded, which is a proved
+result rather than a gap in the construction, so its labelling is a published heuristic that would
+have to be transcribed rather than derived — and this project does not transcribe models it cannot
+check. The rectangle, being a product of two Gray PAMs, extends everything already written for
+square QAM by arithmetic: the levels, the slicer, and an error rate that **is** the square formula,
+term for term, with `M_I` and `M_Q` put in separately. If cross QAM arrives it belongs beside this,
+chosen by a parameter, not instead of it.
+
+A rectangle is not invariant under a quarter turn, and two things here had assumed every
+constellation was. The blind phase search now covers the constellation's **own** rotational
+symmetry — `[0, π)` for a rectangle, `[0, π/2)` for a square — because an 8×4 grid turned a quarter
+is a 4×8 grid, a different alphabet, and a search that never looked past π/2 could not find an
+offset of 0.6π at all. Measured: 0.0022 mean square error with the widened search against 0.1176
+with the old one. And differential *quadrant* encoding is refused on an odd order rather than
+quietly mis-encoding it — a rectangle's blind ambiguity is a half turn, which quadrant differencing
+does not address.
 
 Nothing here is configured to come out right. The shot-noise-limited SNR is asserted against
 `R·P/(2qB)`, the counted symbol errors against
@@ -1237,6 +1260,10 @@ Every physics block ships with a test against a closed-form result, run in CI
 | PIN detector | `I = R·P`; shot `σ² = 2qIB`; thermal `σ² = 4kTB/R_L` | ✅ |
 | Receiver filter | 3 dB at `B`; noise bandwidth `B·√(π/4ln2)`; zero group delay | ✅ |
 | **BER** | `½·erfc(Q/√2)` matched against **directly counted errors**, 10⁻⁴–10⁻¹ | ✅ |
+| **SER, every order** | Counted errors against `ser_qam` within 12 %, at 1–8 bits/symbol and 4–22 dB | ✅ |
+| Rectangular SER ≡ square SER | The generalised expression reproduces the textbook square formula to 2e-16 at every even order, 0–39 dB | ✅ |
+| Odd orders are Gray coded | Every nearest-neighbour pair differs in exactly one bit — which a cross constellation provably cannot manage | ✅ |
+| Rotational symmetry is measured | 4 for a square, 2 for a rectangle, read off the point set; narrowing the phase search back to π/2 breaks 32-QAM at a 0.6π offset | ✅ |
 | Link consistency | `L` km of span ≡ launching `α·L` dB lower, end to end | ✅ |
 | Lossless SSFM | Energy conserved with nonlinearity; γ=0 reproduces the exact linear solution | ✅ |
 | Self-phase modulation | `\|A(T)\|` exactly unchanged; spectrum broadens | ✅ |

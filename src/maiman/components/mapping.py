@@ -40,7 +40,10 @@ class QAMMapper(Component):
         2.0,
         unit="",
         choices=QAM_FORMATS,
-        doc="1 BPSK, 2 QPSK, 4 16-QAM, 6 64-QAM, 8 256-QAM",
+        doc=(
+            "1 BPSK, then 2^n-QAM. Odd orders are rectangular rather than square: "
+            "3 is 8-QAM (4x2), 5 is 32-QAM (8x4), 7 is 128-QAM (16x8)"
+        ),
     )
     differential = BoolParam(
         False,
@@ -65,12 +68,25 @@ class QAMMapper(Component):
         simulation starts, and finding out halfway through one wastes the work
         already done and reports the problem further from its cause.
         """
-        if self.differential and int(self.bits_per_symbol) < 2:
+        bits = int(self.bits_per_symbol)
+        if self.differential and bits < 2:
             raise ValueError(
                 f"{self.label}: differential quadrant encoding needs at least 2 bits "
-                f"per symbol, got {int(self.bits_per_symbol)}. BPSK has no quadrants "
+                f"per symbol, got {bits}. BPSK has no quadrants "
                 f"to difference — turn differential off, and take any Differential "
                 f"Decoder out of the chain with it."
+            )
+        if self.differential and bits % 2:
+            # An odd order is a rectangle, and a rectangle turned a quarter maps
+            # onto a different alphabet. Its blind ambiguity is a half turn,
+            # which quadrant differencing does not address — encoding it anyway
+            # would look like it worked and lose data on every other run.
+            raise ValueError(
+                f"{self.label}: {1 << bits}-QAM is rectangular, so it has no "
+                f"quadrant symmetry to difference — a quarter turn takes it to a "
+                f"different alphabet. Its blind phase ambiguity is a *half* turn. "
+                f"Turn differential off for odd bits per symbol, and take any "
+                f"Differential Decoder out of the chain with it."
             )
 
     def constellation(self) -> np.ndarray:

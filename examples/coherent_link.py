@@ -25,7 +25,19 @@ from maiman.components import (
 
 V_PI = 4.0
 SYMBOL_RATE = 32e9
-FORMATS = {1: "BPSK", 2: "QPSK", 4: "16-QAM", 6: "64-QAM", 8: "256-QAM"}
+# Every whole number of bits per symbol. The odd orders are rectangular rather
+# than square — 8-QAM is 4x2, 32-QAM 8x4, 128-QAM 16x8 — and they sit between
+# their neighbours in this table exactly as a half-bit step should.
+FORMATS = {
+    1: "BPSK",
+    2: "QPSK",
+    3: "8-QAM",
+    4: "16-QAM",
+    5: "32-QAM",
+    6: "64-QAM",
+    7: "128-QAM",
+    8: "256-QAM",
+}
 
 
 def build(bits_per_symbol: int, sequence_length: int = 8192) -> Graph:

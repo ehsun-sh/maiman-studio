@@ -14,7 +14,9 @@ from typing import Any
 import numpy as np
 import pytest
 
+from maiman import modulation
 from maiman.modulation import (
+    axis_bits,
     ber_qam,
     bits_to_indices,
     blind_phase_search,
@@ -23,12 +25,15 @@ from maiman.modulation import (
     indices_to_bits,
     nearest_indices,
     qam_constellation,
+    quadrant_constellation,
+    rotational_symmetry,
     ser_qam,
     snr_from_evm,
 )
 
 SQUARE_ORDERS = [2, 4, 6, 8]
-ALL_ORDERS = [1, *SQUARE_ORDERS]
+RECTANGULAR_ORDERS = [3, 5, 7]
+ALL_ORDERS = [1, *sorted(SQUARE_ORDERS + RECTANGULAR_ORDERS)]
 
 
 @pytest.mark.parametrize("bits_per_symbol", ALL_ORDERS)
@@ -95,10 +100,85 @@ def test_noiseless_symbols_demap_exactly(bits_per_symbol: int) -> None:
     assert np.array_equal(nearest_indices(points[indices], points), indices)
 
 
-def test_cross_constellations_are_refused_rather_than_faked() -> None:
-    """32-QAM is a cross, not a rectangle. Returning a rectangle would be wrong."""
-    with pytest.raises(NotImplementedError, match="cross constellation"):
-        qam_constellation(5)
+@pytest.mark.parametrize("bits_per_symbol", RECTANGULAR_ORDERS)
+def test_an_odd_order_is_a_rectangle_and_says_so(bits_per_symbol: int) -> None:
+    """8-QAM is 4x2, 32-QAM is 8x4, 128-QAM is 16x8 — the extra bit goes on I.
+
+    This used to raise: an odd order was refused on the grounds that the format
+    those names usually mean is a *cross*, and returning a rectangle instead
+    would be answering a different question. The decision changed, and the
+    reason is written in :func:`qam_constellation` — a cross cannot be exactly
+    Gray coded, so its labelling is a published heuristic to transcribe rather
+    than a construction to derive, while a rectangle is a product of two PAMs
+    and everything already written for square QAM extends to it by arithmetic.
+    """
+    inphase, quadrature = axis_bits(bits_per_symbol)
+    assert inphase == quadrature + 1, "the odd bit belongs on the in-phase axis"
+
+    points = qam_constellation(bits_per_symbol)
+    assert points.shape == (1 << bits_per_symbol,)
+    assert len({complex(round(p.real, 9), round(p.imag, 9)) for p in points}) == points.size
+    assert np.mean(np.abs(points) ** 2) == pytest.approx(1.0)
+    assert len(np.unique(np.round(points.real, 9))) == 1 << inphase
+    assert len(np.unique(np.round(points.imag, 9))) == 1 << quadrature
+
+
+@pytest.mark.parametrize("bits_per_symbol", ALL_ORDERS)
+def test_neighbouring_points_differ_in_exactly_one_bit(bits_per_symbol: int) -> None:
+    """Gray coding, measured on the geometry rather than assumed from the construction.
+
+    A rectangle is a product of two Gray PAMs, so it is *exactly* Gray coded —
+    which is the property a cross constellation provably cannot have, and half
+    the reason the rectangle was chosen.
+    """
+    points = qam_constellation(bits_per_symbol)
+    distances = np.abs(points[:, None] - points[None, :])
+    np.fill_diagonal(distances, np.inf)
+    minimum = distances.min()
+
+    for i, row in enumerate(distances):
+        for j in np.flatnonzero(np.abs(row - minimum) < 1e-9):
+            assert bin(int(i) ^ int(j)).count("1") == 1, (
+                f"points {i} and {j} are nearest neighbours but differ in more than one bit"
+            )
+
+
+def test_a_rectangle_is_not_invariant_under_a_quarter_turn() -> None:
+    """Which is the fact two other parts of the library used to assume away.
+
+    An 8x4 grid turned a quarter is a 4x8 grid: a different alphabet. Its blind
+    ambiguity is a half turn, and both the phase search and the differential
+    code now ask the geometry instead of taking four for granted.
+    """
+    assert rotational_symmetry(qam_constellation(4)) == 4
+    assert rotational_symmetry(qam_constellation(5)) == 2
+    assert rotational_symmetry(qam_constellation(1)) == 2
+
+
+def test_quadrant_encoding_is_refused_on_a_rectangle() -> None:
+    """There are no quadrants to difference, and pretending otherwise loses data."""
+    with pytest.raises(ValueError, match="rectangular"):
+        quadrant_constellation(5)
+
+
+@pytest.mark.parametrize("bits_per_symbol", SQUARE_ORDERS)
+def test_the_rectangular_error_rate_is_the_square_one(bits_per_symbol: int) -> None:
+    """Term for term, at every even order, to the last bit.
+
+    The rectangular expression is a *generalisation*, not a second
+    implementation — put M_I = M_Q into it and the textbook square formula falls
+    out. Written here independently so the two really can disagree.
+    """
+
+    def textbook(snr: float) -> float:
+        order = 1 << bits_per_symbol
+        edge = 1.0 - 1.0 / math.sqrt(order)
+        tail = 0.5 * math.erfc(math.sqrt(3.0 * snr / (order - 1)) / math.sqrt(2.0))
+        return 4.0 * edge * tail - 4.0 * edge * edge * tail * tail
+
+    for decibels in range(0, 40):
+        snr = 10.0 ** (decibels / 10.0)
+        assert ser_qam(snr, bits_per_symbol) == pytest.approx(textbook(snr), abs=1e-15)
 
 
 def test_evm_of_a_perfect_sequence_is_zero() -> None:
@@ -273,3 +353,73 @@ def test_phase_search_rejects_impossible_settings(kwargs: dict[str, int], match:
 
 def test_phase_search_handles_an_empty_sequence() -> None:
     assert blind_phase_search(np.zeros(0, dtype=np.complex128), qam_constellation(2)).shape == (0,)
+
+
+@pytest.mark.parametrize("bits_per_symbol", ALL_ORDERS)
+def test_counted_errors_match_the_analytical_rate(bits_per_symbol: int) -> None:
+    """Every order, square and rectangular, against errors actually made.
+
+    The formula is checked where it can be counted — a rate below about 1e-4
+    needs more symbols than this is worth — and the odd orders are the point:
+    they are new, and an error rate that agreed with nothing would be a
+    constellation, a slicer and a formula that merely agreed with each other.
+    """
+    points = qam_constellation(bits_per_symbol)
+    rng = np.random.default_rng(11 + bits_per_symbol)
+    count = 200_000
+
+    checked = 0
+    # Down to 4 dB so BPSK makes countable errors at all, up to 22 so the
+    # high orders are checked somewhere other than their floor.
+    for decibels in (4, 10, 14, 18, 22):
+        snr = 10.0 ** (decibels / 10.0)
+        analytical = ser_qam(snr, bits_per_symbol)
+        if analytical * count < 200:
+            continue
+        indices = rng.integers(0, points.size, count)
+        sigma = math.sqrt(1.0 / (2.0 * snr))
+        noise = sigma * (rng.standard_normal(count) + 1j * rng.standard_normal(count))
+        counted = float(np.mean(nearest_indices(points[indices] + noise, points) != indices))
+
+        assert counted == pytest.approx(analytical, rel=0.12), (
+            f"{1 << bits_per_symbol}-QAM at {decibels} dB: counted {counted:.3e}, "
+            f"analytical {analytical:.3e}"
+        )
+        checked += 1
+    assert checked, "no operating point had enough errors to count"
+
+
+def test_the_phase_search_covers_the_constellation_s_own_symmetry() -> None:
+    """A rectangle needs ``[0, pi)``, and searching ``[0, pi/2)`` cannot find 0.6 pi.
+
+    Not a subtle degradation — the estimator simply has no candidate near the
+    right answer and settles on the least bad one it was allowed to try. Both
+    halves are measured here so the number in the docstring is the number the
+    code produces.
+    """
+    points = qam_constellation(5)
+    assert rotational_symmetry(points) == 2
+
+    rng = np.random.default_rng(3)
+    count = 4000
+    indices = rng.integers(0, points.size, count)
+    clean = points[indices]
+    noisy = clean + 0.03 * (rng.standard_normal(count) + 1j * rng.standard_normal(count))
+    offset = noisy * np.exp(1j * 0.6 * math.pi)
+
+    def residual(pretend_symmetry: int) -> float:
+        original = modulation.rotational_symmetry
+        modulation.rotational_symmetry = lambda constellation: pretend_symmetry
+        try:
+            estimate = blind_phase_search(offset, points, test_phases=64, window=64)
+        finally:
+            modulation.rotational_symmetry = original
+        return float(np.mean(np.abs(offset * np.exp(-1j * estimate) - clean) ** 2))
+
+    honest = residual(2)
+    narrowed = residual(4)
+    assert honest < 0.01, "the widened search failed to find the offset"
+    assert narrowed > 10 * honest, (
+        "narrowing the search back to a quarter turn should have broken this; "
+        "if it did not, the test is no longer measuring the fix"
+    )

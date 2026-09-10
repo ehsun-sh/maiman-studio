@@ -35,44 +35,95 @@ def gray_pam_levels(bits_per_axis: int) -> np.ndarray:
     return levels
 
 
-#: The formats :func:`qam_constellation` can build: BPSK, then square QAM.
-#: Odd orders above 1 are cross constellations and are not implemented, so the
-#: legal values are a *set* rather than the range 1..8 they used to be declared
-#: as — a parameter offering "1 … 8" invites 3, and 8-QAM does not exist here.
-QAM_FORMATS: tuple[float, ...] = (1.0, 2.0, 4.0, 6.0, 8.0)
+#: The formats :func:`qam_constellation` can build: BPSK, then every whole
+#: number of bits per symbol up to eight. Declared as a set rather than a range
+#: because it is one — nothing between the integers means anything — and because
+#: the set is what the GUI offers and what a project file is validated against.
+QAM_FORMATS: tuple[float, ...] = (1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0)
+
+
+def axis_bits(bits_per_symbol: int) -> tuple[int, int]:
+    """How the symbol's bits are split between the two quadratures, ``(I, Q)``.
+
+    Even orders split evenly and give a square. Odd orders put the extra bit on
+    I and give a **rectangle** — 8-QAM is 4x2, 32-QAM is 8x4, 128-QAM is 16x8.
+
+    One function because three places need the same answer and disagreeing about
+    it would be a constellation the receiver slices against a different alphabet
+    than the transmitter built.
+    """
+    if bits_per_symbol < 1:
+        raise ValueError(f"bits_per_symbol must be >= 1, got {bits_per_symbol}")
+    inphase = (bits_per_symbol + 1) // 2
+    return inphase, bits_per_symbol - inphase
 
 
 def qam_constellation(bits_per_symbol: int) -> np.ndarray:
     """Gray-coded QAM constellation of unit mean power, indexed by bit pattern.
 
-    ``bits_per_symbol = 1`` gives BPSK; even values give square QAM — QPSK, 16-QAM,
-    64-QAM, 256-QAM — built as independent Gray-coded PAM on each quadrature, with
-    the more significant half of the bits on I.
+    ``bits_per_symbol = 1`` gives BPSK. Every other value gives a product of two
+    Gray-coded PAMs, with the more significant bits on I: even orders come out
+    **square** — QPSK, 16-QAM, 64-QAM, 256-QAM — and odd orders **rectangular**,
+    4x2 for 8-QAM, 8x4 for 32-QAM, 16x8 for 128-QAM.
 
     Normalising to unit mean power is what lets a launch power be set once, on the
     laser, and mean the same thing for every format. Without it, switching from
     QPSK to 16-QAM would silently change the average optical power.
 
-    Odd orders above 1 (32-QAM, 128-QAM) are cross constellations rather than
-    products of two PAMs and are not implemented; the error says so rather than
-    quietly returning a rectangle nobody uses.
+    **Rectangular, not cross.** An odd order can also be drawn as a cross — a
+    square with its corners cut off — and the cross is the better constellation:
+    at 32 points it is 2.30 dB peak-to-average against the rectangle's 3.48, and
+    buys roughly a decibel of required SNR with it. Two things argue against it
+    here. A cross cannot be exactly Gray coded, which is a proved result and not
+    a gap in the construction, so its labelling is a published heuristic that
+    would have to be transcribed rather than derived. And the rectangle *is* a
+    product of two PAMs, which means everything already written for square QAM —
+    the Gray levels, the analytical error rate, the slicer — extends to it by
+    arithmetic instead of by a second implementation. If cross QAM arrives later
+    it belongs beside this, chosen by a parameter, not instead of it.
+
+    **A rectangle is not invariant under a quarter turn**, and two things in this
+    library depended on every constellation being so: the blind phase search and
+    the differential quadrant encoding. Both now ask
+    :func:`rotational_symmetry` instead of assuming.
     """
     if bits_per_symbol < 1:
         raise ValueError(f"bits_per_symbol must be >= 1, got {bits_per_symbol}")
     if bits_per_symbol == 1:
         points = np.array([-1.0, 1.0], dtype=np.complex128)
         return points / math.sqrt(float(np.mean(np.abs(points) ** 2)))
-    if bits_per_symbol % 2:
-        raise NotImplementedError(
-            f"{1 << bits_per_symbol}-QAM is a cross constellation, not a square one, "
-            f"and is not implemented; use an even bits_per_symbol (or 1 for BPSK)"
-        )
 
-    per_axis = bits_per_symbol // 2
-    levels = gray_pam_levels(per_axis)
+    inphase, quadrature = axis_bits(bits_per_symbol)
+    on_i = gray_pam_levels(inphase)
+    on_q = gray_pam_levels(quadrature)
     patterns = np.arange(1 << bits_per_symbol)
-    points = levels[patterns >> per_axis] + 1j * levels[patterns & ((1 << per_axis) - 1)]
+    points = on_i[patterns >> quadrature] + 1j * on_q[patterns & ((1 << quadrature) - 1)]
     return points / math.sqrt(float(np.mean(np.abs(points) ** 2)))
+
+
+def rotational_symmetry(constellation: np.ndarray) -> int:
+    """How many turns of ``2*pi/n`` map this alphabet onto itself: 1, 2 or 4.
+
+    Measured from the point set rather than assumed from its name, because the
+    answer stopped being four the moment odd orders arrived. A square QAM
+    constellation returns 4 and a rectangular one returns 2 — an 8x4 grid maps
+    onto a 4x8 grid under a quarter turn, which is a different alphabet.
+
+    This is what a blind phase estimator can never resolve: rotate the
+    transmitted sequence by ``2*pi/n`` and *nothing about the received samples
+    changes*, so no amount of data distinguishes the two. It is therefore the
+    period the search has to cover and the ambiguity a differential code has to
+    remove, and getting it from the geometry is the only way those two agree.
+    """
+    points = np.asarray(constellation, dtype=np.complex128)
+    if points.size == 0:
+        return 1
+    reference = np.sort_complex(np.round(points, 9))
+    for turns in (4, 2):
+        rotated = points * np.exp(2j * math.pi / turns)
+        if np.allclose(np.sort_complex(np.round(rotated, 9)), reference, atol=1e-9):
+            return turns
+    return 1
 
 
 def bits_to_indices(bits: np.ndarray, bits_per_symbol: int) -> np.ndarray:
@@ -143,6 +194,15 @@ def quadrant_constellation(bits_per_symbol: int) -> np.ndarray:
             f"differential quadrant encoding needs at least 2 bits per symbol, "
             f"got {bits_per_symbol}"
         )
+    turns = rotational_symmetry(points)
+    if turns != 4:
+        raise ValueError(
+            f"{1 << bits_per_symbol}-QAM is rectangular, and a rectangle is not "
+            f"invariant under a quarter turn — it maps onto a different alphabet, "
+            f"so there are no quadrants to relabel. Its blind ambiguity is a *half* "
+            f"turn, which differential quadrant encoding does not address. Turn "
+            f"differential off for odd bits per symbol."
+        )
 
     first = np.array(
         sorted(
@@ -191,26 +251,35 @@ def blind_phase_search(
 ) -> np.ndarray:
     """Estimate the carrier phase per symbol, without knowing what was sent.
 
-    The blind phase search of Pfau, Hoffmann and Noe (JLT 27(8), 2009), which is
-    what a real coherent receiver runs. For each of ``test_phases`` candidate
-    rotations it de-rotates the symbol, measures the distance to the nearest
-    constellation point, and sums that over a sliding window; the candidate with
-    the smallest sum wins. Averaging over a window is the whole trick — a single
-    symbol cannot distinguish phase noise from additive noise, and a run of them
-    can.
+        The blind phase search of Pfau, Hoffmann and Noe (JLT 27(8), 2009), which is
+        what a real coherent receiver runs. For each of ``test_phases`` candidate
+        rotations it de-rotates the symbol, measures the distance to the nearest
+        constellation point, and sums that over a sliding window; the candidate with
+        the smallest sum wins. Averaging over a window is the whole trick — a single
+        symbol cannot distinguish phase noise from additive noise, and a run of them
+        can.
 
-    Only ``[0, pi/2)`` is searched, because every QAM constellation here is
-    invariant under a quarter turn. That symmetry is also the method's cost: the
-    result is correct **modulo pi/2**, and nothing blind can do better. A real
-    link resolves the ambiguity by differentially encoding the quadrant; see
-    :class:`~maiman.components.coherent.CarrierRecovery` for how it is resolved
-    here.
+    The range searched is the constellation's **own** rotational symmetry, from
+        :func:`rotational_symmetry`: ``[0, pi/2)`` for a square alphabet and
+        ``[0, pi)`` for a rectangular one. That symmetry is also the method's cost —
+        the result is correct only modulo it, and nothing blind can do better,
+        because rotating the transmitted sequence by that much leaves the received
+        samples identical.
 
-    ``window`` is the one real trade. Too short and the estimate is noisy, which
-    shows up as extra EVM; too long and it cannot follow a fast-drifting laser,
-    which shows up as an SNR ceiling that no amount of power lifts. The default
-    of 64 symbols suits a linewidth-times-symbol-period around 1e-5, which is a
-    100 kHz laser at 32 GBd.
+        It used to be ``[0, pi/2)`` unconditionally, on the grounds that every QAM
+        constellation here was invariant under a quarter turn. Odd orders ended
+        that: an 8x4 grid turned a quarter maps onto a 4x8 grid, which is a
+        different alphabet, and a search that never looked past ``pi/2`` could not
+        find an offset of ``0.6 pi`` at all. A real link resolves what remains by
+        differentially encoding the symmetry class; see
+        :class:`~maiman.components.coherent.CarrierRecovery` for how it is resolved
+        here.
+
+        ``window`` is the one real trade. Too short and the estimate is noisy, which
+        shows up as extra EVM; too long and it cannot follow a fast-drifting laser,
+        which shows up as an SNR ceiling that no amount of power lifts. The default
+        of 64 symbols suits a linewidth-times-symbol-period around 1e-5, which is a
+        100 kHz laser at 32 GBd.
     """
     if test_phases < 2:
         raise ValueError(f"test_phases must be >= 2, got {test_phases}")
@@ -223,7 +292,8 @@ def blind_phase_search(
     if count == 0:
         return np.zeros(0, dtype=np.float64)
 
-    candidates = np.arange(test_phases, dtype=np.float64) * (math.pi / 2.0) / test_phases
+    span = 2.0 * math.pi / rotational_symmetry(points)
+    candidates = np.arange(test_phases, dtype=np.float64) * span / test_phases
     rotations = np.exp(-1j * candidates)
 
     # The full cost tensor is (symbols x phases x points), which for a long run
@@ -288,33 +358,47 @@ def _q(x: float) -> float:
 
 
 def ser_qam(snr_symbol: float, bits_per_symbol: int) -> float:
-    """Analytical symbol error rate for square QAM in Gaussian noise.
+    """Analytical symbol error rate for rectangular QAM in Gaussian noise.
 
-    ``SER = 4*(1 - 1/sqrt(M))*Q(sqrt(3*SNR/(M-1))) - 4*(1 - 1/sqrt(M))**2 * Q(...)**2``
+    A rectangular constellation is two independent Gray PAMs, so a symbol
+    survives only if both quadratures do::
 
-    with ``SNR`` the *symbol* signal-to-noise ratio in linear units. The squared
-    term is the correction for the two quadratures failing together; dropping it
-    is the usual approximation and is optimistic by a few percent near threshold,
-    which is exactly the region a sensitivity curve is read in.
+        SER = 1 - (1 - P_I)(1 - P_Q),  P_axis = 2(1 - 1/M_axis) Q(sqrt(2 SNR / E))
+
+    with ``E = (M_I**2 - 1)/3 + (M_Q**2 - 1)/3`` the mean power of the un-normalised
+    grid and ``SNR`` the *symbol* signal-to-noise ratio in linear units. The
+    product is where the exactness lives: expanding it keeps the term for the two
+    quadratures failing together, which the usual union bound drops and is
+    optimistic by a few percent near threshold — exactly the region a sensitivity
+    curve is read in.
+
+    **This is the square formula, not a second one.** Put ``M_I = M_Q = sqrt(M)``
+    into the expression above and ``sqrt(2 SNR / E)`` becomes
+    ``sqrt(3 SNR / (M - 1))`` and the product becomes
+    ``4 e Q - 4 e**2 Q**2`` with ``e = 1 - 1/sqrt(M)`` — the textbook result for
+    square QAM, term for term. The test suite checks the two agree to the last
+    bit at every even order, which is what makes extending to rectangles a
+    generalisation rather than a parallel implementation with its own mistakes.
 
     This exists to be compared against counted errors. A model checked only
     against itself is not checked.
     """
     if bits_per_symbol == 1:
         return _q(math.sqrt(2.0 * max(snr_symbol, 0.0)))
-    if bits_per_symbol % 2:
-        raise NotImplementedError("analytical SER is implemented for square QAM and BPSK only")
     if snr_symbol <= 0.0:
         return 1.0 - 1.0 / (1 << bits_per_symbol)
 
-    order = 1 << bits_per_symbol
-    edge = 1.0 - 1.0 / math.sqrt(order)
-    tail = _q(math.sqrt(3.0 * snr_symbol / (order - 1)))
-    return 4.0 * edge * tail - 4.0 * edge * edge * tail * tail
+    inphase, quadrature = axis_bits(bits_per_symbol)
+    levels_i, levels_q = 1 << inphase, 1 << quadrature
+    mean_power = (levels_i * levels_i - 1) / 3.0 + (levels_q * levels_q - 1) / 3.0
+    tail = _q(math.sqrt(2.0 * snr_symbol / mean_power))
+    on_i = 2.0 * (1.0 - 1.0 / levels_i) * tail
+    on_q = 2.0 * (1.0 - 1.0 / levels_q) * tail
+    return 1.0 - (1.0 - on_i) * (1.0 - on_q)
 
 
 def ber_qam(snr_symbol: float, bits_per_symbol: int) -> float:
-    """Approximate BER for Gray-coded square QAM: ``SER / bits_per_symbol``.
+    """Approximate BER for Gray-coded QAM: ``SER / bits_per_symbol``.
 
     Valid where symbol errors land on a nearest neighbour, which Gray coding makes
     a single bit error. It is optimistic at low SNR, where errors reach past the
