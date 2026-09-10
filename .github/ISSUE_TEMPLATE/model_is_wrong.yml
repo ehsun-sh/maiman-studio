@@ -1,0 +1,54 @@
+name: A model is wrong
+description: A physics block does not agree with the literature, a standard, or measurement.
+title: "[model] "
+labels: ["model", "needs-reference"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is the most valuable issue you can open here, and it is deliberately the first one
+        offered.
+
+        Every physics block in this project is validated against a closed-form result, and the
+        validation is only as good as the closed form it was checked against. If one of those is
+        the wrong expression, the wrong regime, or the right expression misapplied, everything
+        downstream of it inherits the error and the test suite agrees with it enthusiastically.
+
+  - type: input
+    id: block
+    attributes:
+      label: Which block or function
+      placeholder: "maiman.components.EDFA, or maiman.dsp.estimate_timing"
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What it should do, and where that comes from
+      description: >-
+        A paper with an equation number, a standard with a clause, or your own measurement.
+        This project does not accept models derived from inspection of commercial tools — not
+        because they are wrong, but because nobody without a licence can check them.
+      placeholder: |
+        Agrawal, Fiber-Optic Communication Systems, 4th ed., eq. (2.4.15) gives ...
+        ITU-T G.652 clause 8.2 specifies ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: observed
+    attributes:
+      label: What it does instead
+      description: Numbers, please. A script that produces them is better still.
+      render: python
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Commit
+      description: "`git rev-parse --short HEAD`. There are no releases yet, so the commit is the version."
+    validations:
+      required: true

@@ -1,0 +1,51 @@
+name: A missing component or capability
+description: Something you need to model a link that this cannot express.
+title: "[request] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The most useful version of this issue describes **the link you are trying to build**, not
+        just the block you want. What a component has to get right is decided by what it sits
+        between, and that is usually clear from the system and rarely from the block alone.
+
+  - type: textarea
+    id: use_case
+    attributes:
+      label: What are you trying to model
+      description: >-
+        The system, the rates, the formats, what you need to read out at the end. If you currently
+        do this in another tool, saying which is useful — including if the answer is a spreadsheet.
+    validations:
+      required: true
+
+  - type: textarea
+    id: missing
+    attributes:
+      label: What is missing
+      placeholder: "A Raman amplifier with counter-propagating pumps; export of sweep results as CSV"
+    validations:
+      required: true
+
+  - type: textarea
+    id: reference
+    attributes:
+      label: A model to build it from, if you have one
+      description: >-
+        Optional, and it is what decides whether this is a weekend or a month. A component here
+        needs a published model and a closed-form result to be tested against; without a reference
+        the first work is finding one.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: offer
+    attributes:
+      label: Would you want to implement it
+      options:
+        - "No — flagging it"
+        - "Maybe, with guidance on where it goes"
+        - "Yes"
+    validations:
+      required: true

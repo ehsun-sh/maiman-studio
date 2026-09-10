@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/ehsun-sh/maiman-studio/security/advisories/new
+    about: >-
+      Privately, not in the issue tracker. See SECURITY.md for what does and does not count.
+  - name: Does this duplicate something that already exists?
+    url: https://github.com/ehsun-sh/maiman-studio/issues/new
+    about: >-
+      Open a blank issue and say so. Knowing early is worth more than most feature requests —
+      several months could go into work someone has already done better.

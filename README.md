@@ -1764,6 +1764,13 @@ pip install -e ".[dev]" && ruff check . && ruff format --check . && mypy && pyte
 [`CONTRIBUTING.md`](CONTRIBUTING.md) has the rest: how a component is put together, what this
 project refuses and why, and what each of the drift guards means when it fires at you.
 
+The issue templates offer **"a model is wrong"** first, which is deliberate — a physics block that
+disagrees with the literature is the most valuable thing anyone can report here, and the form asks
+for the reference because that is what makes it actionable. Security reports go privately instead:
+[`SECURITY.md`](SECURITY.md) says what does and does not count, and is specific about the one real
+attack surface — `maiman serve` executes the graphs it is posted, which is why it binds to loopback
+and warns if you tell it not to.
+
 ## Citing this
 
 [`CITATION.cff`](CITATION.cff), which GitHub turns into a "Cite this repository" button. It has no

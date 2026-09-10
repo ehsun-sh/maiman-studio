@@ -187,3 +187,68 @@ def test_contributing_only_links_to_files_that_exist() -> None:
     targets = re.findall(r"\]\(([^)#][^)]*)\)", guide)
     missing = sorted(target for target in targets if not (ROOT / target.split("#")[0]).exists())
     assert not missing, f"CONTRIBUTING.md links to paths that do not exist: {missing}"
+
+
+def test_every_document_points_at_the_same_repository() -> None:
+    """One rename, and half of these send people somewhere that does not exist.
+
+    The issue-template config links to a security advisory page by absolute URL,
+    and the citation file names the repository. Those are the two places a fork
+    or a rename leaves stale, and neither fails in a way anyone notices until a
+    contributor follows one.
+    """
+    citation = (ROOT / "CITATION.cff").read_text(encoding="utf-8")
+    declared = re.search(r"repository-code:\s*\"?(\S+?)\"?\s*$", citation, re.MULTILINE)
+    assert declared, "CITATION.cff has no repository-code"
+    repository = declared.group(1).rstrip("/")
+
+    config = (ROOT / ".github" / "ISSUE_TEMPLATE" / "config.yml").read_text(encoding="utf-8")
+    for url in re.findall(r"url:\s*(\S+)", config):
+        assert url.startswith(repository), (
+            f"{url} does not point at {repository}, which CITATION.cff names"
+        )
+
+
+def test_the_issue_templates_are_forms_github_will_accept() -> None:
+    """Structural, and without a YAML dependency for the same reason as above.
+
+    GitHub does not report a malformed issue form anywhere a maintainer sees it;
+    it silently falls back to a blank issue, and the first sign is that reports
+    stop arriving with the fields they were meant to have.
+    """
+    directory = ROOT / ".github" / "ISSUE_TEMPLATE"
+    forms = sorted(path for path in directory.glob("*.yml") if path.name != "config.yml")
+    assert forms, "no issue forms found"
+
+    for form in forms:
+        text = form.read_text(encoding="utf-8")
+        for field in ("name:", "description:", "body:"):
+            assert field in text, f"{form.name} is missing {field!r}"
+        # Every entry in `body` needs a type, and GitHub knows only these.
+        types = set(re.findall(r"^\s*-\s*type:\s*(\S+)", text, re.MULTILINE))
+        unknown = types - {"markdown", "textarea", "input", "dropdown", "checkboxes"}
+        assert not unknown, f"{form.name} uses field types GitHub does not have: {unknown}"
+
+
+def test_the_security_policy_says_which_versions_are_supported() -> None:
+    """And has to keep saying something true as soon as there *is* a release.
+
+    Right now the honest answer is "only main", because nothing has been
+    released. The day a version ships, this file needs revisiting -- so the
+    guard is tied to the package being a development version, and starts
+    failing the moment that stops being true.
+    """
+    policy = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
+    assert "## Supported versions" in policy
+    assert "ehsun.ca@gmail.com" in policy, "no reporting channel in the security policy"
+
+    if "dev" in maiman.__version__:
+        assert "no release" in policy.lower(), (
+            "the policy should say there has been no release while the version is a dev one"
+        )
+    else:
+        raise AssertionError(
+            f"the package now declares {maiman.__version__}, which is not a development "
+            f"version. SECURITY.md still says only `main` is supported -- decide what "
+            f"that means for the released version and update both."
+        )

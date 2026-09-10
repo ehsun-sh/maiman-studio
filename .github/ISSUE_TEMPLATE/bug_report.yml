@@ -1,0 +1,65 @@
+name: Bug report
+description: Something crashes, refuses valid input, or does not do what it says.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For a result that is *physically* wrong rather than broken, use **A model is wrong**
+        instead — it asks for the reference, which is what makes that kind of report actionable.
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: What you ran
+      description: >-
+        The smallest script that shows it. A graph with four blocks that fails is worth ten times
+        a forty-block one that also fails.
+      render: python
+    validations:
+      required: true
+
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened
+      description: The full traceback, if there is one. Do not trim it — the frames matter.
+      render: shell
+    validations:
+      required: true
+
+  - type: input
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Commit
+      description: "`git rev-parse --short HEAD`"
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Python and OS
+      description: "`python -VV` and your platform"
+      placeholder: "3.12.4, Windows 11"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: suite
+    attributes:
+      label: Before opening
+      options:
+        - label: >-
+            The suite passes on my checkout
+            (`ruff check . && ruff format --check . && mypy && pytest`), so this is not my
+            environment. Tick it or say why not — a failing suite is itself worth reporting.
+          required: false
