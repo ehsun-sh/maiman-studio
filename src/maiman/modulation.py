@@ -194,8 +194,12 @@ def quadrant_constellation(bits_per_symbol: int) -> np.ndarray:
             f"differential quadrant encoding needs at least 2 bits per symbol, "
             f"got {bits_per_symbol}"
         )
-    turns = rotational_symmetry(points)
-    if turns != 4:
+    # Not `turns`: that name is taken further down for the four rotations
+    # themselves, and reusing it made one function bind an int and an array to
+    # the same name. Python does not mind and mypy on 3.12 does, which is how
+    # this was found — on a version this machine does not run.
+    symmetry = rotational_symmetry(points)
+    if symmetry != 4:
         raise ValueError(
             f"{1 << bits_per_symbol}-QAM is rectangular, and a rectangle is not "
             f"invariant under a quarter turn — it maps onto a different alphabet, "
@@ -251,35 +255,35 @@ def blind_phase_search(
 ) -> np.ndarray:
     """Estimate the carrier phase per symbol, without knowing what was sent.
 
-        The blind phase search of Pfau, Hoffmann and Noe (JLT 27(8), 2009), which is
-        what a real coherent receiver runs. For each of ``test_phases`` candidate
-        rotations it de-rotates the symbol, measures the distance to the nearest
-        constellation point, and sums that over a sliding window; the candidate with
-        the smallest sum wins. Averaging over a window is the whole trick — a single
-        symbol cannot distinguish phase noise from additive noise, and a run of them
-        can.
+    The blind phase search of Pfau, Hoffmann and Noe (JLT 27(8), 2009), which is
+    what a real coherent receiver runs. For each of ``test_phases`` candidate
+    rotations it de-rotates the symbol, measures the distance to the nearest
+    constellation point, and sums that over a sliding window; the candidate with
+    the smallest sum wins. Averaging over a window is the whole trick — a single
+    symbol cannot distinguish phase noise from additive noise, and a run of them
+    can.
 
     The range searched is the constellation's **own** rotational symmetry, from
-        :func:`rotational_symmetry`: ``[0, pi/2)`` for a square alphabet and
-        ``[0, pi)`` for a rectangular one. That symmetry is also the method's cost —
-        the result is correct only modulo it, and nothing blind can do better,
-        because rotating the transmitted sequence by that much leaves the received
-        samples identical.
+    :func:`rotational_symmetry`: ``[0, pi/2)`` for a square alphabet and
+    ``[0, pi)`` for a rectangular one. That symmetry is also the method's cost —
+    the result is correct only modulo it, and nothing blind can do better,
+    because rotating the transmitted sequence by that much leaves the received
+    samples identical.
 
-        It used to be ``[0, pi/2)`` unconditionally, on the grounds that every QAM
-        constellation here was invariant under a quarter turn. Odd orders ended
-        that: an 8x4 grid turned a quarter maps onto a 4x8 grid, which is a
-        different alphabet, and a search that never looked past ``pi/2`` could not
-        find an offset of ``0.6 pi`` at all. A real link resolves what remains by
-        differentially encoding the symmetry class; see
-        :class:`~maiman.components.coherent.CarrierRecovery` for how it is resolved
-        here.
+    It used to be ``[0, pi/2)`` unconditionally, on the grounds that every QAM
+    constellation here was invariant under a quarter turn. Odd orders ended
+    that: an 8x4 grid turned a quarter maps onto a 4x8 grid, which is a
+    different alphabet, and a search that never looked past ``pi/2`` could not
+    find an offset of ``0.6 pi`` at all. A real link resolves what remains by
+    differentially encoding the symmetry class; see
+    :class:`~maiman.components.coherent.CarrierRecovery` for how it is resolved
+    here.
 
-        ``window`` is the one real trade. Too short and the estimate is noisy, which
-        shows up as extra EVM; too long and it cannot follow a fast-drifting laser,
-        which shows up as an SNR ceiling that no amount of power lifts. The default
-        of 64 symbols suits a linewidth-times-symbol-period around 1e-5, which is a
-        100 kHz laser at 32 GBd.
+    ``window`` is the one real trade. Too short and the estimate is noisy, which
+    shows up as extra EVM; too long and it cannot follow a fast-drifting laser,
+    which shows up as an SNR ceiling that no amount of power lifts. The default
+    of 64 symbols suits a linewidth-times-symbol-period around 1e-5, which is a
+    100 kHz laser at 32 GBd.
     """
     if test_phases < 2:
         raise ValueError(f"test_phases must be >= 2, got {test_phases}")
