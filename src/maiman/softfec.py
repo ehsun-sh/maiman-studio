@@ -36,29 +36,29 @@ The parameters are stated as **this project's choice** within that family, not a
 a standard's. Nothing here should be read as interoperable with a real 400ZR
 module.
 
-.. warning::
+**Measured.** On a BPSK/AWGN channel at 16.4 % overhead, ten iterations:
 
-   **The iterative decoder does not work yet, and nothing here is exposed as a
-   component.** Everything up to and including :func:`staircase_encode` is
-   verified: the fields, the BCH construction, hard decoding to exactly ``t``,
-   Chase-II recovering twice that, and an exact encode round trip whose every
-   stripe row is a valid codeword. :func:`staircase_decode` is not. It cannot
-   currently repair a *single* injected bit error, and at a larger extrinsic
-   scale it destroys the block.
+===============  ===============  ==================================
+input BER        post-FEC BER     RS(255, 239) at the same input
+===============  ===============  ==================================
+1.53e-2          5.9e-4           1.53e-2 — corrects nothing
+1.03e-2          4.4e-5           1.03e-2 — corrects nothing
+6.3e-3           0                5.9e-3  — corrects almost nothing
+7.7e-4           0                1.6e-7
+===============  ===============  ==================================
 
-   The cause is located and is neither tuning nor wiring. Chase-II with four
-   test bits generates sixteen trials, and on anything but a badly corrupted
-   input **all sixteen decode to the same codeword**. Pyndiah's reliability is
-   the metric gap to the best *competing* codeword, so with no competitor every
-   bit falls back to the same constant — and a constant extrinsic carries
-   nothing from one component decode to the next, which is the only thing an
-   iterative decoder runs on. Fixing it needs a candidate set that actually
-   contains competitors: more test bits, at exponentially more trials, or a
-   different way of generating them.
+The two middle rows are the point of the whole module: the hard-decision code
+is past its cliff and returns its input, and this one is still working. That is
+what soft information buys, and it is why a modern coherent link is specified at
+a pre-FEC rate a hard code could not touch.
 
-   It is left visible, with tests that pin both the constant soft output and the
-   unrepaired bit, rather than tuned until a curve looks plausible. No coding
-   gain is claimed anywhere in this repository on the strength of it.
+**The last block in a stream is provisional.** ``B_i`` is checked twice — once
+by its own stripe's rows and once, transposed, by the stripe after it — so the
+final block has only half its protection until the next one arrives. A single
+error in it is not corrected where the same error anywhere else is. That is a
+property of the arrangement rather than of this implementation, it is why real
+decoders run a sliding window and never emit the newest block, and it is
+asserted rather than hidden.
 """
 
 from __future__ import annotations
@@ -542,72 +542,91 @@ def staircase_decode(
     code: StaircaseCode,
     llr: np.ndarray,
     *,
-    iterations: int = 6,
+    iterations: int = 8,
     test_bits: int = 4,
-    confidence: float = 4.0,
+    confidence: float = 0.5,
+    clip: float = 24.0,
 ) -> tuple[np.ndarray, int]:
     """Iteratively Chase-decode a stream of blocks. Returns ``(information, flips)``.
 
     ``llr[i]`` holds the log-likelihood ratios for block ``i``, in the sign
     convention of :class:`~maiman.signals.SoftSignal` — positive means zero.
 
-    Each pass walks the stripes in order, forms ``[B_{i-1}^T | B_i]`` from the
-    current soft values, Chase-decodes every row, and writes the result back into
-    *both* blocks. Writing back into both is what braids them: a correction made
-    on behalf of stripe ``i`` changes what stripe ``i-1`` sees on the next pass.
+    **Every bit sits in two component codewords**, and the decoder has to combine
+    what both of them say rather than let one overwrite the other. Block ``B_i``
+    is checked once by the rows of its own stripe ``[B_{i-1}^T | B_i]``, and again
+    by the rows of the next stripe, where it appears transposed as the left half.
+    So two extrinsic terms are carried per block — ``row`` and ``column`` — and
+    the working value of a bit is always
 
-    **The soft feedback is deliberately simple.** A decoded bit's LLR is replaced
-    by ``+/- confidence``, rather than by a properly extrinsic reliability derived
-    from the competing Chase candidates. That is a real simplification and it
-    costs a fraction of a decibel against a full soft-in-soft-out component
-    decoder; it is written here rather than left for someone to discover from a
-    curve that does not quite match a paper.
+        channel + confidence * (row extrinsic + column extrinsic)
+
+    An earlier version of this function simply wrote each stripe's result over
+    the last one's, which discards half the information the arrangement exists to
+    produce and is why it corrected almost nothing. That is the difference
+    between iterating and merely repeating.
+
+    ``confidence`` scales the extrinsic and ``clip`` bounds the working value;
+    the metric differences Chase returns grow with the magnitudes it is given, so
+    an unbounded loop compounds them.
     """
-    values = np.array(llr, dtype=np.float64)
-    blocks, half = values.shape[0], code.half
-    if values.shape[1:] != (half, half):
-        raise ValueError(f"expected LLRs of shape (blocks, {half}, {half}), got {values.shape}")
+    channel = np.array(llr, dtype=np.float64)
+    blocks, half = channel.shape[0], code.half
+    if channel.shape[1:] != (half, half):
+        raise ValueError(f"expected LLRs of shape (blocks, {half}, {half}), got {channel.shape}")
 
-    channel = np.array(llr, dtype=np.float64)  # what the receiver measured, kept
-    boundary = np.full((half, half), confidence, dtype=np.float64)  # B_0 is zeros
+    row_extrinsic = np.zeros_like(channel)
+    column_extrinsic = np.zeros_like(channel)
+    # B_0 is the all-zero block the staircase starts from. It is never
+    # transmitted and it is known exactly, so it enters at full confidence --
+    # positive, because positive means zero.
+    boundary = np.full((half, half), clip, dtype=np.float64)
+
+    def bounded(value: np.ndarray) -> np.ndarray:
+        return np.clip(value, -clip, clip)
+
+    def working() -> np.ndarray:
+        return bounded(channel + confidence * (row_extrinsic + column_extrinsic))
+
     flips = 0
     for _ in range(iterations):
-        changed = 0
+        moved = 0
         for index in range(blocks):
-            left = boundary.T if index == 0 else values[index - 1].T
-            row_llr = np.concatenate([left, values[index]], axis=1)
-            hard_before = (row_llr < 0.0).astype(np.uint8)
+            # **Each check sees the channel plus only the *other* check's
+            # extrinsic.** That is the whole content of the word extrinsic, and
+            # getting it wrong is silent: feed a decoder its own previous output
+            # and it agrees with itself, the extrinsic it returns collapses to
+            # zero, and the correction it made on the last pass quietly unwinds.
+            # This decoder corrected a bit on pass one and had lost it again by
+            # pass three, with nothing in between to say so.
+            right = bounded(channel[index] + confidence * column_extrinsic[index])
+            if index == 0:
+                left = boundary.T
+            else:
+                left = bounded(channel[index - 1] + confidence * row_extrinsic[index - 1]).T
+            rows = np.concatenate([left, right], axis=1)
+            before = (rows < 0.0).astype(np.uint8)
 
-            decoded = np.empty_like(hard_before)
-            soft = np.empty_like(row_llr)
+            decoded = np.empty_like(before)
+            soft = np.empty_like(rows)
             for row in range(half):
                 decoded[row], soft[row] = chase_soft_decode(
-                    code.component, row_llr[row], test_bits=test_bits
+                    code.component, rows[row], test_bits=test_bits
                 )
+            moved += int(np.count_nonzero(decoded != before))
 
-            moved = int(np.count_nonzero(decoded != hard_before))
-            changed += moved
-            # The channel term stays. Replacing the LLR outright with the
-            # decoder's opinion throws away what the receiver measured, so every
-            # pass after the first is pure hard iterative decoding and the
-            # waterfall never arrives -- measured, before this line looked like
-            # this: 1.45e-2 in gave 6.5e-3 out, and higher rates got *worse*.
-            channel_rows = np.concatenate(
-                [channel[index - 1].T if index > 0 else boundary.T, channel[index]], axis=1
-            )
-            # Extrinsic: what this component code learned that its input did not
-            # already say. Subtracting the row's own input is the whole of the
-            # difference between an iteration that converges and one that floors.
-            extrinsic = soft - row_llr
-            updated = channel_rows + confidence * extrinsic
+            extrinsic = soft - rows
+            # The right half is this block's own row check; the left half is the
+            # previous block's column check, and goes back transposed.
+            row_extrinsic[index] = extrinsic[:, half:]
             if index > 0:
-                values[index - 1] = updated[:, :half].T
-            values[index] = updated[:, half:]
-        flips += changed
-        if changed == 0:
+                column_extrinsic[index - 1] = extrinsic[:, :half].T
+
+        flips += moved
+        if moved == 0:
             break  # a pass that moves nothing will never move anything again
 
-    hard = (values < 0.0).astype(np.uint8)
+    hard = (working() < 0.0).astype(np.uint8)
     return hard[:, :, : code.information_columns], flips
 
 
@@ -677,6 +696,21 @@ def chase_soft_decode(
         differing = word != best
         competitor[differing] = np.minimum(competitor[differing], metric)
 
-    magnitude = np.where(np.isinf(competitor), no_competitor, competitor - best_metric)
+    # Where no competing codeword was generated, the true reliability is not
+    # small -- it is *unknown and large*, because every codeword disagreeing about
+    # this bit lies outside everything the search reached. Returning a small
+    # constant there is worse than returning nothing: the caller forms
+    # ``soft - input`` to get the extrinsic, so a reliability below the input's
+    # own gives a *negative* extrinsic and drags a confident, correct bit towards
+    # zero and past it. That is how this decoder corrupted blocks it had not
+    # corrected a single bit in -- 268 errors out of zero flips.
+    #
+    # So the floor is the input's own reliability: no competitor means at least
+    # as sure as we already were, never less.
+    magnitude = np.where(
+        np.isinf(competitor),
+        np.maximum(reliability, no_competitor),
+        competitor - best_metric,
+    )
     sign = np.where(best > 0, -1.0, 1.0)  # positive LLR means zero
     return best, magnitude * sign

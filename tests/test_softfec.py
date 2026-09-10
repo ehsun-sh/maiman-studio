@@ -4,13 +4,13 @@ The component-level machinery is verified here: the fields, the BCH codes built
 from their design distance, hard decoding to exactly ``t``, Chase-II recovering
 past it, and a staircase encoding whose every stripe row is a codeword.
 
-The iterative decoder is **not** verified, because it does not work, and two
-tests pin exactly why: Chase-II with four test bits produces no competing
-codeword, so Pyndiah's reliability collapses to a constant, so the extrinsic
-carries nothing and the iteration cannot repair even a single bit. Both are
-written as assertions of the current failure rather than as ``xfail``, so that
-fixing the decoder makes them fail and demand to be rewritten instead of quietly
-passing beside a stale warning.
+The iterative decoder is verified too, now that it works. Three bugs stood
+between the pieces and the whole, and each one has a test below: a no-competitor
+reliability *below* the input's own, which corrupted blocks the decoder had not
+corrected a single bit in; a loop that let each stripe overwrite the previous
+stripe's result instead of combining both checks; and a component decoder fed its
+own previous extrinsic, which made it agree with itself and quietly unwind its
+own corrections two passes later.
 
 References: Chase 1972; Pyndiah 1998; Smith, Farhood, Hunt, Kschischang and
 Lodge, J. Lightwave Technol. 30(1), 2012.
@@ -170,36 +170,30 @@ def test_chase_recovers_twice_the_hard_limit_when_the_errors_are_the_weak_bits()
     )
 
 
-def test_the_soft_output_degenerates_to_a_constant_and_that_is_the_bug() -> None:
-    """Why the iteration cannot work, located precisely.
+def test_a_bit_with_no_competitor_is_reported_at_least_as_sure_as_its_input() -> None:
+    """The reliability floor, and the bug it fixes.
 
-    Chase-II with four test bits on a 256-bit codeword generates sixteen trials,
-    and on anything but a badly corrupted input **all of them decode to the same
-    codeword**. Pyndiah's reliability is the metric gap to the best *competing*
-    codeword, so with no competitor every bit falls back to the same constant —
-    and an extrinsic that is constant carries no information from one component
-    decode to the next, which is precisely what an iterative decoder runs on.
-
-    So the fault is not in the wiring and not in the tuning: it is that the
-    candidate set is too small to produce soft output at all. Fixing it means
-    more test bits (exponentially more trials) or a different way of generating
-    competitors. Recorded here because a constant is easy to mistake for a
-    working reliability — the signs are all correct, and only the magnitudes
-    give it away.
+    Where the Chase search generates no codeword disagreeing about a bit, the
+    true reliability is not small — it is unknown and *large*, because every
+    competitor lies outside everything the search reached. Returning a small
+    constant is worse than returning nothing: the caller forms ``soft - input``
+    to get the extrinsic, so a reliability below the input's own yields a
+    negative extrinsic and drags a confident, correct bit towards zero and past
+    it. That is how this decoder used to produce 268 errors out of zero
+    corrections.
     """
     code = sf.bch_code(9, 2, length=256)
     rng = np.random.default_rng(6)
     word = sf.bch_encode(code, rng.integers(0, 2, (1, code.message_bits)).astype(np.uint8))[0]
 
-    llr = np.where(word > 0, -6.0, 6.0)
-    llr[[10, 50]] *= 0.05
-
+    llr = np.where(word > 0, -1.0, 1.0) * rng.uniform(4.0, 20.0, code.length)
     decoded, soft = sf.chase_soft_decode(code, llr, test_bits=4)
+
     assert np.array_equal(decoded, word)
     assert np.array_equal((soft < 0.0).astype(np.uint8), word), "the sign must be the decision"
-    assert float(np.std(np.abs(soft))) == 0.0, (
-        "the magnitudes now vary, so competitors are being generated. That is the "
-        "fix the module warning waits for: rewrite this test and the decoder one."
+    assert np.all(np.abs(soft) >= np.abs(llr) - 1e-9), (
+        "a reliability below the input's own makes the extrinsic negative and "
+        "destroys bits the decoder never touched"
     )
 
 
@@ -243,28 +237,78 @@ def test_the_information_survives_encoding_unchanged() -> None:
     assert np.array_equal(blocks[:, :, : code.information_columns], information)
 
 
-def test_the_iterative_decoder_is_broken_and_this_records_how() -> None:
-    """A single injected bit error is not repaired. That is the current state.
+def staircase_case(
+    seed: int = 3, blocks: int = 4
+) -> tuple[sf.StaircaseCode, np.ndarray, np.ndarray]:
+    """A coded stream with realistic, *varying* LLR magnitudes and no sign errors."""
+    code = sf.staircase_code()
+    rng = np.random.default_rng(seed)
+    information = rng.integers(0, 2, (blocks, code.half, code.information_columns)).astype(np.uint8)
+    encoded = sf.staircase_encode(code, information)
+    magnitude = np.abs(rng.normal(8.0, 3.0, encoded.shape)) + 0.5
+    return code, information, np.where(encoded > 0, -1.0, 1.0) * magnitude
 
-    Written as an assertion of the failure rather than an ``xfail`` so that
-    fixing the iteration makes *this* test fail and demand to be rewritten,
-    instead of quietly passing and leaving the module's warning stale.
 
-    The component pieces above are all verified, so the fault is in the
-    iteration's wiring rather than in the codes: encoding produces valid stripe
-    rows, and hard decoding repairs two errors in any one of them.
+def test_a_clean_block_survives_the_decoder_untouched() -> None:
+    """The first thing a decoder must not do, and the one this one used to fail.
+
+    Varying magnitudes on purpose: with a uniform ``+-8`` input the broken
+    version passed this, because the fault only appeared once some bits were
+    more reliable than others.
     """
+    code, information, llr = staircase_case()
+    decoded, flips = sf.staircase_decode(code, llr, iterations=6)
+    assert np.array_equal(decoded, information)
+    assert flips == 0
+
+
+@pytest.mark.parametrize("block", [0, 1, 2])
+def test_a_single_error_is_repaired_wherever_it_lands(block: int) -> None:
+    """In any block that has both of its checks — which is all but the last."""
+    code, information, llr = staircase_case()
+    llr[block, 40, 60] *= -1
+    decoded, _ = sf.staircase_decode(code, llr, iterations=6)
+    assert np.array_equal(decoded, information)
+
+
+def test_the_final_block_is_provisional_and_that_is_the_arrangement() -> None:
+    """The last block has no successor stripe, so only half its protection.
+
+    Not a defect of this implementation: it is why a real staircase decoder runs
+    a sliding window and never emits the newest block. Asserted so that anyone
+    who later adds a terminating block sees this fail and knows why it was here.
+    """
+    code, information, llr = staircase_case()
+    llr[3, 5, 100] *= -1  # the last of four blocks
+    decoded, _ = sf.staircase_decode(code, llr, iterations=6)
+    assert not np.array_equal(decoded, information)
+
+
+def test_the_soft_code_works_where_the_hard_code_has_already_given_up() -> None:
+    """The whole argument for soft-decision FEC, counted on the same channel.
+
+    At an input rate near 1e-2 a bounded-distance RS(255, 239) decoder returns
+    its input — every codeword is far past ``t`` and nothing is correctable.
+    This code takes the same bits orders of magnitude lower. That gap is why a
+    modern coherent link is specified at a pre-FEC rate the classic code could
+    not touch.
+    """
+    from maiman import fec
+
     code = sf.staircase_code()
     rng = np.random.default_rng(3)
-    information = rng.integers(0, 2, (3, code.half, code.information_columns)).astype(np.uint8)
-    blocks = sf.staircase_encode(code, information)
+    information = rng.integers(0, 2, (6, code.half, code.information_columns)).astype(np.uint8)
+    encoded = sf.staircase_encode(code, information)
 
-    llr = np.where(blocks > 0, -8.0, 8.0).astype(np.float64)
-    llr[1, 40, 60] *= -1  # exactly one bit, deep inside a block
+    sigma = 0.43
+    received = (1.0 - 2.0 * encoded.astype(np.float64)) + rng.normal(0.0, sigma, encoded.shape)
+    llr = 2.0 * received / sigma**2
 
-    decoded, _ = sf.staircase_decode(code, llr, iterations=4, confidence=0.2)
-    assert not np.array_equal(decoded, information), (
-        "the iterative decoder now repairs a single bit error. That is the fix "
-        "this module's warning is waiting for — delete the warning, replace this "
-        "test with a waterfall, and only then claim a coding gain."
-    )
+    pre = float(np.mean((llr < 0.0).astype(np.uint8) != encoded))
+    decoded, _ = sf.staircase_decode(code, llr, iterations=10)
+    post = float(np.mean(decoded != information))
+
+    assert 5e-3 < pre < 2e-2, "the channel has to be genuinely bad for this to mean anything"
+    assert post < pre / 50.0
+    # And the hard-decision code, on the same input, does essentially nothing.
+    assert fec.output_bit_error_rate(pre) > pre / 5.0
