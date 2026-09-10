@@ -99,6 +99,12 @@ def graph_from_dict(data: dict[str, Any]) -> Graph:
         component_class = lookup(node["type"])
         config = node.get("config", {})
         params = node.get("params", {})
+        # Parameters the component has since retired are dropped rather than
+        # refused. They were removed because they had stopped affecting the
+        # model, so a project carrying one describes the same link either way.
+        retired = component_class.retired_parameters
+        if retired:
+            params = {k: v for k, v in params.items() if k not in retired}
         try:
             component: Component = component_class(label=node["id"], **config, **params)
         except (TypeError, ValueError) as exc:

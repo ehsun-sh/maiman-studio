@@ -458,43 +458,6 @@
    "category": "Photonic IC",
    "version": "0.1.0",
    "parameters": {
-    "reference_wavelength": {
-     "type": "float",
-     "default": 1550.0,
-     "unit": "nm",
-     "min": 1200.0,
-     "max": 1700.0,
-     "doc": "Wavelength the indices are quoted at"
-    },
-    "n_eff": {
-     "type": "float",
-     "default": 2.44,
-     "unit": "",
-     "min": 1.0,
-     "max": 5.0,
-     "doc": "Effective index: sets the phase"
-    },
-    "n_group": {
-     "type": "float",
-     "default": 4.2,
-     "unit": "",
-     "min": 1.0,
-     "max": 10.0,
-     "doc": "Group index: sets the delay, and a ring's free spectral range"
-    },
-    "propagation_loss": {
-     "type": "float",
-     "default": 2.0,
-     "unit": "dB/cm",
-     "min": 0.0,
-     "doc": "Waveguide loss; 2 dB/cm is a typical silicon strip"
-    },
-    "dispersion": {
-     "type": "float",
-     "default": 0.0,
-     "unit": "ps/nm/km",
-     "doc": "Waveguide dispersion D; negligible below a millimetre"
-    },
     "coupling": {
      "type": "float",
      "default": 0.5,

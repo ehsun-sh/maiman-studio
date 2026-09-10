@@ -22,6 +22,7 @@ from maiman.components import (
     BERAnalyzer,
     Combiner,
     CWLaser,
+    DirectionalCoupler,
     ElectricalFilter,
     Fiber,
     MachZehnderModulator,
@@ -32,7 +33,7 @@ from maiman.components import (
 )
 from maiman.components.electrical import PRBS_TAPS
 from maiman.modulation import QAM_FORMATS, qam_constellation
-from maiman.project import SCHEMA_VERSION, graph_to_dict, ui_from_dict
+from maiman.project import SCHEMA_VERSION, graph_from_dict, graph_to_dict, ui_from_dict
 from maiman.registry import lookup
 
 
@@ -435,3 +436,79 @@ def test_validation_happens_before_the_first_block_runs(
     with pytest.raises(ValueError, match="no quadrants"):
         graph.run()
     assert ran == [], "a block ran before the settings were checked"
+
+
+def test_a_project_carrying_a_retired_parameter_still_opens() -> None:
+    """Refusing it would punish somebody for a decision made in this repository.
+
+    ``DirectionalCoupler`` used to inherit five waveguide parameters and not one
+    of them changed its matrix. Taking them off is the right call — an inspector
+    knob that moves nothing is the one thing the interface is not allowed to
+    show — but a project saved before the change carries them, and it describes
+    the same link either way. That is what makes dropping them safe, and it is
+    *only* safe because a retired parameter is one that had stopped meaning
+    anything.
+    """
+    document = {
+        "schema_version": SCHEMA_VERSION,
+        "context": {"bit_rate": 1e10, "samples_per_symbol": 8, "sequence_length": 64},
+        "nodes": [
+            {
+                "id": "dc",
+                "type": "DirectionalCoupler",
+                "params": {
+                    "coupling": 0.3,
+                    "insertion_loss": 0.2,
+                    "n_eff": 2.44,
+                    "n_group": 4.2,
+                    "propagation_loss": 2.0,
+                    "dispersion": 0.0,
+                    "reference_wavelength": 1550.0,
+                },
+            }
+        ],
+        "edges": [],
+    }
+    graph = graph_from_dict(document)
+    coupler = graph.components[0]
+    assert isinstance(coupler, DirectionalCoupler)
+    # The live parameters survive; the retired ones are gone, not defaulted onto
+    # some attribute nobody reads.
+    assert coupler.coupling == pytest.approx(0.3)
+    assert coupler.insertion_loss == pytest.approx(0.2)
+    assert set(type(coupler).param_specs()) == {"coupling", "insertion_loss"}
+
+
+def test_a_parameter_that_was_never_declared_is_still_refused() -> None:
+    """Retirement is a named list, not an amnesty on typos.
+
+    A misspelled parameter has to keep failing loudly, or the mechanism that
+    keeps old projects opening becomes the mechanism that hides new mistakes.
+    """
+    document = {
+        "schema_version": SCHEMA_VERSION,
+        "context": {"bit_rate": 1e10, "samples_per_symbol": 8, "sequence_length": 64},
+        "nodes": [{"id": "dc", "type": "DirectionalCoupler", "params": {"couplng": 0.3}}],
+        "edges": [],
+    }
+    with pytest.raises(ProjectError, match="couplng"):
+        graph_from_dict(document)
+
+
+def test_the_coupler_kept_only_the_parameters_that_move_it() -> None:
+    """Measured, not asserted: build two and compare their matrices.
+
+    This is the check that caught the problem in the first place, and it is the
+    one that would catch the same thing happening to another block.
+    """
+    import numpy as np
+
+    grid = np.array([193.4e12])
+    default = DirectionalCoupler()
+    for name in DirectionalCoupler.param_specs():
+        # Set through _values rather than the constructor: the point is to nudge
+        # whatever the class declares today, without naming any of them here.
+        nudged = DirectionalCoupler()
+        nudged._values = {**nudged._values, name: 0.25}
+        same = np.allclose(default._matrix_factory()(grid).s, nudged._matrix_factory()(grid).s)
+        assert not same, f"{name} does not change the coupler's matrix; it should not be declared"

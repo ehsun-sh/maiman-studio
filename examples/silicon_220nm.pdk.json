@@ -48,8 +48,7 @@
 
     "dc_3db": {
       "component": "DirectionalCoupler",
-      "cross_section": "strip",
-      "doc": "Nominal 3 dB coupler. Measures 0.48 at 1550 and drifts hard with wavelength — which is the reason the MMI beside it exists.",
+      "doc": "Nominal 3 dB coupler, drawn in strip. No cross_section: the model is a coupling ratio and an excess loss, with no length in it for an index to act on — the waveguide's contribution is already inside the fitted ratio below. Measures 0.48 at 1550 and drifts hard with wavelength, which is the reason the MMI beside it exists.",
       "params": {
         "coupling": [0.48, 3.9e-3],
         "insertion_loss": 0.10
@@ -57,7 +56,6 @@
     },
     "dc_10": {
       "component": "DirectionalCoupler",
-      "cross_section": "strip",
       "doc": "A 10 % tap, for monitoring a line without spending it.",
       "params": {
         "coupling": [0.10, 1.2e-3],

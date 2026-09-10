@@ -378,6 +378,16 @@ class Component:
 
     # -- execution --------------------------------------------------------
 
+    #: Parameters this component used to declare and no longer does.
+    #:
+    #: A project saved before the change carries them, and refusing to open it
+    #: would punish somebody for a decision made here. They are dropped on load
+    #: instead — which is safe precisely because a retired parameter is one that
+    #: had stopped meaning anything, and is *not* a licence to rename a live one
+    #: quietly. Renaming a parameter that still does something needs a migration
+    #: that carries its value across, not this.
+    retired_parameters: ClassVar[frozenset[str]] = frozenset()
+
     def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
         """Process the whole time window and return one signal per output port.
 

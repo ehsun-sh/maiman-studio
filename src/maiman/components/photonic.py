@@ -278,7 +278,7 @@ class Waveguide(_Photonic):
         }
 
 
-class DirectionalCoupler(_Photonic):
+class DirectionalCoupler(Component):
     """Two waveguides run close enough to trade power. The 2x2 splitter of a PIC.
 
     ``coupling`` is the *power* fraction that crosses over, so 0.5 is a 3 dB
@@ -293,6 +293,22 @@ class DirectionalCoupler(_Photonic):
     """
 
     display_name = "Directional Coupler"
+    category = "Photonic IC"
+
+    #: It used to inherit the waveguide parameters — ``n_eff``, ``n_group``,
+    #: ``propagation_loss``, ``dispersion``, ``reference_wavelength`` — from
+    #: :class:`_Photonic`, and **not one of them changed the matrix**. The model
+    #: is a frequency-flat coupling ratio and an excess loss; there is no length
+    #: in it for an index to act on. Five knobs in the inspector that move
+    #: nothing is the one thing this interface is not allowed to do.
+    #:
+    #: A real coupler's ratio does drift with wavelength, and the honest way to
+    #: say so is a fitted ``coupling`` from a PDK — see :mod:`maiman.pdk`, where
+    #: ``dc_3db`` is 0.285 at 1500 nm and 0.675 at 1600. That is a number from a
+    #: wafer, not an index this model could have used.
+    retired_parameters = frozenset(
+        {"n_eff", "n_group", "propagation_loss", "dispersion", "reference_wavelength"}
+    )
 
     coupling = Param(0.5, unit="", min=0.0, max=1.0, doc="Power fraction crossing over")
     insertion_loss = Param(0.0, unit="dB", min=0.0, doc="Excess loss through the coupler")
