@@ -1,4 +1,4 @@
-"""Integrated-photonic blocks: waveguide, directional coupler, ring resonator.
+"""Integrated-photonic blocks: waveguide, couplers, interferometer, ring resonator.
 
 **How a circuit joins a link.** The top-level simulation is dataflow — every
 block is a pure function of the waveform on its inputs — and a photonic circuit
@@ -38,6 +38,8 @@ from ..photonics import (
     SILICON_STRIP_NGROUP,
     directional_coupler,
     free_spectral_range,
+    mach_zehnder,
+    mmi_coupler,
     resonance_linewidth,
     ring_resonator,
     straight_waveguide,
@@ -327,6 +329,182 @@ class DirectionalCoupler(_Photonic):
         loss = self.insertion_loss
         return solve_once(
             lambda f: directional_coupler(f, coupling=coupling, insertion_loss_db=loss)
+        )
+
+
+class MMI(Component):
+    """A multimode interference coupler: the splitter a foundry actually ships.
+
+    Widen a waveguide until it carries several modes, let them run, and at the
+    right length their relative phases bring the field back as ``N`` copies of
+    the input. There is no gap to control and no coupling length to hit, which
+    is why an MMI survives a lithography process that would move a directional
+    coupler's ratio by a decibel. The price is excess loss: the light that does
+    not land in an image is radiated out of the guide.
+
+    ``ports`` is the count *each side*, so 2 is the ubiquitous 2 x 2 and 4 is the
+    splitter tree in a 90 degree hybrid. At 2 the matrix is identical to a 3 dB
+    :class:`DirectionalCoupler`, factor of j included — the two devices really
+    are the same scattering matrix, and the reason to reach for this one is what
+    happens when fabrication moves, not what happens at nominal.
+
+    What distinguishes an MMI from a box that divides power is the **phase
+    between the images**, which is fixed by self-imaging and is what decides
+    whether an interferometer built from two of them lands its light on the port
+    you wanted. See :func:`maiman.photonics.mmi_phase_relations`.
+
+    Inputs beyond the first are off by default, because most uses drive one.
+    """
+
+    display_name = "MMI Coupler"
+    #: Not a :class:`_Photonic`, deliberately. Every other block in this module
+    #: is made of a length of waveguide and takes its indices and its loss; an
+    #: MMI is a lumped scattering matrix with no arm to have an index *of*.
+    #: Inheriting them would put five knobs in the inspector that move nothing,
+    #: which is the one thing this interface is not allowed to do.
+    category = "Photonic IC"
+
+    excess_loss = Param(0.2, unit="dB", min=0.0, doc="Light radiated rather than imaged")
+    imbalance = Param(
+        0.0, unit="dB", min=0.0, doc="Spread between the strongest and weakest output"
+    )
+
+    def __init__(
+        self,
+        ports: int = 2,
+        *,
+        driven: int = 1,
+        label: str | None = None,
+        **params: float,
+    ) -> None:
+        if ports < 1:
+            raise ValueError(f"an MMI needs at least one port a side, got {ports}")
+        if not 1 <= driven <= ports:
+            raise ValueError(f"driven must be between 1 and ports ({ports}), got {driven}")
+        super().__init__(label=label, **params)
+        self.ports = ports
+        self.driven = driven
+        self.inputs = {f"in{k + 1}": PortType.OPTICAL for k in range(driven)}
+        self.outputs = {f"out{k + 1}": PortType.OPTICAL for k in range(ports)}
+
+    def structural_config(self) -> dict[str, Any]:
+        return {"ports": self.ports, "driven": self.driven}
+
+    def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
+        matrix_for = self._matrix_factory()
+        outputs: dict[str, Signal] = {}
+        for out in self.outputs:
+            contributions = [
+                apply_response(inputs[in_], port_response(matrix_for, out, in_))
+                for in_ in self.inputs
+            ]
+            outputs[out] = _sum_signals(contributions, where=f"{self.label}.{out}")
+        return outputs
+
+    def _matrix_factory(self) -> Callable[[np.ndarray], SMatrix]:
+        ports, loss, imbalance = self.ports, self.excess_loss, self.imbalance
+        return solve_once(
+            lambda f: mmi_coupler(f, ports=ports, excess_loss_db=loss, imbalance_db=imbalance)
+        )
+
+
+class MachZehnderInterferometer(_Photonic):
+    """Two couplers with two paths between them: the switch, the filter, the modulator.
+
+    Not to be confused with :class:`~maiman.components.MachZehnderModulator`,
+    which is the link-level device — a transfer function driven by a voltage,
+    with an extinction ratio and a V_pi. This one is a *circuit*: two arms of
+    real length on a real waveguide, solved as a scattering matrix, and its
+    frequency response falls out rather than being declared.
+
+    **The two knobs are not the same knob.** ``length_difference`` is path
+    imbalance, and its phase grows with frequency — an unbalanced MZI is a filter
+    whose free spectral range is ``c / (n_g dL)``, which is the interleaver in
+    every WDM transmitter. ``phase_shift`` is a flat phase on the long arm, which
+    is what a heater does, and it slides the comb sideways without changing its
+    period. A balanced device has no FSR at all and is a pure switch: at zero it
+    sends everything out the cross port, at pi everything out the bar port, and
+    the sum is one at every setting in between.
+
+    That last part is the whole reason a coupler's cross path carries a factor
+    of j. Without it this device gains energy at one setting and loses it at
+    another; see :func:`maiman.photonics.directional_coupler`.
+    """
+
+    display_name = "Mach-Zehnder Interferometer"
+
+    arm_length = Param(100.0, unit="um", min=0.0, doc="Length of the shorter arm")
+    length_difference = Param(
+        0.0, unit="um", doc="Extra length on the long arm; what gives the filter its FSR"
+    )
+    phase_shift = Param(
+        0.0, unit="rad", doc="Flat phase on the long arm — the heater, or the modulator"
+    )
+    splitter_coupling = Param(0.5, unit="", min=0.0, max=1.0, doc="Input coupler power ratio")
+    combiner_coupling = Param(0.5, unit="", min=0.0, max=1.0, doc="Output coupler power ratio")
+    insertion_loss = Param(0.0, unit="dB", min=0.0, doc="Excess loss in each coupler")
+
+    outputs = {"out1": PortType.OPTICAL, "out2": PortType.OPTICAL}
+
+    def __init__(
+        self,
+        second_input: bool = False,
+        *,
+        use_mmi: bool = False,
+        label: str | None = None,
+        **params: float,
+    ) -> None:
+        super().__init__(label=label, **params)
+        self.second_input = second_input
+        self.use_mmi = use_mmi
+        self.inputs = {"in1": PortType.OPTICAL}
+        if second_input:
+            self.inputs["in2"] = PortType.OPTICAL
+
+    def structural_config(self) -> dict[str, Any]:
+        return {"second_input": self.second_input, "use_mmi": self.use_mmi}
+
+    def free_spectral_range(self) -> float:
+        """Spacing of the transmission peaks [Hz], or infinity if balanced.
+
+        ``c / (n_g dL)`` — set by the *group* index, because what separates two
+        resonances is a difference in delay and not a difference in phase. A
+        balanced arm pair has no periodicity at all, and saying infinity beats
+        dividing by zero.
+        """
+        difference = abs(self.si("length_difference"))
+        return C_LIGHT / (self.n_group * difference) if difference else float("inf")
+
+    def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
+        matrix_for = self._matrix_factory()
+        outputs: dict[str, Signal] = {}
+        for out in self.outputs:
+            contributions = [
+                apply_response(inputs[in_], port_response(matrix_for, out, in_))
+                for in_ in self.inputs
+            ]
+            outputs[out] = _sum_signals(contributions, where=f"{self.label}.{out}")
+        return outputs
+
+    def _matrix_factory(self) -> Callable[[np.ndarray], SMatrix]:
+        settings = self._waveguide_kwargs()
+        arm = self.si("arm_length")
+        difference = self.si("length_difference")
+        shift = self.si("phase_shift")
+        splitter, combiner = self.splitter_coupling, self.combiner_coupling
+        loss, use_mmi = self.insertion_loss, self.use_mmi
+        return solve_once(
+            lambda f: mach_zehnder(
+                f,
+                arm_length=arm,
+                length_difference=difference,
+                phase_shift=shift,
+                splitter_coupling=splitter,
+                combiner_coupling=combiner,
+                use_mmi=use_mmi,
+                insertion_loss_db=loss,
+                **settings,
+            )
         )
 
 

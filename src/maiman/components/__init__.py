@@ -30,11 +30,18 @@ from .passive import (
     PolarizationRotator,
     Splitter,
 )
-from .photonic import DirectionalCoupler, RingResonator, Waveguide
+from .photonic import (
+    MMI,
+    DirectionalCoupler,
+    MachZehnderInterferometer,
+    RingResonator,
+    Waveguide,
+)
 from .sources import CWLaser, GaussianPulse, SechPulse
 
 __all__ = [
     "EDFA",
+    "MMI",
     "APDPhotodiode",
     "Attenuator",
     "BERAnalyzer",
@@ -57,6 +64,7 @@ __all__ = [
     "IQDriver",
     "IQModulator",
     "IQSampler",
+    "MachZehnderInterferometer",
     "MachZehnderModulator",
     "NRZDriver",
     "OSNRMeter",

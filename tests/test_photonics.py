@@ -18,7 +18,9 @@ from maiman.circuit import Circuit, SMatrix
 from maiman.component import Component
 from maiman.components import (
     EDFA,
+    MMI,
     CWLaser,
+    MachZehnderInterferometer,
     OSNRMeter,
     PolarizationRotator,
     PowerMeter,
@@ -34,6 +36,9 @@ from maiman.photonics import (
     SILICON_STRIP_NGROUP,
     directional_coupler,
     free_spectral_range,
+    mach_zehnder,
+    mmi_coupler,
+    mmi_phase_relations,
     propagation_constant,
     resonance_linewidth,
     ring_resonator,
@@ -668,3 +673,232 @@ def test_the_shared_parameter_base_is_not_a_block() -> None:
     # And its parameters really do reach the blocks that mix it in.
     assert "n_group" in Waveguide.param_specs()
     assert "n_group" in RingResonator.param_specs()
+
+
+# ---------------------------------------------------------------------------
+# the MMI
+#
+# The amplitudes are the easy half: self-imaging splits power evenly and any box
+# that divides by N gets them right. What is actually being tested here is the
+# *phase* relation, and the instrument for that is unitarity — a wrong phase
+# matrix still splits evenly and stops conserving energy.
+
+
+@pytest.mark.parametrize("ports", [1, 2, 3, 4, 5, 8])
+def test_a_lossless_mmi_is_unitary(ports: int) -> None:
+    """At every port count, which is what pins Bachmann's phase relations.
+
+    An MMI with the right amplitudes and invented phases passes every power
+    check and fails this one. It is the only test here that could tell the
+    difference.
+    """
+    assert mmi_coupler(np.array([F0]), ports=ports).is_unitary()
+
+
+def test_the_two_by_two_mmi_is_the_three_db_coupler() -> None:
+    """Not approximately: the same matrix, including the factor of j.
+
+    Worth stating as a test rather than a remark, because it is the claim that
+    makes an MMI a drop-in for a directional coupler in any circuit built here —
+    and because it would break the moment somebody 'simplified' the phase
+    relation into an even split.
+    """
+    grid = np.array([F0])
+    assert np.allclose(
+        mmi_coupler(grid, ports=2).s, directional_coupler(grid, coupling=0.5).s, atol=1e-15
+    )
+
+
+def test_the_mmi_phase_matrix_is_reciprocal_and_starts_at_zero() -> None:
+    """Reciprocity holds in ``exp(i phi)``, which is the only part that is physical.
+
+    The raw matrix is *not* symmetric above N = 3: the formula's two branches
+    hand back phases for ij and ji differing by whole multiples of 2 pi. That
+    caught this test out before it caught anything else, which is exactly the
+    trap anyone comparing two implementations falls into.
+
+    Zero on the diagonal is the second half: a common phase across the whole
+    matrix is unobservable, so carrying one would do nothing but invite a
+    comparison to find a discrepancy that is not there.
+    """
+    for ports in (2, 4, 7):
+        phi = mmi_phase_relations(ports)
+        assert np.allclose(np.exp(1j * phi), np.exp(1j * phi).T), "the device is reciprocal"
+        assert phi[0, 0] == 0.0
+        # And the asymmetry really is only 2 pi, not a shrug at a small error.
+        turns = (phi - phi.T) / (2 * np.pi)
+        assert np.allclose(turns, np.round(turns), atol=1e-12)
+
+
+@pytest.mark.parametrize("ports", [2, 3, 4, 8])
+def test_the_mmi_splits_evenly(ports: int) -> None:
+    """One input, N outputs, each carrying 1/N — so 1 x 4 is 6.02 dB down."""
+    matrix = mmi_coupler(np.array([F0]), ports=ports)
+    powers = [matrix.power(f"out{k + 1}", "in1")[0] for k in range(ports)]
+    assert np.allclose(powers, 1.0 / ports, atol=1e-15)
+    assert w_to_dbm(sum(powers) * 1e-3) == pytest.approx(0.0, abs=1e-12)
+
+
+def test_mmi_excess_loss_and_imbalance_do_what_they_say() -> None:
+    """And an imbalanced MMI is lossy, which the matrix has to admit.
+
+    Tapering the outputs and calling the result unitary would let a circuit
+    built from it manufacture power — the kind of error that shows up three
+    components downstream as a gain nobody added.
+    """
+    grid = np.array([F0])
+    lossy = mmi_coupler(grid, ports=2, excess_loss_db=1.0)
+    total = sum(lossy.power(f"out{k + 1}", "in1")[0] for k in range(2))
+    assert 10.0 * np.log10(total) == pytest.approx(-1.0, abs=1e-12)
+
+    tilted = mmi_coupler(grid, ports=4, imbalance_db=1.2)
+    powers = np.array([tilted.power(f"out{k + 1}", "in1")[0] for k in range(4)])
+    spread = 10.0 * np.log10(powers.max() / powers.min())
+    assert spread == pytest.approx(1.2, abs=1e-12)
+    assert not tilted.is_unitary(), "an imbalanced MMI is lossy and must not claim otherwise"
+
+
+# ---------------------------------------------------------------------------
+# the Mach-Zehnder
+#
+# Assembled from couplers and arms, so the cos/sin transfer function belongs
+# here, on the other side of the comparison.
+
+
+def mzi_closed_form(phase: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Bar and cross power for a balanced MZI of two 3 dB couplers.
+
+    With the quadrature convention the two paths to the bar port arrive with a
+    relative phase of ``phase + pi``, and to the cross port with ``phase``:
+
+        ``bar = sin^2(phase/2)``,  ``cross = cos^2(phase/2)``
+    """
+    return np.sin(phase / 2.0) ** 2, np.cos(phase / 2.0) ** 2
+
+
+def test_the_balanced_interferometer_is_the_textbook_switch() -> None:
+    """Across a full turn of the arm phase, against the closed form above."""
+    phases = np.linspace(0.0, 2 * np.pi, 41)
+    bar, cross = [], []
+    for phase in phases:
+        matrix = mach_zehnder(
+            np.array([F0]),
+            arm_length=LENGTH,
+            phase_shift=float(phase),
+            reference_frequency=F0,
+        )
+        bar.append(matrix.power("out1", "in1")[0])
+        cross.append(matrix.power("out2", "in1")[0])
+
+    want_bar, want_cross = mzi_closed_form(phases)
+    assert np.allclose(bar, want_bar, atol=1e-12)
+    assert np.allclose(cross, want_cross, atol=1e-12)
+    # And it conserves power at every setting, which is what the factor of j in
+    # the couplers is for — an interferometer is where dropping it shows up.
+    assert np.allclose(np.array(bar) + np.array(cross), 1.0, atol=1e-12)
+
+
+def test_the_unbalanced_interferometer_is_a_filter_with_the_right_period() -> None:
+    """``FSR = c / (n_g dL)`` — the *group* index, measured between peaks.
+
+    The same distinction the ring makes: what separates two transmission maxima
+    is a difference in delay, not a difference in phase. Using ``n_eff`` here
+    would be wrong by nearly a factor of two on this waveguide.
+    """
+    difference = 200e-6
+    grid = F0 + np.linspace(-2e12, 2e12, 40001)
+    matrix = mach_zehnder(
+        grid, arm_length=LENGTH, length_difference=difference, reference_frequency=F0
+    )
+    power = matrix.power("out1", "in1")
+    peaks = grid[1:-1][
+        (power[1:-1] > power[:-2]) & (power[1:-1] >= power[2:]) & (power[1:-1] > 0.9)
+    ]
+
+    assert len(peaks) > 4, "not enough peaks across the window to measure a period"
+    measured = float(np.mean(np.diff(peaks)))
+    assert measured == pytest.approx(C_LIGHT / (SILICON_STRIP_NGROUP * difference), rel=1e-3)
+
+
+def test_a_balanced_interferometer_has_no_period_at_all() -> None:
+    """Which is why it is a switch and not a filter.
+
+    A flat response across two terahertz, so that "balanced" means what it says
+    rather than "a period too long to have noticed".
+    """
+    grid = F0 + np.linspace(-1e12, 1e12, 2001)
+    matrix = mach_zehnder(grid, arm_length=LENGTH, phase_shift=np.pi / 3, reference_frequency=F0)
+    power = matrix.power("out1", "in1")
+    assert np.ptp(power) < 1e-9, "a balanced interferometer's response moved with frequency"
+
+
+def test_building_it_from_mmis_gives_the_same_device_at_nominal() -> None:
+    """Because a 2 x 2 MMI *is* a 3 dB coupler. The reason to choose one is fabrication.
+
+    So the switch exists to say which device is on the mask, not to change the
+    answer at the nominal ratio — and if it ever does change the answer, one of
+    the two models has drifted.
+    """
+    grid = F0 + np.linspace(-500e9, 500e9, 501)
+    with_couplers = mach_zehnder(
+        grid, arm_length=LENGTH, length_difference=50e-6, reference_frequency=F0
+    )
+    with_mmis = mach_zehnder(
+        grid, arm_length=LENGTH, length_difference=50e-6, reference_frequency=F0, use_mmi=True
+    )
+    assert np.allclose(with_couplers.s, with_mmis.s, atol=1e-14)
+
+
+# ---------------------------------------------------------------------------
+# both, as blocks in a link
+
+
+def test_the_mmi_block_splits_a_carrier_into_equal_parts() -> None:
+    """Four ways, 6.02 dB down each, measured by four power meters."""
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=8, sequence_length=64, seed=1)
+    graph = Graph(ctx)
+    laser = graph.add(CWLaser(power=0.0, wavelength=1550.0, label="tx"))
+    splitter = graph.add(MMI(4, excess_loss=0.0, label="mmi"))
+    meters = [graph.add(PowerMeter(label=f"pm{k}")) for k in range(4)]
+    graph.connect(laser, splitter["in1"])
+    for k, meter in enumerate(meters):
+        graph.connect(splitter[f"out{k + 1}"], meter["in"])
+
+    results = graph.run()
+    for meter in meters:
+        assert results[meter].power_dbm == pytest.approx(-10.0 * np.log10(4.0), abs=1e-3)
+
+
+def test_the_interferometer_block_switches_a_carrier_between_its_outputs() -> None:
+    """And conserves it while doing so, which is the point of the whole convention."""
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=8, sequence_length=64, seed=1)
+    for phase, want_bar in ((0.0, 0.0), (np.pi / 2, 0.5), (np.pi, 1.0)):
+        graph = Graph(ctx)
+        laser = graph.add(CWLaser(power=0.0, wavelength=1550.0, label="tx"))
+        mzi = graph.add(
+            MachZehnderInterferometer(
+                phase_shift=phase, propagation_loss=0.0, arm_length=100.0, label="mzi"
+            )
+        )
+        bar = graph.add(PowerMeter(label="bar"))
+        cross = graph.add(PowerMeter(label="cross"))
+        graph.connect(laser, mzi["in1"])
+        graph.connect(mzi["out1"], bar["in"])
+        graph.connect(mzi["out2"], cross["in"])
+
+        results = graph.run()
+        p_bar = 10.0 ** (results[bar].power_dbm / 10.0)
+        p_cross = 10.0 ** (results[cross].power_dbm / 10.0)
+        assert p_bar == pytest.approx(want_bar, abs=1e-6)
+        assert p_bar + p_cross == pytest.approx(1.0, abs=1e-6)
+
+
+def test_the_interferometer_block_reports_its_own_free_spectral_range() -> None:
+    """Infinite when balanced, rather than a division by zero."""
+    balanced = MachZehnderInterferometer(length_difference=0.0)
+    assert balanced.free_spectral_range() == float("inf")
+
+    unbalanced = MachZehnderInterferometer(length_difference=200.0)
+    assert unbalanced.free_spectral_range() == pytest.approx(
+        C_LIGHT / (SILICON_STRIP_NGROUP * 200e-6), rel=1e-12
+    )

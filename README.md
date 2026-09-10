@@ -1139,7 +1139,7 @@ time window, and results are reproducible.
 | **1.5 — Nonlinear & amplified** ✅ | Adaptive-step SSFM, Kerr, EDFA with ASE, OSNR, PMD, APD, dispersion slope and its third-order term, cross-polarization Kerr coupling, inter-channel stimulated Raman scattering | ~2 months |
 | **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier phase recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km with blind estimation of the accumulated value, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
 | **3 — GUI & WDM** | ✅ Wavelength-selective filters, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — the OSA's trace drawn in the dock, and 400G/800G reference designs validated against the OSNR relations, and a back-end indirection the propagation kernels dispatch through — CuPy runs it where a device exists; it is not exercised in CI | ~6 months |
-| **4 — PIC** | Bidirectional S-matrix circuit solver, waveguide, directional coupler, all-pass and add-drop ring resonators, cross-validated against SAX; MMI, MZI and PDK import still to come | — |
+| **4 — PIC** | Bidirectional S-matrix circuit solver, waveguide, directional coupler, all-pass and add-drop ring resonators, cross-validated against SAX; N×N MMI couplers on the self-imaging phase relations, and a Mach-Zehnder interferometer assembled from them — switch, interleaver, or both; **PDK import still to come** | — |
 
 ¹ One developer, part-time. Estimates, not commitments.
 
@@ -1206,6 +1206,12 @@ Every physics block ships with a test against a closed-form result, run in CI
 | Coupler unitarity | `SᴴS = I` at every split ratio — which is what the cross path's factor of j is for | ✅ |
 | Resonance linewidth | Lorentzian `FSR(1−r)/π√r` within 3 % of a measured width from critical coupling to κ = 0.5 | ✅ |
 | Waveguide group delay | `n_g L / c` read off the transfer function's phase slope, to 1e-9 | ✅ |
+| **MMI phase relations** | `SᴴS = I` at N = 1, 2, 3, 4, 5, 8 — even amplitudes with invented phases pass every other check and fail this one | ✅ |
+| 2×2 MMI ≡ 3 dB coupler | The same matrix to 1e-15, factor of j included; self-imaging at N = 2 *is* the quadrature relation | ✅ |
+| MMI split and imbalance | `1/N` per path; a tilted MMI is lossy and its matrix says so rather than claiming unitarity | ✅ |
+| **MZI as a switch** | `sin²(φ/2)` / `cos²(φ/2)` against the assembled circuit, and the sum is 1 across a full turn to 1e-12 | ✅ |
+| MZI as an interleaver | `FSR = c / (n_g ΔL)` measured between peaks; `n_eff` would be out by 1.7× | ✅ |
+| Balanced MZI has no period | Response flat to 1e-9 across 2 THz — "balanced" means it, not "a period too long to notice" | ✅ |
 
 Component models are derived from published literature and standards (Agrawal, *Nonlinear Fiber
 Optics*; ITU-T G.652 / G.694.1; relevant IEEE 802.3 clauses), cited in each component's
