@@ -193,9 +193,7 @@ def estimate_timing(baseband: np.ndarray, sample_rate: float, *, symbol_rate: fl
     return float((-np.angle(tone) / (2.0 * np.pi)) % 1.0)
 
 
-def resample_to_instant(
-    baseband: np.ndarray, sample_rate: float, *, delay: float
-) -> np.ndarray:
+def resample_to_instant(baseband: np.ndarray, sample_rate: float, *, delay: float) -> np.ndarray:
     """Delay a waveform by ``delay`` seconds, fractional samples included.
 
     A phase ramp in the frequency domain, which is an *exact* fractional delay

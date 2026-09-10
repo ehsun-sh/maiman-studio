@@ -47,10 +47,7 @@ class TimingEstimate:
     """
 
     def __repr__(self) -> str:
-        return (
-            f"TimingEstimate({self.fraction:.4f} symbol, "
-            f"applied {self.applied * 1e12:+.2f} ps)"
-        )
+        return f"TimingEstimate({self.fraction:.4f} symbol, applied {self.applied * 1e12:+.2f} ps)"
 
 
 class TimingRecovery(Component):
