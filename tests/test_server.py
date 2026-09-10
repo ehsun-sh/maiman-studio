@@ -48,6 +48,9 @@ from maiman.components import (
     PRBSGenerator,
     QAMMapper,
     Slicer,
+    SoftDemapper,
+    SoftFECDecoder,
+    SoftFECEncoder,
     TimingRecovery,
     Waveguide,
 )
@@ -210,10 +213,47 @@ def coded_ook_link() -> Graph:
     return graph
 
 
+def soft_coded_coherent_link() -> Graph:
+    """A coherent link carrying soft-decision FEC, end to end.
+
+    The window is two 16384-bit staircase blocks, which at 16-QAM is 8192
+    symbols. -25 dBm puts the line at a few times 1e-3 — past what the
+    hard-decision code in :mod:`maiman.fec` can touch, and inside what this one
+    still clears.
+    """
+    ctx = SimulationContext(bit_rate=32e9, samples_per_symbol=4, sequence_length=8192, seed=2026)
+    graph = Graph(ctx)
+    encoder = graph.add(SoftFECEncoder(order=23.0, bits_per_symbol=4.0, label="fec"))
+    mapper = graph.add(QAMMapper(bits_per_symbol=4.0, label="map"))
+    driver = graph.add(IQDriver(v_pi=4.0, predistort=True, label="drv"))
+    laser = graph.add(CWLaser(power=-25.0, wavelength=1550.0, label="tx"))
+    modulator = graph.add(IQModulator(v_pi=4.0, label="mod"))
+    lo = graph.add(CWLaser(power=10.0, wavelength=1550.0, label="lo"))
+    receiver = graph.add(CoherentReceiver(responsivity=0.8, label="rx"))
+    sampler = graph.add(IQSampler(label="smp"))
+    demapper = graph.add(SoftDemapper(label="sd"))
+    decoder = graph.add(SoftFECDecoder(iterations=6.0, label="dec"))
+
+    graph.connect(encoder["out"], mapper["in"])
+    graph.connect(mapper["out"], driver["in"])
+    graph.connect(laser, modulator["optical_in"])
+    graph.connect(driver["i"], modulator["i"])
+    graph.connect(driver["q"], modulator["q"])
+    graph.connect(modulator, receiver["in"])
+    graph.connect(lo, receiver["lo"])
+    graph.connect(receiver["i"], sampler["i"])
+    graph.connect(receiver["q"], sampler["q"])
+    graph.connect(mapper["out"], sampler["reference"])
+    graph.connect(sampler["out"], demapper["in"])
+    graph.connect(demapper["out"], decoder["in"])
+    graph.connect(encoder["payload"], decoder["payload"])
+    return graph
+
+
 def test_no_metric_port_in_the_library_encodes_as_opaque() -> None:
     """Every measurement the library can produce must be drawable.
 
-    Four graphs between them touch every metric port — the optical/OOK side
+    Five graphs between them touch every metric port — the optical/OOK side
     here, the coherent side through the shipped export example, and an impaired
     link for the front-end stages that only have something to say when there is
     something wrong — and the assertion is that none of them come back tagged
@@ -233,6 +273,7 @@ def test_no_metric_port_in_the_library_encodes_as_opaque() -> None:
         build_coherent(sequence_length=256),
         impaired_coherent_link(),
         coded_ook_link(),
+        soft_coded_coherent_link(),
     ):
         by_label = {c.label: c for c in graph.components}
         encoded = encode_results(graph.run())

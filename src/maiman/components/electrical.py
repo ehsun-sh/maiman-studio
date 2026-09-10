@@ -17,7 +17,8 @@ from ..fec import (
     overhead,
 )
 from ..modulation import QAM_FORMATS
-from ..signals import BinarySignal, ElectricalSignal, Signal, SymbolSignal
+from ..signals import BinarySignal, ElectricalSignal, Signal, SoftSignal, SymbolSignal
+from ..softfec import StaircaseCode, staircase_code, staircase_decode, staircase_encode
 
 #: Maximal-length LFSR feedback taps, as (order, tap) exponent pairs.
 #: These are the standard polynomials used across optical test equipment;
@@ -299,6 +300,194 @@ class FECDecoder(Component):
         )
         return {
             "out": BinarySignal(bits=payload_bits, symbol_rate=reference.symbol_rate),
+            "diagnostics": report,
+        }
+
+
+#: The staircase this project ships, built once. A block is 128x128 bits, so a
+#: run window has to hold a whole number of 16384-bit blocks.
+SOFT_CODE: StaircaseCode = staircase_code()
+SOFT_BLOCK_BITS = SOFT_CODE.half * SOFT_CODE.half
+
+
+@dataclass(frozen=True)
+class SoftFECReport:
+    """What the soft decoder found, and what it did about it."""
+
+    blocks: int
+    corrections: int
+    """Bit decisions the component decoders moved, summed over every pass."""
+
+    pre_fec_errors: int
+    post_fec_errors: int
+    pre_fec_ber: float
+    post_fec_ber: float
+
+    def __repr__(self) -> str:
+        return (
+            f"SoftFECReport(pre {self.pre_fec_ber:.2e} -> post {self.post_fec_ber:.2e}, "
+            f"{self.blocks} blocks)"
+        )
+
+
+class SoftFECEncoder(Component):
+    """PRBS payload, staircase-coded, filling the line window.
+
+    A source, for the same reason :class:`FECEncoder` is one: a coder makes more
+    bits than it is given and the run window is a fixed number of symbols *on the
+    line*, so coding shrinks the payload rather than speeding the line. See that
+    class for the argument in full.
+
+    The code is the braided BCH staircase in :mod:`maiman.softfec` at 16.4 %
+    overhead — **not** OIF's oFEC, which is normative about an interleaver and a
+    framing this does not reproduce. What it is is the family oFEC belongs to,
+    built from the open literature, and the thing that makes it worth having in
+    a link is that it decodes on log-likelihood ratios rather than on bits.
+
+    The window must hold a whole number of 16384-bit blocks, and it wants
+    **several**: the last block of a stream has no successor stripe, so half its
+    protection is missing until the next one arrives. Two blocks is the minimum
+    that runs; more is a better measurement.
+    """
+
+    display_name = "Soft FEC Encoder"
+    category = "Electrical Sources"
+
+    order = Param(
+        23.0,
+        unit="",
+        choices=tuple(float(n) for n in sorted(PRBS_TAPS)),
+        doc="LFSR order for the payload pattern",
+    )
+    bits_per_symbol = Param(
+        1.0,
+        unit="",
+        choices=QAM_FORMATS,
+        doc="Bits each downstream symbol carries; sets the size of the window to fill",
+    )
+
+    outputs = {"out": PortType.BINARY, "payload": PortType.BINARY}
+
+    def blocks_in_window(self, ctx: SimulationContext) -> int:
+        """Staircase blocks that fit the line window, or a refusal naming one that does."""
+        per_symbol = int(self.bits_per_symbol)
+        coded_bits = ctx.sequence_length * per_symbol
+        blocks, remainder = divmod(coded_bits, SOFT_BLOCK_BITS)
+        if blocks < 1 or remainder:
+            symbols_per_block = SOFT_BLOCK_BITS // per_symbol
+            nearest = max(round(ctx.sequence_length / symbols_per_block), 1) * symbols_per_block
+            raise ValueError(
+                f"{self.label}: a window of {ctx.sequence_length} symbols at {per_symbol} "
+                f"bits/symbol is {coded_bits} bits, which is not a whole number of "
+                f"{SOFT_BLOCK_BITS}-bit staircase blocks. Use sequence_length={nearest}."
+            )
+        return blocks
+
+    def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
+        blocks = self.blocks_in_window(ctx)
+        per_symbol = int(self.bits_per_symbol)
+        half, columns = SOFT_CODE.half, SOFT_CODE.information_columns
+
+        order = int(self.order)
+        n, tap = PRBS_TAPS[order]
+        rng = ctx.rng("SoftFECEncoder", self.label, order)
+        state = int(rng.integers(1, 1 << n))
+
+        count = blocks * half * columns
+        payload = np.empty(count, dtype=np.uint8)
+        for i in range(count):
+            feedback = ((state >> (n - 1)) ^ (state >> (tap - 1))) & 1
+            payload[i] = state & 1
+            state = ((state << 1) | feedback) & ((1 << n) - 1)
+
+        coded = staircase_encode(SOFT_CODE, payload.reshape(blocks, half, columns))
+
+        rate = ctx.bit_rate * per_symbol
+        return {
+            "out": BinarySignal(bits=coded.reshape(-1), symbol_rate=rate),
+            "payload": BinarySignal(bits=payload, symbol_rate=rate * SOFT_CODE.rate),
+        }
+
+
+class SoftFECDecoder(Component):
+    """Iterative staircase decoding, on log-likelihood ratios.
+
+    Takes the demapper's soft output rather than a slicer's bits, which is the
+    entire point: the two to three decibels a soft code earns come from knowing
+    *how* near each symbol was to a decision boundary, and a hard input has
+    thrown that away before this block sees it. The port type is what makes
+    wiring a hard signal in here impossible rather than merely wrong.
+
+    Reports both error rates for the reason :class:`FECDecoder` does — the design
+    of a coded link is the distance between them — and the number of decisions
+    the component decoders moved, which is what says the iteration did anything
+    at all.
+
+    ``iterations`` is a real cost. Each pass Chase-decodes every row of every
+    stripe, so doubling it doubles the run; the shipped default stops early when
+    a pass moves nothing, which on a working link is usually after three or four.
+    """
+
+    display_name = "Soft FEC Decoder"
+    category = "Measurements"
+
+    iterations = Param(
+        8.0, unit="", min=1.0, max=32.0, doc="Maximum decoding passes; it stops early"
+    )
+    test_bits = Param(
+        4.0,
+        unit="",
+        min=0.0,
+        max=6.0,
+        doc="Least-reliable positions Chase flips; cost is 2**this per codeword",
+    )
+
+    inputs = {"in": PortType.SOFT, "payload": PortType.BINARY}
+    outputs = {"out": PortType.BINARY, "diagnostics": PortType.METRIC}
+
+    def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
+        received: SoftSignal = inputs["in"]
+        reference: BinarySignal = inputs["payload"]
+        half, columns = SOFT_CODE.half, SOFT_CODE.information_columns
+
+        blocks, remainder = divmod(received.num_bits, SOFT_BLOCK_BITS)
+        if blocks < 1 or remainder:
+            raise ValueError(
+                f"{self.label}: got {received.num_bits} log-likelihood ratios, which is "
+                f"not a whole number of {SOFT_BLOCK_BITS}-bit staircase blocks"
+            )
+        if reference.num_bits != blocks * half * columns:
+            raise ValueError(
+                f"{self.label}: {blocks} blocks carry {blocks * half * columns} payload "
+                f"bits but the reference has {reference.num_bits}"
+            )
+
+        llr = np.asarray(received.llr, dtype=np.float64).reshape(blocks, half, half)
+        payload = np.asarray(reference.bits, dtype=np.uint8).reshape(blocks, half, columns)
+
+        # The pre-FEC rate is measured against the transmitted *codeword*, not the
+        # payload, so the parity bits the optics also carried are counted.
+        transmitted = staircase_encode(SOFT_CODE, payload)
+        pre_errors = int(np.count_nonzero((llr < 0.0).astype(np.uint8) != transmitted))
+
+        decoded, corrections = staircase_decode(
+            SOFT_CODE,
+            llr,
+            iterations=int(self.iterations),
+            test_bits=int(self.test_bits),
+        )
+        post_errors = int(np.count_nonzero(decoded != payload))
+
+        report = SoftFECReport(
+            blocks=blocks,
+            corrections=corrections,
+            pre_fec_errors=pre_errors,
+            post_fec_errors=post_errors,
+            pre_fec_ber=pre_errors / (blocks * SOFT_BLOCK_BITS),
+            post_fec_ber=post_errors / payload.size,
+        )
+        return {
+            "out": BinarySignal(bits=decoded.reshape(-1), symbol_rate=reference.symbol_rate),
             "diagnostics": report,
         }
 

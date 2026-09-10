@@ -360,6 +360,62 @@ variance and the threshold from Lloyd's two-means. It converges on the midpoint 
 than the optimum, which sits nearer the zero rail because a one carries more noise — a real penalty,
 stated rather than smoothed over.
 
+### What soft-decision FEC is for
+
+The hard-decision code above decides each bit, then corrects. This one never decides until the end:
+it works on **log-likelihood ratios** all the way through, and how near each symbol sat to a
+decision boundary is exactly the information the other one throws away. That is worth two to three
+decibels, and here is what it looks like on the same engine.
+
+32 GBd 16-QAM coherent, staircase code at 16.4 % overhead, four blocks, eight iterations — a real
+IQ modulator, a real hybrid with balanced detection and its own shot noise, a max-log demapper, and
+an iterative decoder working on what that produced:
+
+```
+received     pre-FEC BER   post-FEC BER  |  RS(255,239) at the same input
+-26.0 dBm      1.49e-02      6.04e-04    |    1.49e-02  — corrects nothing
+-25.0 dBm      7.36e-03      0           |    7.21e-03  — corrects nothing
+-24.0 dBm      3.20e-03      1.78e-05    |    1.02e-03
+-23.0 dBm      1.34e-03      0           |    8.75e-06
+-22.0 dBm      4.73e-04      0           |    3.31e-09
+```
+
+**At −25 dBm the line is running at 7.4e-3 and the payload comes out exact**, while the classic
+G.709 code at that same input returns essentially what it was given — every one of its codewords is
+far past `t = 8`. Reading across, the hard code needs about −22 dBm to reach 1e-9 and this one is
+already clean at −25: roughly three decibels of sensitivity, which is the number the whole
+soft-decision argument is about.
+
+**The code is a braided BCH staircase** — Smith, Farhood, Hunt, Kschischang and Lodge,
+*J. Lightwave Technol.* 30(1), 2012 — with Chase-II component decoding (Chase, 1972) and Pyndiah's
+soft-output variant (Pyndiah, 1998). It is the family OIF's **oFEC belongs to and it is not oFEC**:
+the 400ZR Implementation Agreement is normative about an interleaver and a framing this does not
+reproduce, and a block that carried the name while being a reconstruction would be the one thing
+this project refuses. The parameters are stated as a choice, not as a standard.
+
+**Three things had to exist before any of this could be wired up**, and each is its own block:
+
+`SoftDemapper` turns symbols into LLRs, max-log, with the noise variance estimated blind because a
+receiver has no other option. `PortType.SOFT` is a sixth port type, so a soft output physically
+cannot be wired into a block expecting bits — that mistake does not crash, it runs and quietly
+gives back the decibels this whole path exists to recover, so the type system is what makes it
+unrepresentable. And `SoftFECEncoder` is a *source* for the same reason the hard one is: a coder
+makes more bits than it is given, the window is a fixed number of symbols on the line, so coding
+shrinks the payload rather than speeding the line.
+
+**The last block of a stream is provisional.** Every bit is checked twice — once by its own
+stripe's rows, once transposed as a column by the next stripe — so the final block has half its
+protection missing until the next one arrives. With two blocks in a window that is half the payload
+and it sets a floor near 1e-4 that has nothing to do with the channel. It is why real decoders run
+a sliding window and never emit the newest block, and there is a test on it rather than a footnote.
+
+Getting the iteration right took three attempts, and all three failures are now tests. A
+no-competitor reliability *below* the input's own made the extrinsic negative and destroyed bits the
+decoder had never touched — 268 errors out of zero corrections, which is the signature that located
+it. A loop that let each stripe overwrite the previous one's result discarded half of what the
+braiding exists to produce. And a component decoder fed its own previous extrinsic agreed with
+itself, so its output collapsed to zero and its corrections quietly unwound two passes later.
+
 ### What EDFA saturation is for
 
 Until now the EDFA's docstring said, in its own words, that **saturation was a clamp and not a
@@ -1633,6 +1689,13 @@ Every physics block ships with a test against a closed-form result, run in CI
 | Fractional delay is exact | Forward then back returns the input to 1e-12 — a phase ramp, not an interpolation | ✅ |
 | Timing recovery earns its place | 500 µm of waveguide costs 675 symbol errors in 1920; with the stage, none, and it moves by the 7.00 ps the guide actually holds | ✅ |
 | A whole symbol is invisible | Delay by one symbol period and the estimate does not move — the limit is `\|A\|²`, not the code | ✅ |
+| **Soft FEC clears what hard FEC cannot** | −25 dBm, 7.4e-3 on the line: the staircase delivers an exact payload where RS(255,239) returns its input | ✅ |
+| A staircase stripe row is a codeword | Structural, block by block — the braiding asserted rather than inferred from a curve | ✅ |
+| Chase beats its component code | Four errors recovered on a `t=2` code, because they were the least reliable bits | ✅ |
+| No competitor means *more* sure, not less | The reliability floor, and the bug it fixes: a negative extrinsic destroys bits the decoder never touched | ✅ |
+| A clean block survives the decoder | With varying reliabilities, which is where the broken version failed and a uniform input did not | ✅ |
+| The final block is provisional | One error in it is not corrected where the same error anywhere else is — the arrangement, not the code | ✅ |
+| Soft cannot be wired into hard | The sixth port type refuses it, because that mistake runs rather than crashes | ✅ |
 | **RS(255,239) corrects exactly eight** | Any eight symbol errors anywhere, exactly recovered; nine reported as a failure rather than silently mangled | ✅ |
 | The generator's roots are its definition | All sixteen consecutive roots annihilate a derived `g(x)` — the claim, not a transcribed coefficient table | ✅ |
 | A burst inside a byte is one error | 64 bad bits in eight bytes correct; 9 bad bits in nine do not — the whole argument for a symbol code | ✅ |

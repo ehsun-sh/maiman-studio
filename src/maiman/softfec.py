@@ -545,7 +545,7 @@ def staircase_decode(
     iterations: int = 8,
     test_bits: int = 4,
     confidence: float = 0.5,
-    clip: float = 24.0,
+    clip: float = 3.0,
 ) -> tuple[np.ndarray, int]:
     """Iteratively Chase-decode a stream of blocks. Returns ``(information, flips)``.
 
@@ -566,12 +566,22 @@ def staircase_decode(
     produce and is why it corrected almost nothing. That is the difference
     between iterating and merely repeating.
 
-    ``confidence`` scales the extrinsic and ``clip`` bounds the working value;
-    the metric differences Chase returns grow with the magnitudes it is given, so
-    an unbounded loop compounds them.
+    ``confidence`` scales the extrinsic and ``clip`` bounds the working value as
+    a multiple of the input's own mean reliability; the metric differences Chase
+    returns grow with the magnitudes it is given, so an unbounded loop compounds
+    them.
     """
     channel = np.array(llr, dtype=np.float64)
     blocks, half = channel.shape[0], code.half
+    # ``clip`` is a multiple of the input's own mean reliability, not an absolute
+    # number of log-likelihood units. It has to be: the LLRs a real demapper
+    # produces scale with the signal-to-noise ratio, and on the links this
+    # project ships the mean magnitude runs from about 10 at the sensitivity
+    # limit to 60 well above it. A fixed bound would be loose where it should
+    # bite and would flatten every reliability difference in the block where it
+    # should not.
+    scale = float(np.mean(np.abs(channel)))
+    bound = clip * scale if scale > 0.0 else clip
     if channel.shape[1:] != (half, half):
         raise ValueError(f"expected LLRs of shape (blocks, {half}, {half}), got {channel.shape}")
 
@@ -580,10 +590,10 @@ def staircase_decode(
     # B_0 is the all-zero block the staircase starts from. It is never
     # transmitted and it is known exactly, so it enters at full confidence --
     # positive, because positive means zero.
-    boundary = np.full((half, half), clip, dtype=np.float64)
+    boundary = np.full((half, half), bound, dtype=np.float64)
 
     def bounded(value: np.ndarray) -> np.ndarray:
-        return np.clip(value, -clip, clip)
+        return np.clip(value, -bound, bound)
 
     def working() -> np.ndarray:
         return bounded(channel + confidence * (row_extrinsic + column_extrinsic))

@@ -36,6 +36,8 @@ from .electrical import (
     IQDriver,
     NRZDriver,
     PRBSGenerator,
+    SoftFECDecoder,
+    SoftFECEncoder,
 )
 from .fiber import Fiber
 from .filters import ElectricalFilter, OpticalFilter, OpticalSpectrumAnalyzer
@@ -102,6 +104,8 @@ __all__ = [
     "SechPulse",
     "Slicer",
     "SoftDemapper",
+    "SoftFECDecoder",
+    "SoftFECEncoder",
     "Splitter",
     "TimingRecovery",
     "Waveguide",

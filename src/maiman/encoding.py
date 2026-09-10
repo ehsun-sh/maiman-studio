@@ -33,7 +33,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from .components.dsp import DispersionDiagnostics, FrequencyEstimate, TimingEstimate
-from .components.electrical import FECReport
+from .components.electrical import FECReport, SoftFECReport
 from .kernels import PropagationDiagnostics
 from .signals import (
     BinarySignal,
@@ -293,6 +293,23 @@ def _timing(estimate: TimingEstimate) -> dict[str, Any]:
     }
 
 
+def _soft_fec(report: SoftFECReport) -> dict[str, Any]:
+    # ``corrections`` rather than a count of repaired codewords: an iterative
+    # decoder has no such thing. It moves decisions, some of them more than once
+    # and some of them back again, and the number that means something is how
+    # much movement there was — a pass that moves nothing is a decoder that has
+    # converged or given up, and the rates beside it say which.
+    return {
+        "kind": "soft_fec",
+        "pre_fec_ber": number(report.pre_fec_ber),
+        "post_fec_ber": number(report.post_fec_ber),
+        "pre_fec_errors": report.pre_fec_errors,
+        "post_fec_errors": report.post_fec_errors,
+        "corrections": report.corrections,
+        "blocks": report.blocks,
+    }
+
+
 def _fec(report: FECReport) -> dict[str, Any]:
     # Both rates, never one. A pre-FEC number says what the optics did and a
     # post-FEC number says what the customer sees, and a client that showed
@@ -345,6 +362,7 @@ def _dispersion(diagnostics: DispersionDiagnostics) -> dict[str, Any]:
 _ENCODERS: dict[type, Any] = {
     DispersionDiagnostics: _dispersion,
     FECReport: _fec,
+    SoftFECReport: _soft_fec,
     FrequencyEstimate: _frequency,
     TimingEstimate: _timing,
     ElectricalSignal: _electrical,

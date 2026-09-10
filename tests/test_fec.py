@@ -19,15 +19,22 @@ import pytest
 
 from maiman import Graph, SimulationContext, fec
 from maiman.components import (
+    CoherentReceiver,
     CWLaser,
     ElectricalFilter,
     FECDecoder,
     FECEncoder,
+    IQDriver,
+    IQModulator,
+    IQSampler,
     MachZehnderModulator,
     NRZDriver,
     PINPhotodiode,
+    QAMMapper,
     Slicer,
     SoftDemapper,
+    SoftFECDecoder,
+    SoftFECEncoder,
 )
 from maiman.modulation import (
     estimate_noise_variance,
@@ -472,3 +479,117 @@ def test_soft_and_hard_disagree_about_nothing_but_confidence() -> None:
     assert np.array_equal(signal.hard(), indices_to_bits(nearest_indices(noisy, constellation), 4))
     # And it really is soft: the confidences are not all the same number.
     assert float(np.std(np.abs(signal.llr))) > 0.0
+
+
+# --------------------------------------------------------------------------
+# The soft code, in a link
+# --------------------------------------------------------------------------
+
+
+def soft_coded_link(power_dbm: float, blocks: int = 2) -> tuple[Graph, SoftFECDecoder]:
+    """32 GBd 16-QAM coherent, soft-decision FEC from the PRBS to the payload.
+
+    Nothing between the two ends is a formula: a real IQ modulator, a real 90
+    degree hybrid with balanced detection and its own shot noise, a sampler, a
+    max-log demapper, and an iterative staircase decoder working on what it
+    produced.
+    """
+    ctx = SimulationContext(
+        bit_rate=32e9,
+        samples_per_symbol=4,
+        sequence_length=blocks * 16384 // 4,
+        seed=2026,
+        precision="double",
+    )
+    graph = Graph(ctx)
+    encoder = graph.add(SoftFECEncoder(order=23.0, bits_per_symbol=4.0, label="fec"))
+    mapper = graph.add(QAMMapper(bits_per_symbol=4.0, label="map"))
+    driver = graph.add(IQDriver(v_pi=4.0, predistort=True, label="drv"))
+    laser = graph.add(CWLaser(power=power_dbm, wavelength=1550.0, label="tx"))
+    modulator = graph.add(IQModulator(v_pi=4.0, label="mod"))
+    lo = graph.add(CWLaser(power=10.0, wavelength=1550.0, label="lo"))
+    receiver = graph.add(CoherentReceiver(responsivity=0.8, label="rx"))
+    sampler = graph.add(IQSampler(label="smp"))
+    demapper = graph.add(SoftDemapper(label="sd"))
+    decoder = graph.add(SoftFECDecoder(iterations=8.0, label="dec"))
+
+    graph.connect(encoder["out"], mapper["in"])
+    graph.connect(mapper["out"], driver["in"])
+    graph.connect(laser, modulator["optical_in"])
+    graph.connect(driver["i"], modulator["i"])
+    graph.connect(driver["q"], modulator["q"])
+    graph.connect(modulator, receiver["in"])
+    graph.connect(lo, receiver["lo"])
+    graph.connect(receiver["i"], sampler["i"])
+    graph.connect(receiver["q"], sampler["q"])
+    graph.connect(mapper["out"], sampler["reference"])
+    graph.connect(sampler["out"], demapper["in"])
+    graph.connect(demapper["out"], decoder["in"])
+    graph.connect(encoder["payload"], decoder["payload"])
+    return graph, decoder
+
+
+def test_the_soft_code_clears_a_line_the_hard_code_cannot_touch() -> None:
+    """The claim the whole soft path was built for, counted on a real link.
+
+    At -25 dBm the line runs a few times 1e-3. RS(255, 239) at that input
+    returns essentially what it was given -- every codeword is far past t=8. The
+    staircase clears it, and the payload comes out exact.
+
+    Both halves are asserted, because only the pair means anything: a soft code
+    that worked where the hard one also worked would have earned nothing.
+    """
+    # Four blocks, not two. The last block of a stream has no successor stripe
+    # and so only half its protection; with two blocks that is half the payload
+    # and it sets a floor near 1e-4 that has nothing to do with the channel.
+    graph, decoder = soft_coded_link(-25.0, blocks=4)
+    report = graph.run(keep=[decoder]).port(decoder, "diagnostics")
+
+    assert report.pre_fec_ber > 1e-3, "the line has to be genuinely bad for this to mean anything"
+    assert report.post_fec_ber == 0.0
+    assert report.corrections > 0
+
+    assert fec.output_bit_error_rate(report.pre_fec_ber) > report.pre_fec_ber / 5.0, (
+        "the hard-decision code must be past its cliff here, or this proves nothing"
+    )
+
+
+def test_the_soft_decoder_refuses_a_window_that_is_not_whole_blocks() -> None:
+    """A staircase block split across two runs cannot be decoded in either."""
+    ctx = SimulationContext(bit_rate=32e9, samples_per_symbol=4, sequence_length=4000, seed=1)
+    graph = Graph(ctx)
+    graph.add(SoftFECEncoder(bits_per_symbol=4.0, label="fec"))
+    with pytest.raises(ValueError, match="whole number of"):
+        graph.run()
+
+
+def test_the_coded_payload_is_smaller_than_the_line_by_the_overhead() -> None:
+    """16.4 % of the line is parity, and the payload rate says so.
+
+    The same invariant the hard-decision encoder carries, and for the same
+    reason: quoting the payload at the line rate would make a coded link look
+    like free capacity.
+    """
+    from maiman.components.electrical import SOFT_CODE
+
+    ctx = SimulationContext(bit_rate=32e9, samples_per_symbol=4, sequence_length=8192, seed=1)
+    graph = Graph(ctx)
+    encoder = graph.add(SoftFECEncoder(bits_per_symbol=4.0, label="fec"))
+    results = graph.run(keep=[encoder])
+
+    line = results.port(encoder, "out")
+    payload = results.port(encoder, "payload")
+    assert payload.symbol_rate == pytest.approx(line.symbol_rate * SOFT_CODE.rate)
+    assert payload.num_bits == pytest.approx(line.num_bits * SOFT_CODE.rate, rel=1e-9)
+
+
+def test_a_hard_bit_stream_cannot_be_wired_into_the_soft_decoder() -> None:
+    """Typed, so the mistake that would silently give back the gain is impossible."""
+    from maiman.graph import GraphError
+
+    ctx = SimulationContext(bit_rate=32e9, samples_per_symbol=4, sequence_length=8192, seed=1)
+    graph = Graph(ctx)
+    encoder = graph.add(SoftFECEncoder(bits_per_symbol=4.0, label="fec"))
+    decoder = graph.add(SoftFECDecoder(label="dec"))
+    with pytest.raises((GraphError, TypeError, ValueError)):
+        graph.connect(encoder["out"], decoder["in"])

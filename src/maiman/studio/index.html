@@ -2893,6 +2893,89 @@ verdict, and DESIGN.md
     }
    }
   },
+  "SoftFECDecoder": {
+   "name": "Soft FEC Decoder",
+   "type": "SoftFECDecoder",
+   "class": "maiman.components.electrical.SoftFECDecoder",
+   "category": "Measurements",
+   "version": "0.1.0",
+   "parameters": {
+    "iterations": {
+     "type": "float",
+     "default": 8.0,
+     "unit": "",
+     "min": 1.0,
+     "max": 32.0,
+     "doc": "Maximum decoding passes; it stops early"
+    },
+    "test_bits": {
+     "type": "float",
+     "default": 4.0,
+     "unit": "",
+     "min": 0.0,
+     "max": 6.0,
+     "doc": "Least-reliable positions Chase flips; cost is 2**this per codeword"
+    }
+   },
+   "structural": {},
+   "ports": {
+    "inputs": {
+     "in": "soft",
+     "payload": "binary"
+    },
+    "outputs": {
+     "out": "binary",
+     "diagnostics": "metric"
+    }
+   }
+  },
+  "SoftFECEncoder": {
+   "name": "Soft FEC Encoder",
+   "type": "SoftFECEncoder",
+   "class": "maiman.components.electrical.SoftFECEncoder",
+   "category": "Electrical Sources",
+   "version": "0.1.0",
+   "parameters": {
+    "order": {
+     "type": "float",
+     "default": 23.0,
+     "unit": "",
+     "choices": [
+      7.0,
+      9.0,
+      11.0,
+      15.0,
+      23.0,
+      31.0
+     ],
+     "doc": "LFSR order for the payload pattern"
+    },
+    "bits_per_symbol": {
+     "type": "float",
+     "default": 1.0,
+     "unit": "",
+     "choices": [
+      1.0,
+      2.0,
+      3.0,
+      4.0,
+      5.0,
+      6.0,
+      7.0,
+      8.0
+     ],
+     "doc": "Bits each downstream symbol carries; sets the size of the window to fill"
+    }
+   },
+   "structural": {},
+   "ports": {
+    "inputs": {},
+    "outputs": {
+     "out": "binary",
+     "payload": "binary"
+    }
+   }
+  },
   "Splitter": {
    "name": "Optical Splitter",
    "type": "Splitter",
@@ -21903,6 +21986,15 @@ verdict, and DESIGN.md
                `post-FEC ${value.post_fec_ber.toExponential(2)}, ` +
                `${value.corrected_symbols} symbols repaired` +
                (failed ? `, ${failed}/${value.blocks} codewords beyond the code` : "");
+      }
+      case "soft_fec": {
+        /* The same two rates the hard decoder reports, and the number of
+           decisions the iteration actually moved. No count of "codewords
+           corrected" here, because an iterative decoder has none: it moves
+           decisions, sometimes more than once and sometimes back again. */
+        return `pre-FEC ${value.pre_fec_ber.toExponential(2)} → ` +
+               `post-FEC ${value.post_fec_ber.toExponential(2)}, ` +
+               `${value.corrections} decisions moved over ${value.blocks} blocks`;
       }
       case "opaque":  return `${value.type} — nothing here can draw it`;
       default:        return value.kind;
