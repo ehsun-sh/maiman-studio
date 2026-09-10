@@ -22,7 +22,7 @@ from typing import Any
 
 import pytest
 
-from maiman import registered_names
+from maiman import manifests, registered_names
 from maiman.server import run_project
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -55,6 +55,25 @@ def test_the_page_carries_the_current_export() -> None:
 def test_the_palette_is_the_whole_library() -> None:
     """It is generated from the registry, so it cannot quietly lose a component."""
     assert set(embedded()["manifests"]) == set(registered_names())
+
+
+def test_the_baked_manifests_are_the_live_ones() -> None:
+    """Every parameter of every component, not just the list of components.
+
+    The palette test above compares *names*, and the export test compares the
+    page against the file it was spliced from — so a parameter added to a
+    component after the last export slips past both: the file and the page agree
+    with each other and neither agrees with the library. Adding ``rin`` to the
+    laser did exactly that, and the whole suite stayed green.
+
+    This closes it against the registry itself, which is the only copy that
+    cannot be stale.
+    """
+    assert embedded()["manifests"] == manifests(), (
+        "the baked manifests no longer match the library — a parameter was added "
+        "or changed since the last export. Re-run examples/export_ui_data.py and "
+        "splice the result back into the page."
+    )
 
 
 def js_table(name: str, pattern: str) -> set[str]:

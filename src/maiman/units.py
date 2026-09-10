@@ -73,6 +73,11 @@ _TO_SI: dict[str, Callable[[float], float]] = {
     "dBm": dbm_to_w,
     # Ratios
     "dB": db_to_linear,
+    # Relative intensity noise: dB/Hz -> 1/Hz. A ratio per hertz, so it converts
+    # like a ratio and keeps its denominator: -155 dB/Hz is 3.16e-16 /Hz. Unlike
+    # dB/km below, this one *does* come out linear, because the hertz is part of
+    # the quantity being logged rather than a length the logarithm is spread over.
+    "dB/Hz": db_to_linear,
     "dB/km": lambda x: x * 1e-3,  # -> dB/m (still logarithmic, per metre)
     # The same quantity at the other end of the scale. Fibre loss is quoted per
     # kilometre and integrated-waveguide loss per centimetre, and the numbers are
@@ -127,6 +132,7 @@ _FROM_SI: dict[str, Callable[[float], float]] = {
     "mW": lambda x: x * 1e3,
     "dBm": w_to_dbm,
     "dB": linear_to_db,
+    "dB/Hz": linear_to_db,
     "dB/km": lambda x: x * 1e3,
     "dB/cm": lambda x: x * 1e-2,
     "ps/nm/km": lambda x: x * 1e6,

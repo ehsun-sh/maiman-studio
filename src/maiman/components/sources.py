@@ -11,13 +11,40 @@ from ..units import C_LIGHT
 
 
 class CWLaser(Component):
-    """Continuous-wave laser.
+    """Continuous-wave laser, with the two noises a real one has.
 
-    Emits a constant-envelope field in the X polarization. With a non-zero
-    linewidth the phase performs a Wiener random walk, which is the standard
-    Lorentzian-lineshape model: the phase increment per sample is drawn from
-    ``N(0, 2*pi*linewidth*dt)``. Amplitude is untouched, so linewidth changes the
-    spectrum without changing the average power — an invariant worth testing.
+    **Phase.** With a non-zero linewidth the phase performs a Wiener random walk,
+    which is the standard Lorentzian-lineshape model: the phase increment per
+    sample is drawn from ``N(0, 2*pi*linewidth*dt)``. Amplitude is untouched, so
+    linewidth changes the spectrum without changing the average power — an
+    invariant worth testing.
+
+    **Intensity.** ``rin`` is the relative intensity noise, the single-sided
+    spectral density of the fractional power fluctuation
+    (``S_dP(f) / P_mean**2``, in 1/Hz, quoted in dB/Hz). A sampled window covers
+    a one-sided bandwidth of ``fs/2``, so the fractional power fluctuation per
+    sample is drawn from ``N(0, rin * fs / 2)`` and the field is the square root
+    of what is left. See Agrawal, *Fiber-Optic Communication Systems*, 4th ed.,
+    section 4.6.2.
+
+    The two are drawn from **separate streams**, so changing one does not move
+    the other's samples: an experiment that varies the linewidth and reads an
+    intensity-noise-limited number back would otherwise be measuring both.
+
+    What RIN buys that no other noise here does is a **floor that power cannot
+    lift**. Shot and thermal noise fall behind the signal as the received power
+    rises, which is why every sensitivity curve in this project keeps improving;
+    intensity noise scales *with* the signal, so the ratio is fixed at
+    ``1 / (rin * B)`` and more launch power buys exactly nothing. That is the
+    same shape of ceiling that phase noise puts on a coherent link, and it is
+    the reason a datasheet quotes RIN at all.
+
+    ``rin = 0`` is a **sentinel meaning an ideal laser**, not a physical value:
+    0 dB/Hz would be a fractional intensity variance of one per hertz of
+    bandwidth, which is not a laser. Every real device is between about
+    -110 dB/Hz (a cheap Fabry-Perot) and -165 dB/Hz (a good DFB), so the top of
+    the scale is free to mean "off" and the default leaves it there — turning it
+    on would move every existing result in this repository.
     """
 
     display_name = "CW Laser"
@@ -27,6 +54,12 @@ class CWLaser(Component):
     wavelength = Param(1550.0, unit="nm", min=1200.0, max=1700.0, doc="Vacuum wavelength")
     linewidth = Param(
         0.0, unit="kHz", min=0.0, doc="Lorentzian FWHM linewidth; 0 disables phase noise"
+    )
+    rin = Param(
+        0.0,
+        unit="dB/Hz",
+        max=0.0,
+        doc="Relative intensity noise; 0 is the sentinel for an ideal laser",
     )
 
     outputs = {"out": PortType.OPTICAL}
@@ -46,6 +79,19 @@ class CWLaser(Component):
             Ex = amplitude * np.exp(1j * phase)
         else:
             Ex = np.full(n, amplitude, dtype=np.complex128)
+
+        if self.rin < 0.0:
+            # A sampled window carries a one-sided bandwidth of fs/2, so that is
+            # the bandwidth the spectral density integrates over to give the
+            # per-sample variance of the fractional power fluctuation.
+            variance = self.si("rin") * ctx.sample_rate / 2.0
+            rng = ctx.rng("CWLaser", self.label, "intensity_noise")
+            fluctuation = rng.normal(0.0, np.sqrt(variance), size=n)
+            # Power cannot be negative. At any RIN a laser has this clips
+            # nothing — a good DFB at 512 GS/s sits 200 sigma away from it — and
+            # where it does engage the model has already left the regime it was
+            # fitted in, so the floor is the honest answer rather than a NaN.
+            Ex = Ex * np.sqrt(np.maximum(1.0 + fluctuation, 0.0))
 
         band = Band(
             Ex=Ex.astype(ctx.complex_dtype),

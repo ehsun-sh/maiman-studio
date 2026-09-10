@@ -222,6 +222,13 @@
      "unit": "kHz",
      "min": 0.0,
      "doc": "Lorentzian FWHM linewidth; 0 disables phase noise"
+    },
+    "rin": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "dB/Hz",
+     "max": 0.0,
+     "doc": "Relative intensity noise; 0 is the sentinel for an ideal laser"
     }
    },
    "structural": {},

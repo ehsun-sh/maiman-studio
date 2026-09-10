@@ -299,6 +299,65 @@ Nothing here is configured to come out right. The shot-noise-limited SNR is asse
 `R·P/(2qB)`, the counted symbol errors against
 [`ser_qam()`](src/maiman/modulation.py), and the modulator's 3 dB against `10·log10(2)`.
 
+### What RIN is for
+
+Every noise in this project until now got *quieter*, relative to the signal, as the launch power
+went up. Shot noise grows as the square root of the current and thermal noise does not grow at all,
+which is why every sensitivity curve here keeps improving to the right. **Relative intensity noise
+does not work like that.** It is a fluctuation *of the power itself*, so it scales with the signal,
+and the ratio it fixes is one that no power budget moves.
+
+`CWLaser` now takes a `rin` parameter in dB/Hz — the single-sided spectral density of the
+fractional power fluctuation, `S_δP(f) / P̄²`, which is the quantity a laser datasheet quotes.
+A sampled window carries a one-sided bandwidth of `fs/2`, so the fractional fluctuation per sample
+is drawn from `N(0, rin·fs/2)` and the field is the square root of what is left (Agrawal,
+*Fiber-Optic Communication Systems*, 4th ed., §4.6.2).
+
+**The closed form is exact and the test is an equality.** Detect a CW laser with shot and thermal
+noise off, and what is left in the photocurrent is the laser's own intensity noise:
+
+```
+RIN         measured SNR   1/(RIN·B_n)   the same, at ten times the power
+-155 dB/Hz    56.264 dB      56.278 dB          56.264 dB
+-145 dB/Hz    46.265 dB      46.278 dB          46.265 dB
+-135 dB/Hz    36.268 dB      36.278 dB          36.268 dB
+```
+
+`B_n` is the receiver filter's *noise* bandwidth, which for the Gaussian shape used here is
+`1.0645 × B` in closed form rather than approximately — which is why this can be checked as an
+equality (0.014 dB) instead of an order of magnitude. The third column is the point: **+10 dBm
+gives bit-identical SNR**. A model that got the variance right and this wrong would pass a
+variance check and be useless for the one question RIN is asked.
+
+**On a link it shows up as a penalty that grows with power.** 10 Gb/s OOK, PIN with shot and
+thermal noise on, Q in dB against an otherwise identical ideal laser:
+
+```
+received      ideal Q  |  penalty at -155  |  at -145  |  at -135 dB/Hz
+ -20 dBm       8.06 dB |      0.00 dB      |  0.00 dB  |    0.01 dB
+ -15 dBm      17.98 dB |      0.00 dB      |  0.01 dB  |    0.13 dB
+ -10 dBm      27.75 dB |      0.01 dB      |  0.12 dB  |    1.04 dB
+  -5 dBm      36.49 dB |      0.08 dB      |  0.77 dB  |    4.30 dB
+   0 dBm      41.54 dB |      0.24 dB      |  1.99 dB  |    7.63 dB
+```
+
+At −20 dBm the columns are indistinguishable — thermal noise is a hundred times larger and the
+laser's intensity noise is invisible. Every 5 dB of extra power makes it more visible, not less,
+until at 0 dBm a −135 dB/Hz laser has given back 7.6 dB of the Q the same link would have had.
+The penalty is quoted as a difference at equal power on purpose: it does not depend on whatever
+else limits the ideal column at the top of the sweep.
+
+`rin = 0` is a **sentinel for an ideal laser, not 0 dB/Hz of noise** — 0 dB/Hz would be a
+fractional intensity variance of one per hertz of bandwidth, which is not a laser. Every real
+device sits between about −110 dB/Hz for a cheap Fabry-Perot and −165 dB/Hz for a good DFB, so the
+top of the scale is free to carry the sentinel. It is the default, and the shipped links keep it:
+turning it on by default would move every number in this file, which is a decision for whoever
+wants the noise and not for the parameter's default.
+
+The phase and intensity noises are drawn from **separate streams**, so sweeping the linewidth does
+not move the intensity samples. Otherwise a plot of one against the other shows a coupling that is
+not there.
+
 ### What timing recovery is for
 
 Everything downstream of the receiver used to sample on a grid it was *given*. `IQSampler` takes
@@ -1442,6 +1501,10 @@ Every physics block ships with a test against a closed-form result, run in CI
 | Fractional delay is exact | Forward then back returns the input to 1e-12 — a phase ramp, not an interpolation | ✅ |
 | Timing recovery earns its place | 500 µm of waveguide costs 675 symbol errors in 1920; with the stage, none, and it moves by the 7.00 ps the guide actually holds | ✅ |
 | A whole symbol is invisible | Delay by one symbol period and the estimate does not move — the limit is `\|A\|²`, not the code | ✅ |
+| **RIN-limited SNR** | `1/(RIN·B_n)` to 0.014 dB at −155, −145 and −135 dB/Hz, against the Gaussian filter's closed-form noise bandwidth | ✅ |
+| The RIN floor ignores power | Ten times the launch power returns a bit-identical SNR — the one property that makes intensity noise worth modelling | ✅ |
+| Intensity noise conserves average power | Moves the variance to `RIN·fs/2` and leaves the mean at the declared dBm, the counterpart of the linewidth invariant | ✅ |
+| The two laser noises are independent | Sweeping the linewidth leaves the intensity samples bit-identical, so neither is measuring the other | ✅ |
 | **Carrier offset estimate** | Lands on a known offset to 0.5 MHz at both signs across the whole ±3.9 GHz range, on a 32 GBd link | ✅ |
 | Frequency recovery earns its place | A 10 MHz LO detuning — 0.03 % of the symbol rate — costs 1677 symbol errors in 1920; with the stage, none | ✅ |
 | The stripping power is the geometry's | 8-QAM is refused a quarter turn and stripped at a half, so its range is ±8 GHz and not ±4 | ✅ |

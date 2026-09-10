@@ -9,11 +9,25 @@ Each test names the relation it verifies.
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pytest
 
 from maiman import Graph, SimulationContext
-from maiman.components import Attenuator, Combiner, CWLaser, Fiber, PowerMeter
+from maiman.components import (
+    Attenuator,
+    BERAnalyzer,
+    Combiner,
+    CWLaser,
+    ElectricalFilter,
+    Fiber,
+    MachZehnderModulator,
+    NRZDriver,
+    PINPhotodiode,
+    PowerMeter,
+    PRBSGenerator,
+)
 from maiman.units import dbm_to_w, w_to_dbm
 
 # dBm tolerance. Fields are complex64 by default (~1e-7 relative), so a power
@@ -127,6 +141,163 @@ def test_phase_noise_changes_phase_but_not_average_power() -> None:
     band = results.port(laser, "out").bands[0]
     phase = np.angle(band.Ex)
     assert np.std(phase) > 0.0, "linewidth was declared but the phase is constant"
+
+
+#: Noise bandwidth of the Gaussian receiver filter as a multiple of its 3 dB
+#: cutoff: ``sqrt(pi / (4 ln2))``. Written here rather than imported so that a
+#: change to the filter has to be argued with the closed form rather than
+#: silently agreeing with itself.
+GAUSSIAN_NOISE_BANDWIDTH = math.sqrt(math.pi / (4.0 * math.log(2.0)))
+
+
+def detected_rin_snr(rin_db: float, power_dbm: float, cutoff_ghz: float = 7.0) -> float:
+    """Photocurrent SNR of a CW laser detected with every other noise turned off."""
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=16, sequence_length=8192, seed=3)
+    g = Graph(ctx)
+    laser = g.add(CWLaser(power=power_dbm, rin=rin_db, label="tx"))
+    # Shot and thermal off, so what is left in the current is the laser's own
+    # intensity noise and nothing else. This is the one measurement where that
+    # is the honest configuration rather than an optimistic one.
+    pin = g.add(PINPhotodiode(responsivity=0.8, shot_noise=False, thermal_noise=False, label="pin"))
+    lpf = g.add(ElectricalFilter(bandwidth=cutoff_ghz, label="lpf"))
+    g.chain(laser, pin, lpf)
+
+    current = np.asarray(g.run(keep=[lpf])[lpf].samples)
+    return float(current.mean() ** 2 / current.var())
+
+
+@pytest.mark.parametrize("rin_db", [-155.0, -145.0, -135.0])
+def test_rin_limited_snr_is_one_over_rin_times_bandwidth(rin_db: float) -> None:
+    """The closed form every RIN figure on a datasheet is quoted against.
+
+    ``SNR = 1 / (RIN * B_n)``, with ``B_n`` the receiver's *noise* bandwidth —
+    which for the Gaussian filter here is 1.0645 times its 3 dB cutoff and is
+    exact rather than approximate, which is why this can be an equality and not
+    an order of magnitude.
+    """
+    noise_bandwidth = 7.0e9 * GAUSSIAN_NOISE_BANDWIDTH
+    expected = 1.0 / (10.0 ** (rin_db / 10.0) * noise_bandwidth)
+    assert detected_rin_snr(rin_db, 0.0) == pytest.approx(expected, rel=0.01)
+
+
+def test_the_rin_floor_does_not_move_when_power_is_raised() -> None:
+    """The property that makes RIN worth modelling at all.
+
+    Shot and thermal noise fall behind the signal as power rises, which is why
+    every sensitivity curve in this project keeps improving. Intensity noise
+    scales *with* the signal, so the ratio is fixed and ten times the power buys
+    nothing. A model that got this wrong would still pass a variance check and
+    would be useless for the one question RIN is asked.
+    """
+    low = detected_rin_snr(-145.0, 0.0)
+    high = detected_rin_snr(-145.0, 10.0)
+    assert high == pytest.approx(low, rel=1e-9), "ten times the power must change nothing"
+
+
+def test_rin_scales_with_the_declared_density() -> None:
+    """Ten dB more noise is ten dB less signal-to-noise, exactly."""
+    quiet = detected_rin_snr(-155.0, 0.0)
+    noisy = detected_rin_snr(-145.0, 0.0)
+    assert quiet / noisy == pytest.approx(10.0, rel=0.02)
+
+
+def test_intensity_noise_changes_power_sample_to_sample_but_not_on_average() -> None:
+    """The counterpart of the linewidth invariant above, and the same argument.
+
+    Phase noise must not move the average power; intensity noise must not either.
+    It moves the *variance*, and a model that quietly added or removed power
+    would show up here rather than as a link budget that never quite closes.
+    """
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=16, sequence_length=8192, seed=11)
+    g = Graph(ctx)
+    laser = g.add(CWLaser(power=0.0, rin=-140.0))
+    meter = g.add(PowerMeter())
+    g.chain(laser, meter)
+    results = g.run(keep=[laser])
+
+    assert results[meter].power_dbm == pytest.approx(0.0, abs=0.01)
+
+    power = np.abs(results.port(laser, "out").bands[0].Ex) ** 2
+    relative_variance = float(power.var() / power.mean() ** 2)
+    # RIN * fs / 2, the one-sided bandwidth a sampled window carries.
+    expected = 10.0 ** (-140.0 / 10.0) * ctx.sample_rate / 2.0
+    assert relative_variance == pytest.approx(expected, rel=0.05)
+
+
+def test_an_ideal_laser_is_the_default_and_stays_exact() -> None:
+    """``rin = 0`` is a sentinel for "no intensity noise", not 0 dB/Hz of it.
+
+    Worth asserting because the sentinel is the one place this parameter is not
+    its own logarithm, and because every result in this repository was measured
+    with it and would move if it ever started meaning what it says.
+    """
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=16, sequence_length=256, seed=5)
+    g = Graph(ctx)
+    laser = g.add(CWLaser(power=0.0))
+    g.add(PowerMeter())
+    g.chain(laser, g.components[-1])
+
+    power = np.abs(g.run(keep=[laser]).port(laser, "out").bands[0].Ex) ** 2
+    assert np.ptp(power) == 0.0, "the default laser must be exactly constant"
+
+
+def test_the_two_laser_noises_are_drawn_from_separate_streams() -> None:
+    """Changing the linewidth must not move the intensity samples, or vice versa.
+
+    Otherwise an experiment that sweeps one and reads the other back is measuring
+    both, and the plot looks like a physical coupling that is not there.
+    """
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=16, sequence_length=512, seed=9)
+
+    def intensity(linewidth: float) -> np.ndarray:
+        g = Graph(ctx)
+        laser = g.add(CWLaser(power=0.0, rin=-140.0, linewidth=linewidth, label="tx"))
+        g.add(PowerMeter())
+        g.chain(laser, g.components[-1])
+        return np.abs(g.run(keep=[laser]).port(laser, "out").bands[0].Ex) ** 2
+
+    assert np.allclose(intensity(0.0), intensity(1000.0), rtol=1e-12)
+
+
+def ook_q_db(rin_db: float, power_dbm: float) -> float:
+    """Q of a short OOK link, in dB, with everything but the laser held fixed."""
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=16, sequence_length=8192, seed=7)
+    g = Graph(ctx)
+    prbs = g.add(PRBSGenerator(order=15.0, label="prbs"))
+    driver = g.add(NRZDriver(v_low=4.0, v_high=0.0, label="drv"))
+    laser = g.add(CWLaser(power=power_dbm, rin=rin_db, label="tx"))
+    modulator = g.add(MachZehnderModulator(v_pi=4.0, extinction_ratio=30.0, label="mzm"))
+    detector = g.add(PINPhotodiode(responsivity=0.8, label="pin"))
+    lowpass = g.add(ElectricalFilter(bandwidth=7.0, label="lpf"))
+    analyzer = g.add(BERAnalyzer(label="ber"))
+
+    g.chain(prbs, driver)
+    g.connect(laser, modulator["optical_in"])
+    g.connect(driver, modulator["electrical_in"])
+    g.chain(modulator, detector, lowpass)
+    g.connect(lowpass, analyzer["in"])
+    g.connect(prbs["out"], analyzer["reference"])
+    return float(20.0 * math.log10(g.run()[analyzer].q_factor))
+
+
+def test_the_rin_penalty_grows_with_launch_power() -> None:
+    """The link-level consequence, and the one that inverts the usual intuition.
+
+    Every other noise here falls behind the signal as power rises. This one does
+    not, so the penalty it costs is *larger* at high power than at low — which is
+    the opposite of how a reader trained on shot and thermal noise expects a
+    noise term to behave, and the reason the README quotes a penalty rather than
+    a sensitivity.
+
+    Quoted as a difference at equal power on purpose: it does not then depend on
+    whatever else limits the ideal link at the top of the sweep.
+    """
+    penalties = [ook_q_db(0.0, p) - ook_q_db(-135.0, p) for p in (-20.0, -10.0, 0.0)]
+
+    assert penalties[0] < 0.1, "at -20 dBm thermal noise should bury it entirely"
+    assert penalties[1] > 0.5, "by -10 dBm it should be visible"
+    assert penalties[2] > 5.0, "and by 0 dBm it should dominate"
+    assert penalties == sorted(penalties), "the penalty must grow with power, not shrink"
 
 
 def test_laser_wavelength_maps_to_the_expected_optical_frequency(ctx: SimulationContext) -> None:
