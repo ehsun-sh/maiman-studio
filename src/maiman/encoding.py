@@ -32,7 +32,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from .components.dsp import DispersionDiagnostics, TimingEstimate
+from .components.dsp import DispersionDiagnostics, FrequencyEstimate, TimingEstimate
 from .kernels import PropagationDiagnostics
 from .signals import (
     BinarySignal,
@@ -292,6 +292,19 @@ def _timing(estimate: TimingEstimate) -> dict[str, Any]:
     }
 
 
+def _frequency(estimate: FrequencyEstimate) -> dict[str, Any]:
+    # In MHz as well as Hz, for the reason the timing block goes out in ps: an
+    # offset is quoted in MHz by everyone who quotes one, and the interesting
+    # range here spans four decades of hertz.
+    return {
+        "kind": "frequency",
+        "offset": number(estimate.offset),
+        "offset_mhz": number(estimate.offset / 1e6),
+        "symmetry": estimate.symmetry,
+        "confidence": number(estimate.confidence),
+    }
+
+
 def _dispersion(diagnostics: DispersionDiagnostics) -> dict[str, Any]:
     # Accumulated dispersion is held in s/m and quoted in ps/nm, which differ by
     # 1e3 rather than by one of the usual powers. Both are sent: a client that
@@ -314,6 +327,7 @@ def _dispersion(diagnostics: DispersionDiagnostics) -> dict[str, Any]:
 
 _ENCODERS: dict[type, Any] = {
     DispersionDiagnostics: _dispersion,
+    FrequencyEstimate: _frequency,
     TimingEstimate: _timing,
     ElectricalSignal: _electrical,
     OpticalSignal: _optical,

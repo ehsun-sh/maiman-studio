@@ -19,12 +19,115 @@ from ..dsp import (
     butterfly_separate,
     clock_tone,
     compensate_dispersion,
+    derotate,
     dispersive_spread,
+    estimate_carrier_offset,
     estimate_dispersion,
     estimate_timing,
     resample_to_instant,
 )
+from ..modulation import rotational_symmetry
 from ..signals import ElectricalSignal, Signal, SymbolSignal
+
+
+@dataclass(frozen=True)
+class FrequencyEstimate:
+    """What frequency offset was found between the two lasers, and how believable."""
+
+    offset: float
+    """The offset removed [Hz]. Positive means the signal sat above the LO."""
+
+    symmetry: int
+    """The power the alphabet was raised to in order to strip the modulation."""
+
+    confidence: float
+    """Spectral peak over the median of the spectrum.
+
+    The estimator always returns some argmax; this is what says whether there was
+    a line under it. Around 20 on the links here, and near 1 when there is no
+    tone to find — a number that low means the offset above it is noise, whatever
+    its decimal places suggest.
+    """
+
+    def __repr__(self) -> str:
+        return f"FrequencyEstimate({self.offset / 1e6:+.3f} MHz, confidence {self.confidence:.1f})"
+
+
+class FrequencyRecovery(Component):
+    """Find the beat between the transmitter laser and the LO, and spin it out.
+
+    A transmitter laser and a local oscillator are independent oscillators, and
+    they are not on the same frequency. This library already models that
+    honestly: bands carry their own centre frequency, so detuning an
+    :class:`~maiman.components.CWLaser` used as an LO makes it beat against the
+    signal in :class:`~maiman.components.CoherentReceiver` exactly as two real
+    lasers do. Nothing downstream removed it blind until this block.
+
+    **How little it takes.** On the 32 GBd 16-QAM link this project ships, an
+    offset of 10 MHz — three hundredths of one per cent of the symbol rate —
+    takes a clean back-to-back constellation from zero symbol errors to 1677 in
+    1920. A laser on the ITU grid is specified to +/-2.5 GHz and a good tunable
+    holds +/-100 MHz, so the offset a receiver actually meets is two to three
+    orders of magnitude past the point where the link stops working.
+
+    **This is not the phase problem.** :class:`~maiman.components.CarrierRecovery`
+    removes a phase that *walks*; this removes one that *ramps*. The distinction
+    is not pedantry about which word to use: a phase search covers a quarter turn
+    and averages over a window, so a ramp steep enough to cross that quarter turn
+    inside the window makes it slip rather than track, and the block downstream
+    fails in a way that looks like noise. Every deployed coherent receiver puts
+    frequency before phase, and so does this one.
+
+    **The method is one FFT**, of the symbols raised to the alphabet's own
+    rotational symmetry — see :func:`maiman.dsp.estimate_carrier_offset` for why
+    that power is the one that strips the data, and for the ambiguity that comes
+    with it. Nothing is searched and nothing iterates.
+
+    **What it cannot do is find an offset past half the stripped bandwidth.**
+    Beyond ``symbol_rate / (2 * M)`` — 4 GHz for square QAM at 32 GBd — the tone
+    wraps and the estimate comes back aliased rather than merely wrong. Below it
+    the correction is measured to hold across the whole range: the same link,
+    detuned anywhere from -3.9 to +3.9 GHz, comes back to its back-to-back EVM
+    and zero errors. Widening that window is an acquisition sweep, which real
+    equipment has and this does not.
+
+    A ``symmetry`` of 1 has nothing to strip, so a constellation with no
+    rotational symmetry is refused at run time rather than answered with an
+    argmax over noise.
+    """
+
+    display_name = "Frequency Recovery"
+    category = "DSP"
+
+    inputs = {"in": PortType.SYMBOL}
+    outputs = {"out": PortType.SYMBOL, "diagnostics": PortType.METRIC}
+
+    def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
+        received: SymbolSignal = inputs["in"]
+        constellation = np.asarray(received.constellation)
+        symmetry = rotational_symmetry(constellation)
+        if symmetry < 2:
+            raise ValueError(
+                f"{self.label}: this constellation maps onto itself only at a full turn, "
+                f"so there is no power that strips the modulation and no blind estimate "
+                f"to make"
+            )
+
+        offset, confidence = estimate_carrier_offset(
+            np.asarray(received.symbols), received.symbol_rate, symmetry=symmetry
+        )
+        corrected = derotate(np.asarray(received.symbols), received.symbol_rate, offset=offset)
+
+        return {
+            "out": SymbolSignal(
+                symbols=corrected,
+                symbol_rate=received.symbol_rate,
+                constellation=constellation,
+            ),
+            "diagnostics": FrequencyEstimate(
+                offset=offset, symmetry=symmetry, confidence=confidence
+            ),
+        }
 
 
 @dataclass(frozen=True)

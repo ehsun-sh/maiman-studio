@@ -830,6 +830,24 @@
     }
    }
   },
+  "FrequencyRecovery": {
+   "name": "Frequency Recovery",
+   "type": "FrequencyRecovery",
+   "class": "maiman.components.dsp.FrequencyRecovery",
+   "category": "DSP",
+   "version": "0.1.0",
+   "parameters": {},
+   "structural": {},
+   "ports": {
+    "inputs": {
+     "in": "symbol"
+    },
+    "outputs": {
+     "out": "symbol",
+     "diagnostics": "metric"
+    }
+   }
+  },
   "GaussianPulse": {
    "name": "Gaussian Pulse",
    "type": "GaussianPulse",

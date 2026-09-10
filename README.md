@@ -336,6 +336,74 @@ The estimate carries the **magnitude** of the line it came from, because the pha
 number like any other: a signal shaped to exactly the Nyquist bandwidth carries no symbol-rate line
 at all, and a heavily dispersed one nearly none.
 
+### What frequency recovery is for
+
+A transmitter laser and a local oscillator are independent oscillators, and they are not on the
+same frequency. This library already modelled that honestly — bands carry their own centre
+frequency, so an LO tuned off the transmitter beats against the signal inside `CoherentReceiver`
+exactly as two real lasers do. Nothing removed it blind until this block; the analyser removed it
+*data-aided*, with the transmitted sequence in hand, which is what a bench instrument does and not
+what a receiver can.
+
+**How little it takes.** On the shipped 32 GBd 16-QAM link, 10 MHz — three hundredths of one per
+cent of the symbol rate — is enough:
+
+```
+  offset | errors, no block | errors, block |  found offset | confidence
+       0 |      0/1920      |    0/1920     |    +0.000 MHz |    21.7
+  10 MHz |   1677/1920      |    0/1920     |   +10.254 MHz |    22.1
+ 100 MHz |   1796/1920      |    0/1920     |  +100.098 MHz |    21.6
+   1 GHz |   1791/1920      |    0/1920     | +1000.000 MHz |    22.3
+ 3.9 GHz |   1790/1920      |    0/1920     | +3899.902 MHz |    22.0
+```
+
+EVM is left out of that table on purpose: once the constellation is spinning, the analyser's
+common-gain fit has nothing to fit and the percentage it reports is not a measurement. The error
+count still is.
+
+For scale: a laser on the ITU grid is specified to ±2.5 GHz and a good tunable holds ±100 MHz, so
+the offset a receiver actually meets is two to three orders of magnitude past the point where the
+link stops working.
+
+**The method is one FFT**, of the symbols raised to their own alphabet's rotational symmetry —
+Leven, Kaneda, Koc and Chen, *IEEE Photon. Technol. Lett.* 19(6), 2007. Raise a symbol to that
+power and every point that differed only by one of those turns lands in the same place: the
+modulation becomes a constant and the offset becomes a tone at M times itself. The power is taken
+from the geometry by the same `rotational_symmetry()` that bounds the blind *phase* search, which
+is the only way the two agree — 4 for a square constellation, 2 for a rectangular one or for BPSK.
+
+That makes the acquisition range fall out of the format, and a rectangular format wins twice:
+
+```
+format   M   unambiguous range   errors at 1 GHz off/on   confidence
+QPSK     4        ±4 GHz              1448  ->  0            197
+8-QAM    2        ±8 GHz              1671  ->  0             34
+16-QAM   4        ±4 GHz              1791  ->  0             22
+64-QAM   4        ±4 GHz              1888  ->  80            16
+```
+
+64-QAM's 80 is not residual offset — it is that link's own noise floor, which is 74 errors with no
+offset at all. The confidence column falls with order because a higher-order alphabet strips less
+cleanly, and it is reported rather than hidden: it is the spectral peak over the median, so a value
+near 1 says the argmax found no line and the megahertz beside it are an accident with decimal
+places.
+
+**This is not the phase problem, and the order is not a preference.** `CarrierRecovery` removes a
+phase that *walks*; this removes one that *ramps*. A phase search covers a quarter turn and averages
+over a window, so a ramp steep enough to cross that quarter turn inside the window makes it slip
+rather than track — and a slip looks like noise. Every deployed coherent receiver puts frequency
+before phase.
+
+**Past half the stripped bandwidth it aliases rather than degrades**, which is the failure worth
+knowing because it does not look like one. Beyond `symbol_rate / (2M)` the tone wraps, and the
+estimate comes back wrong by exactly `symbol_rate / M` **with the same confidence as a correct
+one**: 4.1 GHz is reported as −3.9 GHz. Widening that window is an acquisition sweep, which real
+equipment has and this does not. A test asserts the aliasing explicitly, rather than leaving it as
+a range nobody checks.
+
+Something with no rotational symmetry at all has no power that strips it, so it is refused at run
+time rather than answered with an argmax over noise.
+
 ### What carrier recovery is for
 
 With ordinary 100 kHz lasers and no phase recovery, 16-QAM at 32 GBd does not close — and, more
@@ -1263,7 +1331,7 @@ time window, and results are reproducible.
 | **0 — Foundations** ✅ | Signal model, context, port types, component base, registry, scheduler, `.maiman` project format, sweeps, CI | ~1 month |
 | **1 — MVP: linear link** ✅ | ✅ PRBS → NRZ → laser → MZM → fiber (α + CD) → PIN → filter → eye/Q/BER, validated end to end. **Python only, no GUI.** | ~2–3 months |
 | **1.5 — Nonlinear & amplified** ✅ | Adaptive-step SSFM, Kerr, EDFA with ASE, OSNR, PMD, APD, dispersion slope and its third-order term, cross-polarization Kerr coupling, inter-channel stimulated Raman scattering | ~2 months |
-| **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier phase recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km with blind estimation of the accumulated value, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
+| **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier frequency and phase recovery, blind square-law timing recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km with blind estimation of the accumulated value, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
 | **3 — GUI & WDM** | ✅ Wavelength-selective filters, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — the OSA's trace drawn in the dock, and 400G/800G reference designs validated against the OSNR relations, and a back-end indirection the propagation kernels dispatch through — CuPy runs it where a device exists, `maiman devices` cross-checks it against NumPy, and a CI job does the same on any runner labelled `gpu` | ~6 months |
 | **4 — PIC** ✅ | Bidirectional S-matrix circuit solver, waveguide, directional coupler, all-pass and add-drop ring resonators, cross-validated against SAX; N×N MMI couplers on the self-imaging phase relations; a Mach-Zehnder interferometer assembled from them — switch, interleaver, or both; and PDK import, which reads a foundry's fitted numbers out of a JSON kit and refuses to extrapolate them past the window they were fitted in | — |
 
@@ -1340,6 +1408,11 @@ Every physics block ships with a test against a closed-form result, run in CI
 | Fractional delay is exact | Forward then back returns the input to 1e-12 — a phase ramp, not an interpolation | ✅ |
 | Timing recovery earns its place | 500 µm of waveguide costs 675 symbol errors in 1920; with the stage, none, and it moves by the 7.00 ps the guide actually holds | ✅ |
 | A whole symbol is invisible | Delay by one symbol period and the estimate does not move — the limit is `\|A\|²`, not the code | ✅ |
+| **Carrier offset estimate** | Lands on a known offset to 0.5 MHz at both signs across the whole ±3.9 GHz range, on a 32 GBd link | ✅ |
+| Frequency recovery earns its place | A 10 MHz LO detuning — 0.03 % of the symbol rate — costs 1677 symbol errors in 1920; with the stage, none | ✅ |
+| The stripping power is the geometry's | 8-QAM is refused a quarter turn and stripped at a half, so its range is ±8 GHz and not ±4 | ✅ |
+| Past the range it aliases, confidently | Beyond `Rs/2M` the estimate is wrong by exactly `Rs/M` with an unchanged confidence — asserted, not left to be discovered | ✅ |
+| No line, no confidence | Circular noise returns an argmax like anything else, and a confidence a fifth of a real one | ✅ |
 | **Kernels never touch NumPy** | Every kernel run against an array library that refuses NumPy's *allocating* API and returns identical answers | ✅ |
 | A second library gets the same field | `check_device()` propagates an N=1 soliton on each back-end and compares — the one answer that is known without a second run | ✅ |
 | The GPU job cannot vanish quietly | A test reads `ci.yml` and holds it to the runner label, the CuPy install and the cross-check | ✅ |

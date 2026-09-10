@@ -166,6 +166,86 @@ class DispersionEstimate:
         )
 
 
+#: How far past its own length the M-th power spectrum is zero-padded before the
+#: peak is taken. The peak lands on a bin, so the bin spacing is the estimator's
+#: resolution; padding by eight takes that to ``symbol_rate / (8 * M * N)``, which
+#: on the shortest run this library ships is a quarter of a MHz at 32 GBd.
+#: Measured past this point the error stops falling — what is left is the
+#: estimator's own variance rather than quantisation — so padding further buys
+#: memory and nothing else.
+CARRIER_OFFSET_PADDING = 8
+
+
+def estimate_carrier_offset(
+    symbols: np.ndarray, symbol_rate: float, *, symmetry: int
+) -> tuple[float, float]:
+    """Blind carrier frequency offset [Hz], and how much to believe it.
+
+    The M-th power method of Leven, Kaneda, Koc and Chen, "Frequency estimation
+    in intradyne reception", IEEE Photon. Technol. Lett. 19(6), 2007.
+
+    **Why raising to a power strips the data.** ``symmetry`` is the number of
+    turns of ``2*pi/M`` that map the alphabet onto itself — 4 for a square QAM
+    constellation, 2 for a rectangular one or for BPSK — which is exactly
+    :func:`maiman.modulation.rotational_symmetry`. Raise a symbol to that power
+    and every point that differed only by one of those turns lands in the same
+    place, so what was modulation becomes a constant and what was a frequency
+    offset becomes a tone at ``M`` times it. The same number that bounds the
+    blind *phase* search bounds the blind *frequency* search, and taking it from
+    the geometry is the only way the two agree.
+
+    Returns ``(offset, confidence)``. Confidence is the spectral peak over the
+    median of the spectrum, the same ratio :class:`DispersionEstimate` reports and
+    for the same reason: the estimator always returns *some* peak, and this is
+    what says whether there was a line under it. Around 20 on the links here;
+    near 1 means the argmax picked noise.
+
+    **Unambiguous only for offsets below ``symbol_rate / (2 * M)``** — 4 GHz for
+    square QAM at 32 GBd. Past that the tone at ``M`` times the offset wraps the
+    spectrum, and the estimate comes back aliased by ``symbol_rate / M`` rather
+    than merely inaccurate: 4.1 GHz is reported as -3.9 GHz. That is a wide
+    enough window for a receiver whose LO is tuned to the channel and far too
+    narrow for one that is not, which is why an acquisition sweep exists in real
+    equipment; there is none here.
+
+    A ``symmetry`` of 1 leaves the data in and there is nothing to find, so this
+    refuses rather than returning an argmax over noise.
+    """
+    if symmetry < 2:
+        raise ValueError(
+            f"the M-th power method needs an alphabet with at least a half-turn "
+            f"of symmetry to strip, got {symmetry}"
+        )
+    values = np.asarray(symbols).astype(np.complex128)
+    if values.size == 0:
+        return 0.0, 0.0
+
+    stripped = values**symmetry
+    length = int(2 ** np.ceil(np.log2(stripped.size * CARRIER_OFFSET_PADDING)))
+    spectrum = np.abs(np.fft.fft(stripped, length))
+
+    peak = int(np.argmax(spectrum))
+    median = float(np.median(spectrum))
+    confidence = float(spectrum[peak] / median) if median > 0.0 else 0.0
+    offset = float(np.fft.fftfreq(length, d=1.0 / symbol_rate)[peak]) / symmetry
+    return offset, confidence
+
+
+def derotate(symbols: np.ndarray, symbol_rate: float, *, offset: float) -> np.ndarray:
+    """Spin a symbol sequence back by a carrier frequency offset of ``offset`` Hz.
+
+    The whole correction: a frequency error is a phase that advances by the same
+    amount every symbol, so undoing it is one complex exponential. What is left
+    afterwards is a *constant* rotation, which is a phase problem and belongs to
+    :func:`~maiman.modulation.blind_phase_search`.
+    """
+    values = np.asarray(symbols).astype(np.complex128)
+    if values.size == 0 or offset == 0.0:
+        return values
+    index = np.arange(values.shape[0], dtype=np.float64)
+    return values * np.exp(-2j * np.pi * offset * index / symbol_rate)
+
+
 def estimate_timing(baseband: np.ndarray, sample_rate: float, *, symbol_rate: float) -> float:
     """Where in the symbol period the sampling instant is, as a fraction of it.
 

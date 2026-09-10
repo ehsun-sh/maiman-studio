@@ -16,7 +16,12 @@ from .coherent import (
     IQSampler,
 )
 from .detectors import APDPhotodiode, PINPhotodiode
-from .dsp import ButterflyEqualizer, DispersionCompensator, TimingRecovery
+from .dsp import (
+    ButterflyEqualizer,
+    DispersionCompensator,
+    FrequencyRecovery,
+    TimingRecovery,
+)
 from .electrical import DCVoltage, IQDriver, NRZDriver, PRBSGenerator
 from .fiber import Fiber
 from .filters import ElectricalFilter, OpticalFilter, OpticalSpectrumAnalyzer
@@ -60,6 +65,7 @@ __all__ = [
     "ElectricalFilter",
     "EyeDiagram",
     "Fiber",
+    "FrequencyRecovery",
     "GaussianPulse",
     "IQDriver",
     "IQModulator",

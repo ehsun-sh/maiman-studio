@@ -1862,6 +1862,24 @@ verdict, and DESIGN.md
     }
    }
   },
+  "FrequencyRecovery": {
+   "name": "Frequency Recovery",
+   "type": "FrequencyRecovery",
+   "class": "maiman.components.dsp.FrequencyRecovery",
+   "category": "DSP",
+   "version": "0.1.0",
+   "parameters": {},
+   "structural": {},
+   "ports": {
+    "inputs": {
+     "in": "symbol"
+    },
+    "outputs": {
+     "out": "symbol",
+     "diagnostics": "metric"
+    }
+   }
+  },
   "GaussianPulse": {
    "name": "Gaussian Pulse",
    "type": "GaussianPulse",
@@ -21683,6 +21701,17 @@ verdict, and DESIGN.md
         return `instant at ${(value.fraction * 100).toFixed(1)} % of the symbol, ` +
                `moved ${moved >= 0 ? "+" : ""}${moved.toFixed(2)} ps ` +
                `(clock line ${fmt(value.strength)})`;
+      }
+      case "frequency": {
+        /* In MHz, because that is the unit anyone reads an offset in, and the
+           interesting range spans four decades of hertz. The confidence is the
+           spectral peak over the median: around 20 on these links, near 1 when
+           the argmax found no line — which is the case where the MHz beside it
+           is an accident with decimal places. */
+        const mhz = value.offset_mhz;
+        return `carrier offset ${mhz >= 0 ? "+" : ""}${mhz.toFixed(3)} MHz, ` +
+               `stripped by its ${value.symmetry}-fold symmetry ` +
+               `(confidence ${fmt(value.confidence)})`;
       }
       case "opaque":  return `${value.type} — nothing here can draw it`;
       default:        return value.kind;

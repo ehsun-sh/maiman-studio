@@ -33,6 +33,7 @@ from maiman.components import (
     ElectricalFilter,
     EyeDiagram,
     Fiber,
+    FrequencyRecovery,
     IQDriver,
     IQModulator,
     IQSampler,
@@ -69,6 +70,7 @@ from maiman.server import (
     serve,
 )
 from maiman.signals import ElectricalSignal, EyeMeasurement, PowerReading
+from maiman.units import C_LIGHT
 
 
 def simple_link() -> Graph:
@@ -127,12 +129,19 @@ def metric_rich_link() -> Graph:
     return graph
 
 
-def mistimed_coherent_link() -> Graph:
-    """A coherent link with a waveguide in it, and the block that copes with one.
+def impaired_coherent_link() -> Graph:
+    """A coherent front end with both of its blind corrections in the path.
 
-    The delay is not invented: a 500 um silicon waveguide at a group index of
-    4.2 holds 7 ps, which at 32 GBd is most of a quarter of a symbol. Without
-    the recovery stage this link runs at 37 % EVM.
+    Neither impairment is invented, which is why one graph carries both. A
+    500 um silicon waveguide at a group index of 4.2 holds 7 ps, which at
+    32 GBd is most of a quarter of a symbol and takes this link to 37 % EVM on
+    its own. An LO tuned 200 MHz off the transmitter is an ordinary
+    :class:`CWLaser` at a different wavelength, and the beat comes out of the
+    receiver's own mixing — 200 MHz is well inside what a good tunable holds
+    and far past what the link survives.
+
+    They are corrected in the order a real receiver corrects them: the sampling
+    instant at the sample rate, then the carrier frequency on the symbols.
     """
     ctx = SimulationContext(bit_rate=32e9, samples_per_symbol=16, sequence_length=512, seed=5)
     graph = Graph(ctx)
@@ -144,10 +153,12 @@ def mistimed_coherent_link() -> Graph:
     laser = graph.add(CWLaser(power=2.0, wavelength=1550.0, label="tx"))
     modulator = graph.add(IQModulator(v_pi=4.0, label="mod"))
     guide = graph.add(Waveguide(length=500.0, propagation_loss=0.0, label="wg"))
-    lo = graph.add(CWLaser(power=10.0, wavelength=1550.0, label="lo"))
+    detuned = C_LIGHT / (C_LIGHT / 1550e-9 - 200e6) * 1e9
+    lo = graph.add(CWLaser(power=10.0, wavelength=detuned, label="lo"))
     receiver = graph.add(CoherentReceiver(responsivity=0.8, label="rx"))
     timing = graph.add(TimingRecovery(label="tr"))
     sampler = graph.add(IQSampler(matched_filter=True, roll_off=0.2, label="smp"))
+    frequency = graph.add(FrequencyRecovery(label="fo"))
     analyzer = graph.add(ConstellationAnalyzer(ignore_edges=32.0, label="vsa"))
 
     graph.connect(prbs["out"], mapper["in"])
@@ -163,7 +174,8 @@ def mistimed_coherent_link() -> Graph:
     graph.connect(timing["i"], sampler["i"])
     graph.connect(timing["q"], sampler["q"])
     graph.connect(mapper["out"], sampler["reference"])
-    graph.connect(sampler["out"], analyzer["in"])
+    graph.connect(sampler["out"], frequency["in"])
+    graph.connect(frequency["out"], analyzer["in"])
     graph.connect(mapper["out"], analyzer["reference"])
     return graph
 
@@ -172,9 +184,10 @@ def test_no_metric_port_in_the_library_encodes_as_opaque() -> None:
     """Every measurement the library can produce must be drawable.
 
     Three graphs between them touch every metric port — the optical/OOK side
-    here, the coherent side through the shipped export example, and a
-    mistimed link for the stage that only has something to say on one — and the
-    assertion is that none of them come back tagged ``opaque``. That tag is the
+    here, the coherent side through the shipped export example, and an impaired
+    link for the front-end stages that only have something to say when there is
+    something wrong — and the assertion is that none of them come back tagged
+    ``opaque``. That tag is the
     honest answer for a plugin's own result type, and the wrong answer for
     anything shipped in this package.
     """
@@ -188,7 +201,7 @@ def test_no_metric_port_in_the_library_encodes_as_opaque() -> None:
     for graph in (
         metric_rich_link(),
         build_coherent(sequence_length=256),
-        mistimed_coherent_link(),
+        impaired_coherent_link(),
     ):
         by_label = {c.label: c for c in graph.components}
         encoded = encode_results(graph.run())

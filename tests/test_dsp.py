@@ -20,6 +20,7 @@ from maiman.components import (
     CoherentReceiver,
     ConstellationAnalyzer,
     CWLaser,
+    FrequencyRecovery,
     IQDriver,
     IQModulator,
     IQSampler,
@@ -28,8 +29,10 @@ from maiman.components import (
     TimingRecovery,
     Waveguide,
 )
-from maiman.dsp import estimate_timing, resample_to_instant
+from maiman.dsp import derotate, estimate_carrier_offset, estimate_timing, resample_to_instant
+from maiman.modulation import qam_constellation, rotational_symmetry
 from maiman.signals import ConstellationMeasurement
+from maiman.units import C_LIGHT
 
 #: Enough symbols for the walk to actually wander, and a window edge to discard.
 SEQUENCE = 4096
@@ -386,3 +389,205 @@ def test_the_estimate_carries_the_strength_of_the_line_it_came_from() -> None:
     estimate = graph.run(keep=[timing]).port(timing, "diagnostics")
     assert estimate.strength > 0.0
     assert 0.0 <= estimate.fraction < 1.0
+
+
+# ---------------------------------------------------------------------------
+# carrier frequency offset
+
+
+def analyzer_of(graph: Graph) -> Any:
+    return next(c for c in graph.components if isinstance(c, ConstellationAnalyzer))
+
+
+def detuned_link(
+    offset: float, *, bits_per_symbol: int = 4, recover: bool, launch: float = -18.0
+) -> tuple[Graph, Any, Any]:
+    """A coherent link whose LO is detuned from the transmitter by ``offset`` Hz.
+
+    Not an injected impairment: the LO is an ordinary :class:`CWLaser` tuned to a
+    different wavelength, and the beat comes out of the receiver's own mixing.
+    Which is the point — if the offset had to be synthesised, the block removing
+    it would be answering a question nothing asks.
+    """
+    ctx = SimulationContext(
+        bit_rate=32e9, samples_per_symbol=4, sequence_length=1920, seed=2026, precision="double"
+    )
+    graph = Graph(ctx)
+    bps = float(bits_per_symbol)
+    prbs = graph.add(PRBSGenerator(order=23.0, bits_per_symbol=bps, label="prbs"))
+    mapper = graph.add(QAMMapper(bits_per_symbol=bps, label="map"))
+    driver = graph.add(IQDriver(v_pi=4.0, predistort=True, label="drv"))
+    laser = graph.add(CWLaser(power=launch, wavelength=1550.0, label="tx"))
+    modulator = graph.add(IQModulator(v_pi=4.0, label="mod"))
+    # Tuned below the signal by the offset, so the beat comes out positive.
+    detuned_nm = C_LIGHT / (C_LIGHT / 1550e-9 - offset) * 1e9
+    lo = graph.add(CWLaser(power=10.0, wavelength=detuned_nm, label="lo"))
+    receiver = graph.add(CoherentReceiver(responsivity=0.8, label="rx"))
+    sampler = graph.add(IQSampler(label="smp"))
+    # Blind here, or the analyser's own data-aided removal would hide the very
+    # thing under test — it holds the transmitted sequence and this block does not.
+    analyzer = graph.add(ConstellationAnalyzer(remove_frequency_offset=False, label="vsa"))
+
+    graph.chain(prbs, mapper, driver)
+    graph.connect(laser, modulator["optical_in"])
+    graph.connect(driver["i"], modulator["i"])
+    graph.connect(driver["q"], modulator["q"])
+    graph.connect(modulator, receiver["in"])
+    graph.connect(lo, receiver["lo"])
+    graph.connect(receiver["i"], sampler["i"])
+    graph.connect(receiver["q"], sampler["q"])
+    graph.connect(mapper["out"], sampler["reference"])
+
+    recovery = None
+    if recover:
+        recovery = graph.add(FrequencyRecovery(label="fo"))
+        graph.connect(sampler["out"], recovery["in"])
+        graph.connect(recovery["out"], analyzer["in"])
+    else:
+        graph.connect(sampler["out"], analyzer["in"])
+    graph.connect(mapper["out"], analyzer["reference"])
+    return graph, analyzer, recovery
+
+
+def modulated(offset: float, symbol_rate: float, count: int = 2048, bits: int = 4) -> np.ndarray:
+    """A clean QAM sequence spun by a known offset, with no channel in the way."""
+    rng = np.random.default_rng(7)
+    points = qam_constellation(bits)
+    symbols = points[rng.integers(0, points.size, count)]
+    index = np.arange(count, dtype=np.float64)
+    return symbols * np.exp(2j * np.pi * offset * index / symbol_rate)
+
+
+@pytest.mark.parametrize("offset", [0.0, 137e6, -137e6, 1e9, -1e9, 3.9e9, -3.9e9])
+def test_the_offset_estimate_lands_on_the_offset(offset: float) -> None:
+    """Across the whole unambiguous range and both signs, to well under a MHz.
+
+    A sign error here is not a small error: it doubles the residual rather than
+    removing it, so both directions are asserted rather than one and a shrug.
+    """
+    symbol_rate = 32e9
+    found, confidence = estimate_carrier_offset(
+        modulated(offset, symbol_rate), symbol_rate, symmetry=4
+    )
+    assert found == pytest.approx(offset, abs=0.5e6)
+    assert confidence > 10.0
+
+
+def test_past_half_the_stripped_bandwidth_it_aliases_rather_than_degrades() -> None:
+    """The one failure mode worth knowing, because it does not look like failure.
+
+    The tone sits at ``M`` times the offset, so ``symbol_rate / (2 * M)`` is where
+    it wraps. Past that the estimate is not noisy — it is confidently wrong by
+    exactly ``symbol_rate / M``, with the same confidence as a correct one. That
+    is why a real receiver sweeps its LO to acquire, and why the docstring says so.
+    """
+    symbol_rate = 32e9
+    beyond = symbol_rate / 8.0 + 100e6  # M = 4 for square QAM
+
+    found, confidence = estimate_carrier_offset(
+        modulated(beyond, symbol_rate), symbol_rate, symmetry=4
+    )
+    assert found == pytest.approx(beyond - symbol_rate / 4.0, abs=0.5e6)
+    assert confidence > 10.0, "and it is confident about it, which is the trap"
+
+
+def test_an_alphabet_with_no_symmetry_is_refused() -> None:
+    """There is no power that strips it, so there is no estimate to return.
+
+    Returning an argmax over noise with a low confidence beside it would be the
+    other option; refusing is better, because a caller that ignores confidence is
+    the normal case and a caller that ignores an exception is not.
+    """
+    with pytest.raises(ValueError, match="half-turn"):
+        estimate_carrier_offset(modulated(0.0, 32e9), 32e9, symmetry=1)
+
+
+def test_derotating_by_what_was_found_is_reversible() -> None:
+    """Forward then back is the input again — a phasor, not a filter."""
+    symbols = modulated(0.0, 32e9, count=256)
+    there = derotate(symbols, 32e9, offset=411e6)
+    back = derotate(there, 32e9, offset=-411e6)
+    assert np.allclose(back, symbols, atol=1e-12)
+
+
+def test_the_symmetry_used_is_the_one_the_geometry_reports() -> None:
+    """Not four by assumption: a rectangular alphabet only has a half turn.
+
+    8-QAM here is 4x2, which a quarter turn maps onto a 2x4 grid — a different
+    alphabet. Raising it to the fourth power would leave the data in.
+    """
+    assert rotational_symmetry(qam_constellation(3)) == 2
+    assert rotational_symmetry(qam_constellation(4)) == 4
+
+    symbol_rate = 32e9
+    found, _ = estimate_carrier_offset(
+        modulated(500e6, symbol_rate, bits=3), symbol_rate, symmetry=2
+    )
+    assert found == pytest.approx(500e6, abs=0.5e6)
+
+
+def test_confidence_collapses_when_there_is_no_line() -> None:
+    """Circular noise has no tone at any power of itself, and says so.
+
+    The number this guards is the one a user would otherwise read as an answer:
+    the argmax exists either way, and only the ratio beside it distinguishes a
+    measurement from an accident.
+    """
+    rng = np.random.default_rng(11)
+    noise = rng.normal(size=4096) + 1j * rng.normal(size=4096)
+    _, confidence = estimate_carrier_offset(noise, 32e9, symmetry=4)
+
+    _, real_line = estimate_carrier_offset(modulated(200e6, 32e9), 32e9, symmetry=4)
+    assert confidence < real_line / 5.0
+
+
+@pytest.mark.parametrize("offset", [10e6, 100e6, 1e9])
+def test_the_block_takes_a_detuned_link_back_to_zero_errors(offset: float) -> None:
+    """The physical claim, end to end, on a link nothing else in the chain fixes.
+
+    10 MHz is three hundredths of one per cent of the symbol rate and is enough
+    to destroy the link, which is the whole reason this block exists: the offset
+    a real LO carries is orders of magnitude larger than the offset the link
+    survives.
+    """
+    broken = detuned_link(offset, recover=False)[0]
+    fixed_graph, analyzer, recovery = detuned_link(offset, recover=True)
+
+    without = broken.run()[analyzer_of(broken)]
+    results = fixed_graph.run(keep=[recovery])
+    with_block = results[analyzer]
+    estimate = results.port(recovery, "diagnostics")
+
+    assert without.symbol_errors > without.symbols_evaluated // 2
+    assert with_block.symbol_errors == 0
+    assert estimate.offset == pytest.approx(offset, abs=0.5e6)
+    assert estimate.symmetry == 4
+
+
+def test_it_does_nothing_when_there_is_nothing_to_do() -> None:
+    """A block that quietly costs something when idle is a block nobody leaves in."""
+    aligned, analyzer, recovery = detuned_link(0.0, recover=True)
+    baseline, plain_analyzer, _ = detuned_link(0.0, recover=False)
+
+    results = aligned.run(keep=[recovery])
+    estimate = results.port(recovery, "diagnostics")
+
+    assert estimate.offset == pytest.approx(0.0, abs=0.5e6)
+    assert results[analyzer].evm == pytest.approx(baseline.run()[plain_analyzer].evm, rel=1e-9)
+
+
+def test_a_rectangular_format_is_recovered_too() -> None:
+    """8-QAM has half the symmetry, so half the range and the same outcome."""
+    graph, analyzer, recovery = detuned_link(1e9, bits_per_symbol=3, recover=True)
+    results = graph.run(keep=[recovery])
+    estimate = results.port(recovery, "diagnostics")
+
+    assert estimate.symmetry == 2
+    assert estimate.offset == pytest.approx(1e9, abs=0.5e6)
+    assert results[analyzer].symbol_errors == 0
+
+
+def test_an_empty_sequence_is_answered_rather_than_divided_by() -> None:
+    empty = np.array([], dtype=np.complex128)
+    assert estimate_carrier_offset(empty, 32e9, symmetry=4) == (0.0, 0.0)
+    assert derotate(empty, 32e9, offset=1e9).size == 0
