@@ -127,3 +127,63 @@ def test_the_test_count_the_product_brief_claims_is_a_floor_and_is_met(
         f"PRODUCT.md claims more than {claimed} tests and the suite collects "
         f"{collected}. Lower the claim, or find out which tests went missing."
     )
+
+
+# --------------------------------------------------------------------------
+# The files that describe the project to people who are not reading the code
+# --------------------------------------------------------------------------
+
+
+def test_the_citation_file_names_the_version_the_package_does() -> None:
+    """A citation that points at the wrong version is worse than none at all.
+
+    Whoever cites this is recording what they ran. The version is the only part
+    of that a reader can check, so it has to be the version the package
+    actually declares — and it is exactly the sort of field that is updated in
+    one file and forgotten in the other.
+    """
+    citation = (ROOT / "CITATION.cff").read_text(encoding="utf-8")
+    declared = re.search(r"^version:\s*(\S+)\s*$", citation, re.MULTILINE)
+    assert declared, "CITATION.cff has no version line"
+    assert declared.group(1) == maiman.__version__, (
+        f"CITATION.cff says {declared.group(1)} and the package says {maiman.__version__}"
+    )
+
+
+def test_the_citation_file_has_what_a_citation_needs() -> None:
+    """The fields CFF 1.2.0 requires, checked without taking a YAML dependency.
+
+    Deliberately not a schema validation: pulling in a parser to check five
+    lines would cost every contributor an install to run the suite. What breaks
+    in practice is a field going missing, and that is what this sees.
+    """
+    citation = (ROOT / "CITATION.cff").read_text(encoding="utf-8")
+    for field in ("cff-version:", "title:", "message:", "type:", "authors:", "license:"):
+        assert field in citation, f"CITATION.cff is missing {field!r}"
+    assert "cff-version: 1.2.0" in citation
+
+
+def test_contributing_only_names_tests_that_exist() -> None:
+    """Its table of guards is a promise about this suite, so it has to be true.
+
+    A contributing guide that sends someone to a test that was renamed two
+    months ago wastes exactly the person who was trying to help. Every
+    backticked ``test_...`` name in the file is checked against the suite.
+    """
+    guide = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+    named = set(re.findall(r"`(test_[a-z0-9_]+)`", guide))
+    assert named, "no test names found in CONTRIBUTING.md — has its shape changed?"
+
+    sources = "\n".join(
+        path.read_text(encoding="utf-8") for path in (ROOT / "tests").glob("test_*.py")
+    )
+    missing = sorted(name for name in named if f"def {name}(" not in sources)
+    assert not missing, f"CONTRIBUTING.md names tests that do not exist: {missing}"
+
+
+def test_contributing_only_links_to_files_that_exist() -> None:
+    """Same argument, for the paths it points at."""
+    guide = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+    targets = re.findall(r"\]\(([^)#][^)]*)\)", guide)
+    missing = sorted(target for target in targets if not (ROOT / target.split("#")[0]).exists())
+    assert not missing, f"CONTRIBUTING.md links to paths that do not exist: {missing}"

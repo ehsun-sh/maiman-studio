@@ -1,0 +1,44 @@
+cff-version: 1.2.0
+title: "Maiman Studio"
+message: >-
+  If you use this software in work you publish, please cite it as below.
+  Please also cite the primary sources for whichever physics you relied on:
+  every component's docstring names the paper or standard its model comes
+  from, and those authors did the work this only implements.
+type: software
+authors:
+  - family-names: Shahmohammadi
+    given-names: Ehsan
+    email: ehsun.ca@gmail.com
+repository-code: "https://github.com/ehsun-sh/maiman-studio"
+url: "https://github.com/ehsun-sh/maiman-studio"
+abstract: >-
+  An open-source simulator for optical communication links and photonic
+  systems. Links are built as block diagrams — laser, modulator, fiber,
+  amplifier, detector, receiver DSP — and read back as eye diagrams, bit
+  error rates, OSNR figures and constellation measurements. Every physics
+  block is validated against a closed-form result in continuous
+  integration, and models are derived from published literature and
+  standards rather than from inspection of commercial tools.
+
+  The project is named after Theodore Maiman, who built the first working
+  laser at Hughes Research Laboratories in May 1960.
+keywords:
+  - photonics
+  - optical communications
+  - fiber optics
+  - simulation
+  - digital signal processing
+  - forward error correction
+  - photonic integrated circuits
+license: Apache-2.0
+version: 0.0.1.dev0
+
+# No `date-released`, deliberately. There has been no release: the version
+# above is a development version, the package is not on PyPI, and the field
+# would have to be invented to be present. Cite the repository and, if the
+# result matters, the commit you ran — `git rev-parse HEAD` — because a
+# pre-alpha tree is not a stable thing to cite by name alone.
+#
+# No ORCID and no affiliation either, for the same reason: neither is on
+# hand, and a citation file is exactly the wrong place to approximate.

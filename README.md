@@ -1761,6 +1761,16 @@ Open an issue for any of the above.
 pip install -e ".[dev]" && ruff check . && ruff format --check . && mypy && pytest
 ```
 
+[`CONTRIBUTING.md`](CONTRIBUTING.md) has the rest: how a component is put together, what this
+project refuses and why, and what each of the drift guards means when it fires at you.
+
+## Citing this
+
+[`CITATION.cff`](CITATION.cff), which GitHub turns into a "Cite this repository" button. It has no
+release date because there has been no release — cite the commit you ran. And please cite the
+primary sources for whichever physics you leaned on: every component's docstring names the paper
+or the standard its model comes from, and those authors did the work this only implements.
+
 ## License
 
 [Apache-2.0](LICENSE) — permissive enough for industrial adoption, with an explicit patent grant.
