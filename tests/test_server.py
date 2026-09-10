@@ -27,10 +27,15 @@ from maiman.component import PortType
 from maiman.components import (
     EDFA,
     BERAnalyzer,
+    CoherentReceiver,
+    ConstellationAnalyzer,
     CWLaser,
     ElectricalFilter,
     EyeDiagram,
     Fiber,
+    IQDriver,
+    IQModulator,
+    IQSampler,
     MachZehnderModulator,
     NRZDriver,
     OpticalSpectrumAnalyzer,
@@ -38,6 +43,9 @@ from maiman.components import (
     PINPhotodiode,
     PowerMeter,
     PRBSGenerator,
+    QAMMapper,
+    TimingRecovery,
+    Waveguide,
 )
 from maiman.encoding import (
     MAX_ENCODED_NUMBERS,
@@ -119,11 +127,53 @@ def metric_rich_link() -> Graph:
     return graph
 
 
+def mistimed_coherent_link() -> Graph:
+    """A coherent link with a waveguide in it, and the block that copes with one.
+
+    The delay is not invented: a 500 um silicon waveguide at a group index of
+    4.2 holds 7 ps, which at 32 GBd is most of a quarter of a symbol. Without
+    the recovery stage this link runs at 37 % EVM.
+    """
+    ctx = SimulationContext(bit_rate=32e9, samples_per_symbol=16, sequence_length=512, seed=5)
+    graph = Graph(ctx)
+    prbs = graph.add(PRBSGenerator(order=15.0, bits_per_symbol=4.0, label="prbs"))
+    mapper = graph.add(QAMMapper(bits_per_symbol=4.0, label="map"))
+    driver = graph.add(
+        IQDriver(v_pi=4.0, predistort=True, pulse_shaping=True, roll_off=0.2, label="drv")
+    )
+    laser = graph.add(CWLaser(power=2.0, wavelength=1550.0, label="tx"))
+    modulator = graph.add(IQModulator(v_pi=4.0, label="mod"))
+    guide = graph.add(Waveguide(length=500.0, propagation_loss=0.0, label="wg"))
+    lo = graph.add(CWLaser(power=10.0, wavelength=1550.0, label="lo"))
+    receiver = graph.add(CoherentReceiver(responsivity=0.8, label="rx"))
+    timing = graph.add(TimingRecovery(label="tr"))
+    sampler = graph.add(IQSampler(matched_filter=True, roll_off=0.2, label="smp"))
+    analyzer = graph.add(ConstellationAnalyzer(ignore_edges=32.0, label="vsa"))
+
+    graph.connect(prbs["out"], mapper["in"])
+    graph.connect(mapper["out"], driver["in"])
+    graph.connect(laser, modulator["optical_in"])
+    graph.connect(driver["i"], modulator["i"])
+    graph.connect(driver["q"], modulator["q"])
+    graph.connect(modulator, guide["in"])
+    graph.connect(guide, receiver["in"])
+    graph.connect(lo, receiver["lo"])
+    graph.connect(receiver["i"], timing["i"])
+    graph.connect(receiver["q"], timing["q"])
+    graph.connect(timing["i"], sampler["i"])
+    graph.connect(timing["q"], sampler["q"])
+    graph.connect(mapper["out"], sampler["reference"])
+    graph.connect(sampler["out"], analyzer["in"])
+    graph.connect(mapper["out"], analyzer["reference"])
+    return graph
+
+
 def test_no_metric_port_in_the_library_encodes_as_opaque() -> None:
     """Every measurement the library can produce must be drawable.
 
-    Two graphs between them touch all nine metric ports — the optical/OOK side
-    here, the coherent side through the shipped export example — and the
+    Three graphs between them touch every metric port — the optical/OOK side
+    here, the coherent side through the shipped export example, and a
+    mistimed link for the stage that only has something to say on one — and the
     assertion is that none of them come back tagged ``opaque``. That tag is the
     honest answer for a plugin's own result type, and the wrong answer for
     anything shipped in this package.
@@ -135,7 +185,11 @@ def test_no_metric_port_in_the_library_encodes_as_opaque() -> None:
     from export_ui_data import build as build_coherent
 
     covered: set[tuple[str, str]] = set()
-    for graph in (metric_rich_link(), build_coherent(sequence_length=256)):
+    for graph in (
+        metric_rich_link(),
+        build_coherent(sequence_length=256),
+        mistimed_coherent_link(),
+    ):
         by_label = {c.label: c for c in graph.components}
         encoded = encode_results(graph.run())
         for label, ports in encoded.items():

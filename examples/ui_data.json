@@ -1743,6 +1743,35 @@
     }
    }
   },
+  "TimingRecovery": {
+   "name": "Timing Recovery",
+   "type": "TimingRecovery",
+   "class": "maiman.components.dsp.TimingRecovery",
+   "category": "DSP",
+   "version": "0.1.0",
+   "parameters": {
+    "target": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "",
+     "min": 0.0,
+     "max": 1.0,
+     "doc": "Where in the symbol to put the instant; 0 matches a matched-filter sampler"
+    }
+   },
+   "structural": {},
+   "ports": {
+    "inputs": {
+     "i": "electrical",
+     "q": "electrical"
+    },
+    "outputs": {
+     "i": "electrical",
+     "q": "electrical",
+     "diagnostics": "metric"
+    }
+   }
+  },
   "Waveguide": {
    "name": "Waveguide",
    "type": "Waveguide",

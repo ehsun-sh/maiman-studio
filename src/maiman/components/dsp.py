@@ -8,7 +8,7 @@ matter of taste.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 
@@ -17,11 +17,126 @@ from ..context import SimulationContext
 from ..dsp import (
     butterfly_equalize,
     butterfly_separate,
+    clock_tone,
     compensate_dispersion,
     dispersive_spread,
     estimate_dispersion,
+    estimate_timing,
+    resample_to_instant,
 )
 from ..signals import ElectricalSignal, Signal, SymbolSignal
+
+
+@dataclass(frozen=True)
+class TimingEstimate:
+    """Where the sampling instant was found, and what was done about it."""
+
+    fraction: float
+    """Where the instant sat in the symbol before correction, 0 to 1."""
+
+    applied: float
+    """Seconds of delay applied. Negative advances."""
+
+    strength: float
+    """Magnitude of the symbol-rate line the estimate came from.
+
+    Worth carrying because the estimate is only as good as the line: a signal
+    shaped to exactly the Nyquist bandwidth has none, and a heavily dispersed one
+    has nearly none. A number near zero here says the timing below it is noise,
+    and no amount of confidence in the arithmetic changes that.
+    """
+
+    def __repr__(self) -> str:
+        return (
+            f"TimingEstimate({self.fraction:.4f} symbol, "
+            f"applied {self.applied * 1e12:+.2f} ps)"
+        )
+
+
+class TimingRecovery(Component):
+    """Find the sampling instant in the signal, instead of assuming it.
+
+    Everything downstream of the receiver in this library samples on a grid it
+    was *given*: :class:`~maiman.components.coherent.IQSampler` takes one column
+    out of every symbol and the column is a parameter. That is exact when the
+    transmitter's symbol grid and the receiver's sample grid are the same one,
+    which in a simulation they are by construction — and stops being true the
+    moment anything in the path has a delay that is not a whole number of
+    samples.
+
+    A silicon waveguide is enough to do it. At a group index of 4.2 a
+    quarter-millimetre holds 3.5 ps, which at 32 GBd is a ninth of a symbol, and
+    it takes a back-to-back link from 1.5 % EVM to 17.7 %; half a millimetre
+    takes it to 37 % and 637 symbol errors in 1920. None of that is a
+    fabricated impairment — it is one shipped block in the optical path.
+
+    **The method is one FFT bin.** :func:`maiman.dsp.estimate_timing` reads the
+    phase of the symbol-rate line in the intensity, which *is* the timing;
+    nothing is searched and nothing iterates. The correction is a phase ramp,
+    which is an exact fractional delay for a periodic band-limited window rather
+    than an interpolation with a passband to argue about.
+
+    **What it cannot do is find a whole symbol.** A delay of exactly one symbol
+    period leaves the intensity waveform identical, so no estimator that looks at
+    ``|A|**2`` can see it, and what it costs is not a worse decision but the
+    sequence read off by one place. That is framing, not timing, and it is
+    resolved against a known reference the way the quadrant ambiguity is. A
+    2.23 mm waveguide is exactly this case: the timing comes back to zero and the
+    link stays broken.
+
+    ``target`` is where in the symbol the instant should be put, as a fraction.
+    Zero — the default — matches ``IQSampler``'s own default when its matched
+    filter is on, which is the chain this library ships. A sampler reading the
+    midpoint instead wants 0.5 here, and the two have to agree: this block moves
+    the signal, it does not tell the sampler anything.
+    """
+
+    display_name = "Timing Recovery"
+    category = "DSP"
+
+    target = Param(
+        0.0,
+        unit="",
+        min=0.0,
+        max=1.0,
+        doc="Where in the symbol to put the instant; 0 matches a matched-filter sampler",
+    )
+
+    inputs = {"i": PortType.ELECTRICAL, "q": PortType.ELECTRICAL}
+    outputs = {
+        "i": PortType.ELECTRICAL,
+        "q": PortType.ELECTRICAL,
+        "diagnostics": PortType.METRIC,
+    }
+
+    def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
+        current_i: ElectricalSignal = inputs["i"]
+        current_q: ElectricalSignal = inputs["q"]
+        if current_i.samples.shape != current_q.samples.shape:
+            raise ValueError(
+                f"{self.label}: the two rails differ in length, "
+                f"{current_i.samples.shape} and {current_q.samples.shape}"
+            )
+
+        sample_rate = ctx.bit_rate * ctx.samples_per_symbol
+        baseband = np.asarray(current_i.samples).astype(np.float64) + 1j * np.asarray(
+            current_q.samples
+        ).astype(np.float64)
+
+        found = estimate_timing(baseband, sample_rate, symbol_rate=ctx.bit_rate)
+        tone = float(abs(clock_tone(baseband, sample_rate, symbol_rate=ctx.bit_rate)))
+
+        # Shortest way round. Moving 0.9 of a symbol forward is moving 0.1 back,
+        # and the second is both smaller and the one a real loop would take.
+        error = (found - self.target + 0.5) % 1.0 - 0.5
+        delay = -error / ctx.bit_rate
+
+        moved = resample_to_instant(baseband, sample_rate, delay=delay)
+        return {
+            "i": replace(current_i, samples=np.real(moved)),
+            "q": replace(current_q, samples=np.imag(moved)),
+            "diagnostics": TimingEstimate(fraction=found, applied=delay, strength=tone),
+        }
 
 
 @dataclass(frozen=True)

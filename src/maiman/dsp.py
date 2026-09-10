@@ -166,6 +166,55 @@ class DispersionEstimate:
         )
 
 
+def estimate_timing(baseband: np.ndarray, sample_rate: float, *, symbol_rate: float) -> float:
+    """Where in the symbol period the sampling instant is, as a fraction of it.
+
+    The square-law estimator of Oerder and Meyr (IEEE Trans. Commun. 36(5),
+    1988): the phase of the symbol-rate line in ``|A|**2``, which is
+    :func:`clock_tone`, is the timing directly. Nothing is searched and nothing
+    iterates — one FFT bin is the whole method, which is why it is what a real
+    receiver runs at the front of its DSP chain.
+
+    Returns a value in ``[0, 1)``, measured from the first sample of the window.
+    **Modulo one symbol, necessarily.** A delay of a whole symbol period leaves
+    the intensity waveform identical, so no estimator that looks at ``|A|**2``
+    can see it — what it costs is not a worse decision but a *different* one, the
+    sequence read off by one place. That is a framing problem and is resolved
+    against a known reference, exactly as the quadrant ambiguity is; see
+    :class:`~maiman.components.dsp.TimingRecovery`.
+
+    Needs the signal to have excess bandwidth, for the reason
+    :func:`clock_tone` gives: a spectrum shaped to exactly the Nyquist
+    bandwidth carries no line at the symbol rate to take the phase of.
+    """
+    tone = clock_tone(baseband, sample_rate, symbol_rate=symbol_rate)
+    if tone == 0:
+        return 0.0
+    return float((-np.angle(tone) / (2.0 * np.pi)) % 1.0)
+
+
+def resample_to_instant(
+    baseband: np.ndarray, sample_rate: float, *, delay: float
+) -> np.ndarray:
+    """Delay a waveform by ``delay`` seconds, fractional samples included.
+
+    A phase ramp in the frequency domain, which is an *exact* fractional delay
+    for a band-limited periodic signal rather than an interpolation with a
+    passband to argue about. The window this engine runs is periodic by
+    construction — every simulation is a whole number of symbols — so the
+    circular wrap the FFT implies is not an approximation here either.
+
+    A negative delay advances, which is what timing recovery asks for when the
+    instant it found is late.
+    """
+    values = np.asarray(baseband)
+    count = values.shape[0]
+    if count == 0 or delay == 0.0:
+        return values
+    frequency = np.fft.fftfreq(count, d=1.0 / sample_rate)
+    return np.fft.ifft(np.fft.fft(values) * np.exp(-2j * np.pi * frequency * delay))
+
+
 def _symbol_rate_bin(num_samples: int, sample_rate: float, symbol_rate: float) -> int:
     """The FFT bin the symbol rate lands on, refusing a window where it lands between.
 
@@ -198,9 +247,9 @@ def clock_tone(baseband: np.ndarray, sample_rate: float, *, symbol_rate: float) 
     searches for.
 
     Its **phase** is the symbol timing — where in the symbol period the intensity
-    peaks — which is a free clock recovery for anything that wants one. Nothing
-    here does: refinement was written to use it and measured better without it,
-    for which see :func:`intensity_cost`.
+    peaks. :func:`estimate_timing` is what reads it; dispersion refinement was
+    written to use it too and measured better without it, for which see
+    :func:`intensity_cost`.
 
     **The line only exists if the signal has excess bandwidth.** Components one
     symbol rate apart must both fall inside the occupied band, and for a signal

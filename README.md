@@ -299,6 +299,43 @@ Nothing here is configured to come out right. The shot-noise-limited SNR is asse
 `R·P/(2qB)`, the counted symbol errors against
 [`ser_qam()`](src/maiman/modulation.py), and the modulator's 3 dB against `10·log10(2)`.
 
+### What timing recovery is for
+
+Everything downstream of the receiver used to sample on a grid it was *given*. `IQSampler` takes
+one column out of every symbol and the column is a parameter — exact when the transmitter's symbol
+grid and the receiver's sample grid are the same one, which in a simulation they are by
+construction, and wrong the moment anything in the path holds a delay that is not a whole number of
+samples.
+
+**One shipped block is enough to do it.** A silicon waveguide at a group index of 4.2 holds 14 ps
+per millimetre. At 32 GBd a symbol is 31.2 ps, so a quarter of a millimetre is a ninth of one:
+
+```
+waveguide     delay | EVM off   errors off | EVM on    errors on     moved
+      0 um   0.00 ps |   6.44%     0/1920  |   6.44%     0/1920    +0.00 ps
+    250 um   3.50 ps |  18.39%    64/1920  |   6.43%     0/1920    -3.52 ps
+    500 um   7.00 ps |  37.06%   675/1920  |   6.45%     0/1920    -7.00 ps
+   1115 um  15.61 ps | 110.20%  1527/1920  | 2993.36%  1806/1920  +15.62 ps
+```
+
+The method is **one FFT bin**. A modulated signal is cyclostationary, so `|A|²` carries a line at
+the symbol rate; the phase of that line *is* the timing — Oerder and Meyr, 1988. Nothing is
+searched and nothing iterates. The correction is a phase ramp, which is an exact fractional delay
+for a periodic band-limited window rather than an interpolation with a passband to argue about,
+and the test asserts that forward-then-back returns the input to 1e-12.
+
+**Half a symbol is the cliff, and past it the failure is a different one.** At 1115 µm the delay is
+exactly half a symbol: both directions are the same distance, so whichever it takes puts the
+instant in the right place and the *sequence* one place out. The constellation is fine and the
+errors are total, which is the signature of a slip rather than of bad timing. No estimator reading
+`|A|²` can do better — delay by a whole symbol and the intensity waveform is **identical**, so the
+line has the same phase. That is framing, not timing, and it is resolved against a known reference
+exactly as the quadrant ambiguity is.
+
+The estimate carries the **magnitude** of the line it came from, because the phase of nothing is a
+number like any other: a signal shaped to exactly the Nyquist bandwidth carries no symbol-rate line
+at all, and a heavily dispersed one nearly none.
+
 ### What carrier recovery is for
 
 With ordinary 100 kHz lasers and no phase recovery, 16-QAM at 32 GBd does not close — and, more
@@ -1299,6 +1336,10 @@ Every physics block ships with a test against a closed-form result, run in CI
 | Coupler unitarity | `SᴴS = I` at every split ratio — which is what the cross path's factor of j is for | ✅ |
 | Resonance linewidth | Lorentzian `FSR(1−r)/π√r` within 3 % of a measured width from critical coupling to κ = 0.5 | ✅ |
 | Waveguide group delay | `n_g L / c` read off the transfer function's phase slope, to 1e-9 | ✅ |
+| **Timing estimate** | Tracks a known delay one for one over ±0.45 symbol, to 2e-3 | ✅ |
+| Fractional delay is exact | Forward then back returns the input to 1e-12 — a phase ramp, not an interpolation | ✅ |
+| Timing recovery earns its place | 500 µm of waveguide costs 675 symbol errors in 1920; with the stage, none, and it moves by the 7.00 ps the guide actually holds | ✅ |
+| A whole symbol is invisible | Delay by one symbol period and the estimate does not move — the limit is `\|A\|²`, not the code | ✅ |
 | **Kernels never touch NumPy** | Every kernel run against an array library that refuses NumPy's *allocating* API and returns identical answers | ✅ |
 | A second library gets the same field | `check_device()` propagates an N=1 soliton on each back-end and compares — the one answer that is known without a second run | ✅ |
 | The GPU job cannot vanish quietly | A test reads `ci.yml` and holds it to the runner label, the CuPy install and the cross-check | ✅ |

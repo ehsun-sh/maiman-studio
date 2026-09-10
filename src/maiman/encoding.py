@@ -32,7 +32,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from .components.dsp import DispersionDiagnostics
+from .components.dsp import DispersionDiagnostics, TimingEstimate
 from .kernels import PropagationDiagnostics
 from .signals import (
     BinarySignal,
@@ -279,6 +279,19 @@ def _diagnostics(diagnostics: PropagationDiagnostics) -> dict[str, Any]:
     }
 
 
+def _timing(estimate: TimingEstimate) -> dict[str, Any]:
+    # The applied delay goes out in picoseconds as well as seconds. A timing
+    # correction is quoted in ps by everyone who quotes one, and at 32 GBd the
+    # SI number is 1e-12 and reads as zero in anything that rounds.
+    return {
+        "kind": "timing",
+        "fraction": number(estimate.fraction),
+        "applied": number(estimate.applied),
+        "applied_ps": number(estimate.applied * 1e12),
+        "strength": number(estimate.strength),
+    }
+
+
 def _dispersion(diagnostics: DispersionDiagnostics) -> dict[str, Any]:
     # Accumulated dispersion is held in s/m and quoted in ps/nm, which differ by
     # 1e3 rather than by one of the usual powers. Both are sent: a client that
@@ -301,6 +314,7 @@ def _dispersion(diagnostics: DispersionDiagnostics) -> dict[str, Any]:
 
 _ENCODERS: dict[type, Any] = {
     DispersionDiagnostics: _dispersion,
+    TimingEstimate: _timing,
     ElectricalSignal: _electrical,
     OpticalSignal: _optical,
     BinarySignal: _binary,
