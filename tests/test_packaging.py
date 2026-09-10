@@ -13,6 +13,7 @@ and every test was reading the workspace. These read the artefact.
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 import zipfile
@@ -98,3 +99,31 @@ def test_the_wheel_declares_the_maiman_command(wheel: zipfile.ZipFile) -> None:
 
     assert "[console_scripts]" in text, text
     assert "maiman = maiman.cli:main" in text, text
+
+
+def test_the_test_count_the_product_brief_claims_is_a_floor_and_is_met(
+    request: pytest.FixtureRequest,
+) -> None:
+    """PRODUCT.md says "more than N tests". It must be true, and it must stay true.
+
+    The number drifted twice in one afternoon — written as an exact count, it is
+    wrong the moment anybody adds a test, and nothing notices. So it is a floor
+    now: only a claim that gets *smaller* can falsify it, which happens when
+    tests are deleted and is exactly when somebody should be told.
+
+    Skipped on a partial run, because ``testscollected`` counts what this
+    session collected and running one file would fail this for the wrong reason.
+    """
+    brief = (ROOT / "PRODUCT.md").read_text(encoding="utf-8")
+    match = re.search(r"more than ([\d,]+) tests", brief)
+    assert match, "PRODUCT.md no longer states a test count; the guard has nothing to hold"
+    claimed = int(match.group(1).replace(",", ""))
+
+    collected = request.session.testscollected
+    if collected < claimed // 2:
+        pytest.skip(f"partial run ({collected} collected); this needs the whole suite")
+
+    assert collected > claimed, (
+        f"PRODUCT.md claims more than {claimed} tests and the suite collects "
+        f"{collected}. Lower the claim, or find out which tests went missing."
+    )
