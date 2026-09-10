@@ -1771,6 +1771,18 @@ for the reference because that is what makes it actionable. Security reports go 
 attack surface — `maiman serve` executes the graphs it is posted, which is why it binds to loopback
 and warns if you tell it not to.
 
+## Installing
+
+Not on PyPI yet. From a checkout:
+
+```bash
+pip install -e ".[dev]"
+```
+
+[`RELEASING.md`](RELEASING.md) is what stands between that and `pip install maiman` — the
+mechanical half is a workflow that publishes with no API token anywhere (PyPI mints trust from
+GitHub's OIDC identity instead), and the half left is an account and two web forms.
+
 ## Citing this
 
 [`CITATION.cff`](CITATION.cff), which GitHub turns into a "Cite this repository" button. It has no

@@ -1,0 +1,125 @@
+# Publish to PyPI.
+#
+# **No API token anywhere.** This uses PyPI's trusted publishing: GitHub mints a
+# short-lived OIDC identity for this workflow, PyPI checks it against a publisher
+# it was told to trust, and the upload is authorised without a secret existing at
+# all. A token in repository secrets is a long-lived credential that can be
+# leaked, has to be rotated, and grants upload rights to anyone who obtains it.
+# This has none of those properties, which is why it is worth the one-time setup
+# described in RELEASING.md.
+#
+# It runs on a published GitHub release rather than on a tag push, so the release
+# notes and the artifacts are one act. The build is checked before it is
+# uploaded, and the tag has to agree with the version in pyproject.toml -- a
+# mismatch there is unrecoverable once uploaded, because PyPI never lets a
+# version number be reused.
+
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Where to publish"
+        required: true
+        default: testpypi
+        type: choice
+        options: [testpypi, pypi]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install the build tools
+        run: python -m pip install --upgrade build twine
+
+      - name: Refuse a tag that disagrees with the version
+        if: github.event_name == 'release'
+        run: |
+          declared=$(python -c "import tomllib,pathlib;print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
+          tag="${GITHUB_REF_NAME#v}"
+          echo "pyproject says $declared, tag says $tag"
+          if [ "$declared" != "$tag" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match version $declared in pyproject.toml"
+            exit 1
+          fi
+
+      - name: Build
+        run: python -m build
+
+      - name: Check the metadata renders
+        run: python -m twine check --strict dist/*
+
+      - name: Install the wheel somewhere clean and run a link through it
+        run: |
+          python -m venv /tmp/fresh
+          /tmp/fresh/bin/python -m pip install --quiet dist/*.whl
+          cd /tmp
+          /tmp/fresh/bin/python - <<'PY'
+          import pathlib
+
+          import maiman
+          from maiman import Graph, SimulationContext
+          from maiman.components import CWLaser, PowerMeter
+
+          ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=8, sequence_length=64)
+          graph = Graph(ctx)
+          laser = graph.add(CWLaser(power=0.0))
+          meter = graph.add(PowerMeter())
+          graph.chain(laser, meter)
+          assert abs(graph.run()[meter].power_dbm) < 1e-9
+
+          page = pathlib.Path(maiman.__file__).parent / "studio" / "index.html"
+          assert page.exists(), "the wheel does not carry the studio page"
+          assert len(maiman.registered_names()) > 40
+          print(f"maiman {maiman.__version__}: a link ran and the page is present")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+
+  testpypi:
+    name: Publish to TestPyPI
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write # the OIDC identity, and the only credential involved
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  pypi:
+    name: Publish to PyPI
+    needs: build
+    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi')
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

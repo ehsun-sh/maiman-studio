@@ -252,3 +252,66 @@ def test_the_security_policy_says_which_versions_are_supported() -> None:
             f"version. SECURITY.md still says only `main` is supported -- decide what "
             f"that means for the released version and update both."
         )
+
+
+def test_the_release_workflow_uploads_without_a_token() -> None:
+    """Trusted publishing, and nothing that could be leaked instead.
+
+    An API token in repository secrets is a long-lived credential with upload
+    rights: it can be exfiltrated, it has to be rotated, and nothing about the
+    workflow file says whether it still exists. OIDC has none of those
+    properties, so this test refuses the alternative outright rather than
+    trusting that nobody adds it in a hurry one evening.
+    """
+    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+
+    assert "id-token: write" in workflow, "no OIDC identity, so no trusted publishing"
+    assert "pypa/gh-action-pypi-publish" in workflow
+
+    forbidden = ("PYPI_API_TOKEN", "PYPI_TOKEN", "TWINE_PASSWORD", "password:")
+    present = [name for name in forbidden if name in workflow]
+    assert not present, (
+        f"the release workflow references {present}. Trusted publishing needs no "
+        f"secret; if a token has been added, the OIDC setup has been abandoned "
+        f"and RELEASING.md is now wrong."
+    )
+
+
+def test_the_release_workflow_checks_the_tag_against_the_version() -> None:
+    """Because a version number on PyPI can never be reused.
+
+    Publishing 0.1.0 from a tree that says 0.2.0 is not something a later commit
+    can fix: the number is spent. The workflow compares them and fails before
+    building, and this makes sure that check is still there.
+    """
+    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    assert "pyproject.toml" in workflow and "GITHUB_REF_NAME" in workflow, (
+        "the workflow no longer compares the tag with the declared version"
+    )
+
+
+def test_the_release_document_and_the_workflow_agree_on_the_environments() -> None:
+    """A publisher registered against the wrong environment name fails at upload.
+
+    It fails *after* a successful build, on the last step, with an error about
+    an untrusted publisher — which is a confusing place to learn that two files
+    disagreed about a string.
+    """
+    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    releasing = (ROOT / "RELEASING.md").read_text(encoding="utf-8")
+
+    environments = set(re.findall(r"^\s*environment:\s*(\S+)\s*$", workflow, re.MULTILINE))
+    assert environments == {"pypi", "testpypi"}, environments
+    for name in environments:
+        assert f"`{name}`" in releasing, (
+            f"the workflow uses the {name!r} environment and RELEASING.md never mentions it"
+        )
+
+
+def test_the_release_document_links_to_files_that_exist() -> None:
+    """Same argument as the contributing guide, and it points at the workflow."""
+    releasing = (ROOT / "RELEASING.md").read_text(encoding="utf-8")
+    targets = re.findall(r"\]\((?!https?:)([^)#][^)]*)\)", releasing)
+    assert targets, "no relative links found in RELEASING.md"
+    missing = sorted(t for t in targets if not (ROOT / t.split("#")[0]).exists())
+    assert not missing, f"RELEASING.md links to paths that do not exist: {missing}"
