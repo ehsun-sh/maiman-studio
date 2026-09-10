@@ -1841,6 +1841,23 @@
     }
    }
   },
+  "SoftDemapper": {
+   "name": "Soft Demapper",
+   "type": "SoftDemapper",
+   "class": "maiman.components.dsp.SoftDemapper",
+   "category": "DSP",
+   "version": "0.1.0",
+   "parameters": {},
+   "structural": {},
+   "ports": {
+    "inputs": {
+     "in": "symbol"
+    },
+    "outputs": {
+     "out": "soft"
+    }
+   }
+  },
   "Splitter": {
    "name": "Optical Splitter",
    "type": "Splitter",

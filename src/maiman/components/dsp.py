@@ -26,8 +26,48 @@ from ..dsp import (
     estimate_timing,
     resample_to_instant,
 )
-from ..modulation import rotational_symmetry
-from ..signals import ElectricalSignal, Signal, SymbolSignal
+from ..modulation import rotational_symmetry, soft_demap
+from ..signals import ElectricalSignal, Signal, SoftSignal, SymbolSignal
+
+
+class SoftDemapper(Component):
+    """Symbols in, log-likelihood ratios out: the boundary a soft decoder needs.
+
+    Everything that decided a bit in this library decided it *hard* — the
+    nearest constellation point, or a threshold. That throws away how near it
+    was, and how near it was is worth two to three decibels to a decoder that
+    can use it. This block is what stops throwing it away.
+
+    Max-log LLRs; see :func:`maiman.modulation.soft_demap` for why that
+    approximation costs a fraction of a decibel and cannot change a hard
+    decision. The noise variance is estimated blind from the samples, because a
+    receiver has no other option — and because a demapper handed the true
+    variance would report a confidence no real one could have.
+
+    The output carries its own port type. A soft output cannot be wired into a
+    block expecting bits, which is exactly the mistake that would quietly give
+    back the decibels this block exists to recover.
+    """
+
+    display_name = "Soft Demapper"
+    category = "DSP"
+
+    inputs = {"in": PortType.SYMBOL}
+    outputs = {"out": PortType.SOFT}
+
+    def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
+        received: SymbolSignal = inputs["in"]
+        constellation = np.asarray(received.constellation)
+        bits_per_symbol = int(constellation.shape[0]).bit_length() - 1
+
+        llr = soft_demap(np.asarray(received.symbols), constellation, bits_per_symbol)
+        return {
+            "out": SoftSignal(
+                llr=llr,
+                symbol_rate=received.symbol_rate,
+                bits_per_symbol=bits_per_symbol,
+            )
+        }
 
 
 @dataclass(frozen=True)

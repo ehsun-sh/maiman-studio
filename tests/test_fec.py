@@ -27,6 +27,14 @@ from maiman.components import (
     NRZDriver,
     PINPhotodiode,
     Slicer,
+    SoftDemapper,
+)
+from maiman.modulation import (
+    estimate_noise_variance,
+    indices_to_bits,
+    nearest_indices,
+    qam_constellation,
+    soft_demap,
 )
 
 # --------------------------------------------------------------------------
@@ -314,3 +322,153 @@ def test_the_slicer_decides_without_being_told_the_answer() -> None:
     # says it does and where its penalty against the optimum comes from.
     assert level == pytest.approx(1e-3, rel=0.05)
     assert blind_threshold(np.array([0.0, 0.0, 1.0, 1.0])) == pytest.approx(0.5)
+
+
+# --------------------------------------------------------------------------
+# Soft information
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("bits_per_symbol", [1, 2, 3, 4, 6, 8])
+def test_positive_means_zero_in_every_format(bits_per_symbol: int) -> None:
+    """The sign convention, asserted rather than assumed.
+
+    Both orders are in common use and neither is more correct, so the only thing
+    that makes one of them right here is that everything agrees on it. A decoder
+    written against the other convention does not fail loudly — it decodes the
+    complement, converges happily, and reports a bit error rate near one half,
+    which looks like a broken channel rather than a broken convention.
+    """
+    constellation = qam_constellation(bits_per_symbol)
+    indices = np.arange(constellation.size)
+    labels = indices_to_bits(indices, bits_per_symbol)
+
+    llr = soft_demap(constellation[indices], constellation, bits_per_symbol, noise_variance=0.1)
+    assert np.array_equal((llr < 0.0).astype(np.uint8), labels)
+
+
+@pytest.mark.parametrize("bits_per_symbol", [2, 4, 6])
+def test_the_soft_sign_is_the_hard_decision(bits_per_symbol: int) -> None:
+    """Max-log is exact in the sign, so it can never change a decision.
+
+    That is the property that makes the approximation safe: it compresses
+    confidence, always towards less, and never moves a bit. A soft demapper that
+    disagreed with the slicer would be a second, quieter decision rule in the
+    receiver — which is exactly the kind of thing that produces two BER numbers
+    from one link.
+    """
+    rng = np.random.default_rng(4)
+    constellation = qam_constellation(bits_per_symbol)
+    indices = rng.integers(0, constellation.size, 4000)
+    noisy = constellation[indices] + (
+        rng.normal(0.0, 0.15, indices.size) + 1j * rng.normal(0.0, 0.15, indices.size)
+    )
+
+    soft_bits = (soft_demap(noisy, constellation, bits_per_symbol) < 0.0).astype(np.uint8)
+    hard_bits = indices_to_bits(nearest_indices(noisy, constellation), bits_per_symbol)
+    assert np.array_equal(soft_bits, hard_bits)
+
+
+def test_confidence_falls_as_a_symbol_approaches_a_boundary() -> None:
+    """The magnitude has to mean something, or this is a hard decision in a float.
+
+    A symbol sitting exactly on a decision boundary carries no information about
+    that bit, and its LLR must be zero. One placed well inside a region must
+    carry a large one. Without this a demapper that returned ``+-1`` would pass
+    every sign test in this file.
+    """
+    constellation = qam_constellation(2)  # QPSK: boundaries on the axes
+    on_boundary = np.array([0.0 + 0.7j], dtype=np.complex128)
+    well_inside = np.array([0.7 + 0.7j], dtype=np.complex128)
+
+    boundary_llr = soft_demap(on_boundary, constellation, 2, noise_variance=0.1)
+    inside_llr = soft_demap(well_inside, constellation, 2, noise_variance=0.1)
+
+    # The in-phase bit is the ambiguous one at x = 0.
+    assert abs(boundary_llr[0]) == pytest.approx(0.0, abs=1e-12)
+    assert abs(inside_llr[0]) > 10.0
+
+
+def test_the_noise_estimate_finds_the_noise_it_was_given() -> None:
+    """Blind, and it has to be: a receiver does not hold the transmitted sequence.
+
+    Checked against the variance actually injected. The estimator is biased low
+    at high error rates — a symbol that crossed a boundary is measured against
+    the wrong point and looks closer than it is — so this runs where that bias is
+    small and the docstring says where it is not.
+    """
+    rng = np.random.default_rng(7)
+    constellation = qam_constellation(4)
+    symbols = constellation[rng.integers(0, constellation.size, 20000)]
+
+    for sigma in (0.05, 0.1):
+        noisy = symbols + (
+            rng.normal(0.0, sigma, symbols.size) + 1j * rng.normal(0.0, sigma, symbols.size)
+        )
+        assert estimate_noise_variance(noisy, constellation) == pytest.approx(
+            2.0 * sigma**2, rel=0.1
+        )
+
+
+def test_scaling_the_variance_scales_every_llr_together() -> None:
+    """So it cannot change a hard decision — only how much a decoder believes it.
+
+    Worth pinning because it is the whole of the variance's influence. A
+    demapper that let the estimate move a decision would make the noise estimate
+    a second decision rule, and a wrong estimate would then cost errors rather
+    than only costing confidence.
+    """
+    rng = np.random.default_rng(9)
+    constellation = qam_constellation(4)
+    noisy = constellation[rng.integers(0, constellation.size, 500)] + rng.normal(0.0, 0.1, 500)
+
+    tight = soft_demap(noisy, constellation, 4, noise_variance=0.01)
+    loose = soft_demap(noisy, constellation, 4, noise_variance=0.04)
+    assert np.allclose(tight, 4.0 * loose)
+
+
+def test_a_soft_output_cannot_be_wired_into_a_block_that_wants_bits() -> None:
+    """Refused at edit time, which is the reason the port type exists at all.
+
+    Wiring soft data into a hard input is not a crash — the array has the right
+    length and the wrong meaning, and the link would run and quietly give back
+    the decibels the soft path exists to recover. The type system is what makes
+    that unrepresentable instead of merely unlikely.
+    """
+    from maiman.component import PortType
+    from maiman.graph import GraphError
+
+    assert SoftDemapper.outputs["out"] is PortType.SOFT
+
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=4, sequence_length=64, seed=1)
+    graph = Graph(ctx)
+    demapper = graph.add(SoftDemapper(label="soft"))
+    decoder = graph.add(FECDecoder(label="dec"))
+    with pytest.raises((GraphError, TypeError, ValueError)):
+        graph.connect(demapper["out"], decoder["in"])
+
+
+def test_soft_and_hard_disagree_about_nothing_but_confidence() -> None:
+    """End to end on a real link: the soft path is the same decisions, plus more.
+
+    The point of the whole soft path is that it adds information without
+    changing any conclusion. If a real received constellation gave different bits
+    through the two routes, one of them would be wrong and there would be no way
+    to tell which from inside.
+    """
+    from maiman.signals import SoftSignal
+
+    rng = np.random.default_rng(21)
+    constellation = qam_constellation(4)
+    indices = rng.integers(0, constellation.size, 2000)
+    noisy = constellation[indices] + (
+        rng.normal(0.0, 0.12, indices.size) + 1j * rng.normal(0.0, 0.12, indices.size)
+    )
+
+    signal = SoftSignal(
+        llr=soft_demap(noisy, constellation, 4), symbol_rate=32e9, bits_per_symbol=4
+    )
+    assert signal.num_bits == indices.size * 4
+    assert np.array_equal(signal.hard(), indices_to_bits(nearest_indices(noisy, constellation), 4))
+    # And it really is soft: the confidences are not all the same number.
+    assert float(np.std(np.abs(signal.llr))) > 0.0

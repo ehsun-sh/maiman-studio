@@ -154,6 +154,89 @@ def indices_to_bits(indices: np.ndarray, bits_per_symbol: int) -> np.ndarray:
     return bits.reshape(-1).astype(np.uint8)
 
 
+def estimate_noise_variance(symbols: np.ndarray, constellation: np.ndarray) -> float:
+    """Noise variance per complex dimension pair, from the samples alone.
+
+    The mean squared distance from each symbol to the nearest constellation
+    point. Blind, which is the point: a receiver does not know the transmitted
+    sequence, and a demapper handed the true variance would be reporting a
+    confidence no real one could have.
+
+    It is biased low at high error rates, because a symbol that has crossed a
+    decision boundary is measured against the wrong point and looks closer than
+    it is. That bias makes the demapper *over*-confident exactly where it should
+    not be, so it is worth knowing about: it is the reason a soft decoder can do
+    worse than its own theory near the cliff.
+    """
+    points = np.asarray(constellation).astype(np.complex128)
+    values = np.asarray(symbols).astype(np.complex128)
+    if values.size == 0:
+        return 1.0
+    decided = points[nearest_indices(values, points)]
+    error = float(np.mean(np.abs(values - decided) ** 2))
+    return max(error, 1e-30)
+
+
+def soft_demap(
+    symbols: np.ndarray,
+    constellation: np.ndarray,
+    bits_per_symbol: int,
+    *,
+    noise_variance: float | None = None,
+) -> np.ndarray:
+    """Log-likelihood ratios for every bit, ``log P(0)/P(1)``, max-log.
+
+    For each bit position, the exact LLR is the log ratio of two sums — over the
+    constellation points whose label has a zero there, and those with a one. The
+    max-log approximation keeps only the largest term in each sum, which turns
+    both into a nearest-point search::
+
+        LLR_k = (min_{c in S1} |y - c|^2 - min_{c in S0} |y - c|^2) / sigma^2
+
+    That is what a receiver implements, because the exact form needs a
+    ``logsumexp`` per bit per symbol and buys a fraction of a decibel. The
+    approximation is *exact* in the sign, so it never changes a hard decision —
+    it only compresses the confidence, and always towards less.
+
+    ``noise_variance`` is estimated blind if not given. It scales every LLR
+    equally, so it cannot change a hard decision either; what it changes is how
+    much a soft decoder believes this block against its own parity checks, which
+    is the whole of its influence.
+
+    Bit order matches :func:`indices_to_bits`: most significant bit first within
+    each symbol, symbols in sequence.
+    """
+    points = np.asarray(constellation).astype(np.complex128)
+    if points.shape[0] != 1 << bits_per_symbol:
+        raise ValueError(
+            f"a {bits_per_symbol}-bit alphabet needs {1 << bits_per_symbol} points, "
+            f"got {points.shape[0]}"
+        )
+    values = np.asarray(symbols).astype(np.complex128)
+    variance = estimate_noise_variance(values, points) if noise_variance is None else noise_variance
+    if variance <= 0.0:
+        raise ValueError(f"noise variance must be positive, got {variance}")
+
+    # Squared distance from every symbol to every point: (symbols, points).
+    distance = np.abs(values[:, None] - points[None, :]) ** 2
+
+    labels = indices_to_bits(np.arange(points.shape[0]), bits_per_symbol).reshape(
+        points.shape[0], bits_per_symbol
+    )
+
+    llr = np.empty((values.shape[0], bits_per_symbol), dtype=np.float64)
+    for bit in range(bits_per_symbol):
+        zeros = labels[:, bit] == 0
+        # A constellation whose labelling left a bit constant would make one of
+        # these empty and the LLR infinite. Every alphabet here uses all its
+        # bits, and the guard says so rather than producing an inf downstream.
+        if not zeros.any() or zeros.all():
+            raise ValueError(f"bit {bit} takes only one value across the alphabet")
+        llr[:, bit] = (distance[:, ~zeros].min(axis=1) - distance[:, zeros].min(axis=1)) / variance
+
+    return llr.reshape(-1)
+
+
 def nearest_indices(symbols: np.ndarray, constellation: np.ndarray) -> np.ndarray:
     """Hard-decide each symbol to the nearest constellation point.
 

@@ -26,6 +26,7 @@ from .dsp import (
     ButterflyEqualizer,
     DispersionCompensator,
     FrequencyRecovery,
+    SoftDemapper,
     TimingRecovery,
 )
 from .electrical import (
@@ -100,6 +101,7 @@ __all__ = [
     "RingResonator",
     "SechPulse",
     "Slicer",
+    "SoftDemapper",
     "Splitter",
     "TimingRecovery",
     "Waveguide",

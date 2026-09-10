@@ -26,6 +26,13 @@ class PortType(Enum):
     ELECTRICAL = "electrical"
     BINARY = "binary"
     SYMBOL = "symbol"
+    #: Log-likelihood ratios, one real number per *bit*. Not electrical — those
+    #: are a sampled waveform with a unit and a sample rate — and emphatically
+    #: not binary, because the whole content of a soft decision is the part that
+    #: is not a bit yet. Giving it its own type is what stops a soft output being
+    #: wired into a hard input, which would silently throw away the two to three
+    #: decibels the soft decoder exists to recover.
+    SOFT = "soft"
     METRIC = "metric"
 
     def __str__(self) -> str:

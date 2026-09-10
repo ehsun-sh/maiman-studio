@@ -66,6 +66,7 @@ verdict, and DESIGN.md
     --electrical: #a35f00;
     --binary: #5a6474;
     --symbol: #6539cc;
+    --soft: #b06a00;
     --metric: #bc2668;
 
     --accent: var(--optical);
@@ -129,6 +130,7 @@ verdict, and DESIGN.md
       --electrical: #f0a030;
       --binary: #7c86a0;
       --symbol: #9b7cf6;
+      --soft: #e0a13a;
       --metric: #e85d9b;
 
       --accent-dim: #14807a;
@@ -883,6 +885,7 @@ verdict, and DESIGN.md
           <span class="legend"><i style="background:var(--electrical)"></i>electrical</span>
           <span class="legend"><i style="background:var(--binary)"></i>binary</span>
           <span class="legend"><i style="background:var(--symbol)"></i>symbol</span>
+          <span class="legend"><i style="background:var(--soft)"></i>soft</span>
           <span class="legend"><i style="background:var(--metric)"></i>metric</span>
         </div>
       </div>
@@ -2870,6 +2873,23 @@ verdict, and DESIGN.md
     },
     "outputs": {
      "out": "binary"
+    }
+   }
+  },
+  "SoftDemapper": {
+   "name": "Soft Demapper",
+   "type": "SoftDemapper",
+   "class": "maiman.components.dsp.SoftDemapper",
+   "category": "DSP",
+   "version": "0.1.0",
+   "parameters": {},
+   "structural": {},
+   "ports": {
+    "inputs": {
+     "in": "symbol"
+    },
+    "outputs": {
+     "out": "soft"
     }
    }
   },

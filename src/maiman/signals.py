@@ -294,6 +294,50 @@ class ElectricalSignal:
 
 
 @dataclass(frozen=True)
+class SoftSignal:
+    """Log-likelihood ratios, one per bit: what a hard decision throws away.
+
+    ``llr[i]`` is ``log(P(bit == 0) / P(bit == 1))`` for the i-th bit of the
+    sequence, so a positive value leans towards zero and the magnitude is the
+    confidence. The sign alone is the hard decision; everything else here is the
+    reason a soft-decision decoder outperforms one by two to three decibels.
+
+    **The sign convention is the one that bites.** Both orders are in common use
+    and neither is more correct, so it is stated once here and asserted in the
+    tests: positive means zero. A decoder written against the other convention
+    does not fail loudly — it decodes the complement, converges happily, and
+    reports a bit error rate near one half.
+    """
+
+    llr: np.ndarray
+    """Log-likelihood ratios [natural log units], shape (bits,)."""
+
+    symbol_rate: float
+    """Rate of the *symbols* these bits were carried in [Bd]."""
+
+    bits_per_symbol: int
+
+    def __post_init__(self) -> None:
+        if self.llr.ndim != 1:
+            raise ValueError(f"llr must be 1-D, got {self.llr.ndim}-D")
+        if not np.issubdtype(self.llr.dtype, np.floating):
+            raise TypeError(f"llr must be a float array, got dtype {self.llr.dtype}")
+        if self.symbol_rate <= 0:
+            raise ValueError(f"symbol_rate must be positive, got {self.symbol_rate}")
+        if self.bits_per_symbol < 1:
+            raise ValueError(f"bits_per_symbol must be >= 1, got {self.bits_per_symbol}")
+        object.__setattr__(self, "llr", freeze(self.llr))
+
+    @property
+    def num_bits(self) -> int:
+        return int(self.llr.shape[0])
+
+    def hard(self) -> np.ndarray:
+        """The hard decision this softens: the sign, as bits."""
+        return (np.asarray(self.llr) < 0.0).astype(np.uint8)
+
+
+@dataclass(frozen=True)
 class BinarySignal:
     """A sequence of bits, one per symbol.
 
