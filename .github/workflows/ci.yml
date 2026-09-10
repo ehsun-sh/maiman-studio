@@ -42,17 +42,20 @@ jobs:
       - name: Test
         run: pytest
 
-  # Runs only where a CUDA device is actually attached. GitHub's hosted runners
-  # have none, so on this repository as configured the job is never scheduled and
-  # claims nothing — which is the point. The default job above tests what would
-  # break a GPU port (that the kernels never reach for NumPy directly, against a
-  # deliberately hostile array library); this one tests that the port is not
-  # broken, on hardware, and starts doing so the day somebody attaches a machine
-  # labelled `gpu`.
+  # Runs only where a CUDA device is actually attached. The default job above
+  # tests what would break a GPU port — that the kernels never reach for NumPy
+  # directly, against a deliberately hostile array library; this one tests that
+  # the port is not broken, on hardware.
+  #
+  # Gated on a repository *variable* rather than on the runner label alone. A job
+  # that merely asks for a label nobody provides is not skipped, it is queued —
+  # for hours, holding the whole run pending and the badge with it. Set
+  # `HAS_GPU_RUNNER` to `true` under Settings → Secrets and variables → Actions
+  # once a machine labelled `gpu` is attached, and this starts running; until
+  # then it is skipped, which costs nothing and claims nothing.
   device:
+    if: ${{ vars.HAS_GPU_RUNNER == 'true' }}
     runs-on: [self-hosted, gpu]
-    if: ${{ !github.event.repository.fork }}
-    continue-on-error: true
 
     steps:
       - uses: actions/checkout@v5

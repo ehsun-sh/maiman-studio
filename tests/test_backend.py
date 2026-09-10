@@ -378,5 +378,9 @@ def test_the_workflow_runs_the_device_check_where_a_device_exists() -> None:
     """
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     assert "runs-on: [self-hosted, gpu]" in workflow, "the GPU job lost its runner label"
+    # Gated, not merely labelled. A job asking for a label nobody provides is
+    # queued rather than skipped — it held a whole run pending once, and the
+    # badge with it.
+    assert "vars.HAS_GPU_RUNNER" in workflow, "the GPU job would queue forever"
     assert "maiman devices" in workflow, "the GPU job no longer cross-checks the device"
     assert "cupy-cuda12x" in workflow, "the GPU job no longer installs CuPy"
