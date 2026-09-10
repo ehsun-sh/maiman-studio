@@ -279,8 +279,9 @@ Two findings worth keeping:
 - The mockup shows a single-carrier link. The dual-polarization link is in
   [`examples/dualpol_link.py`](examples/dualpol_link.py) and is not on the
   canvas: at ~20 blocks the node text stops being readable at this canvas size,
-  and a schematic nobody can read is not a better demonstration. At 17 blocks
-  the current graph is already close to that ceiling, which is the reason the
+  and a schematic nobody can read is not a better demonstration. At 19 blocks —
+  the receiver's two blind front-end corrections arrived after this was written —
+  the current graph is at that ceiling, which is the reason the
   two instruments that need a link of their own get one instead of a place on
   it: the eye comes from [`examples/ook_eye.maiman`](examples/ook_eye.maiman)
   and the spectrum from [`examples/wdm_osa.maiman`](examples/wdm_osa.maiman),

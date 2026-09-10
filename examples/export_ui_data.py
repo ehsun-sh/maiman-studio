@@ -35,6 +35,7 @@ from maiman.components import (
     ElectricalFilter,
     EyeDiagram,
     Fiber,
+    FrequencyRecovery,
     IQDriver,
     IQModulator,
     IQSampler,
@@ -46,6 +47,7 @@ from maiman.components import (
     PowerMeter,
     PRBSGenerator,
     QAMMapper,
+    TimingRecovery,
 )
 from maiman.project import graph_to_dict, save
 from maiman.units import C_LIGHT, wavelength_to_frequency
@@ -248,6 +250,14 @@ def wdm_spectrum() -> dict[str, Any]:
     }
 
 
+#: How far the local oscillator sits below the transmitter [Hz], and the
+#: wavelength that puts it there. Quoted as a frequency because that is what a
+#: laser is specified in and what the receiver has to remove; the parameter is a
+#: wavelength because that is what the block takes.
+LO_OFFSET_HZ = 200e6
+LO_WAVELENGTH_NM = C_LIGHT / (C_LIGHT / 1550e-9 - LO_OFFSET_HZ) * 1e9
+
+
 def build(sequence_length: int = 4096) -> Graph:
     ctx = SimulationContext(
         bit_rate=SYMBOL_RATE,
@@ -299,14 +309,29 @@ def build(sequence_length: int = 4096) -> Graph:
     )
     modulator = graph.add(IQModulator(v_pi=V_PI, label="mod"))
     meter = graph.add(PowerMeter(label="pm"))
-    lo = graph.add(CWLaser(power=10.0, wavelength=1550.0, linewidth=100.0, label="lo"))
+    # Detuned by 200 MHz, which is not an injected impairment but the removal of
+    # an idealisation: two free-running lasers are never on the same frequency to
+    # fifteen decimal places, and a good tunable holds about this much. The beat
+    # comes out of the receiver's own mixing, and 200 MHz is six thousandths of
+    # one per cent of the symbol rate and destroys the link on its own. The
+    # FrequencyRecovery stage below is what makes the realistic number usable, in
+    # exactly the way CarrierRecovery makes the realistic linewidth usable.
+    lo = graph.add(CWLaser(power=10.0, wavelength=LO_WAVELENGTH_NM, linewidth=100.0, label="lo"))
     receiver = graph.add(CoherentReceiver(responsivity=0.8, label="rx"))
     compensator = graph.add(
         DispersionCompensator(
             accumulated_dispersion=DISPERSION * SPAN_KM, wavelength=1550.0, label="cdc"
         )
     )
+    # The receiver's two blind front-end corrections, in the order every
+    # deployed receiver applies them: the sampling instant at the sample rate,
+    # then the carrier frequency on the symbols, then the carrier phase. The
+    # order is not a preference — a phase search covers a quarter turn and
+    # averages over a window, so a frequency ramp steep enough to cross that
+    # quarter turn inside the window makes it slip rather than track.
+    timing = graph.add(TimingRecovery(label="tr"))
     sampler = graph.add(IQSampler(matched_filter=True, roll_off=0.2, label="smp"))
+    frequency = graph.add(FrequencyRecovery(label="fo"))
     recovery = graph.add(CarrierRecovery(window=64.0, test_phases=32.0, label="cr"))
     decoder = graph.add(DifferentialDecoder(label="dec"))
     # Two analysers, because the two numbers come from different places. EVM is a
@@ -330,10 +355,13 @@ def build(sequence_length: int = 4096) -> Graph:
     graph.connect(lo, receiver["lo"])
     graph.connect(receiver["i"], compensator["i"])
     graph.connect(receiver["q"], compensator["q"])
-    graph.connect(compensator["i"], sampler["i"])
-    graph.connect(compensator["q"], sampler["q"])
+    graph.connect(compensator["i"], timing["i"])
+    graph.connect(compensator["q"], timing["q"])
+    graph.connect(timing["i"], sampler["i"])
+    graph.connect(timing["q"], sampler["q"])
     graph.connect(mapper["out"], sampler["reference"])
-    graph.connect(sampler["out"], recovery["in"])
+    graph.connect(sampler["out"], frequency["in"])
+    graph.connect(frequency["out"], recovery["in"])
     graph.connect(recovery["out"], decoder["in"])
     graph.connect(recovery["out"], analyzer["in"])
     graph.connect(mapper["out"], analyzer["reference"])

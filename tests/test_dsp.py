@@ -591,3 +591,87 @@ def test_an_empty_sequence_is_answered_rather_than_divided_by() -> None:
     empty = np.array([], dtype=np.complex128)
     assert estimate_carrier_offset(empty, 32e9, symmetry=4) == (0.0, 0.0)
     assert derotate(empty, 32e9, offset=1e9).size == 0
+
+
+def shipped_variant(*, timing: bool, frequency: bool, detuned: bool = True) -> Any:
+    """The shipped coherent project, with either front-end stage optionally taken out.
+
+    Edited as a project document rather than rebuilt, so what is measured is the
+    graph the studio actually opens and not a copy of it that could drift.
+    """
+    import sys
+    from pathlib import Path as _Path
+
+    sys.path.insert(0, str(_Path(__file__).resolve().parent.parent / "examples"))
+    from export_ui_data import build
+
+    from maiman.project import graph_from_dict, graph_to_dict
+
+    document = graph_to_dict(build(sequence_length=4096))
+    if not detuned:
+        for node in document["nodes"]:
+            if node["id"] == "lo":
+                node["params"]["wavelength"] = 1550.0
+
+    def bypass(label: str, pairs: list[tuple[str, str]]) -> None:
+        document["nodes"] = [n for n in document["nodes"] if n["id"] != label]
+        upstream: dict[str, Any] = {}
+        downstream: dict[str, Any] = {}
+        kept = []
+        for edge in document["edges"]:
+            if edge["to"][0] == label:
+                upstream[edge["to"][1]] = edge["from"]
+            elif edge["from"][0] == label:
+                downstream[edge["from"][1]] = edge["to"]
+            else:
+                kept.append(edge)
+        for source, sink in pairs:
+            kept.append({"from": upstream[source], "to": downstream[sink]})
+        document["edges"] = kept
+
+    if not timing:
+        bypass("tr", [("i", "i"), ("q", "q")])
+    if not frequency:
+        bypass("fo", [("in", "out")])
+
+    graph = graph_from_dict(document)
+    results = graph.run()
+    soft = next(c for c in graph.components if c.label == "vsa")
+    counted = next(c for c in graph.components if c.label == "ber")
+    return results[soft], results[counted]
+
+
+def test_the_reference_design_needs_both_front_end_stages() -> None:
+    """The shipped link's LO is 200 MHz off, and both stages earn that back.
+
+    Guards the table in the README, and guards it on the *shipped* graph rather
+    than a test fixture — the claim is about what a user opens, so measuring
+    anything else would be measuring the wrong thing.
+
+    Also pins the order of magnitude of what each is worth, which is the part a
+    refactor can quietly lose: frequency recovery is the difference between a
+    link and no link, and timing recovery is worth several points of EVM but
+    only once the offset is gone.
+    """
+    _, broken_errors = shipped_variant(timing=False, frequency=False)
+    assert broken_errors.symbol_errors > broken_errors.symbols_evaluated // 2, (
+        "200 MHz on a 32 GBd link should destroy it; if this passes the LO is no longer detuned"
+    )
+
+    _, timing_errors = shipped_variant(timing=True, frequency=False)
+    assert timing_errors.symbol_errors > timing_errors.symbols_evaluated // 2, (
+        "a spinning constellation is not a timing problem, and timing alone must not fix it"
+    )
+
+    frequency_only, frequency_errors = shipped_variant(timing=False, frequency=True)
+    assert frequency_errors.symbol_errors == 0
+    assert 0.11 < frequency_only.evm < 0.15, "13 % EVM: the offset is gone, the instant is not"
+
+    both, both_errors = shipped_variant(timing=True, frequency=True)
+    assert both_errors.symbol_errors == 0
+    assert both.evm < frequency_only.evm / 1.5, "the timing stage is worth most of that 13 %"
+
+    ideal, _ = shipped_variant(timing=True, frequency=True, detuned=False)
+    assert both.evm == pytest.approx(ideal.evm, abs=0.002), (
+        "the two stages together should return the detuned link to the co-tuned one"
+    )

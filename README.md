@@ -404,6 +404,40 @@ a range nobody checks.
 Something with no rotational symmetry at all has no power that strips it, so it is refused at run
 time rather than answered with an argmax over noise.
 
+### Both are in the reference design
+
+The coherent link the studio opens with carries both stages, and its LO is tuned 200 MHz below the
+transmitter. That is not an injected impairment — it is the removal of an idealisation. Two
+free-running lasers are never on the same frequency to fifteen decimal places, and a good tunable
+holds about this much; modelling them as exactly co-tuned was the unrealistic choice, in the same
+way that modelling a zero-linewidth laser would be. The link already runs a realistic 100 kHz
+linewidth for exactly that reason.
+
+200 MHz is six thousandths of one per cent of the symbol rate. Here is what each stage is worth on
+that link, with the detuning and without it — every row a real run of the shipped graph:
+
+```
+   LO      timing  frequency |    EVM      SNR      symbol errors
+co-tuned     off      off    |   7.318%   22.71 dB      0/3968
+co-tuned     on       on     |   7.387%   22.63 dB      0/3968
+detuned      off      off    | 285.219%   -9.10 dB   3334/3968
+detuned      on       off    | 292.993%   -9.34 dB   3473/3968
+detuned      off      on     |  13.006%   17.72 dB      0/3968
+detuned      on       on     |   7.342%   22.68 dB      0/3968
+```
+
+Three things are worth reading off it. **Frequency recovery is the difference between a link and
+no link** — 3334 errors to none. **Timing recovery is worth 5.7 points of EVM, but only once the
+offset is gone**: on its own it does nothing for a detuned link, because a spinning constellation
+is not a timing problem. And **the two together return the detuned link to the co-tuned one**,
+7.342 % against 7.318 %.
+
+That last gap is the honest cost of the stages: on a link with an ideal LO they find 2.12 ps and
++0.000 MHz and correct them, and the correction is very slightly worse than leaving it alone —
+0.07 points of EVM. A blind estimator has variance, and paying it is what buys the 278 points in
+the row above. A receiver carries these stages because the impairment is normally there, not
+because they are free when it is not.
+
 ### What carrier recovery is for
 
 With ordinary 100 kHz lasers and no phase recovery, 16-QAM at 32 GBd does not close — and, more
@@ -1413,6 +1447,7 @@ Every physics block ships with a test against a closed-form result, run in CI
 | The stripping power is the geometry's | 8-QAM is refused a quarter turn and stripped at a half, so its range is ±8 GHz and not ±4 | ✅ |
 | Past the range it aliases, confidently | Beyond `Rs/2M` the estimate is wrong by exactly `Rs/M` with an unchanged confidence — asserted, not left to be discovered | ✅ |
 | No line, no confidence | Circular noise returns an argmax like anything else, and a confidence a fifth of a real one | ✅ |
+| The reference design needs both | Detuned 200 MHz, the shipped link runs 3334 errors in 3968; frequency recovery alone leaves 13.0 % EVM, both stages return it to the co-tuned 7.34 % | ✅ |
 | **Kernels never touch NumPy** | Every kernel run against an array library that refuses NumPy's *allocating* API and returns identical answers | ✅ |
 | A second library gets the same field | `check_device()` propagates an N=1 soliton on each back-end and compares — the one answer that is known without a second run | ✅ |
 | The GPU job cannot vanish quietly | A test reads `ci.yml` and holds it to the runner label, the CuPy install and the cross-check | ✅ |
