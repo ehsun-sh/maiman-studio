@@ -726,6 +726,72 @@
     }
    }
   },
+  "FECDecoder": {
+   "name": "FEC Decoder",
+   "type": "FECDecoder",
+   "class": "maiman.components.electrical.FECDecoder",
+   "category": "Measurements",
+   "version": "0.1.0",
+   "parameters": {},
+   "structural": {},
+   "ports": {
+    "inputs": {
+     "in": "binary",
+     "payload": "binary"
+    },
+    "outputs": {
+     "out": "binary",
+     "diagnostics": "metric"
+    }
+   }
+  },
+  "FECEncoder": {
+   "name": "FEC Encoder",
+   "type": "FECEncoder",
+   "class": "maiman.components.electrical.FECEncoder",
+   "category": "Electrical Sources",
+   "version": "0.1.0",
+   "parameters": {
+    "order": {
+     "type": "float",
+     "default": 23.0,
+     "unit": "",
+     "choices": [
+      7.0,
+      9.0,
+      11.0,
+      15.0,
+      23.0,
+      31.0
+     ],
+     "doc": "LFSR order for the payload pattern"
+    },
+    "bits_per_symbol": {
+     "type": "float",
+     "default": 1.0,
+     "unit": "",
+     "choices": [
+      1.0,
+      2.0,
+      3.0,
+      4.0,
+      5.0,
+      6.0,
+      7.0,
+      8.0
+     ],
+     "doc": "Bits each downstream symbol carries; sets the size of the window to fill"
+    }
+   },
+   "structural": {},
+   "ports": {
+    "inputs": {},
+    "outputs": {
+     "out": "binary",
+     "payload": "binary"
+    }
+   }
+  },
   "Fiber": {
    "name": "Optical Fiber",
    "type": "Fiber",
@@ -1742,6 +1808,36 @@
     "inputs": {},
     "outputs": {
      "out": "optical"
+    }
+   }
+  },
+  "Slicer": {
+   "name": "Slicer",
+   "type": "Slicer",
+   "class": "maiman.components.analyzers.Slicer",
+   "category": "Receivers",
+   "version": "0.1.0",
+   "parameters": {
+    "sample_offset": {
+     "type": "float",
+     "default": -1.0,
+     "unit": "",
+     "doc": "Instant within the symbol; -1 finds it from the eye opening"
+    },
+    "threshold": {
+     "type": "float",
+     "default": -1.0,
+     "unit": "",
+     "doc": "Decision level [A]; negative finds it blind from the samples"
+    }
+   },
+   "structural": {},
+   "ports": {
+    "inputs": {
+     "in": "electrical"
+    },
+    "outputs": {
+     "out": "binary"
     }
    }
   },

@@ -324,7 +324,7 @@ def test_the_format_is_edited_link_wide() -> None:
         for name, manifest in __import__("maiman").manifests().items()
         if "bits_per_symbol" in manifest["parameters"]
     }
-    assert carriers == {"PRBSGenerator", "QAMMapper"}, (
+    assert carriers == {"FECEncoder", "PRBSGenerator", "QAMMapper"}, (
         f"a new component carries bits_per_symbol: {sorted(carriers)}. The editor "
         "spreads the value to every block that has it, so this is a note that the "
         "set grew, not necessarily a fault."

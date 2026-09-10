@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from .components.dsp import DispersionDiagnostics, FrequencyEstimate, TimingEstimate
+from .components.electrical import FECReport
 from .kernels import PropagationDiagnostics
 from .signals import (
     BinarySignal,
@@ -292,6 +293,22 @@ def _timing(estimate: TimingEstimate) -> dict[str, Any]:
     }
 
 
+def _fec(report: FECReport) -> dict[str, Any]:
+    # Both rates, never one. A pre-FEC number says what the optics did and a
+    # post-FEC number says what the customer sees, and a client that showed
+    # either alone would be describing a different link from the one that ran.
+    return {
+        "kind": "fec",
+        "pre_fec_ber": number(report.pre_fec_ber),
+        "post_fec_ber": number(report.post_fec_ber),
+        "pre_fec_errors": report.pre_fec_errors,
+        "post_fec_errors": report.post_fec_errors,
+        "corrected_symbols": report.corrected_symbols,
+        "failed_blocks": report.failed_blocks,
+        "blocks": report.blocks,
+    }
+
+
 def _frequency(estimate: FrequencyEstimate) -> dict[str, Any]:
     # In MHz as well as Hz, for the reason the timing block goes out in ps: an
     # offset is quoted in MHz by everyone who quotes one, and the interesting
@@ -327,6 +344,7 @@ def _dispersion(diagnostics: DispersionDiagnostics) -> dict[str, Any]:
 
 _ENCODERS: dict[type, Any] = {
     DispersionDiagnostics: _dispersion,
+    FECReport: _fec,
     FrequencyEstimate: _frequency,
     TimingEstimate: _timing,
     ElectricalSignal: _electrical,

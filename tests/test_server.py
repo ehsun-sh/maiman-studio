@@ -32,6 +32,8 @@ from maiman.components import (
     CWLaser,
     ElectricalFilter,
     EyeDiagram,
+    FECDecoder,
+    FECEncoder,
     Fiber,
     FrequencyRecovery,
     IQDriver,
@@ -45,6 +47,7 @@ from maiman.components import (
     PowerMeter,
     PRBSGenerator,
     QAMMapper,
+    Slicer,
     TimingRecovery,
     Waveguide,
 )
@@ -180,10 +183,37 @@ def impaired_coherent_link() -> Graph:
     return graph
 
 
+def coded_ook_link() -> Graph:
+    """A direct-detection link with RS(255, 239) in the path and a real slicer.
+
+    The window is 8160 symbols because a codeword is 2040 bits and one that
+    straddles two runs cannot be decoded in either. -19 dBm puts the line a few
+    times 1e-4, which is where the code has something to do and still succeeds.
+    """
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=8, sequence_length=8160, seed=4)
+    graph = Graph(ctx)
+    encoder = graph.add(FECEncoder(order=23.0, bits_per_symbol=1.0, label="fec"))
+    driver = graph.add(NRZDriver(v_low=4.0, v_high=0.0, label="drv"))
+    laser = graph.add(CWLaser(power=-19.0, label="tx"))
+    modulator = graph.add(MachZehnderModulator(v_pi=4.0, extinction_ratio=30.0, label="mzm"))
+    detector = graph.add(PINPhotodiode(responsivity=0.8, label="pin"))
+    lowpass = graph.add(ElectricalFilter(bandwidth=7.0, label="lpf"))
+    slicer = graph.add(Slicer(label="sl"))
+    decoder = graph.add(FECDecoder(label="dec"))
+
+    graph.connect(encoder["out"], driver["in"])
+    graph.connect(laser, modulator["optical_in"])
+    graph.connect(driver, modulator["electrical_in"])
+    graph.chain(modulator, detector, lowpass, slicer)
+    graph.connect(slicer["out"], decoder["in"])
+    graph.connect(encoder["payload"], decoder["payload"])
+    return graph
+
+
 def test_no_metric_port_in_the_library_encodes_as_opaque() -> None:
     """Every measurement the library can produce must be drawable.
 
-    Three graphs between them touch every metric port — the optical/OOK side
+    Four graphs between them touch every metric port — the optical/OOK side
     here, the coherent side through the shipped export example, and an impaired
     link for the front-end stages that only have something to say when there is
     something wrong — and the assertion is that none of them come back tagged
@@ -202,6 +232,7 @@ def test_no_metric_port_in_the_library_encodes_as_opaque() -> None:
         metric_rich_link(),
         build_coherent(sequence_length=256),
         impaired_coherent_link(),
+        coded_ook_link(),
     ):
         by_label = {c.label: c for c in graph.components}
         encoded = encode_results(graph.run())

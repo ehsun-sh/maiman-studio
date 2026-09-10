@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from ..component import BoolParam, Component, Param, PortType
 from ..context import SimulationContext
 from ..dsp import root_raised_cosine, shape_symbols
+from ..fec import (
+    CODEWORD_SYMBOLS,
+    MESSAGE_SYMBOLS,
+    decode_blocks,
+    encode_blocks,
+    overhead,
+)
 from ..modulation import QAM_FORMATS
 from ..signals import BinarySignal, ElectricalSignal, Signal, SymbolSignal
 
@@ -87,6 +96,211 @@ class PRBSGenerator(Component):
             state = ((state << 1) | feedback) & ((1 << n) - 1)
 
         return {"out": BinarySignal(bits=bits, symbol_rate=ctx.bit_rate * per_symbol)}
+
+
+#: Bits in one RS(255, 239) codeword on the line. The run window has to hold a
+#: whole number of these: a codeword split across two runs cannot be decoded in
+#: either, and silently padding one would report a corrected error rate for data
+#: that was never sent.
+CODED_BITS_PER_BLOCK = CODEWORD_SYMBOLS * 8
+PAYLOAD_BITS_PER_BLOCK = MESSAGE_SYMBOLS * 8
+
+
+@dataclass(frozen=True)
+class FECReport:
+    """What the decoder found, and what it did about it."""
+
+    corrected_symbols: int
+    """Byte errors repaired across the window."""
+
+    failed_blocks: int
+    """Codewords the decoder could not correct."""
+
+    blocks: int
+    """Codewords in the window."""
+
+    pre_fec_errors: int
+    """Bit errors on the line, before decoding."""
+
+    post_fec_errors: int
+    """Bit errors left in the payload, after decoding."""
+
+    pre_fec_ber: float
+    post_fec_ber: float
+
+    def __repr__(self) -> str:
+        return (
+            f"FECReport(pre {self.pre_fec_ber:.2e} -> post {self.post_fec_ber:.2e}, "
+            f"{self.corrected_symbols} symbols fixed, {self.failed_blocks}/{self.blocks} failed)"
+        )
+
+
+class FECEncoder(Component):
+    """PRBS payload, Reed-Solomon coded, filling the line window.
+
+    **Why this is a source rather than a filter.** A coder makes more bits than
+    it is given — 255 for every 239 — and the run window here is a fixed number
+    of symbols *on the line*. Those two facts settle the shape of the block
+    between them: the window is the line rate, so coding does not make the line
+    faster, it makes the payload smaller. An OTN framer does exactly this. A
+    block that took bits in and handed 6.69 % more back would be refused by the
+    mapper downstream, and rightly.
+
+    So this generates its own payload, codes it, and emits a window that is
+    exactly full. The uncoded payload leaves on a second port, which is what a
+    :class:`BERAnalyzer` downstream of the decoder compares against — the same
+    arrangement the shipped coherent project already uses to keep a differential
+    and a non-differential copy of its symbols.
+
+    The window must hold a whole number of codewords: ``sequence_length *
+    bits_per_symbol`` has to be a multiple of 2040. A codeword split across two
+    runs cannot be decoded in either.
+    """
+
+    display_name = "FEC Encoder"
+    category = "Electrical Sources"
+
+    order = Param(
+        23.0,
+        unit="",
+        choices=tuple(float(n) for n in sorted(PRBS_TAPS)),
+        doc="LFSR order for the payload pattern",
+    )
+    bits_per_symbol = Param(
+        1.0,
+        unit="",
+        choices=QAM_FORMATS,
+        doc="Bits each downstream symbol carries; sets the size of the window to fill",
+    )
+
+    outputs = {"out": PortType.BINARY, "payload": PortType.BINARY}
+
+    def blocks_in_window(self, ctx: SimulationContext) -> int:
+        """Codewords that fit the line window, or a refusal naming a size that fits."""
+        per_symbol = int(self.bits_per_symbol)
+        coded_bits = ctx.sequence_length * per_symbol
+        blocks, remainder = divmod(coded_bits, CODED_BITS_PER_BLOCK)
+        if blocks < 1 or remainder:
+            symbols_per_block = CODED_BITS_PER_BLOCK // per_symbol
+            nearest = max(round(ctx.sequence_length / symbols_per_block), 1) * symbols_per_block
+            raise ValueError(
+                f"{self.label}: a window of {ctx.sequence_length} symbols at {per_symbol} "
+                f"bits/symbol is {coded_bits} bits, which is not a whole number of "
+                f"{CODED_BITS_PER_BLOCK}-bit codewords. Use sequence_length={nearest}."
+            )
+        return blocks
+
+    def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
+        blocks = self.blocks_in_window(ctx)
+        per_symbol = int(self.bits_per_symbol)
+
+        order = int(self.order)
+        n, tap = PRBS_TAPS[order]
+        rng = ctx.rng("FECEncoder", self.label, order)
+        state = int(rng.integers(1, 1 << n))
+
+        count = blocks * PAYLOAD_BITS_PER_BLOCK
+        payload = np.empty(count, dtype=np.uint8)
+        for i in range(count):
+            feedback = ((state >> (n - 1)) ^ (state >> (tap - 1))) & 1
+            payload[i] = state & 1
+            state = ((state << 1) | feedback) & ((1 << n) - 1)
+
+        symbols = np.packbits(payload).reshape(blocks, MESSAGE_SYMBOLS)
+        coded = encode_blocks(symbols.astype(np.int32))
+        bits = np.unpackbits(coded.astype(np.uint8).reshape(-1))
+
+        rate = ctx.bit_rate * per_symbol
+        return {
+            "out": BinarySignal(bits=bits, symbol_rate=rate),
+            # The payload leaves at the rate it is actually carried at, which is
+            # the line rate divided by the coding overhead. Quoting it at the
+            # line rate would make a coded link look like free capacity.
+            "payload": BinarySignal(bits=payload, symbol_rate=rate / (1.0 + overhead())),
+        }
+
+
+class FECDecoder(Component):
+    """Reed-Solomon decoding, and an honest account of what it could not fix.
+
+    Takes the received line bits, hands back the payload, and reports both error
+    rates on its diagnostics port. Both, because the interesting number is
+    neither one alone: a pre-FEC rate says what the optics did and a post-FEC
+    rate says what the customer sees, and the whole design of a coded link is
+    the distance between them.
+
+    **A failed codeword is passed through, not dropped.** Its payload bytes go
+    out as received, which is what a real decoder does and what makes the
+    post-FEC error count meaningful — dropping them would report a perfect link
+    that had silently lost data. ``failed_blocks`` says how many.
+
+    **Miscorrection is not detectable from in here.** Past ``t`` errors the
+    decoder usually finds no consistent error pattern, but it can instead find a
+    wrong one and return a codeword that is confidently incorrect. Those bits
+    are counted in the post-FEC rate like any others, because that is where they
+    show up in reality; there is no flag for them because a real decoder has
+    none either.
+    """
+
+    display_name = "FEC Decoder"
+    category = "Measurements"
+
+    inputs = {"in": PortType.BINARY, "payload": PortType.BINARY}
+    outputs = {"out": PortType.BINARY, "diagnostics": PortType.METRIC}
+
+    def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
+        received: BinarySignal = inputs["in"]
+        reference: BinarySignal = inputs["payload"]
+
+        blocks, remainder = divmod(received.num_bits, CODED_BITS_PER_BLOCK)
+        if blocks < 1 or remainder:
+            raise ValueError(
+                f"{self.label}: got {received.num_bits} bits, which is not a whole number "
+                f"of {CODED_BITS_PER_BLOCK}-bit codewords"
+            )
+        if reference.num_bits != blocks * PAYLOAD_BITS_PER_BLOCK:
+            raise ValueError(
+                f"{self.label}: {blocks} codewords carry "
+                f"{blocks * PAYLOAD_BITS_PER_BLOCK} payload bits but the reference "
+                f"has {reference.num_bits}"
+            )
+
+        line = np.asarray(received.bits, dtype=np.uint8)
+        symbols = np.packbits(line).reshape(blocks, CODEWORD_SYMBOLS).astype(np.int32)
+
+        # The pre-FEC rate is measured against the codeword the encoder built,
+        # not against the payload — otherwise the parity bits, which are a third
+        # of what the optics carried at these sizes, would not be counted.
+        transmitted = encode_blocks(
+            np.packbits(np.asarray(reference.bits, dtype=np.uint8))
+            .reshape(blocks, MESSAGE_SYMBOLS)
+            .astype(np.int32)
+        )
+        pre_errors = int(
+            np.count_nonzero(np.unpackbits(np.bitwise_xor(symbols, transmitted).astype(np.uint8)))
+        )
+
+        result = decode_blocks(symbols)
+        payload_bits = np.unpackbits(result.messages.astype(np.uint8).reshape(-1))
+        post_errors = int(
+            np.count_nonzero(payload_bits ^ np.asarray(reference.bits, dtype=np.uint8))
+        )
+
+        coded_bits = blocks * CODED_BITS_PER_BLOCK
+        payload_count = blocks * PAYLOAD_BITS_PER_BLOCK
+        report = FECReport(
+            corrected_symbols=result.corrected,
+            failed_blocks=result.failed,
+            blocks=blocks,
+            pre_fec_errors=pre_errors,
+            post_fec_errors=post_errors,
+            pre_fec_ber=pre_errors / coded_bits,
+            post_fec_ber=post_errors / payload_count,
+        )
+        return {
+            "out": BinarySignal(bits=payload_bits, symbol_rate=reference.symbol_rate),
+            "diagnostics": report,
+        }
 
 
 class NRZDriver(Component):

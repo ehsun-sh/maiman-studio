@@ -293,6 +293,88 @@ def rail_statistics(samples: np.ndarray, bits: np.ndarray) -> tuple[float, float
     )
 
 
+def blind_threshold(instants: np.ndarray, iterations: int = 32) -> float:
+    """A decision threshold from the samples alone, by Lloyd's algorithm.
+
+    :func:`measure_eye` sets its threshold from the two rails' statistics, which
+    it can only separate because it was handed the transmitted bits. A receiver
+    has no such thing. This is the blind counterpart: start at the mean, split
+    the samples on it, move to the midpoint of the two group means, repeat until
+    nothing moves — one-dimensional two-means clustering (S. P. Lloyd, "Least
+    squares quantization in PCM", IEEE Trans. Inf. Theory 28(2), 1982; circulated
+    from 1957).
+
+    It converges on the midpoint of the rails rather than on the *optimal*
+    threshold, which sits nearer the zero rail because a one carries more noise
+    than a zero does. That is a real and quantifiable penalty rather than an
+    approximation swept under a docstring — and it is also what a receiver
+    without a threshold-tuning loop actually suffers.
+    """
+    values = np.asarray(instants, dtype=np.float64)
+    if values.size == 0:
+        raise ValueError("cannot find a threshold in an empty waveform")
+
+    threshold = float(values.mean())
+    for _ in range(iterations):
+        high = values[values > threshold]
+        low = values[values <= threshold]
+        if high.size == 0 or low.size == 0:
+            break
+        moved = 0.5 * (float(high.mean()) + float(low.mean()))
+        if moved == threshold:
+            break
+        threshold = moved
+    return threshold
+
+
+def blind_sample_offset(grid: np.ndarray) -> int:
+    """The instant in the symbol where the two rails are furthest apart.
+
+    Blind, and cheap: the variance across symbols at a fixed instant is largest
+    where the eye is most open, because that is where the ones and zeros are most
+    separated. It needs no reference and no clock tone, and on a rectangular
+    symbol it lands in the middle where a matched decision belongs.
+    """
+    return int(np.argmax(np.var(np.asarray(grid, dtype=np.float64), axis=0)))
+
+
+def slice_waveform(
+    samples: np.ndarray,
+    samples_per_symbol: int,
+    *,
+    sample_offset: int | None = None,
+    threshold: float | None = None,
+) -> tuple[np.ndarray, int, float]:
+    """Decide one bit per symbol, blind. Returns ``(bits, offset, threshold)``.
+
+    The boundary between the analogue receiver and the digital domain for direct
+    detection — what :class:`~maiman.components.IQSampler` is for a coherent one.
+    Until this existed the only thing that decided a bit in this library was the
+    BER analyser, which decides *with the transmitted sequence in hand* and emits
+    a number rather than bits. That is the right way to measure a link and no way
+    at all to build one: a decoder downstream needs the bits a receiver actually
+    produced, mistakes included.
+    """
+    if samples_per_symbol < 1:
+        raise ValueError(f"samples_per_symbol must be >= 1, got {samples_per_symbol}")
+    values = np.asarray(samples, dtype=np.float64)
+    symbols, remainder = divmod(values.shape[0], samples_per_symbol)
+    if remainder:
+        raise ValueError(
+            f"{values.shape[0]} samples is not a whole number of "
+            f"{samples_per_symbol}-sample symbols"
+        )
+
+    grid = values.reshape(symbols, samples_per_symbol)
+    offset = blind_sample_offset(grid) if sample_offset is None else int(sample_offset)
+    if not 0 <= offset < samples_per_symbol:
+        raise ValueError(f"sample_offset must be in [0, {samples_per_symbol}), got {offset}")
+
+    instants = grid[:, offset]
+    level = blind_threshold(instants) if threshold is None else float(threshold)
+    return (instants > level).astype(np.uint8), offset, level
+
+
 def measure_eye(
     samples: np.ndarray,
     bits: np.ndarray,

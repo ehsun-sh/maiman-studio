@@ -1758,6 +1758,72 @@ verdict, and DESIGN.md
     }
    }
   },
+  "FECDecoder": {
+   "name": "FEC Decoder",
+   "type": "FECDecoder",
+   "class": "maiman.components.electrical.FECDecoder",
+   "category": "Measurements",
+   "version": "0.1.0",
+   "parameters": {},
+   "structural": {},
+   "ports": {
+    "inputs": {
+     "in": "binary",
+     "payload": "binary"
+    },
+    "outputs": {
+     "out": "binary",
+     "diagnostics": "metric"
+    }
+   }
+  },
+  "FECEncoder": {
+   "name": "FEC Encoder",
+   "type": "FECEncoder",
+   "class": "maiman.components.electrical.FECEncoder",
+   "category": "Electrical Sources",
+   "version": "0.1.0",
+   "parameters": {
+    "order": {
+     "type": "float",
+     "default": 23.0,
+     "unit": "",
+     "choices": [
+      7.0,
+      9.0,
+      11.0,
+      15.0,
+      23.0,
+      31.0
+     ],
+     "doc": "LFSR order for the payload pattern"
+    },
+    "bits_per_symbol": {
+     "type": "float",
+     "default": 1.0,
+     "unit": "",
+     "choices": [
+      1.0,
+      2.0,
+      3.0,
+      4.0,
+      5.0,
+      6.0,
+      7.0,
+      8.0
+     ],
+     "doc": "Bits each downstream symbol carries; sets the size of the window to fill"
+    }
+   },
+   "structural": {},
+   "ports": {
+    "inputs": {},
+    "outputs": {
+     "out": "binary",
+     "payload": "binary"
+    }
+   }
+  },
   "Fiber": {
    "name": "Optical Fiber",
    "type": "Fiber",
@@ -2774,6 +2840,36 @@ verdict, and DESIGN.md
     "inputs": {},
     "outputs": {
      "out": "optical"
+    }
+   }
+  },
+  "Slicer": {
+   "name": "Slicer",
+   "type": "Slicer",
+   "class": "maiman.components.analyzers.Slicer",
+   "category": "Receivers",
+   "version": "0.1.0",
+   "parameters": {
+    "sample_offset": {
+     "type": "float",
+     "default": -1.0,
+     "unit": "",
+     "doc": "Instant within the symbol; -1 finds it from the eye opening"
+    },
+    "threshold": {
+     "type": "float",
+     "default": -1.0,
+     "unit": "",
+     "doc": "Decision level [A]; negative finds it blind from the samples"
+    }
+   },
+   "structural": {},
+   "ports": {
+    "inputs": {
+     "in": "electrical"
+    },
+    "outputs": {
+     "out": "binary"
     }
    }
   },
@@ -21774,6 +21870,19 @@ verdict, and DESIGN.md
         return `carrier offset ${mhz >= 0 ? "+" : ""}${mhz.toFixed(3)} MHz, ` +
                `stripped by its ${value.symmetry}-fold symmetry ` +
                `(confidence ${fmt(value.confidence)})`;
+      }
+      case "fec": {
+        /* Both rates, and the distance between them, because that distance is
+           the entire design of a coded link. A codeword the decoder could not
+           fix is named rather than folded into the rate: past its limit a
+           bounded-distance decoder adds errors instead of degrading, and a
+           reader who sees only a rate cannot tell which side of that they are
+           on. */
+        const failed = value.failed_blocks;
+        return `pre-FEC ${value.pre_fec_ber.toExponential(2)} → ` +
+               `post-FEC ${value.post_fec_ber.toExponential(2)}, ` +
+               `${value.corrected_symbols} symbols repaired` +
+               (failed ? `, ${failed}/${value.blocks} codewords beyond the code` : "");
       }
       case "opaque":  return `${value.type} — nothing here can draw it`;
       default:        return value.kind;

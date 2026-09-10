@@ -9,10 +9,58 @@ from ..analysis import (
     eye_histogram,
     measure_constellation,
     measure_eye,
+    slice_waveform,
 )
 from ..component import BoolParam, Component, Param, PortType
 from ..context import SimulationContext
 from ..signals import BinarySignal, ElectricalSignal, Signal, SymbolSignal
+
+
+class Slicer(Component):
+    """Decision circuit: a received waveform in, one bit per symbol out.
+
+    The digital output a direct-detection receiver in this library never had.
+    Every bit decided here used to be decided inside :class:`BERAnalyzer`, which
+    does it *with the transmitted sequence in hand* and emits a number — the
+    right way to measure a link and no way at all to build one. A forward error
+    correcting decoder needs the bits a receiver actually produced, mistakes
+    included, and there was nowhere to get them.
+
+    Blind by default, in both of the choices a decision circuit has to make.
+    The sampling instant is the one where the variance across symbols is largest,
+    which is where the rails are furthest apart. The threshold is Lloyd's
+    two-means on the sampled instants — see :func:`maiman.analysis.blind_threshold`
+    for why that lands on the midpoint of the rails and not on the optimum, and
+    what the difference costs.
+
+    Both can be pinned instead, which is how a mis-set decision circuit is
+    studied rather than merely described.
+    """
+
+    display_name = "Slicer"
+    category = "Receivers"
+
+    sample_offset = Param(
+        -1.0, unit="", doc="Instant within the symbol; -1 finds it from the eye opening"
+    )
+    threshold = Param(
+        -1.0, unit="", doc="Decision level [A]; negative finds it blind from the samples"
+    )
+
+    inputs = {"in": PortType.ELECTRICAL}
+    outputs = {"out": PortType.BINARY}
+
+    def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
+        waveform: ElectricalSignal = inputs["in"]
+        offset = None if self.sample_offset < 0 else int(self.sample_offset)
+        level = None if self.threshold < 0 else float(self.threshold)
+        bits, _, _ = slice_waveform(
+            np.asarray(waveform.samples),
+            ctx.samples_per_symbol,
+            sample_offset=offset,
+            threshold=level,
+        )
+        return {"out": BinarySignal(bits=bits, symbol_rate=ctx.bit_rate)}
 
 
 class BERAnalyzer(Component):

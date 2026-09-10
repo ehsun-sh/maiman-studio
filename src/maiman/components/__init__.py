@@ -8,7 +8,13 @@ between a plugin system researchers will actually use and one they will not.
 from __future__ import annotations
 
 from .amplifiers import EDFA
-from .analyzers import BERAnalyzer, ConstellationAnalyzer, ConstellationDiagram, EyeDiagram
+from .analyzers import (
+    BERAnalyzer,
+    ConstellationAnalyzer,
+    ConstellationDiagram,
+    EyeDiagram,
+    Slicer,
+)
 from .coherent import (
     CarrierRecovery,
     CoherentReceiver,
@@ -22,7 +28,14 @@ from .dsp import (
     FrequencyRecovery,
     TimingRecovery,
 )
-from .electrical import DCVoltage, IQDriver, NRZDriver, PRBSGenerator
+from .electrical import (
+    DCVoltage,
+    FECDecoder,
+    FECEncoder,
+    IQDriver,
+    NRZDriver,
+    PRBSGenerator,
+)
 from .fiber import Fiber
 from .filters import ElectricalFilter, OpticalFilter, OpticalSpectrumAnalyzer
 from .mapping import DifferentialDecoder, QAMMapper
@@ -64,6 +77,8 @@ __all__ = [
     "DualPolarizationReceiver",
     "ElectricalFilter",
     "EyeDiagram",
+    "FECDecoder",
+    "FECEncoder",
     "Fiber",
     "FrequencyRecovery",
     "GaussianPulse",
@@ -84,6 +99,7 @@ __all__ = [
     "QAMMapper",
     "RingResonator",
     "SechPulse",
+    "Slicer",
     "Splitter",
     "TimingRecovery",
     "Waveguide",
