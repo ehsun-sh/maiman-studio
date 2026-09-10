@@ -18,10 +18,13 @@ a real back-end has to meet.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 
 import hostile_backend
+from maiman import backend
 from maiman.backend import array_module, available, to_numpy
 from maiman.kernels import (
     angular_frequency_grid,
@@ -31,6 +34,8 @@ from maiman.kernels import (
     propagate_dispersion,
     random_pmd_sections,
 )
+
+ROOT = Path(__file__).resolve().parent.parent
 
 FS = 160e9
 SAMPLES = 512
@@ -305,3 +310,73 @@ def test_the_kernels_do_not_reach_for_numpy_in_the_hot_path() -> None:
             if fragment.startswith("np.") and not fragment.startswith(allowed)
         ]
         assert not offenders, f"{function.__name__} reaches for {offenders}"
+
+
+# ---------------------------------------------------------------------------
+# the device check
+#
+# Everything above proves the kernels never reach for NumPy, which is what would
+# break a port. This is the other half: that a real second array library gets the
+# same field out of the same span. It cannot be run against CuPy here — there is
+# no device — so it is run against the hostile module, which is a different array
+# library by every test in this file's terms.
+
+
+def test_check_device_says_so_when_there_is_nothing_to_check() -> None:
+    """No device is an answer, not a failure. It must not raise and must not lie."""
+    report = backend.check_device()
+    assert report.backends["numpy"] is True
+    assert report.checks == (), "nothing but NumPy is installed here"
+    assert report.agrees, "no device is an answer, not a failure"
+
+
+def test_check_device_runs_a_real_span_on_a_second_library(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """And compares the field, not a version string.
+
+    The hostile module refuses NumPy's allocating API, so a kernel that reached
+    for one would fail here rather than agreeing by accident — which is what
+    makes the agreement worth reporting.
+    """
+    monkeypatch.setattr(backend, "available", lambda: {"numpy": True, "hostile_backend": True})
+    report = backend.check_device()
+
+    (outcome,) = report.checks
+    assert outcome.name == "hostile_backend"
+    assert outcome.ran, outcome.why
+    assert outcome.agrees
+    assert outcome.max_difference == pytest.approx(0.0, abs=1e-12)
+    assert report.agrees
+
+
+def test_a_backend_that_cannot_run_is_reported_not_raised(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A card that is installed but unusable is the common real failure.
+
+    Reporting it beats a traceback: ``maiman devices`` exists to tell somebody
+    what is wrong with their machine, and it cannot do that by dying.
+    """
+    monkeypatch.setattr(
+        backend, "available", lambda: {"numpy": True, "no_such_array_library": True}
+    )
+    report = backend.check_device()
+
+    (outcome,) = report.checks
+    assert outcome.ran is False
+    assert "ModuleNotFoundError" in outcome.why
+    assert not report.agrees, "a back-end that could not run is not agreement"
+
+
+def test_the_workflow_runs_the_device_check_where_a_device_exists() -> None:
+    """The GPU job is not scheduled here and must not quietly disappear either.
+
+    It claims nothing on a hosted runner — that is the honest arrangement — but
+    it is the whole of this project's answer to "CuPy is not exercised in CI",
+    and a job deleted in passing would take the answer with it.
+    """
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    assert "runs-on: [self-hosted, gpu]" in workflow, "the GPU job lost its runner label"
+    assert "maiman devices" in workflow, "the GPU job no longer cross-checks the device"
+    assert "cupy-cuda12x" in workflow, "the GPU job no longer installs CuPy"

@@ -41,3 +41,36 @@ jobs:
 
       - name: Test
         run: pytest
+
+  # Runs only where a CUDA device is actually attached. GitHub's hosted runners
+  # have none, so on this repository as configured the job is never scheduled and
+  # claims nothing — which is the point. The default job above tests what would
+  # break a GPU port (that the kernels never reach for NumPy directly, against a
+  # deliberately hostile array library); this one tests that the port is not
+  # broken, on hardware, and starts doing so the day somebody attaches a machine
+  # labelled `gpu`.
+  device:
+    runs-on: [self-hosted, gpu]
+    if: ${{ !github.event.repository.fork }}
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install, with CuPy
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install cupy-cuda12x
+
+      # One soliton period on the device against the same span on NumPy. Exits
+      # non-zero only if a back-end is present and disagrees.
+      - name: Cross-check the device against NumPy
+        run: maiman devices
+
+      - name: Test
+        run: pytest

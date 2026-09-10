@@ -23,16 +23,25 @@ heard of works if it presents the same surface.
 ``tests/test_backend.py`` holds it to exactly that list — a kernel that reaches
 past it for something only NumPy has fails there rather than on somebody's GPU.
 
-**CuPy is not exercised here.** No CUDA device or CuPy install is available in
-this project's CI, so what is tested is that the kernels never touch NumPy
-directly and that a second, deliberately hostile array library gets identical
-answers out of them. That is the part that would break a port; the part that
-remains untested is CuPy's own numerics, which are not this project's to test.
+**CuPy is not exercised on an ordinary runner.** GitHub's hosted machines have no
+CUDA device, so the default CI job tests the part that would actually break a
+port: that the kernels never touch NumPy directly, and that a second,
+deliberately hostile array library gets identical answers out of them.
+
+Where a device *does* exist, :func:`check_device` runs the real thing — a split
+step on CuPy against the same span on NumPy — and the workflow has a job that
+calls it on any runner labelled ``gpu``. That job is not scheduled when no such
+runner is attached, which is the honest arrangement: it says nothing today
+rather than claiming a coverage that is not there, and it starts saying
+something the day somebody attaches a machine. ``maiman devices`` is the same
+check by hand.
 """
 
 from __future__ import annotations
 
+import importlib
 import sys
+from dataclasses import dataclass
 from types import ModuleType
 
 import numpy as np
@@ -86,3 +95,94 @@ def available() -> dict[str, bool]:
         "numpy": True,
         "cupy": importlib.util.find_spec("cupy") is not None,
     }
+
+
+@dataclass(frozen=True)
+class BackendCheck:
+    """What happened when one back-end was asked to propagate the same span."""
+
+    name: str
+    ran: bool
+    max_difference: float | None = None
+    agrees: bool = False
+    why: str = ""
+    """Why it could not run, when it could not — a card present but unusable."""
+
+
+@dataclass(frozen=True)
+class DeviceReport:
+    """Which back-ends exist here, and whether the ones that do agree with NumPy."""
+
+    backends: dict[str, bool]
+    checks: tuple[BackendCheck, ...]
+
+    @property
+    def agrees(self) -> bool:
+        """True when every back-end that ran got the same answer.
+
+        A machine with no device at all returns True, because "only NumPy here"
+        is an answer rather than a failure and ``maiman devices`` must not exit
+        non-zero on every laptop that runs it.
+        """
+        return all(check.ran and check.agrees for check in self.checks)
+
+
+def check_device(tolerance: float = 1e-9) -> DeviceReport:
+    """Run one propagation on every available back-end and compare the answers.
+
+    The end-to-end check that :mod:`tests.hostile_backend` cannot be: that a
+    *real* second array library, on real hardware, gets the same field out of the
+    same span. The hostile module proves the kernels never reach for NumPy, which
+    is what would break a port; this proves the port is not broken.
+
+    Deliberately a function rather than a test, because the machine that can run
+    it is usually not the machine running the suite. ``maiman devices`` calls it,
+    so anyone with a card can verify their own install in one command, and the
+    workflow's GPU job calls the same thing.
+
+    A soliton, because it is the one propagation whose *correct* answer is known
+    without reference to another run: an N=1 soliton comes out of a span with the
+    envelope it went in with. Two libraries agreeing on a wrong answer is a real
+    failure mode, and this one cannot hide in it.
+    """
+    import numpy as _np
+
+    from .kernels import propagate_ssfm
+
+    def span(xp: ModuleType) -> object:
+        time = xp.linspace(-20.0, 20.0, 4096)
+        field = (1.0 / xp.cosh(time)).astype(xp.complex128)
+        out, _ = propagate_ssfm(
+            field,
+            sample_rate=4096.0 / 40.0,
+            beta2=-1.0,
+            gamma=1.0,
+            alpha=0.0,
+            distance=1.0,
+            max_nonlinear_phase=0.002,
+        )
+        return out
+
+    reference = to_numpy(span(_np))
+    checks: list[BackendCheck] = []
+    for name, present in available().items():
+        if name == "numpy" or not present:
+            continue
+        try:
+            module = importlib.import_module(name)
+            result = to_numpy(span(module))
+        except Exception as error:  # a card that is present but unusable
+            checks.append(
+                BackendCheck(name=name, ran=False, why=f"{type(error).__name__}: {error}")
+            )
+            continue
+        difference = float(_np.abs(result - reference).max())
+        checks.append(
+            BackendCheck(
+                name=name,
+                ran=True,
+                max_difference=difference,
+                agrees=difference <= tolerance,
+            )
+        )
+    return DeviceReport(backends=available(), checks=tuple(checks))
