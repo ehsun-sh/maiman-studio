@@ -312,3 +312,37 @@ def test_the_soft_code_works_where_the_hard_code_has_already_given_up() -> None:
     assert post < pre / 50.0
     # And the hard-decision code, on the same input, does essentially nothing.
     assert fec.output_bit_error_rate(pre) > pre / 5.0
+
+
+def test_the_decoder_does_not_care_what_units_the_llrs_arrive_in() -> None:
+    """Because a real demapper's do not arrive in the units it was tuned on.
+
+    The clip that bounds the iteration used to be an absolute number of
+    log-likelihood units, chosen where the mean magnitude was about 8. On the
+    links this project ships the mean runs from roughly 10 at the sensitivity
+    limit to 60 well above it, so a fixed bound is loose where it should bite and
+    flattens every reliability difference in the block where it should not.
+
+    It is now a multiple of the input's own mean, which makes the decoder
+    indifferent to an overall factor — as it must be, since multiplying every LLR
+    by a constant describes the same channel and the same beliefs.
+    """
+    code = sf.staircase_code()
+    rng = np.random.default_rng(3)
+    information = rng.integers(0, 2, (6, code.half, code.information_columns)).astype(np.uint8)
+    encoded = sf.staircase_encode(code, information)
+
+    sigma = 0.43
+    received = (1.0 - 2.0 * encoded.astype(np.float64)) + rng.normal(0.0, sigma, encoded.shape)
+    reference = 2.0 * received / sigma**2
+
+    rates = []
+    for factor in (0.1, 1.0, 10.0):
+        decoded, _ = sf.staircase_decode(code, factor * reference, iterations=8)
+        rates.append(float(np.mean(decoded != information)))
+
+    assert max(rates) < 1e-3, "all three have to actually decode for this to mean anything"
+    assert max(rates) < 5.0 * max(min(rates), 1e-6), (
+        "a hundredfold change in units moved the answer, so something in the "
+        "loop is still measured in absolute log-likelihood units"
+    )
