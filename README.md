@@ -299,6 +299,77 @@ Nothing here is configured to come out right. The shot-noise-limited SNR is asse
 `R·P/(2qB)`, the counted symbol errors against
 [`ser_qam()`](src/maiman/modulation.py), and the modulator's 3 dB against `10·log10(2)`.
 
+### What EDFA saturation is for
+
+Until now the EDFA's docstring said, in its own words, that **saturation was a clamp and not a
+model**: `max_output_power` held the output at a ceiling and the gain fell to whatever achieved
+it. That has a kink in it. Below the ceiling the amplifier was perfectly ideal; above it the gain
+fell as `1/P_in`. Real amplifiers do neither — they compress from the first photon, smoothly, and
+never hit a wall.
+
+The replacement is the standard steady-state description (Saleh, Jopson, Evankow and Aspell,
+*IEEE Photon. Technol. Lett.* 2(10), 1990), which is implicit in the gain:
+
+```
+G = G₀ · exp( −(G − 1) · P_in / P_sat )
+```
+
+solved exactly — Newton on `ln G`, to 1e-12 — rather than approximated. The root is bracketed by
+`[0, ln G₀]` and the function is increasing and convex, so Newton started at the upper end descends
+onto it monotonically: no bisection fallback and no iteration cap that could quietly hand back a
+half-converged gain. A test puts the answer back into the equation, because that is the only honest
+check on a solver for an implicit relation.
+
+**The parameter is the one a datasheet quotes** — `saturation_power` is the *output* power at 3 dB
+of gain compression — and is converted to the model's own `P_sat` by `P_3dB·(G₀−2)/(G₀·ln2)`, which
+follows from setting `G = G₀/2` above. For a large gain that is `1.443 · P_3dB`; the `(G₀−2)/G₀`
+factor is carried in full because it is 0.98 at 20 dB of gain and 0.80 at 10, and a version that
+dropped it as "large gain" passes a 20 dB test and fails a 10 dB one. Both are in the suite.
+
+A 20 dB amplifier with a +17 dBm saturation power:
+
+```
+in dBm   out dBm   gain dB   compression
+   -40    -20.00     20.00      0.00 dB
+   -20     -0.06     19.94      0.06 dB
+   -10      9.46     19.46      0.54 dB
+     0     16.99     16.99      3.01 dB   ← the declared point, by construction
+    10     21.65     11.65      8.35 dB
+```
+
+**Saturation is driven by total power, ASE included**, which is what makes an EDFA behave like a
+fixed power source rather than a fixed gain. Feed one 20 dB amplifier more channels at −5 dBm each
+and watch them share:
+
+```
+channels   total out   per channel
+    1       13.61 dBm   13.61 dBm
+    2       15.75 dBm   12.74 dBm
+    4       17.58 dBm   11.56 dBm
+    8       19.15 dBm   10.12 dBm
+```
+
+Eight times the input for 5.5 dB more output. Every doubling of the channel count costs the
+channels already there about a decibel, which is the arithmetic a WDM operator plans around, and it
+falls out of the model rather than being put in — the amplifier never sees channels, only the
+power they add up to. A version that saturated each band against its own copy of the amplifier
+would pass a single-channel test and be wrong here, so the suite checks it through a real graph
+with a real combiner and not only through the gain function.
+
+**It is off by default.** An amplifier that never compresses is an idealisation, and it is now
+declared as one the way a zero-linewidth laser is: `saturate` is a flag and it starts false. That
+keeps every existing result in this repository exactly where it was — the change moved the
+manifests and not one number — and makes turning it on a decision someone takes. What it replaces
+was worse than an idealisation, because a clamp claims to be a saturation model and is not.
+
+`max_output_power` is retired. Old projects still open, with the parameter dropped — and unlike the
+other retirements in this library that **does** change the link they describe, which is stated in
+the code rather than glossed. The value it carried was fitted to a fiction.
+
+What is still absent is **dynamics**: this is the steady state the erbium settles into, not the
+millisecond transient after a channel is added or dropped. That is a real effect in a deployed
+system and it is genuinely missing rather than approximated.
+
 ### What RIN is for
 
 Every noise in this project until now got *quieter*, relative to the signal, as the launch power
@@ -1501,6 +1572,11 @@ Every physics block ships with a test against a closed-form result, run in CI
 | Fractional delay is exact | Forward then back returns the input to 1e-12 — a phase ramp, not an interpolation | ✅ |
 | Timing recovery earns its place | 500 µm of waveguide costs 675 symbol errors in 1920; with the stage, none, and it moves by the 7.00 ps the guide actually holds | ✅ |
 | A whole symbol is invisible | Delay by one symbol period and the estimate does not move — the limit is `\|A\|²`, not the code | ✅ |
+| **Gain compresses 3 dB at the declared point** | The datasheet definition, checked as a definition, at 10, 20 and 30 dB of gain — the 10 dB row is what catches a dropped `(G₀−2)/G₀` | ✅ |
+| The solved gain solves the equation | Newton's answer put back into the implicit Saleh relation, residual under 1e-12 of the small-signal gain | ✅ |
+| Compression is smooth, not a ceiling | Gain falls at every step from −40 dBm up and output never stops rising — the two things a clamp gets qualitatively wrong | ✅ |
+| Channels share one inversion | 1, 2, 4, 8 channels through a real combiner: 13.61, 12.74, 11.56, 10.12 dBm each, and 8× the input for 5.5 dB more output | ✅ |
+| A retired clamp still opens | A project carrying `max_output_power` loads with it dropped rather than refusing | ✅ |
 | **RIN-limited SNR** | `1/(RIN·B_n)` to 0.014 dB at −155, −145 and −135 dB/Hz, against the Gaussian filter's closed-form noise bandwidth | ✅ |
 | The RIN floor ignores power | Ten times the launch power returns a bit-identical SNR — the one property that makes intensity noise worth modelling | ✅ |
 | Intensity noise conserves average power | Moves the variance to `RIN·fs/2` and leaves the mean at the declared dBm, the counterpart of the linewidth invariant | ✅ |

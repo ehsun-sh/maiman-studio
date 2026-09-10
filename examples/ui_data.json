@@ -625,11 +625,16 @@
      "min": 0.0,
      "doc": "Noise figure"
     },
-    "max_output_power": {
+    "saturate": {
+     "type": "bool",
+     "default": false,
+     "doc": "Compress the gain as the inversion depletes"
+    },
+    "saturation_power": {
      "type": "float",
-     "default": 30.0,
+     "default": 17.0,
      "unit": "dBm",
-     "doc": "Output power clamp; the gain is reduced to hold it"
+     "doc": "Output power at 3 dB gain compression, as a datasheet quotes it"
     },
     "center_wavelength": {
      "type": "float",

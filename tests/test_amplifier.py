@@ -15,13 +15,14 @@ Reference: G. P. Agrawal, *Fiber-Optic Communication Systems*, ch. 6.
 from __future__ import annotations
 
 import math
+from itertools import pairwise
 
 import numpy as np
 import pytest
 
 from maiman import Component, Graph, OpticalSignal, SimulationContext
 from maiman.analysis import OSNR_REFERENCE_BANDWIDTH, noise_psd_at, osnr
-from maiman.components import EDFA, CWLaser, Fiber, OSNRMeter, PowerMeter
+from maiman.components import EDFA, Combiner, CWLaser, Fiber, OSNRMeter, PowerMeter
 from maiman.units import C_LIGHT, H_PLANCK, db_to_linear, dbm_to_w, w_to_dbm
 
 CTX = SimulationContext(bit_rate=10e9, samples_per_symbol=8, sequence_length=64)
@@ -75,21 +76,207 @@ def test_signal_power_is_multiplied_by_the_gain(gain_db: float) -> None:
     assert w_to_dbm(reading.signal_power_w) == pytest.approx(-20.0 + gain_db, abs=1e-4)
 
 
-def test_the_output_clamp_reduces_the_gain_rather_than_the_signal() -> None:
-    """A clamp, not a saturation model — and the docstring says so. What it must
-    do is hold the output where it is told."""
-    g = Graph(CTX)
-    laser = g.add(CWLaser(power=0.0, label="laser"))
-    amp = g.add(EDFA(gain=20.0, max_output_power=10.0, noise_figure=5.0, label="edfa"))
-    meter = g.add(PowerMeter(label="meter"))
-    g.chain(laser, amp, meter)
+def test_an_amplifier_that_is_not_asked_to_saturate_does_not() -> None:
+    """The default is an ideal amplifier, and it has to be exactly ideal.
 
-    assert w_to_dbm(g.run()[meter].signal_power_w) == pytest.approx(10.0, abs=1e-3)
+    Declared as an idealisation rather than delivered as one by accident: every
+    result in this repository was measured with ``saturate`` false, and a model
+    that compressed a little anyway would move all of them by amounts too small
+    to notice and too large to be nothing.
+    """
+    # Asserted on the gain itself as well as through the link, because the
+    # round trip through dBm costs a few parts in 1e7 on its own and would hide
+    # a compression a hundred times larger than that.
+    assert EDFA(gain=20.0).effective_gain(dbm_to_w(0.0)) == db_to_linear(20.0)
 
-
-def test_an_unsaturated_amplifier_is_untouched_by_the_clamp() -> None:
     g, power, _ = _amplified(-20.0, gain_db=20.0)
-    assert w_to_dbm(g.run()[power].signal_power_w) == pytest.approx(0.0, abs=1e-4)
+    assert w_to_dbm(g.run()[power].signal_power_w) == pytest.approx(0.0, abs=1e-6)
+
+
+# --------------------------------------------------------------------------
+# Saturation
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(("gain_db", "saturation_dbm"), [(20.0, 17.0), (30.0, 20.0), (10.0, 13.0)])
+def test_the_gain_compresses_by_three_db_at_the_declared_saturation_power(
+    gain_db: float, saturation_dbm: float
+) -> None:
+    """The definition of the parameter, checked as a definition.
+
+    ``saturation_power`` is the *output* at 3 dB of compression, which is how a
+    datasheet quotes it. Drive the amplifier so that its output lands there and
+    the gain must be exactly 3 dB down — and the output must be exactly the
+    declared number, which is the half of it that catches a conversion applied
+    in the wrong direction.
+
+    The 10 dB row is not padding: the conversion from the datasheet number to
+    the model's own ``P_sat`` carries a factor ``(G_0 - 2) / G_0``, which is 0.98
+    at 20 dB and 0.8 at 10. A version that dropped it as "large gain" passes the
+    first two rows.
+    """
+    amplifier = EDFA(gain=gain_db, saturate=True, saturation_power=saturation_dbm)
+    small_signal = db_to_linear(gain_db)
+    # The input whose output would be the 3 dB point, if the gain there is G_0/2.
+    input_power = 2.0 * dbm_to_w(saturation_dbm) / small_signal
+
+    gain = amplifier.effective_gain(input_power)
+    assert 10.0 * math.log10(gain) == pytest.approx(gain_db - 10.0 * math.log10(2.0), abs=1e-6)
+    assert w_to_dbm(gain * input_power) == pytest.approx(saturation_dbm, abs=1e-6)
+
+
+def test_the_solved_gain_satisfies_the_equation_it_came_from() -> None:
+    """Newton either converged or it did not, and this is what says which.
+
+    ``G = G_0 exp(-(G-1) P_in / P_sat)`` is implicit, so the only honest check on
+    the solver is to put its answer back in. An iteration cap that quietly
+    returned a half-converged gain would pass every other test in this file by a
+    hair and fail here by orders of magnitude.
+    """
+    amplifier = EDFA(gain=25.0, saturate=True, saturation_power=15.0)
+    small_signal = db_to_linear(25.0)
+    p_sat = amplifier.intrinsic_saturation_power(small_signal)
+
+    for input_dbm in (-40.0, -20.0, -10.0, 0.0, 10.0):
+        input_power = dbm_to_w(input_dbm)
+        gain = amplifier.effective_gain(input_power)
+        residual = gain - small_signal * math.exp(-(gain - 1.0) * input_power / p_sat)
+        assert abs(residual) < 1e-12 * small_signal
+
+
+def test_compression_is_smooth_and_has_no_ceiling_to_hit() -> None:
+    """What the clamp got qualitatively wrong, and the reason for replacing it.
+
+    A clamp has a kink: below it the amplifier is perfectly ideal and above it
+    the gain falls as ``1/P_in``, which means an amplifier that is exactly right
+    until it is suddenly wrong. Real compression starts immediately and never
+    stops. So: the gain must fall at *every* step, including ones far below the
+    saturation power, and the output must keep rising — a saturated amplifier
+    delivers less gain, not less power.
+    """
+    amplifier = EDFA(gain=20.0, saturate=True, saturation_power=17.0)
+    inputs = [dbm_to_w(p) for p in (-40.0, -30.0, -20.0, -10.0, -5.0, 0.0, 5.0, 10.0)]
+    gains = [amplifier.effective_gain(p) for p in inputs]
+    outputs = [g * p for g, p in zip(gains, inputs, strict=True)]
+
+    assert all(later < earlier for earlier, later in pairwise(gains)), (
+        "compression must begin immediately, not at a threshold"
+    )
+    assert all(later > earlier for earlier, later in pairwise(outputs)), (
+        "more in must still mean more out; a clamp is what stops being true"
+    )
+    # Ten dB more input, well past the knee, must buy substantially less than
+    # ten dB more output — which is the whole content of the word saturation.
+    assert w_to_dbm(outputs[-1]) - w_to_dbm(outputs[-3]) < 5.0
+
+
+def test_saturation_is_driven_by_total_power_so_channels_share_the_gain() -> None:
+    """Two channels compress an amplifier that neither would compress alone.
+
+    The physical prediction that makes this a model of an amplifier rather than
+    of a channel: erbium has one inversion and everything in the band draws on
+    it. It is also the mechanism behind every gain-flattening argument in a WDM
+    system, so a version that saturated per band would be wrong in a way that
+    only shows up once someone adds channels.
+    """
+    amplifier = EDFA(gain=20.0, saturate=True, saturation_power=17.0)
+    one = dbm_to_w(-5.0)
+
+    alone = amplifier.effective_gain(one)
+    together = amplifier.effective_gain(2.0 * one)
+    assert together < alone, "a second channel must cost the first some gain"
+
+    # And the two must share: doubling the load is exactly the same to the
+    # amplifier as one channel of twice the power.
+    assert together == pytest.approx(
+        amplifier.effective_gain(dbm_to_w(-5.0 + 10.0 * math.log10(2.0)))
+    )
+
+
+def test_adding_channels_takes_gain_from_the_ones_already_there() -> None:
+    """The same sharing, through a real graph rather than through one function.
+
+    Worth having separately: ``effective_gain`` is driven by
+    :meth:`OpticalSignal.total_power`, and a version that summed one band, or
+    that saturated each band against its own copy of the amplifier, would give
+    the right answer to the unit test above and the wrong one here.
+
+    The per-channel numbers are the physics a WDM operator actually plans
+    around: every doubling of the channel count costs the survivors about a
+    decibel, and the amplifier's *total* output barely moves — an EDFA near
+    saturation is closer to a fixed power source than to a fixed gain.
+    """
+
+    def per_channel_dbm(channels: int) -> tuple[float, float]:
+        g = Graph(CTX)
+        amplifier = g.add(
+            EDFA(gain=20.0, saturate=True, saturation_power=17.0, noise_figure=5.0, label="edfa")
+        )
+        meter = g.add(PowerMeter(label="pm"))
+        if channels == 1:
+            laser = g.add(CWLaser(power=-5.0, wavelength=1550.0, label="ch0"))
+            g.connect(laser, amplifier["in"])
+        else:
+            combiner = g.add(Combiner(num_inputs=channels, insertion_loss=0.0, label="mux"))
+            for index in range(channels):
+                # Spaced on a real grid, so these are separate bands rather than
+                # one band with more power in it.
+                laser = g.add(
+                    CWLaser(power=-5.0, wavelength=1550.0 + index * 0.8, label=f"ch{index}")
+                )
+                g.connect(laser, combiner[f"in{index}"])
+            g.connect(combiner, amplifier["in"])
+        g.connect(amplifier, meter["in"])
+        total = g.run()[meter].signal_power_w
+        return w_to_dbm(total), w_to_dbm(total / channels)
+
+    readings = {n: per_channel_dbm(n) for n in (1, 2, 4, 8)}
+
+    each = [readings[n][1] for n in (1, 2, 4, 8)]
+    assert each == pytest.approx([13.61, 12.74, 11.56, 10.12], abs=0.02)
+    assert all(later < earlier for earlier, later in pairwise(each)), (
+        "every added channel must cost the ones already there"
+    )
+
+    # Eight times the input, and under 6 dB more out of the amplifier.
+    totals = [readings[n][0] for n in (1, 8)]
+    assert totals[1] - totals[0] < 6.0
+
+
+def test_a_project_carrying_the_retired_clamp_still_loads() -> None:
+    """``max_output_power`` is gone, and an old document must not fail to open.
+
+    It loads with the parameter dropped, which — unlike the other retirements in
+    this library — genuinely changes the link it describes. That is the trade
+    taken deliberately: the value described a clamp this class's own docstring
+    called a fiction, and refusing to open the file would be worse than opening
+    it with the physics in place.
+    """
+    from maiman.project import graph_from_dict
+
+    document = {
+        "schema_version": 1,
+        "context": {
+            "bit_rate": 10e9,
+            "samples_per_symbol": 8,
+            "sequence_length": 64,
+            "seed": 1,
+        },
+        "nodes": [
+            {"id": "laser", "type": "CWLaser", "params": {"power": 0.0}},
+            {
+                "id": "edfa",
+                "type": "EDFA",
+                "params": {"gain": 20.0, "max_output_power": 10.0},
+            },
+        ],
+        "edges": [{"from": ["laser", "out"], "to": ["edfa", "in"]}],
+    }
+    graph = graph_from_dict(document)
+    amplifier = next(c for c in graph.components if isinstance(c, EDFA))
+    assert not hasattr(amplifier, "max_output_power")
+    assert amplifier.gain == 20.0
+    assert not amplifier.saturate, "and it loads as the ideal amplifier, not a compressed one"
 
 
 # --------------------------------------------------------------------------
