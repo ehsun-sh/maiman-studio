@@ -41,10 +41,19 @@ Because the project does not exist on PyPI yet, register it as a **pending publi
 | Workflow name | `release.yml` |
 | Environment name | `pypi` |
 
-Repeat it at <https://test.pypi.org/manage/account/publishing/> with the environment name
-`testpypi` if you want the dry run, which you do.
+### 2. TestPyPI trusted publisher — a *separate* registration
 
-### 2. GitHub environments
+**TestPyPI is a different service with a different account and its own publisher list.** Registering
+on PyPI does not register you on TestPyPI, and the dry run fails with `invalid-publisher` if you
+skip this. That is exactly what happened the first time.
+
+<https://test.pypi.org/manage/account/publishing/>, same table as above, except:
+
+| Field | Value |
+| :--- | :--- |
+| Environment name | `testpypi` |
+
+### 3. GitHub environments
 
 Settings → Environments. Create **`pypi`** and **`testpypi`**. They need no secrets — the whole
 point is that there are none — but the names must match the workflow and the publisher
@@ -54,12 +63,15 @@ in the loop before an upload.
 ## Releasing
 
 ```bash
-# 1. Decide and set the version in pyproject.toml, then:
-git commit -am "Release 0.1.0" && git push
-
-# 2. Tag it. The workflow refuses if this disagrees with pyproject.toml.
-git tag v0.1.0 && git push origin v0.1.0
+git tag v0.1.0
+git push origin v0.1.0
 ```
+
+Two lines, not one joined by `&&` — **Windows PowerShell 5.1 has no `&&`**, and a chained command
+there is a parser error that runs neither half. The first attempt at this produced no tag and no
+error anyone noticed, which is exactly how a parser error looks when you expected a git message.
+
+The workflow refuses to publish if the tag disagrees with `pyproject.toml`.
 
 Then publish a GitHub release against that tag. The workflow builds, runs `twine check --strict`,
 installs the wheel into a clean environment and runs a link through it, and only then uploads.
@@ -92,3 +104,32 @@ can check them from inside:
 
 None of these is guarded, because a test cannot ask PyPI whether an upload happened without a
 network call in CI. They are listed here instead, which is the honest substitute.
+
+## When the upload fails with `invalid-publisher`
+
+```
+* `invalid-publisher`: valid token, but no corresponding publisher
+```
+
+The OIDC token was fine; PyPI has no publisher matching it. The action prints the claims it sent,
+and the fix is to compare them field by field against the registration:
+
+| Claim in the log | Must equal |
+| :--- | :--- |
+| `repository` | Owner + repository name in the form |
+| `workflow_ref` | ends with the **Workflow name** you registered, e.g. `release.yml` |
+| `environment` | the **Environment name** you registered |
+
+If all three already match, check *which service* you are looking at. A publisher on
+<https://pypi.org> does nothing for an upload to <https://test.pypi.org>, and the error is identical
+either way.
+
+Nothing is uploaded when this fails, so the version number is not spent and there is nothing to
+clean up. Fix the registration and run it again.
+
+## Reading the run
+
+A dispatch with `target: testpypi` runs **Build and check**, then **Publish to TestPyPI**, and
+*skips* **Publish to PyPI** — which GitHub renders greyed out with a dash, next to a job that
+failed with a red cross. The two look similar at a glance and mean opposite things: skipped is
+correct, failed is not. `gh run view <id>` prints them unambiguously.
