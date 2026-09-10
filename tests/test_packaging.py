@@ -134,6 +134,24 @@ def test_the_test_count_the_product_brief_claims_is_a_floor_and_is_met(
 # --------------------------------------------------------------------------
 
 
+def test_the_package_and_its_metadata_declare_the_same_version() -> None:
+    """``maiman.__version__`` is hand-written and pyproject's is what ships.
+
+    Nothing tied them together until 0.1.0, and they are updated by hand in two
+    files. A divergence is invisible in every ordinary way: the wheel builds,
+    the tests pass, PyPI shows one number and ``maiman.__version__`` reports
+    another to whoever is writing down what they ran. For a project whose
+    citation file tells people to record the version, that is not cosmetic.
+    """
+    import tomllib
+
+    declared = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert declared["project"]["version"] == maiman.__version__, (
+        f"pyproject.toml says {declared['project']['version']} and "
+        f"src/maiman/__init__.py says {maiman.__version__}"
+    )
+
+
 def test_the_citation_file_names_the_version_the_package_does() -> None:
     """A citation that points at the wrong version is worse than none at all.
 
@@ -242,16 +260,17 @@ def test_the_security_policy_says_which_versions_are_supported() -> None:
     assert "## Supported versions" in policy
     assert "ehsun.ca@gmail.com" in policy, "no reporting channel in the security policy"
 
-    if "dev" in maiman.__version__:
-        assert "no release" in policy.lower(), (
-            "the policy should say there has been no release while the version is a dev one"
-        )
-    else:
-        raise AssertionError(
-            f"the package now declares {maiman.__version__}, which is not a development "
-            f"version. SECURITY.md still says only `main` is supported -- decide what "
-            f"that means for the released version and update both."
-        )
+    # This used to assert that the policy said "no release", and to fail
+    # deliberately the moment the version stopped being a development one. It
+    # did exactly that at 0.1.0, which is what it was for. What replaces it is
+    # the narrower claim that survives: the policy has to name the release
+    # series the package is actually in, so a 0.2 that nobody updated the file
+    # for fails here rather than telling people something untrue.
+    series = ".".join(maiman.__version__.split(".")[:2])
+    assert f"`{series}." in policy, (
+        f"the package declares {maiman.__version__} and SECURITY.md does not mention "
+        f"the {series}.x series, so it is describing some other version"
+    )
 
 
 def test_the_release_workflow_uploads_without_a_token() -> None:

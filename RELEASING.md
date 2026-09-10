@@ -6,25 +6,19 @@ Everything mechanical is in [`.github/workflows/release.yml`](.github/workflows/
 steps below are the ones a workflow cannot do: they involve web interfaces and an account, and
 they are deliberately the only ones.
 
-## Decide the version first
+## The version
 
-The package currently declares **`0.0.1.dev0`**, and that matters more than it looks.
+The package declares **`0.1.0`** — a real release, not a `.devN` placeholder, so
+`pip install maiman` will find it. The `Development Status :: 2 - Pre-Alpha` classifier says what
+it is, and `0.1.0` does not claim otherwise.
 
-A `.devN` version is a *development release*. PyPI accepts it, but **`pip install maiman` will not
-find it** — pip excludes pre-releases unless asked with `--pre`. So publishing as it stands claims
-the name and delivers nothing to anyone who types the obvious command.
+The number lives in **three** places and they are checked against each other on every commit:
+`pyproject.toml`, `src/maiman/__init__.py`, and `CITATION.cff`. Change one and the suite tells you
+about the other two.
 
-Two honest options:
-
-* **Claim the name now.** Publish `0.0.1.dev0` and accept that it is a placeholder. Reasonable if
-  the concern is that someone else takes `maiman`.
-* **Make a real first release.** Bump to `0.1.0` in `pyproject.toml` — `pip install maiman` then
-  works. The `Development Status :: 2 - Pre-Alpha` classifier already tells anyone reading what
-  they are getting, and `0.1.0` does not claim otherwise.
-
-Either way, **a version number on PyPI can never be reused.** Deleting a release does not free it.
-That is the one irreversible step in this document, and the reason the workflow refuses to publish
-when the git tag and `pyproject.toml` disagree.
+**A version number on PyPI can never be reused.** Deleting a release does not free it. That is the
+one irreversible step in this document, and the reason the workflow refuses to publish when the git
+tag and `pyproject.toml` disagree.
 
 Do a TestPyPI run first. It costs one workflow dispatch and it is the only way to see the page the
 way a stranger will.
@@ -84,12 +78,17 @@ suite cannot do:
   answers every API route and 404s the page it exists to serve,
 * more than forty components register.
 
-## After the first release
 
-`SECURITY.md` says only `main` is supported, on the grounds that there has been no release. A test
-in `tests/test_packaging.py` ties that claim to the version still being a development one, so the
-moment the version stops being `dev`, **that test fails on purpose** and asks you to decide what
-support actually means. Answer it there rather than deleting it.
+## After the first successful upload
 
-`CITATION.cff` has no `date-released` for the same reason. A real release should add one, and its
-`version` is already checked against the package on every commit.
+Three statements in this repository are true only until the moment the upload lands, and nothing
+can check them from inside:
+
+* `README.md` says "Not on PyPI yet" above the install instructions. Replace it with
+  `pip install maiman`.
+* `RELEASING.md` — this file — opens with the same claim.
+* `CITATION.cff` has no `date-released`, on the grounds that there has been no release. Add the
+  date the release was actually published, not the date the version was bumped.
+
+None of these is guarded, because a test cannot ask PyPI whether an upload happened without a
+network call in CI. They are listed here instead, which is the honest substitute.

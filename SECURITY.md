@@ -14,8 +14,16 @@ their own time, and pretending to a response time it cannot meet would be worse 
 
 ## Supported versions
 
-**Only `main`.** There has been no release: the version is `0.0.1.dev0` and the package is not on
-PyPI. There is nothing older to backport a fix to, and fixes land on `main`.
+| Version | Supported |
+| :--- | :--- |
+| `0.1.x` | Yes |
+| `main` | Yes |
+| Anything older | There is nothing older |
+
+Fixes land on `main` and go out in the next `0.1.x`. While the version stays below `1.0`, a
+security fix may arrive alongside behavioural changes rather than on its own — pinning an exact
+version and never updating is the wrong shape of caution here, because there is no branch to
+backport to and there will not be one until the interface stops moving.
 
 ## What the threat model actually is
 

@@ -32,7 +32,7 @@ keywords:
   - forward error correction
   - photonic integrated circuits
 license: Apache-2.0
-version: 0.0.1.dev0
+version: 0.1.0
 
 # No `date-released`, deliberately. There has been no release: the version
 # above is a development version, the package is not on PyPI, and the field
