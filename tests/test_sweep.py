@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import os
 from itertools import pairwise
 
 import numpy as np
 import pytest
 
-from maiman import Graph, GraphError, SimulationContext, sweep
+from maiman import Component, Graph, GraphError, SimulationContext, sweep
 from maiman.components import (
     BERAnalyzer,
     CWLaser,
@@ -19,7 +20,7 @@ from maiman.components import (
     PowerMeter,
     PRBSGenerator,
 )
-from maiman.sweep import derive_run_seed
+from maiman.sweep import _lane_count, derive_run_seed
 
 
 def _link(sequence_length: int = 2048) -> tuple[Graph, CWLaser, Fiber, BERAnalyzer]:
@@ -231,3 +232,114 @@ def test_asking_for_an_axis_that_was_not_swept() -> None:
     result = sweep(g, {(laser, "power"): [-20.0]})
     with pytest.raises(KeyError, match="was not swept"):
         result.axis(fiber, "length")
+
+
+# ---------------------------------------------------------------------------
+# workers
+#
+# The whole claim being defended is that adding workers changes the wall clock
+# and nothing else. A sweep whose numbers moved with the thread count would be
+# useless as a measurement, and the failure would not look like a crash — it
+# would look like a curve with the right shape and the wrong values.
+
+
+@pytest.mark.parametrize("workers", [1, 2, 3, 4, None])
+def test_the_answer_does_not_depend_on_the_worker_count(workers: int | None) -> None:
+    """Bit-identical, not close. Every point is a function of its own overrides.
+
+    ``None`` asks for one per core, so this also covers however many that
+    happens to be on the machine running it — which is the configuration nobody
+    tests by hand.
+    """
+    graph, laser, _fiber, analyzer = _link()
+    powers = [-14.0, -12.0, -10.0, -8.0, -6.0]
+
+    reference = sweep(graph, {(laser, "power"): powers})
+    result = sweep(graph, {(laser, "power"): powers}, workers=workers)
+
+    assert [point.index for point in result.points] == list(range(len(powers)))
+    assert np.array_equal(reference.axis(laser, "power"), result.axis(laser, "power")), (
+        "the points came back in a different order"
+    )
+    assert np.array_equal(
+        reference.metric(analyzer, lambda m: m.q_factor),
+        result.metric(analyzer, lambda m: m.q_factor),
+    ), "the numbers moved with the worker count"
+
+
+def test_repeated_runs_keep_their_seeds_when_parallelised() -> None:
+    """The derived seeds come from the original context, not from a worker's copy.
+
+    They are the same object, so this could only break by someone deriving from
+    ``on.ctx``. It is the kind of change that looks like a tidy-up and silently
+    reseeds every repeated run.
+    """
+    graph, laser, _fiber, analyzer = _link(sequence_length=512)
+    axis: dict[tuple[Component | str, str], list[float]] = {(laser, "power"): [-12.0, -10.0]}
+
+    sequential = sweep(graph, axis, runs=3)
+    parallel = sweep(graph, axis, runs=3, workers=4)
+
+    assert np.array_equal(
+        sequential.metric(analyzer, lambda m: m.q_factor),
+        parallel.metric(analyzer, lambda m: m.q_factor),
+    )
+    # And the repeats really are different from one another, or the check above
+    # would pass on a sweep that had quietly stopped varying its seed.
+    spread = parallel.metric(analyzer, lambda m: m.q_factor)
+    assert spread.shape == (2, 3)
+    assert len(set(spread[0])) == 3
+
+
+def test_a_parallel_sweep_leaves_the_original_graph_alone() -> None:
+    """It is never run at all above one worker — only copied.
+
+    A stronger guarantee than the sequential path's, which relies on overrides
+    being rolled back. Worth asserting because the copies are what make it true
+    and a future change to hand out the original would pass every other test.
+    """
+    graph, laser, _fiber, _analyzer = _link(sequence_length=512)
+    before = dict(laser._values)
+
+    sweep(graph, {(laser, "power"): [-20.0, -10.0, 0.0, 5.0]}, workers=4)
+
+    assert laser._values == before
+
+
+def test_a_failing_point_still_raises_and_does_not_hang() -> None:
+    """One bad point must not strand the workers queued behind it.
+
+    The graph a thread borrowed is returned in a ``finally``; without that the
+    queue drains and the pool deadlocks on a sweep that should have taken a
+    second to fail.
+    """
+    graph, laser, _fiber, _analyzer = _link(sequence_length=512)
+    # More points than lanes on purpose: with a lane each, nothing ever waits
+    # for a graph to come back and a missing `finally` would go unnoticed.
+    with pytest.raises(GraphError):
+        sweep(graph, {(laser, "nonexistent"): [float(v) for v in range(8)]}, workers=2)
+
+
+def test_more_workers_than_points_is_not_an_error() -> None:
+    """It just makes fewer copies. Asking for sixteen lanes for three points
+    should not allocate sixteen graphs, and should certainly not fail."""
+    graph, laser, _fiber, analyzer = _link(sequence_length=512)
+    result = sweep(graph, {(laser, "power"): [-10.0, -8.0, -6.0]}, workers=16)
+    assert len(result.points) == 3
+    assert np.all(np.isfinite(result.metric(analyzer, lambda m: m.q_factor)))
+
+
+def test_the_lane_count_never_exceeds_the_work() -> None:
+    """Checked directly, because the observable effect is only a wasted deepcopy."""
+    assert _lane_count(16, 3) == 3
+    assert _lane_count(2, 9) == 2
+    assert _lane_count(1, 9) == 1
+    assert _lane_count(None, 1) == 1
+    assert _lane_count(None, 10_000) == (os.cpu_count() or 1)
+
+
+@pytest.mark.parametrize("workers", [0, -1])
+def test_a_worker_count_below_one_is_rejected(workers: int) -> None:
+    graph, laser, _fiber, _analyzer = _link(sequence_length=512)
+    with pytest.raises(ValueError, match="workers must be"):
+        sweep(graph, {(laser, "power"): [-10.0]}, workers=workers)

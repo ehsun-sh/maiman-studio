@@ -174,6 +174,18 @@ def run_project(
     }
 
 
+#: How many sweep points the server runs at once. A browser is holding a
+#: connection open for the whole of a sweep, which is the case parallelism was
+#: built for — and the numbers do not depend on it, so this is a speed knob and
+#: not a behaviour one.
+#:
+#: Capped rather than one per core. The box is running an interactive tool and
+#: very likely the editor the graph was drawn in; taking every core for a curve
+#: somebody asked for by clicking a button is not a trade a design tool gets to
+#: make on its own. Past four workers a split-step sweep is memory-bound anyway
+#: and the fifth buys almost nothing.
+SWEEP_WORKERS = 4
+
 #: Shortest gap between two progress lines, in seconds. Twenty a second is
 #: already past what anybody reads off a moving bar, and a split step can report
 #: thousands of times in that window.
@@ -262,7 +274,7 @@ def run_sweep(request: dict[str, Any]) -> dict[str, Any]:
         )
 
     try:
-        result = sweep(graph, {(node, parameter): list(values)}, runs=runs)
+        result = sweep(graph, {(node, parameter): list(values)}, runs=runs, workers=SWEEP_WORKERS)
     except GraphError as error:
         raise RequestError(HTTPStatus.UNPROCESSABLE_ENTITY, str(error)) from error
     except (ValueError, TypeError) as error:

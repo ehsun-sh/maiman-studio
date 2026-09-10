@@ -115,6 +115,26 @@ that changed most is the one worth showing — which is also what stops it openi
 downstream of the decoder, whose EVM is exactly zero at every point because it is looking at
 symbols that have already been decided.
 
+**Points run at the same time, and the answer does not know it.** `sweep(..., workers=4)` — or
+`workers=None` for one per core — runs four points at once, each on its own deep copy of the graph.
+Measured 3.2× on an eight-point nonlinear span sweep, and **bit-identical** to the sequential
+result, in sweep order, however many workers ran it. That last part is the whole claim: a sweep
+whose numbers moved with the thread count would be worthless as a measurement, and the failure
+would not look like a crash — it would look like a curve with the right shape and the wrong values.
+
+Threads rather than processes. Measured, the two are the same speed on this work — 3.25× against
+3.14× on twelve workers — because the time goes into numpy's FFTs, which release the GIL, and
+because a split step is memory-bound long before it is core-bound. Threads then win on everything
+else: nothing to pickle, no interpreter to start, and no objection to a component you defined in a
+notebook. The copies are what make it safe — a run *writes* a point's overrides onto the components
+and rolls them back after, so two threads sharing one graph would produce numbers belonging to
+neither point.
+
+The default is one worker, because a sweep of four cheap points is slower to parallelise than to
+run. The session server uses four: a browser is holding a connection open for the whole of a sweep,
+which is the case this was built for, but taking all twenty-four cores for a curve somebody asked
+for by clicking a button is not a trade a design tool gets to make on its own.
+
 **The spectrum is drawn, not summarised.** An Optical Spectrum Analyzer anywhere on the graph puts
 its trace in the dock: wavelength across, dBm per resolution bandwidth up, the peak marked at the
 wavelength it was found at. The axis is labelled in the analyser's own resolution because the trace
@@ -1252,6 +1272,8 @@ Every physics block ships with a test against a closed-form result, run in CI
 | Coupler unitarity | `SᴴS = I` at every split ratio — which is what the cross path's factor of j is for | ✅ |
 | Resonance linewidth | Lorentzian `FSR(1−r)/π√r` within 3 % of a measured width from critical coupling to κ = 0.5 | ✅ |
 | Waveguide group delay | `n_g L / c` read off the transfer function's phase slope, to 1e-9 | ✅ |
+| **Parallel sweeps are invisible** | Bit-identical at 1, 2, 3, 4 and one-per-core workers, in sweep order; derived seeds unchanged | ✅ |
+| A failing point does not hang | More points than lanes, so a borrowed graph must come back — verified by deleting the `finally` and watching it deadlock | ✅ |
 | **MMI phase relations** | `SᴴS = I` at N = 1, 2, 3, 4, 5, 8 — even amplitudes with invented phases pass every other check and fail this one | ✅ |
 | 2×2 MMI ≡ 3 dB coupler | The same matrix to 1e-15, factor of j included; self-imaging at N = 2 *is* the quadrature relation | ✅ |
 | MMI split and imbalance | `1/N` per path; a tilted MMI is lossy and its matrix says so rather than claiming unitarity | ✅ |
