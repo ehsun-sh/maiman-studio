@@ -22,6 +22,7 @@ from __future__ import annotations
 from .component import BoolParam, Component, Param, Port, PortType
 from .context import SimulationContext
 from .graph import CycleError, Graph, GraphError, Results
+from .pdk import PDK, PDKError, load_pdk, pdk_from_dict
 from .project import ProjectError, load, save
 from .registry import UnknownComponentError, manifests, registered_names
 from .signals import (
@@ -40,6 +41,7 @@ from .sweep import SweepPoint, SweepResult, sweep
 __version__ = "0.0.1.dev0"
 
 __all__ = [
+    "PDK",
     "Band",
     "BandPower",
     "BinarySignal",
@@ -53,6 +55,7 @@ __all__ = [
     "GraphError",
     "NoiseBin",
     "OpticalSignal",
+    "PDKError",
     "Param",
     "Port",
     "PortType",
@@ -65,7 +68,9 @@ __all__ = [
     "UnknownComponentError",
     "__version__",
     "load",
+    "load_pdk",
     "manifests",
+    "pdk_from_dict",
     "registered_names",
     "save",
     "sweep",

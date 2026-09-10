@@ -303,10 +303,16 @@ def mmi_coupler(
     # a loss parameter rather than hidden in a normalisation.
     taper = np.ones(ports, dtype=np.float64)
     if imbalance_db and ports > 1:
-        # Linear in dB across the outputs, centred so that the *mean* level is
-        # the loss the caller asked for and the spread is the imbalance.
+        # Linear in dB across the outputs, then renormalised so the mean
+        # *power* is one. Centring the tilt in decibels is not the same as
+        # centring it in power — by Jensen it comes out slightly heavy — so
+        # without this line an imbalanced MMI passes a little more light than
+        # its excess loss says, and "0.45 dB excess" stops being a number you
+        # can subtract. The rescale is a constant on every amplitude, so the
+        # spread in dB is still exactly the imbalance asked for.
         tilt = np.linspace(-imbalance_db / 2.0, imbalance_db / 2.0, ports)
         taper = 10.0 ** (-tilt / 20.0)
+        taper /= np.sqrt(np.mean(taper**2))
     amplitude = 10.0 ** (-excess_loss_db / 20.0) / np.sqrt(ports)
     # Rows are outputs, so the taper indexes rows. Tapering the columns instead
     # spreads the imbalance across the *inputs*, which leaves every output of a

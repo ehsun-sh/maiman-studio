@@ -17,7 +17,7 @@ link in this simulator descends from.*
 
 ---
 
-> ### ⚠️ Project status: pre-alpha — Phases 0 through 3 complete. Phase 4, the PIC, is under way.
+> ### ⚠️ Project status: pre-alpha — Phases 0 through 4 complete.
 >
 > Two complete links run end to end and produce numbers that match theory.
 > **Direct detection:** PRBS → NRZ → CW laser → MZM → fiber (loss + dispersion) → PIN → filter →
@@ -950,6 +950,52 @@ no band is sampled at. Not putting the channels on one grid is what makes a WDM 
 all, and that choice has to be paid for somewhere. See
 [`examples/wdm_nonlinear.py`](examples/wdm_nonlinear.py).
 
+## A foundry's numbers, not a foundry's code
+
+A process design kit here is **not** a component library. It adds no devices, carries no layout,
+and reading one executes nothing — a `.pdk` is JSON, read the way a `.maiman` project is, and for
+the same reason: opening a file somebody sent you must not be equivalent to running their code.
+`"component": "os.system"` is refused like any other name that is not in the registry.
+
+What it carries is the half of a real design the engine cannot derive. `maiman.photonics` knows
+what a directional coupler *is*. It has no way to know that this process makes a nominal 3 dB
+coupler measuring 0.48 at 1550 nm, or that the nitride guide beside the silicon one is twenty times
+quieter. Those numbers come off a wafer.
+
+```python
+from maiman import load_pdk
+
+pdk = load_pdk("examples/silicon_220nm.pdk.json")
+coupler = pdk.make("dc_3db", label="split")        # 0.48, not 0.5
+splitter = pdk.make("mmi_1x4", wavelength=1565.0)  # the fits, evaluated there
+```
+
+**A value in a kit may be a fit rather than a constant** — a polynomial in `λ − λ_ref` in
+nanometres, which is the form a foundry quotes one in. It is evaluated when the component is built.
+The device models here are frequency-flat by construction, so what a kit buys is the right constant
+for the band you are working in, chosen by the file rather than guessed. That "3 dB" coupler is a
+1.5 / 5.5 dB split at 1500 nm and 4.9 / 1.7 at 1600 — which is the entire reason the MMI sits
+beside it in the kit.
+
+**A fit has a window, and running outside it is refused.** This is the part worth the code. That
+first-order C-band fit, extrapolated to 1310 nm, returns **minus 0.46** — a negative power fraction,
+out of arithmetic that never complained once. `valid_wavelengths` turns it into a sentence naming
+the range and the device. Everything else a kit can get wrong — a component that is not registered,
+a parameter the component does not declare, a cross-section that does not exist, a cross-section
+attached to a lumped device with no waveguide to apply it to — is refused at load, naming the file
+and the entry, because a kit is read once and used a hundred times.
+
+And nominal is not what you build. The same 1 × 4 splitter, twice:
+
+    out1     out2     out3     out4
+    textbook         -6.021   -6.021   -6.021   -6.021   total +0.000 dB   spread 0.000 dB
+    silicon-220nm    -6.298   -6.414   -6.531   -6.648   total -0.450 dB   spread 0.350 dB
+
+See [`examples/pdk_import.py`](examples/pdk_import.py) and the kit it reads,
+[`examples/silicon_220nm.pdk.json`](examples/silicon_220nm.pdk.json) — representative of the open
+multi-project-wafer processes and drawn from published literature, not from anyone's confidential
+kit. Replace it with yours.
+
 ## The session server
 
     maiman serve
@@ -1035,7 +1081,7 @@ library, and the UI.
 | [GNPy](https://github.com/Telecominfraproject/oopt-gnpy) | Optical network planning / OSNR budgets | Complementary — network layer, not waveform layer |
 | [QAMPy](https://github.com/ChalmersPhotonicsLab/QAMpy) | Coherent DSP algorithms | Reference for Phase 3 |
 | [SAX](https://github.com/gdsfactory/sax) | S-matrix photonic circuit solver | **Cross-validation reference, not a dependency.** The reduction is thirty lines and SAX resolves to 37 packages including an LGPL sparse back-end; the two agree to 7e-15 |
-| [gdsfactory](https://github.com/gdsfactory/gdsfactory) | Photonic layout & PDK ecosystem | PDK path for Phase 4 — this is the part still worth integrating |
+| [gdsfactory](https://github.com/gdsfactory/gdsfactory) | Photonic layout & PDK ecosystem | **Not a dependency.** A `.pdk` file here is JSON carrying a foundry's *fitted numbers* — indices, loss, coupling ratios — which is the half of a kit this engine cannot derive. Layout, DRC and the GDS itself are gdsfactory's job and stay there; converting one of its PDKs into a `.pdk` is a script somebody can write without this project taking on the ecosystem |
 | [Meep](https://github.com/NanoComp/meep) | FDTD / full-wave EM | Feeds component models *in*; not a competitor |
 | [GNU Radio](https://www.gnuradio.org/) | Block-based SDR | Architectural reference for dataflow scheduling |
 
@@ -1139,7 +1185,7 @@ time window, and results are reproducible.
 | **1.5 — Nonlinear & amplified** ✅ | Adaptive-step SSFM, Kerr, EDFA with ASE, OSNR, PMD, APD, dispersion slope and its third-order term, cross-polarization Kerr coupling, inter-channel stimulated Raman scattering | ~2 months |
 | **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier phase recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km with blind estimation of the accumulated value, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
 | **3 — GUI & WDM** | ✅ Wavelength-selective filters, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — the OSA's trace drawn in the dock, and 400G/800G reference designs validated against the OSNR relations, and a back-end indirection the propagation kernels dispatch through — CuPy runs it where a device exists; it is not exercised in CI | ~6 months |
-| **4 — PIC** | Bidirectional S-matrix circuit solver, waveguide, directional coupler, all-pass and add-drop ring resonators, cross-validated against SAX; N×N MMI couplers on the self-imaging phase relations, and a Mach-Zehnder interferometer assembled from them — switch, interleaver, or both; **PDK import still to come** | — |
+| **4 — PIC** ✅ | Bidirectional S-matrix circuit solver, waveguide, directional coupler, all-pass and add-drop ring resonators, cross-validated against SAX; N×N MMI couplers on the self-imaging phase relations; a Mach-Zehnder interferometer assembled from them — switch, interleaver, or both; and PDK import, which reads a foundry's fitted numbers out of a JSON kit and refuses to extrapolate them past the window they were fitted in | — |
 
 ¹ One developer, part-time. Estimates, not commitments.
 
@@ -1212,6 +1258,11 @@ Every physics block ships with a test against a closed-form result, run in CI
 | **MZI as a switch** | `sin²(φ/2)` / `cos²(φ/2)` against the assembled circuit, and the sum is 1 across a full turn to 1e-12 | ✅ |
 | MZI as an interleaver | `FSR = c / (n_g ΔL)` measured between peaks; `n_eff` would be out by 1.7× | ✅ |
 | Balanced MZI has no period | Response flat to 1e-9 across 2 THz — "balanced" means it, not "a period too long to notice" | ✅ |
+| **PDK fits** | A polynomial in `λ − λ_ref` [nm], evaluated where you ask; a bare number is a constant | ✅ |
+| PDK refuses extrapolation | A C-band coupler fit run to 1310 nm returns **−0.46** — a negative power fraction. `valid_wavelengths` turns that into a sentence | ✅ |
+| PDK refuses nonsense | Unregistered component, undeclared parameter, missing cross-section, a cross-section on a lumped device — all at load, all naming the entry | ✅ |
+| A kit executes nothing | JSON in, registry lookup out; `"component": "os.system"` is refused like any other unknown name | ✅ |
+| Every shipped device builds | At the bottom, middle and top of the kit's own window | ✅ |
 
 Component models are derived from published literature and standards (Agrawal, *Nonlinear Fiber
 Optics*; ITU-T G.652 / G.694.1; relevant IEEE 802.3 clauses), cited in each component's

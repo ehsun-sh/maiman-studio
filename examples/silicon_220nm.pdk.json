@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "name": "silicon-220nm",
+  "description": "A generic 220 nm silicon-on-insulator photonics process, TE. Representative of the open multi-project-wafer offerings (IMEC iSiPP, AMF, SiEPIC) rather than any one of them; every number is from published literature, and none is from a foundry's confidential kit. Use it to see what a PDK does, then replace it with yours. The fits are first-order over the C band and are refused outside 1500-1600 nm: run this coupler out to the O band and it returns a negative power fraction.",
+  "reference_wavelength": 1550.0,
+  "valid_wavelengths": [1500.0, 1600.0],
+
+  "cross_sections": {
+    "strip": {
+      "n_eff": [2.44, -1.13e-3],
+      "n_group": [4.20, 6.0e-4],
+      "propagation_loss": [2.0, 2.5e-3],
+      "dispersion": -1800.0
+    },
+    "rib": {
+      "n_eff": [2.85, -9.0e-4],
+      "n_group": [3.75, 5.0e-4],
+      "propagation_loss": [0.5, 8.0e-4],
+      "dispersion": -900.0
+    },
+    "nitride": {
+      "n_eff": [1.62, -2.4e-4],
+      "n_group": [2.10, 1.4e-4],
+      "propagation_loss": [0.10, 6.0e-5],
+      "dispersion": -180.0
+    }
+  },
+
+  "devices": {
+    "wg_strip": {
+      "component": "Waveguide",
+      "cross_section": "strip",
+      "doc": "The default routing waveguide. 500 x 220 nm, single mode at TE.",
+      "params": { "length": 1000.0 }
+    },
+    "wg_rib": {
+      "component": "Waveguide",
+      "cross_section": "rib",
+      "doc": "Shallow-etched rib. Four times lower loss than strip, and a bend radius to match.",
+      "params": { "length": 1000.0 }
+    },
+    "wg_nitride": {
+      "component": "Waveguide",
+      "cross_section": "nitride",
+      "doc": "Silicon nitride: 0.1 dB/cm, no two-photon absorption, and a far weaker confinement.",
+      "params": { "length": 1000.0 }
+    },
+
+    "dc_3db": {
+      "component": "DirectionalCoupler",
+      "cross_section": "strip",
+      "doc": "Nominal 3 dB coupler. Measures 0.48 at 1550 and drifts hard with wavelength — which is the reason the MMI beside it exists.",
+      "params": {
+        "coupling": [0.48, 3.9e-3],
+        "insertion_loss": 0.10
+      }
+    },
+    "dc_10": {
+      "component": "DirectionalCoupler",
+      "cross_section": "strip",
+      "doc": "A 10 % tap, for monitoring a line without spending it.",
+      "params": {
+        "coupling": [0.10, 1.2e-3],
+        "insertion_loss": 0.08
+      }
+    },
+
+    "mmi_2x2": {
+      "component": "MMI",
+      "doc": "2 x 2 general-interference MMI. Flat where the directional coupler is not; pays for it in excess loss.",
+      "structural": { "ports": 2 },
+      "params": {
+        "excess_loss": [0.25, 6.0e-4],
+        "imbalance": [0.15, 2.0e-4]
+      }
+    },
+    "mmi_1x4": {
+      "component": "MMI",
+      "doc": "A 4-way splitter tree in one device.",
+      "structural": { "ports": 4, "driven": 1 },
+      "params": {
+        "excess_loss": [0.45, 9.0e-4],
+        "imbalance": [0.35, 3.0e-4]
+      }
+    },
+
+    "mzi_switch": {
+      "component": "MachZehnderInterferometer",
+      "cross_section": "strip",
+      "doc": "Balanced thermo-optic switch. Set phase_shift to steer; a 220 nm strip heater reaches pi in roughly 20 mW.",
+      "params": {
+        "arm_length": 200.0,
+        "length_difference": 0.0,
+        "insertion_loss": 0.10
+      }
+    },
+    "mzi_interleaver_100g": {
+      "component": "MachZehnderInterferometer",
+      "cross_section": "strip",
+      "doc": "Unbalanced MZI on a 100 GHz grid: dL = c / (n_g * FSR) = 714 um at n_g 4.20.",
+      "params": {
+        "arm_length": 200.0,
+        "length_difference": 713.7,
+        "insertion_loss": 0.10
+      }
+    },
+
+    "ring_addrop_10um": {
+      "component": "RingResonator",
+      "cross_section": "strip",
+      "doc": "A 10 um radius add-drop ring — the parameter is the round trip, 2*pi*r = 62.83 um — near critical coupling on this loss.",
+      "params": {
+        "length": 62.83,
+        "coupling": [0.12, 9.0e-4],
+        "drop_coupling": [0.12, 9.0e-4]
+      }
+    },
+    "ring_notch_nitride": {
+      "component": "RingResonator",
+      "cross_section": "nitride",
+      "doc": "All-pass nitride ring, 40 um radius. Twenty times lower loss than silicon, so a far narrower linewidth at the same size.",
+      "params": {
+        "length": 251.33,
+        "coupling": [0.02, 1.5e-4],
+        "drop_coupling": 0.0
+      }
+    }
+  }
+}
