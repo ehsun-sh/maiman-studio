@@ -27,6 +27,7 @@ from maiman.component import PortType
 from maiman.components import (
     EDFA,
     BERAnalyzer,
+    CoarseFrequencyRecovery,
     CoherentReceiver,
     ConstellationAnalyzer,
     CWLaser,
@@ -136,18 +137,29 @@ def metric_rich_link() -> Graph:
 
 
 def impaired_coherent_link() -> Graph:
-    """A coherent front end with both of its blind corrections in the path.
+    """A coherent front end with all three of its blind corrections in the path.
 
-    Neither impairment is invented, which is why one graph carries both. A
-    500 um silicon waveguide at a group index of 4.2 holds 7 ps, which at
-    32 GBd is most of a quarter of a symbol and takes this link to 37 % EVM on
-    its own. An LO tuned 200 MHz off the transmitter is an ordinary
-    :class:`CWLaser` at a different wavelength, and the beat comes out of the
-    receiver's own mixing — 200 MHz is well inside what a good tunable holds
-    and far past what the link survives.
+    No impairment here is invented, which is why one graph carries them all. A
+    500 um silicon waveguide at a group index of 4.2 holds 7 ps, which at 32 GBd
+    is most of a quarter of a symbol and takes this link to 37 % EVM on its own.
+    An LO at a different wavelength is an ordinary :class:`CWLaser`, and the beat
+    comes out of the receiver's own mixing rather than being added by hand.
 
-    They are corrected in the order a real receiver corrects them: the sampling
-    instant at the sample rate, then the carrier frequency on the symbols.
+    **The LO is 20 GHz off rather than the 200 MHz a tuned one would hold**,
+    because this is the graph with a matched filter in it and that is what makes
+    a large offset matter. 20 GHz is not a specification anyone would accept in
+    a running link; it is the state a receiver is in *before* it has acquired —
+    an LO still settling, or one left on a neighbouring channel of a 50 GHz grid.
+    :class:`FrequencyRecovery` cannot reach it at all: it folds at
+    ``symbol_rate / (2 * M)``, which is 4 GHz here, and past that returns a wrong
+    offset with a right-looking confidence.
+
+    They are corrected in the order a real receiver corrects them, and the order
+    is forced rather than chosen. Acquisition comes first because the two stages
+    after it are built around baseband — the matched filter is a root-raised
+    cosine centred there — so a band 20 GHz away is filtered off before anything
+    can measure it. Then the sampling instant at the sample rate, then the
+    residual carrier frequency on the symbols.
     """
     ctx = SimulationContext(bit_rate=32e9, samples_per_symbol=16, sequence_length=512, seed=5)
     graph = Graph(ctx)
@@ -159,9 +171,10 @@ def impaired_coherent_link() -> Graph:
     laser = graph.add(CWLaser(power=2.0, wavelength=1550.0, label="tx"))
     modulator = graph.add(IQModulator(v_pi=4.0, label="mod"))
     guide = graph.add(Waveguide(length=500.0, propagation_loss=0.0, label="wg"))
-    detuned = C_LIGHT / (C_LIGHT / 1550e-9 - 200e6) * 1e9
+    detuned = C_LIGHT / (C_LIGHT / 1550e-9 - 20e9) * 1e9
     lo = graph.add(CWLaser(power=10.0, wavelength=detuned, label="lo"))
     receiver = graph.add(CoherentReceiver(responsivity=0.8, label="rx"))
+    acquisition = graph.add(CoarseFrequencyRecovery(label="acq"))
     timing = graph.add(TimingRecovery(label="tr"))
     sampler = graph.add(IQSampler(matched_filter=True, roll_off=0.2, label="smp"))
     frequency = graph.add(FrequencyRecovery(label="fo"))
@@ -175,8 +188,10 @@ def impaired_coherent_link() -> Graph:
     graph.connect(modulator, guide["in"])
     graph.connect(guide, receiver["in"])
     graph.connect(lo, receiver["lo"])
-    graph.connect(receiver["i"], timing["i"])
-    graph.connect(receiver["q"], timing["q"])
+    graph.connect(receiver["i"], acquisition["i"])
+    graph.connect(receiver["q"], acquisition["q"])
+    graph.connect(acquisition["i"], timing["i"])
+    graph.connect(acquisition["q"], timing["q"])
     graph.connect(timing["i"], sampler["i"])
     graph.connect(timing["q"], sampler["q"])
     graph.connect(mapper["out"], sampler["reference"])

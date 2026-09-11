@@ -759,12 +759,100 @@ before phase.
 **Past half the stripped bandwidth it aliases rather than degrades**, which is the failure worth
 knowing because it does not look like one. Beyond `symbol_rate / (2M)` the tone wraps, and the
 estimate comes back wrong by exactly `symbol_rate / M` **with the same confidence as a correct
-one**: 4.1 GHz is reported as −3.9 GHz. Widening that window is an acquisition sweep, which real
-equipment has and this does not. A test asserts the aliasing explicitly, rather than leaving it as
-a range nobody checks.
+one**: 4.1 GHz is reported as −3.9 GHz, at a confidence of 23.1 against 24.0 for a correct
+estimate. A test asserts the aliasing explicitly, rather than leaving it as a range nobody checks.
 
 Something with no rotational symmetry at all has no power that strips it, so it is refused at run
 time rather than answered with an argmax over noise.
+
+### Acquisition, and why it cannot be a sweep
+
+The obvious way to widen that ±4 GHz window is to try candidate offsets and keep whichever looks
+best. **It cannot work, and the reason is worth stating because it is not an implementation
+limit.** An alias of `symbol_rate / M` is a phase advance of exactly one `2π/M` turn per symbol —
+and `M` is *defined* as the turn that maps the alphabet onto itself. So the aliased constellation is
+not merely similar to the correct one, it is identical, symbol for symbol. A sweep would be
+searching for a difference that is not there. The ambiguity belongs to the alphabet, not to the
+estimator.
+
+So [`CoarseFrequencyRecovery`](src/maiman/components/dsp.py) does not look at the symbols at all. It
+takes the **first circular moment of the received waveform's power spectrum** — where the band
+*is*, before any of the modulation has been stripped:
+
+```
+offset = angle( Σ S(f)·exp(2πjf/fs) ) / 2π · fs
+```
+
+Circular rather than an ordinary centroid, and both reasons carry weight. A band straddling the
+`+fs/2` wrap has no meaningful arithmetic mean and an exact circular one. And **a flat noise floor
+contributes nothing to a circular moment**, because a constant spread evenly around the circle sums
+to zero — so no floor has to be estimated, thresholded or subtracted, and *the block never has to
+be told the signal's bandwidth or roll-off*. That last part is not a convenience. The obvious
+alternative — slide a window of the signal's width and take the position holding the most energy —
+must be told that width, and any window wider than the band sits on a plateau of equal energy whose
+argmax is arbitrary: measured, assuming `1.6·R_s` for a band that was `1.2·R_s` put the answer
+**3.9 GHz out**.
+
+```
+                       fine (M-th power)        coarse (circular moment)
+reads                  symbols                  the waveform
+unambiguous over       ±symbol_rate/(2M)        ±fs/2 — which is Nyquist, not the method
+                       = ±4 GHz at 32 GBd       = ±256 GHz on the shipped link
+accuracy               sub-MHz                  ~±150 MHz
+past its range         confidently wrong        correct — the alias *is* the sampling
+confidence figure      peak/median              resultant length, 0…1
+```
+
+**The two failure modes are opposites, and that is the whole argument for having both blocks.** The
+fine stage's alias destroys the link and reports a healthy confidence while doing it. The coarse
+stage's "alias" past `fs/2` is not an error at all: beyond Nyquist an offset *is* the wrapped value
+in sampled data, and correcting to it is correct. Measured on the shipped link at 512 GHz sample
+rate, +258 GHz reads as −254 GHz and the link still recovers to 7.50 % EVM with zero symbol errors.
+
+**It has to run before dispersion compensation and before the matched filter**, and its port types
+make it impossible to wire anywhere else — it takes a waveform and returns one. Both of those
+stages are built around baseband: the compensator applies a quadratic phase measured from zero
+frequency, and the matched filter is a root-raised-cosine centred there. A band sitting 20 GHz away
+gets the wrong phase curve and is then largely filtered off.
+
+Measured end to end on the shipped coherent link, detuning the LO and running the whole chain:
+
+```
+LO offset    coarse stage lands    fine stage residual    EVM      symbol errors
++20 GHz      +19.915 GHz           +85 MHz                7.41 %   0
++60 GHz      +59.890 GHz           +109 MHz               7.37 %   0
++200 GHz     +199.903 GHz          —                      7.41 %   0
+```
+
+Back to back is 7.39 %. Without the block the chain is broken past 4 GHz — at 4.1 GHz the same link
+reads 6002 % EVM.
+
+**It is deliberately coarse**, and the accuracy is set by the data's own spectral asymmetry rather
+than by noise: a finite draw of random symbols does not have an exactly symmetric spectrum, and
+±150 MHz over a 4096-symbol window is whatever that asymmetry is. That is ~25× finer than the range
+the fine stage needs, which is the entire requirement — this block does not have to be accurate, it
+has to be *unambiguous*. It also outlives the link: at −14 dBm launch the constellation is at 117 %
+EVM and the acquisition estimate is still right to 226 MHz.
+
+The **concentration** figure it reports is the resultant length of that same moment, and unlike the
+M-th power's peak-to-median it is informative about the thing that actually goes wrong here, since
+what degrades a circular mean is the spectrum ceasing to be a band. Walking the launch power down:
+0.98 at +10 dBm, 0.88 at 0, 0.66 at −6, 0.43 at −10, 0.23 at −14.
+
+`python examples/acquisition_link.py` runs one link with a matched filter in it through both
+arrangements and prints the two tables side by side. Its middle rows are the interesting ones: the
+fine stage reports −3.900 GHz for a +4.100 GHz offset at a confidence of 19.6, where a correct
+estimate on the same link scores 23.2. Further out — at 20 and 100 GHz — the confidence does
+collapse, to 4.4 and 3.3, but that is the matched filter having already destroyed the signal rather
+than the estimator noticing anything. **Near the fold, which is where it matters, confidence does
+not separate a right answer from a wrong one.**
+
+**A large offset is not automatically a hard one**, which a test records so nobody re-reads it as
+one. On a link that samples at the symbol rate with no matched filter, the sampler itself folds the
+offset by `symbol_rate` before the fine stage sees it — at 60 GHz that fold lands on −4 GHz, inside
+the fine stage's range, and at 64 GHz, exactly twice the symbol rate, it lands on zero. Both come
+back with zero symbol errors and no acquisition stage at all. What makes an offset hard is a stage
+downstream that is built around baseband.
 
 ### Both are in the reference design
 
@@ -1727,7 +1815,7 @@ time window, and results are reproducible.
 | **0 — Foundations** ✅ | Signal model, context, port types, component base, registry, scheduler, `.maiman` project format, sweeps, CI | ~1 month |
 | **1 — MVP: linear link** ✅ | ✅ PRBS → NRZ → laser → MZM → fiber (α + CD) → PIN → filter → eye/Q/BER, validated end to end. **Python only, no GUI.** | ~2–3 months |
 | **1.5 — Nonlinear & amplified** ✅ | Adaptive-step SSFM, Kerr, EDFA with ASE, OSNR, PMD, APD, dispersion slope and its third-order term, cross-polarization Kerr coupling, inter-channel stimulated Raman scattering | ~2 months |
-| **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier frequency and phase recovery, blind square-law timing recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km with blind estimation of the accumulated value, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
+| **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier frequency and phase recovery, coarse frequency acquisition over the whole sampled band, blind square-law timing recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km with blind estimation of the accumulated value, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
 | **3 — GUI & WDM** | ✅ Wavelength-selective filters, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — the OSA's trace drawn in the dock, and 400G/800G reference designs validated against the OSNR relations, and a back-end indirection the propagation kernels dispatch through — CuPy runs it where a device exists, `maiman devices` cross-checks it against NumPy, and a CI job does the same on any runner labelled `gpu` | ~6 months |
 | **4 — PIC** ✅ | Bidirectional S-matrix circuit solver, waveguide, directional coupler, all-pass and add-drop ring resonators, cross-validated against SAX; N×N MMI couplers on the self-imaging phase relations; a Mach-Zehnder interferometer assembled from them — switch, interleaver, or both; and PDK import, which reads a foundry's fitted numbers out of a JSON kit and refuses to extrapolate them past the window they were fitted in | — |
 
@@ -1806,6 +1894,11 @@ Every physics block ships with a test against a closed-form result, run in CI
 | A whole symbol is invisible | Delay by one symbol period and the estimate does not move — the limit is `\|A\|²`, not the code | ✅ |
 | Every shipped project still opens | All six `.maiman` files load, run, and carry their canvas layout — the first thing a new user opens, and nothing checked them before | ✅ |
 | **A pilot is an erasure, not an error** | LLR set to zero where the coder's bits were overwritten: 4.9e-4 out of a 9.9e-3 channel, against 2.8e-2 if they are believed | ✅ |
+| **Acquisition reaches where the fine stage folds** | Band located to ±200 MHz from 0 to ±200 GHz, both signs — 50× past the M-th power's unambiguous range | ✅ |
+| The two failure modes are opposites | The fine stage wrong by a whole `symbol_rate/M` at unchanged confidence; the coarse stage's Nyquist wrap correct to derotate by | ✅ |
+| No bandwidth is told to it | Roll-off 0 through 1 located identically — a window formulation given 1.6·R_s for a 1.2·R_s band lands 3.9 GHz out | ✅ |
+| A flat noise floor does not pull it | Centre unmoved under noise at the signal's own power; only the concentration falls, which is what that number is for | ✅ |
+| Acquisition returns a link the fine stage cannot | 4.1, −4.1 and 20 GHz: ~1787 symbol errors without it, zero with it, at the undetuned link's own EVM | ✅ |
 | **Pilots resolve every quarter turn** | All four rotations recovered identically and exactly — resolving three of four would make the link work three times in a row and then not | ✅ |
 | Pilots are legal symbols, and vary | Drawn from the alphabet's outermost ring, so a pilot is not itself an error, and never constant, so it is not a spectral line | ✅ |
 | The estimate reads only the pilots | Every other reference symbol corrupted, and the answer unchanged to 1e-12 — otherwise it is a data-aided estimator in disguise | ✅ |

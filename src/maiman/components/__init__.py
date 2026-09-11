@@ -24,6 +24,7 @@ from .coherent import (
 from .detectors import APDPhotodiode, PINPhotodiode
 from .dsp import (
     ButterflyEqualizer,
+    CoarseFrequencyRecovery,
     DispersionCompensator,
     FrequencyRecovery,
     SoftDemapper,
@@ -74,6 +75,7 @@ __all__ = [
     "ButterflyEqualizer",
     "CWLaser",
     "CarrierRecovery",
+    "CoarseFrequencyRecovery",
     "CoherentReceiver",
     "Combiner",
     "ConstellationAnalyzer",

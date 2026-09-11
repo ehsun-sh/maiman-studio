@@ -17,6 +17,7 @@ import pytest
 from maiman import Graph, SimulationContext
 from maiman.components import (
     CarrierRecovery,
+    CoarseFrequencyRecovery,
     CoherentReceiver,
     ConstellationAnalyzer,
     CWLaser,
@@ -30,9 +31,15 @@ from maiman.components import (
     TimingRecovery,
     Waveguide,
 )
-from maiman.dsp import derotate, estimate_carrier_offset, estimate_timing, resample_to_instant
+from maiman.dsp import (
+    acquire_carrier_offset,
+    derotate,
+    estimate_carrier_offset,
+    estimate_timing,
+    resample_to_instant,
+)
 from maiman.modulation import qam_constellation, rotational_symmetry
-from maiman.signals import ConstellationMeasurement, SymbolSignal
+from maiman.signals import ConstellationMeasurement, ElectricalSignal, SymbolSignal
 from maiman.units import C_LIGHT
 
 #: Enough symbols for the walk to actually wander, and a window edge to discard.
@@ -401,7 +408,12 @@ def analyzer_of(graph: Graph) -> Any:
 
 
 def detuned_link(
-    offset: float, *, bits_per_symbol: int = 4, recover: bool, launch: float = -18.0
+    offset: float,
+    *,
+    bits_per_symbol: int = 4,
+    recover: bool,
+    coarse: bool = False,
+    launch: float = -18.0,
 ) -> tuple[Graph, Any, Any]:
     """A coherent link whose LO is detuned from the transmitter by ``offset`` Hz.
 
@@ -435,8 +447,18 @@ def detuned_link(
     graph.connect(driver["q"], modulator["q"])
     graph.connect(modulator, receiver["in"])
     graph.connect(lo, receiver["lo"])
-    graph.connect(receiver["i"], sampler["i"])
-    graph.connect(receiver["q"], sampler["q"])
+    if coarse:
+        # Ahead of the sampler, which is where it has to be: the matched filter
+        # inside the sampler is centred on baseband, so a band that has not been
+        # brought there yet is filtered off rather than measured.
+        acquisition = graph.add(CoarseFrequencyRecovery(label="acq"))
+        graph.connect(receiver["i"], acquisition["i"])
+        graph.connect(receiver["q"], acquisition["q"])
+        graph.connect(acquisition["i"], sampler["i"])
+        graph.connect(acquisition["q"], sampler["q"])
+    else:
+        graph.connect(receiver["i"], sampler["i"])
+        graph.connect(receiver["q"], sampler["q"])
     graph.connect(mapper["out"], sampler["reference"])
 
     recovery = None
@@ -480,7 +502,9 @@ def test_past_half_the_stripped_bandwidth_it_aliases_rather_than_degrades() -> N
     The tone sits at ``M`` times the offset, so ``symbol_rate / (2 * M)`` is where
     it wraps. Past that the estimate is not noisy — it is confidently wrong by
     exactly ``symbol_rate / M``, with the same confidence as a correct one. That
-    is why a real receiver sweeps its LO to acquire, and why the docstring says so.
+    is why acquisition has to happen somewhere else entirely — see
+    :class:`CoarseFrequencyRecovery`, which does it on the waveform because no
+    measurement made on these symbols can tell the two apart.
     """
     symbol_rate = 32e9
     beyond = symbol_rate / 8.0 + 100e6  # M = 4 for square QAM
@@ -850,3 +874,252 @@ def test_a_spacing_with_too_few_pilots_is_refused() -> None:
     graph.chain(prbs, mapper, pilots)
     with pytest.raises(ValueError, match="not enough"):
         graph.run()
+
+
+# ---------------------------------------------------------------------------
+# coarse frequency acquisition
+
+
+def shaped_band(
+    offset: float, sample_rate: float, *, roll_off: float, count: int = 65536
+) -> np.ndarray:
+    """A symmetric QAM band, shaped and shifted to a known centre.
+
+    Built rather than simulated, because what is under test is where the
+    estimator says a band is, and a band whose true centre is known exactly is
+    the only way to separate the estimator's own error from the channel's.
+    """
+    rng = np.random.default_rng(11)
+    points = qam_constellation(4)
+    sps = 16
+    symbols = points[rng.integers(0, points.size, count // sps)]
+    upsampled = np.zeros(count, dtype=np.complex128)
+    upsampled[::sps] = symbols
+    frequency = np.fft.fftfreq(count, d=1.0 / sample_rate)
+    edge = sample_rate / sps * (1.0 + roll_off) / 2.0
+    shaped = np.fft.ifft(np.fft.fft(upsampled) * (np.abs(frequency) <= edge))
+    return shaped * np.exp(2j * np.pi * offset * np.arange(count) / sample_rate)
+
+
+@pytest.mark.parametrize(
+    "offset", [0.0, 200e6, -200e6, 4.1e9, -4.1e9, 20e9, -20e9, 100e9, 200e9, -200e9]
+)
+def test_acquisition_finds_the_band_far_past_where_the_fine_stage_folds(offset: float) -> None:
+    """The whole point of the block, across a range the fine stage cannot reach.
+
+    :func:`estimate_carrier_offset` is unambiguous only below
+    ``symbol_rate / (2 * M)``, which is 4 GHz at this rate. Several of these are
+    past that and one is fifty times past it. Both signs, because a sign error
+    doubles the residual rather than removing it and is invisible at zero.
+    """
+    sample_rate = 512e9
+    found, concentration = acquire_carrier_offset(
+        shaped_band(offset, sample_rate, roll_off=0.2), sample_rate
+    )
+    assert found == pytest.approx(offset, abs=200e6)
+    assert concentration > 0.9, "a clean shaped band is concentrated"
+
+
+def test_the_fine_stage_is_confidently_wrong_exactly_where_this_one_is_right() -> None:
+    """The two side by side, which is the whole argument for having both blocks.
+
+    Past ``symbol_rate / (2 * M)`` the M-th power estimate does not get noisier —
+    it returns a different offset and reports the same confidence for it. If that
+    were merely a loss of accuracy a caller could threshold on confidence and be
+    safe. It is not, and this is the test that says so.
+    """
+    symbol_rate = 32e9
+    beyond = symbol_rate / 8.0 + 100e6
+
+    fine, fine_confidence = estimate_carrier_offset(
+        modulated(beyond, symbol_rate), symbol_rate, symmetry=4
+    )
+    _, honest_confidence = estimate_carrier_offset(
+        modulated(symbol_rate / 8.0 - 100e6, symbol_rate), symbol_rate, symmetry=4
+    )
+    assert abs(fine - beyond) > 7e9, "it is wrong by a whole symbol_rate / M"
+    assert fine_confidence == pytest.approx(honest_confidence, rel=0.3), (
+        "and reports the same confidence for the wrong answer as for a right one"
+    )
+
+    sample_rate = 512e9
+    coarse, _ = acquire_carrier_offset(shaped_band(beyond, sample_rate, roll_off=0.2), sample_rate)
+    assert coarse == pytest.approx(beyond, abs=200e6)
+
+
+def test_it_needs_no_bandwidth_and_no_roll_off_told_to_it() -> None:
+    """The reason for a circular moment rather than a largest-energy window.
+
+    A window formulation has to be given the signal's width, and any window wider
+    than the band sits on a plateau of equal energy whose argmax is arbitrary —
+    measured, assuming 1.6x the symbol rate for a band that was 1.2x put the
+    answer 3.9 GHz out. A circular moment has no width to be told, so bands of
+    very different widths are located equally well by the same call.
+    """
+    sample_rate = 512e9
+    for roll_off in (0.0, 0.1, 0.5, 1.0):
+        found, _ = acquire_carrier_offset(
+            shaped_band(20e9, sample_rate, roll_off=roll_off), sample_rate
+        )
+        assert found == pytest.approx(20e9, abs=300e6), f"roll-off {roll_off} moved the centre"
+
+
+def test_a_flat_noise_floor_does_not_pull_the_estimate() -> None:
+    """Which is why nothing has to be thresholded, and what the concentration is for.
+
+    A flat floor is spread evenly around the circle, so it contributes nothing to
+    a circular moment however large it is — an ordinary centroid it would drag
+    toward zero. What it does move is the resultant length, and that is exactly
+    what makes the resultant length worth reporting: it falls when the spectrum
+    stops being a band, which is the thing that actually goes wrong here.
+    """
+    sample_rate = 512e9
+    band = shaped_band(20e9, sample_rate, roll_off=0.2)
+    rng = np.random.default_rng(5)
+    scale = float(np.sqrt(np.mean(np.abs(band) ** 2)))
+
+    clean, strong = acquire_carrier_offset(band, sample_rate)
+    noise = rng.normal(scale=scale, size=band.size) + 1j * rng.normal(scale=scale, size=band.size)
+    noisy, weak = acquire_carrier_offset(band + noise, sample_rate)
+
+    assert noisy == pytest.approx(clean, abs=500e6), "the floor did not move the centre"
+    assert weak < strong, "but it did cost concentration, which is what that number is for"
+    assert weak > 0.1
+
+
+def test_an_empty_or_dead_window_says_so_instead_of_returning_an_angle() -> None:
+    """``angle(0)`` is 0.0 and means nothing; a concentration of zero means something."""
+    assert acquire_carrier_offset(np.array([], dtype=complex), 512e9) == (0.0, 0.0)
+    assert acquire_carrier_offset(np.zeros(128, dtype=complex), 512e9) == (0.0, 0.0)
+
+
+def test_past_nyquist_the_alias_is_the_sampling_and_correcting_to_it_is_right() -> None:
+    """Unlike the fine stage's alias, this one is not an error to be avoided.
+
+    Beyond ``fs / 2`` an offset is not *reported* as the aliased value, it *is*
+    the aliased value — sampled data cannot represent the difference and no
+    estimator of any kind could. So what is asserted is that it lands on the
+    wrapped offset, and the end-to-end test is what shows correcting to it works.
+    """
+    sample_rate = 512e9
+    beyond = 258e9
+    wrapped = ((beyond + sample_rate / 2.0) % sample_rate) - sample_rate / 2.0
+    assert wrapped < 0.0, "258 GHz wraps to a negative offset at this rate"
+
+    found, _ = acquire_carrier_offset(shaped_band(beyond, sample_rate, roll_off=0.2), sample_rate)
+    assert found == pytest.approx(wrapped, abs=300e6)
+
+
+def test_the_two_rails_have_to_be_the_same_signal() -> None:
+    """I and Q are one complex waveform sampled together, not two waveforms."""
+    block = CoarseFrequencyRecovery(label="acq")
+    ctx = SimulationContext(bit_rate=32e9, samples_per_symbol=16, sequence_length=4, seed=1)
+    good = ElectricalSignal(samples=np.zeros(64), fs=512e9, unit="A")
+    mismatched = ElectricalSignal(samples=np.zeros(64), fs=256e9, unit="A")
+    with pytest.raises(ValueError, match="sampled together"):
+        block.run(ctx, {"i": good, "q": mismatched})
+
+
+@pytest.mark.parametrize("offset", [4.1e9, -4.1e9, 20e9])
+def test_acquisition_returns_a_link_the_fine_stage_alone_cannot(offset: float) -> None:
+    """End to end, which is the only claim that matters.
+
+    Past 4 GHz the fine stage aliases and the link is destroyed. With acquisition
+    ahead of it the same link comes back to zero symbol errors, and the residual
+    the fine stage is left to remove is the few hundred MHz it is good at rather
+    than the tens of GHz it is not.
+
+    The failing case is measured here rather than assumed. A test that only
+    showed the working arrangement would still pass if the offset had stopped
+    being an impairment at all.
+    """
+    alone_graph, alone_analyzer, _ = detuned_link(offset, recover=True)
+    alone = alone_graph.run(keep=[alone_analyzer])[alone_analyzer]
+    assert alone.symbol_errors > alone.symbols_evaluated // 10, (
+        "the fine stage alone should be failing here, or this test proves nothing"
+    )
+
+    graph, analyzer, recovery = detuned_link(offset, recover=True, coarse=True)
+    acquisition = next(c for c in graph.components if c.label == "acq")
+    results = graph.run(keep=[analyzer, recovery, acquisition])
+    estimate = results.port(acquisition, "diagnostics")
+    residual = results.port(recovery, "diagnostics")
+    measured = results[analyzer]
+
+    assert estimate.offset == pytest.approx(offset, abs=400e6)
+    assert abs(residual.offset) < 500e6, "the fine stage is left a residual it can handle"
+    assert measured.symbol_errors == 0
+
+    # Against the same link with the LO on frequency, rather than a number typed
+    # here: what is claimed is that acquisition costs nothing, and a constant
+    # would only say the link is somewhere under wherever I put the constant.
+    ideal_graph, ideal_analyzer, _ = detuned_link(0.0, recover=True)
+    ideal = ideal_graph.run(keep=[ideal_analyzer])[ideal_analyzer]
+    assert measured.evm < ideal.evm * 1.1
+
+
+def test_an_offset_near_a_multiple_of_the_symbol_rate_never_reaches_the_symbols() -> None:
+    """Measured while choosing the cases above, and worth keeping so nobody re-adds one.
+
+    This link samples at the symbol rate with no matched filter, so the sampler
+    itself folds the offset by ``symbol_rate`` before the fine stage ever sees
+    it. At 60 GHz that fold lands on -4 GHz, which is inside the fine stage's
+    unambiguous range, and at 64 GHz — exactly twice the symbol rate — it lands
+    on zero and there is no offset left at all. Both come back with **zero symbol
+    errors and no acquisition stage**.
+
+    So a large number is not by itself a hard case, and a test that used 60 GHz
+    to show acquisition was necessary would be claiming a credit it had not
+    earned. What makes an offset hard is a stage downstream that is built around
+    baseband — a matched filter or a dispersion compensator — which is the
+    arrangement the shipped link has and this one does not.
+    """
+    for offset in (60e9, 64e9):
+        graph, analyzer, _ = detuned_link(offset, recover=True)
+        measured = graph.run(keep=[analyzer])[analyzer]
+        assert measured.symbol_errors == 0, f"{offset / 1e9:g} GHz should fold away here"
+        assert measured.evm < 0.1
+
+
+def test_on_the_shipped_link_acquisition_is_what_makes_a_large_offset_survivable() -> None:
+    """The claim in full, on the chain that actually has a matched filter and a CD stage.
+
+    Both of those are built around baseband — the compensator applies a quadratic
+    phase measured from zero frequency, and the matched filter is a
+    root-raised-cosine centred there — so a band sitting 20 GHz away gets the
+    wrong phase curve and is then largely filtered off. That is why the block
+    takes a waveform rather than symbols, and why its ports make it impossible to
+    wire after the sampler.
+    """
+    import sys
+    from pathlib import Path as _Path
+
+    sys.path.insert(0, str(_Path(__file__).resolve().parent.parent / "examples"))
+    from export_ui_data import build as build_flagship
+
+    from maiman.components import CoarseFrequencyRecovery as _Coarse
+
+    offset = 20e9
+    graph = build_flagship(sequence_length=4096)
+    blocks = {c.label: c for c in graph.components}
+    blocks["lo"].wavelength = C_LIGHT / (C_LIGHT / 1550e-9 - offset) * 1e9
+
+    results = graph.run(keep=[blocks["rx"], blocks["pil"], blocks["vsa"]])
+    assert results[blocks["vsa"]].evm > 1.0, "20 GHz should destroy this link outright"
+
+    rails = (results.port(blocks["rx"], "i"), results.port(blocks["rx"], "q"))
+    acquired = _Coarse(label="acq").run(graph.ctx, {"i": rails[0], "q": rails[1]})
+    assert acquired["diagnostics"].offset == pytest.approx(offset, abs=400e6)
+
+    reference = results.port(blocks["pil"], "out")
+    stage = blocks["cdc"].run(graph.ctx, {"i": acquired["i"], "q": acquired["q"]})
+    stage = blocks["tr"].run(graph.ctx, {"i": stage["i"], "q": stage["q"]})
+    stage = blocks["smp"].run(graph.ctx, {"i": stage["i"], "q": stage["q"], "reference": reference})
+    stage = blocks["fo"].run(graph.ctx, {"in": stage["out"]})
+    assert abs(stage["diagnostics"].offset) < 500e6, "the fine stage gets a residual it can take"
+    stage = blocks["cr"].run(graph.ctx, {"in": stage["out"]})
+    stage = blocks["pqr"].run(graph.ctx, {"in": stage["out"], "reference": reference})
+    measured = blocks["vsa"].run(graph.ctx, {"in": stage["out"], "reference": reference})["out"]
+
+    assert measured.symbol_errors == 0
+    assert measured.evm < 0.09, "back to back on this link is 7.4 %"

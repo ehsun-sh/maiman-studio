@@ -205,8 +205,11 @@ def estimate_carrier_offset(
     spectrum, and the estimate comes back aliased by ``symbol_rate / M`` rather
     than merely inaccurate: 4.1 GHz is reported as -3.9 GHz. That is a wide
     enough window for a receiver whose LO is tuned to the channel and far too
-    narrow for one that is not, which is why an acquisition sweep exists in real
-    equipment; there is none here.
+    narrow for one that is not. :func:`acquire_carrier_offset` is the stage that
+    covers the second case, and it works on the waveform rather than the symbols
+    because — as that function explains — the alias here is a rotation the
+    alphabet is symmetric under, so no measurement made on these symbols can
+    distinguish it from the truth.
 
     A ``symmetry`` of 1 leaves the data in and there is nothing to find, so this
     refuses rather than returning an argmax over noise.
@@ -231,6 +234,91 @@ def estimate_carrier_offset(
     return offset, confidence
 
 
+def acquire_carrier_offset(baseband: np.ndarray, sample_rate: float) -> tuple[float, float]:
+    """Coarse carrier frequency offset [Hz] from where the signal's band sits.
+
+    The acquisition stage :func:`estimate_carrier_offset` needs and does not
+    have. That estimator raises the symbols to the alphabet's rotational
+    symmetry, which strips the data but folds the answer: past
+    ``symbol_rate / (2 * M)`` it returns an aliased offset **with the confidence
+    of a correct one**, so nothing downstream can tell the two apart. This finds
+    the offset a different way, one that does not fold until Nyquist does.
+
+    **Why the alias cannot be swept away at the symbol rate.** The obvious repair
+    is to try trial offsets and keep the one that looks best. It cannot work. An
+    alias of ``symbol_rate / M`` is a phase advance of exactly ``2*pi / M`` per
+    symbol, and ``M`` is by construction the turn that maps the alphabet onto
+    itself — so the aliased constellation is not merely similar to the correct
+    one, it is *identical*. No measurement made on symbols of a rotationally
+    symmetric alphabet distinguishes them, and a sweep that searches for a
+    difference searches for something that is not there.
+
+    **So this does not look at the symbols at all.** A frequency offset displaces
+    the whole received band, and the band's position is visible in the waveform
+    before any of the modulation is stripped. What is returned is the **first
+    circular moment** of the power spectrum::
+
+        offset = angle(sum(S(f) * exp(2j*pi*f/fs))) / (2*pi) * fs
+
+    Circular rather than an ordinary centroid, for two reasons that are both
+    load-bearing. A band that straddles the ``+fs/2`` wrap has no meaningful
+    arithmetic mean and an exact circular one. And a **flat noise floor
+    contributes nothing** to a circular moment, because a constant spread over
+    the whole circle sums to zero — so no floor has to be estimated, thresholded
+    or subtracted, and the estimate does not need to be told the signal's
+    bandwidth or roll-off. There is no window width to get wrong, which a
+    largest-energy-window formulation has and is sensitive to: measured, assuming
+    ``1.6 * symbol_rate`` for a band that was ``1.2`` put the answer 3.9 GHz out,
+    because any window wider than the band sits on a plateau of equal energy and
+    the argmax picks a point in it arbitrarily.
+
+    Returns ``(offset, confidence)``. Confidence is the **resultant length** of
+    that same moment, in ``[0, 1]``: 1 for all the energy in one place, 0 for
+    energy spread evenly around the circle. Unlike the M-th power's peak-to-median
+    ratio this one is informative about the thing that actually goes wrong here,
+    because what degrades a circular mean is the spectrum spreading out. Measured
+    on the shipped coherent link, walking the launch power down: 0.98 at +10 dBm,
+    0.88 at 0, 0.66 at -6, 0.43 at -10, 0.23 at -14.
+
+    **Accuracy is set by the data's own spectral asymmetry**, not by the noise, and
+    it is about +/-150 MHz on a 32 GBd link over a 4096-symbol window — a finite
+    draw of random symbols does not have an exactly symmetric spectrum, and the
+    residual is whatever that asymmetry is. That is roughly 25 times finer than
+    the ``+/-symbol_rate / (2 * M)`` the fine stage needs, which is the whole
+    requirement: this does not have to be accurate, it has to be unambiguous.
+    It also degrades gracefully past the point where the link itself has stopped
+    working — at -14 dBm launch the constellation is at 117 % EVM and this is
+    still right to 226 MHz.
+
+    **Unambiguous over the entire sampled band**, and that bound is Nyquist rather
+    than a property of the method: beyond ``+/-fs/2`` an offset is not
+    *misreported*, it genuinely *is* the aliased value in sampled data, and
+    correcting to the aliased value is correct. Measured on the shipped link at
+    512 GHz sample rate: +258 GHz reads as -254 GHz, and the link recovers to its
+    back-to-back 7.50 % EVM with zero symbol errors anyway. That is the opposite
+    of the M-th power's alias, which destroys the link. What does break it is the
+    band no longer fitting in the sampled bandwidth at all, which is a sampling
+    rate problem and not this estimator's.
+
+    An empty window, or one carrying no power, returns ``(0.0, 0.0)`` — there is
+    no band to locate and saying so beats returning the angle of zero.
+    """
+    values = np.asarray(baseband).astype(np.complex128)
+    if values.size == 0:
+        return 0.0, 0.0
+
+    spectrum = np.abs(np.fft.fft(values)) ** 2
+    total = float(spectrum.sum())
+    if total <= 0.0:
+        return 0.0, 0.0
+
+    count = spectrum.size
+    turn = np.exp(2j * np.pi * np.arange(count) / count)
+    moment = complex((spectrum * turn).sum() / total)
+    offset = float(np.angle(moment)) / (2.0 * np.pi) * sample_rate
+    return offset, float(abs(moment))
+
+
 def derotate(symbols: np.ndarray, symbol_rate: float, *, offset: float) -> np.ndarray:
     """Spin a symbol sequence back by a carrier frequency offset of ``offset`` Hz.
 
@@ -238,6 +326,12 @@ def derotate(symbols: np.ndarray, symbol_rate: float, *, offset: float) -> np.nd
     amount every symbol, so undoing it is one complex exponential. What is left
     afterwards is a *constant* rotation, which is a phase problem and belongs to
     :func:`~maiman.modulation.blind_phase_search`.
+
+    Nothing here is about symbols specifically — it is a uniformly sampled
+    sequence and the rate it was sampled at, so the coarse stage applies the same
+    correction to a *waveform* by passing the sample rate instead. The two are
+    the same operation at two rates, and writing it twice would be two chances
+    for the signs to disagree.
     """
     values = np.asarray(symbols).astype(np.complex128)
     if values.size == 0 or offset == 0.0:

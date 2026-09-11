@@ -32,7 +32,12 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from .components.dsp import DispersionDiagnostics, FrequencyEstimate, TimingEstimate
+from .components.dsp import (
+    AcquisitionEstimate,
+    DispersionDiagnostics,
+    FrequencyEstimate,
+    TimingEstimate,
+)
 from .components.electrical import FECReport, SoftFECReport
 from .components.mapping import PilotEstimate
 from .kernels import PropagationDiagnostics
@@ -353,6 +358,19 @@ def _frequency(estimate: FrequencyEstimate) -> dict[str, Any]:
     }
 
 
+def _acquisition(estimate: AcquisitionEstimate) -> dict[str, Any]:
+    # In GHz rather than the fine stage's MHz, and that is not a style choice:
+    # this one is unambiguous over the whole sampled band, so its useful range
+    # starts where the other's ends. An offset of 2e10 printed in MHz is a number
+    # nobody reads.
+    return {
+        "kind": "acquisition",
+        "offset": number(estimate.offset),
+        "offset_ghz": number(estimate.offset / 1e9),
+        "concentration": number(estimate.concentration),
+    }
+
+
 def _dispersion(diagnostics: DispersionDiagnostics) -> dict[str, Any]:
     # Accumulated dispersion is held in s/m and quoted in ps/nm, which differ by
     # 1e3 rather than by one of the usual powers. Both are sent: a client that
@@ -374,6 +392,7 @@ def _dispersion(diagnostics: DispersionDiagnostics) -> dict[str, Any]:
 
 
 _ENCODERS: dict[type, Any] = {
+    AcquisitionEstimate: _acquisition,
     DispersionDiagnostics: _dispersion,
     FECReport: _fec,
     PilotEstimate: _pilot,

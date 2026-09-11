@@ -15,6 +15,7 @@ import numpy as np
 from ..component import BoolParam, Component, Param, PortType
 from ..context import SimulationContext
 from ..dsp import (
+    acquire_carrier_offset,
     butterfly_equalize,
     butterfly_separate,
     clock_tone,
@@ -95,6 +96,109 @@ class SoftDemapper(Component):
 
 
 @dataclass(frozen=True)
+class AcquisitionEstimate:
+    """Where the received band was found, and how concentrated it was."""
+
+    offset: float
+    """The coarse offset removed [Hz]. Positive means the signal sat above the LO."""
+
+    concentration: float
+    """Resultant length of the spectrum's first circular moment, in ``[0, 1]``.
+
+    1 would be all the energy in one bin and 0 energy spread evenly around the
+    circle. About 0.92 on the shipped coherent link, 0.98 back to back, and it
+    falls with the noise: 0.66 at -6 dBm launch, 0.23 at -14. Low means the
+    spectrum had no band in it worth calling a band, and the offset above it is
+    the angle of noise.
+    """
+
+    def __repr__(self) -> str:
+        return (
+            f"AcquisitionEstimate({self.offset / 1e9:+.3f} GHz, "
+            f"concentration {self.concentration:.2f})"
+        )
+
+
+class CoarseFrequencyRecovery(Component):
+    """Find the received band and bring it to baseband, before anything else runs.
+
+    :class:`FrequencyRecovery` is exact and narrow. It raises the symbols to the
+    alphabet's rotational symmetry, which strips the modulation but folds the
+    answer at ``symbol_rate / (2 * M)`` — 4 GHz for square QAM at 32 GBd. Past
+    that it does not degrade, it **aliases**: measured on the shipped link, a
+    4.1 GHz offset is reported as -3.9 GHz with a confidence of 23.1, against
+    24.0 for a correct estimate. Nothing downstream can tell those apart, and the
+    link goes from zero symbol errors to an EVM of 6002 %.
+
+    **Why a sweep over trial offsets cannot fix that.** The natural repair is to
+    try candidate offsets and keep whichever looks best, and there is nothing to
+    look at. An alias of ``symbol_rate / M`` is a phase advance of exactly one
+    ``2*pi / M`` turn per symbol, and that turn is *defined* as the one mapping
+    the alphabet onto itself — so the aliased constellation is identical to the
+    correct one, symbol for symbol. The ambiguity is a property of the alphabet,
+    not of the estimator, and no blind measurement on symbols removes it.
+
+    **So this looks at the waveform instead**, where the modulation has not been
+    stripped and the band's own position is still visible. It takes the first
+    circular moment of the power spectrum — see
+    :func:`maiman.dsp.acquire_carrier_offset` for why circular, why no bandwidth
+    parameter, and what the confidence figure means — and spins the band down to
+    baseband with the same :func:`~maiman.dsp.derotate` the fine stage uses, at
+    the sample rate rather than the symbol rate.
+
+    **It has to run first, before dispersion compensation and before the matched
+    filter**, and that is not a preference either. Both of those are built around
+    baseband: the compensator applies a quadratic phase measured from zero
+    frequency, and the matched filter is a root-raised-cosine centred there. A
+    band sitting 20 GHz away gets the wrong phase curve and is then largely
+    filtered off. Coarse correction, then dispersion, then timing, then the
+    matched filter, then fine frequency, then phase — which is the order deployed
+    receivers use and now the order this library's blocks compose in.
+
+    **Measured end to end on the shipped coherent link**, detuning the LO and
+    running the whole chain: at +20 GHz the coarse stage lands 85 MHz out, the
+    fine stage removes that residual, and the link returns 7.41 % EVM with zero
+    symbol errors against 7.39 % back to back. The same holds at +60, +100 and
+    +200 GHz. Without this block the chain is broken past 4 GHz.
+
+    **What it costs is one FFT and no accuracy anyone needs.** It is deliberately
+    coarse — about +/-150 MHz, set by the finite window's own spectral asymmetry
+    rather than by noise — because its only job is to land the residual inside
+    the fine stage's unambiguous range, which is 25 times wider than that. The
+    precision is the other block's to provide.
+    """
+
+    display_name = "Coarse Frequency Recovery"
+    category = "DSP"
+
+    inputs = {"i": PortType.ELECTRICAL, "q": PortType.ELECTRICAL}
+    outputs = {
+        "i": PortType.ELECTRICAL,
+        "q": PortType.ELECTRICAL,
+        "diagnostics": PortType.METRIC,
+    }
+
+    def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
+        in_phase: ElectricalSignal = inputs["i"]
+        quadrature: ElectricalSignal = inputs["q"]
+        if in_phase.fs != quadrature.fs:
+            raise ValueError(
+                f"{self.label}: the two rails are the same signal sampled together, "
+                f"got {in_phase.fs} Hz on i and {quadrature.fs} Hz on q"
+            )
+
+        baseband = np.asarray(in_phase.samples) + 1j * np.asarray(quadrature.samples)
+        offset, concentration = acquire_carrier_offset(baseband, in_phase.fs)
+        corrected = derotate(baseband, in_phase.fs, offset=offset)
+
+        return {
+            "i": replace(in_phase, samples=np.ascontiguousarray(corrected.real)),
+            "q": replace(quadrature, samples=np.ascontiguousarray(corrected.imag)),
+            "diagnostics": AcquisitionEstimate(offset=offset, concentration=concentration),
+        }
+
+
+@dataclass(frozen=True)
 class FrequencyEstimate:
     """What frequency offset was found between the two lasers, and how believable."""
 
@@ -152,8 +256,9 @@ class FrequencyRecovery(Component):
     wraps and the estimate comes back aliased rather than merely wrong. Below it
     the correction is measured to hold across the whole range: the same link,
     detuned anywhere from -3.9 to +3.9 GHz, comes back to its back-to-back EVM
-    and zero errors. Widening that window is an acquisition sweep, which real
-    equipment has and this does not.
+    and zero errors. Past it, put :class:`CoarseFrequencyRecovery` in front: it
+    brings the band to baseband from anywhere in the sampled bandwidth, leaving
+    this block the few hundred MHz it is precise about.
 
     A ``symmetry`` of 1 has nothing to strip, so a constellation with no
     rotational symmetry is refused at run time rather than answered with an

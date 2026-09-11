@@ -272,6 +272,26 @@
     }
    }
   },
+  "CoarseFrequencyRecovery": {
+   "name": "Coarse Frequency Recovery",
+   "type": "CoarseFrequencyRecovery",
+   "class": "maiman.components.dsp.CoarseFrequencyRecovery",
+   "category": "DSP",
+   "version": "0.1.0",
+   "parameters": {},
+   "structural": {},
+   "ports": {
+    "inputs": {
+     "i": "electrical",
+     "q": "electrical"
+    },
+    "outputs": {
+     "i": "electrical",
+     "q": "electrical",
+     "diagnostics": "metric"
+    }
+   }
+  },
   "CoherentReceiver": {
    "name": "Coherent Receiver",
    "type": "CoherentReceiver",

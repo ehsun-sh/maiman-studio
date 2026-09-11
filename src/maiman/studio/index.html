@@ -1033,7 +1033,8 @@ verdict, and DESIGN.md
   </div>
 </div>
 
-<script id="maiman-data" type="application/json">{
+<script id="maiman-data" type="application/json">
+{
  "manifests": {
   "APDPhotodiode": {
    "name": "APD Photodiode",
@@ -1304,6 +1305,26 @@ verdict, and DESIGN.md
     },
     "outputs": {
      "out": "symbol"
+    }
+   }
+  },
+  "CoarseFrequencyRecovery": {
+   "name": "Coarse Frequency Recovery",
+   "type": "CoarseFrequencyRecovery",
+   "class": "maiman.components.dsp.CoarseFrequencyRecovery",
+   "category": "DSP",
+   "version": "0.1.0",
+   "parameters": {},
+   "structural": {},
+   "ports": {
+    "inputs": {
+     "i": "electrical",
+     "q": "electrical"
+    },
+    "outputs": {
+     "i": "electrical",
+     "q": "electrical",
+     "diagnostics": "metric"
     }
    }
   },
@@ -20620,7 +20641,8 @@ verdict, and DESIGN.md
   "span_km": 80.0,
   "gbps": 128.0
  }
-}</script>
+}
+</script>
 
 <script>
 (() => {
@@ -22051,6 +22073,19 @@ verdict, and DESIGN.md
         return `instant at ${(value.fraction * 100).toFixed(1)} % of the symbol, ` +
                `moved ${moved >= 0 ? "+" : ""}${moved.toFixed(2)} ps ` +
                `(clock line ${fmt(value.strength)})`;
+      }
+      case "acquisition": {
+        /* In GHz, where the fine stage's line is in MHz, and the difference is
+           the point of having both: this one is unambiguous over the whole
+           sampled band, so its useful range starts where the other's ends.
+           Concentration is the resultant length of the spectrum's first circular
+           moment -- 1 is all the energy in one place and 0 is energy spread
+           evenly round the circle. About 0.92 on the shipped link; low means
+           there was no band to find and the GHz beside it is the angle of
+           noise. */
+        const ghz = value.offset_ghz;
+        return `band found at ${ghz >= 0 ? "+" : ""}${ghz.toFixed(3)} GHz ` +
+               `(concentration ${fmt(value.concentration)})`;
       }
       case "frequency": {
         /* In MHz, because that is the unit anyone reads an offset in, and the
