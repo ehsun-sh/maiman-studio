@@ -1,87 +1,186 @@
 {
   "schema_version": 1,
   "name": "silicon-220nm",
-  "description": "A generic 220 nm silicon-on-insulator photonics process, TE. Representative of the open multi-project-wafer offerings (IMEC iSiPP, AMF, SiEPIC) rather than any one of them; every number is from published literature, and none is from a foundry's confidential kit. Use it to see what a PDK does, then replace it with yours. The fits are first-order over the C band and are refused outside 1500-1600 nm: run this coupler out to the O band and it returns a negative power fraction.",
+  "description": "A generic 220 nm silicon-on-insulator photonics process, TE. Representative of the open multi-project-wafer offerings (IMEC iSiPP, AMF, SiEPIC) rather than any one of them; every number is from published literature, and none is from a foundry's confidential kit. Use it to see what a PDK does, then replace it with yours. The fits are first-order over the C band and are refused outside 1500-1600 nm: run this coupler out to the O band and it returns a negative power fraction. Each device also says which layout cell it models, which layout port is which model port, and which of its numbers the layout decides per instance -- so a netlist from a layout tool can be solved against this kit. That mapping belongs in the file and not in the library: another process draws the same geometry under another name.",
   "reference_wavelength": 1550.0,
-  "valid_wavelengths": [1500.0, 1600.0],
-
+  "valid_wavelengths": [
+    1500.0,
+    1600.0
+  ],
   "cross_sections": {
     "strip": {
-      "n_eff": [2.44, -1.13e-3],
-      "n_group": [4.20, 6.0e-4],
-      "propagation_loss": [2.0, 2.5e-3],
+      "n_eff": [
+        2.44,
+        -0.00113
+      ],
+      "n_group": [
+        4.2,
+        0.0006
+      ],
+      "propagation_loss": [
+        2.0,
+        0.0025
+      ],
       "dispersion": -1800.0
     },
     "rib": {
-      "n_eff": [2.85, -9.0e-4],
-      "n_group": [3.75, 5.0e-4],
-      "propagation_loss": [0.5, 8.0e-4],
+      "n_eff": [
+        2.85,
+        -0.0009
+      ],
+      "n_group": [
+        3.75,
+        0.0005
+      ],
+      "propagation_loss": [
+        0.5,
+        0.0008
+      ],
       "dispersion": -900.0
     },
     "nitride": {
-      "n_eff": [1.62, -2.4e-4],
-      "n_group": [2.10, 1.4e-4],
-      "propagation_loss": [0.10, 6.0e-5],
+      "n_eff": [
+        1.62,
+        -0.00024
+      ],
+      "n_group": [
+        2.1,
+        0.00014
+      ],
+      "propagation_loss": [
+        0.1,
+        6e-05
+      ],
       "dispersion": -180.0
     }
   },
-
   "devices": {
     "wg_strip": {
       "component": "Waveguide",
+      "cell": "straight",
       "cross_section": "strip",
       "doc": "The default routing waveguide. 500 x 220 nm, single mode at TE.",
-      "params": { "length": 1000.0 }
+      "params": {
+        "length": 1000.0
+      },
+      "ports": {
+        "o1": "in",
+        "o2": "out"
+      },
+      "from_netlist": {
+        "length": "info.length"
+      }
     },
     "wg_rib": {
       "component": "Waveguide",
+      "cell": "straight_rib",
       "cross_section": "rib",
       "doc": "Shallow-etched rib. Four times lower loss than strip, and a bend radius to match.",
-      "params": { "length": 1000.0 }
+      "params": {
+        "length": 1000.0
+      },
+      "ports": {
+        "o1": "in",
+        "o2": "out"
+      },
+      "from_netlist": {
+        "length": "info.length"
+      }
     },
     "wg_nitride": {
       "component": "Waveguide",
+      "cell": "straight_nitride",
       "cross_section": "nitride",
       "doc": "Silicon nitride: 0.1 dB/cm, no two-photon absorption, and a far weaker confinement.",
-      "params": { "length": 1000.0 }
+      "params": {
+        "length": 1000.0
+      },
+      "ports": {
+        "o1": "in",
+        "o2": "out"
+      },
+      "from_netlist": {
+        "length": "info.length"
+      }
     },
-
     "dc_3db": {
       "component": "DirectionalCoupler",
-      "doc": "Nominal 3 dB coupler, drawn in strip. No cross_section: the model is a coupling ratio and an excess loss, with no length in it for an index to act on — the waveguide's contribution is already inside the fitted ratio below. Measures 0.48 at 1550 and drifts hard with wavelength, which is the reason the MMI beside it exists.",
+      "cell": "coupler",
+      "doc": "Nominal 3 dB coupler, drawn in strip. No cross_section: the model is a coupling ratio and an excess loss, with no length in it for an index to act on \u2014 the waveguide's contribution is already inside the fitted ratio below. Measures 0.48 at 1550 and drifts hard with wavelength, which is the reason the MMI beside it exists.",
       "params": {
-        "coupling": [0.48, 3.9e-3],
-        "insertion_loss": 0.10
+        "coupling": [
+          0.48,
+          0.0039
+        ],
+        "insertion_loss": 0.1
+      },
+      "ports": {
+        "o1": "in1",
+        "o2": "in2",
+        "o3": "out2",
+        "o4": "out1"
       }
     },
     "dc_10": {
       "component": "DirectionalCoupler",
+      "cell": "coupler_tap",
       "doc": "A 10 % tap, for monitoring a line without spending it.",
       "params": {
-        "coupling": [0.10, 1.2e-3],
+        "coupling": [
+          0.1,
+          0.0012
+        ],
         "insertion_loss": 0.08
+      },
+      "ports": {
+        "o1": "in1",
+        "o2": "in2",
+        "o3": "out2",
+        "o4": "out1"
       }
     },
-
     "mmi_2x2": {
       "component": "MMI",
+      "cell": "mmi2x2",
       "doc": "2 x 2 general-interference MMI. Flat where the directional coupler is not; pays for it in excess loss.",
-      "structural": { "ports": 2 },
+      "structural": {
+        "ports": 2
+      },
       "params": {
-        "excess_loss": [0.25, 6.0e-4],
-        "imbalance": [0.15, 2.0e-4]
+        "excess_loss": [
+          0.25,
+          0.0006
+        ],
+        "imbalance": [
+          0.15,
+          0.0002
+        ]
+      },
+      "ports": {
+        "o1": "in1",
+        "o2": "in2",
+        "o3": "out2",
+        "o4": "out1"
       }
     },
     "mmi_1x4": {
       "component": "MMI",
       "doc": "A 4-way splitter tree in one device.",
-      "structural": { "ports": 4, "driven": 1 },
+      "structural": {
+        "ports": 4,
+        "driven": 1
+      },
       "params": {
-        "excess_loss": [0.45, 9.0e-4],
-        "imbalance": [0.35, 3.0e-4]
+        "excess_loss": [
+          0.45,
+          0.0009
+        ],
+        "imbalance": [
+          0.35,
+          0.0003
+        ]
       }
     },
-
     "mzi_switch": {
       "component": "MachZehnderInterferometer",
       "cross_section": "strip",
@@ -89,7 +188,7 @@
       "params": {
         "arm_length": 200.0,
         "length_difference": 0.0,
-        "insertion_loss": 0.10
+        "insertion_loss": 0.1
       }
     },
     "mzi_interleaver_100g": {
@@ -99,18 +198,30 @@
       "params": {
         "arm_length": 200.0,
         "length_difference": 713.7,
-        "insertion_loss": 0.10
+        "insertion_loss": 0.1
       }
     },
-
     "ring_addrop_10um": {
       "component": "RingResonator",
+      "cell": "ring_double",
       "cross_section": "strip",
-      "doc": "A 10 um radius add-drop ring — the parameter is the round trip, 2*pi*r = 62.83 um — near critical coupling on this loss.",
+      "doc": "A 10 um radius add-drop ring \u2014 the parameter is the round trip, 2*pi*r = 62.83 um \u2014 near critical coupling on this loss.",
       "params": {
         "length": 62.83,
-        "coupling": [0.12, 9.0e-4],
-        "drop_coupling": [0.12, 9.0e-4]
+        "coupling": [
+          0.12,
+          0.0009
+        ],
+        "drop_coupling": [
+          0.12,
+          0.0009
+        ]
+      },
+      "ports": {
+        "o1": "in",
+        "o2": "through",
+        "o3": "add",
+        "o4": "drop"
       }
     },
     "ring_notch_nitride": {
@@ -119,8 +230,42 @@
       "doc": "All-pass nitride ring, 40 um radius. Twenty times lower loss than silicon, so a far narrower linewidth at the same size.",
       "params": {
         "length": 251.33,
-        "coupling": [0.02, 1.5e-4],
+        "coupling": [
+          0.02,
+          0.00015
+        ],
         "drop_coupling": 0.0
+      }
+    },
+    "bend_strip": {
+      "component": "Waveguide",
+      "cell": "bend_euler",
+      "cross_section": "strip",
+      "doc": "A routed bend, in strip. The same waveguide as wg_strip and a separate entry because its length is whatever the router made it: a 90-degree Euler bend of radius 10 is 16.637 um of path, which the radius alone does not give you. Bend loss is not modelled -- this claims only the straight-waveguide loss over the arc length, and a tight bend in a real process loses more.",
+      "ports": {
+        "o1": "in",
+        "o2": "out"
+      },
+      "from_netlist": {
+        "length": "info.length"
+      },
+      "params": {
+        "length": 16.637
+      }
+    },
+    "coupler_ring": {
+      "component": "DirectionalCoupler",
+      "cell": "coupler_ring",
+      "doc": "The point coupler between a bus and a ring. 0.5 % of the power, which is a wide gap and a short interaction -- nothing like the 48 % of dc_3db, and using that one on a ring gives a notch 0.12 dB deep. Whether a ring is under-, over- or critically coupled is not a property of this coupler: it is this number against the loop's round-trip loss, and 0.5 % sits near critical for 100 um of strip at 2 dB/cm. Put the same coupler on a longer loop and it is under-coupled.",
+      "ports": {
+        "o1": "in1",
+        "o2": "in2",
+        "o3": "out2",
+        "o4": "out1"
+      },
+      "params": {
+        "coupling": 0.005,
+        "insertion_loss": 0.02
       }
     }
   }

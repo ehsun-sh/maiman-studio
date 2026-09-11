@@ -46,7 +46,7 @@ three circuits later.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -147,6 +147,38 @@ class Device:
     valid_wavelengths: tuple[float, float] | None = None
     """Where this device's fits hold [nm], if narrower than the kit's."""
 
+    cell: str | None = None
+    """The layout cell this device is the model of, if a layout tool draws one.
+
+    A netlist from a layout tool names cells, not models: it says ``straight``
+    and ``mmi1x2`` because those are what the foundry's library calls them. This
+    is the one place that knows ``straight`` means :class:`Waveguide` *in this
+    process* — which is exactly a PDK's job, and is why the mapping lives in the
+    file rather than in a table inside this library. Another process may call the
+    same geometry something else.
+    """
+
+    ports: dict[str, str] = field(default_factory=dict)
+    """Layout port name to model port name, e.g. ``{"o1": "in", "o2": "out"}``.
+
+    Needed because the two vocabularies do not agree and neither is wrong. A
+    layout tool numbers ports going round the boundary, ``o1`` to ``o4``; a model
+    names them for what they do, ``in``/``through``/``drop``. Guessing the
+    correspondence from the order would silently wire a drop port to a through
+    port on any cell whose numbering ran the other way.
+    """
+
+    from_netlist: dict[str, str] = field(default_factory=dict)
+    """Model parameter to a dotted path in the instance's netlist entry.
+
+    ``{"length": "info.length"}`` says this device's length is whatever the
+    layout says it is, per instance, rather than the kit's nominal value. That
+    matters most for the cells a router generates: every bend in a route has its
+    own arc length and every connecting straight its own, and a kit that gave all
+    of them one nominal length would be describing a different circuit from the
+    one that was drawn.
+    """
+
 
 @dataclass(frozen=True)
 class PDK:
@@ -206,6 +238,24 @@ class PDK:
             raise PDKError(
                 f"{self.name} has no device {name!r}; it has {sorted(self.devices) or 'none'}"
             ) from None
+
+    def device_for_cell(self, cell: str) -> Device:
+        """The device modelling layout cell ``cell``.
+
+        Refused rather than skipped when there is none. A netlist importer that
+        quietly dropped the cells it did not recognise would return a circuit
+        that solves, looks like a spectrum, and is not the circuit on the mask —
+        which is the worst of the three possible outcomes.
+        """
+        for entry in self.devices.values():
+            if entry.cell == cell:
+                return entry
+        known = sorted(e.cell for e in self.devices.values() if e.cell)
+        raise PDKError(
+            f"{self.name} has no device modelling the layout cell {cell!r}; it models "
+            f'{known or "no cells at all"}. Add a device with "cell": {cell!r}, or '
+            f"the circuit this builds is not the circuit that was drawn."
+        )
 
     def parameters(self, name: str, *, wavelength: float | None = None) -> dict[str, float]:
         """Every parameter this device would be built with, evaluated [display units].
@@ -362,6 +412,41 @@ def pdk_from_dict(data: dict[str, Any], *, source: Path | None = None) -> PDK:
                     f"model with no waveguide in it. Leave the cross-section off."
                 )
 
+        ports = entry.get("ports") or {}
+        if not isinstance(ports, dict) or not all(
+            isinstance(k, str) and isinstance(v, str) for k, v in ports.items()
+        ):
+            raise PDKError(
+                f"{where}: device {device_name!r} has a 'ports' that is not a mapping of "
+                f"layout port name to model port name, got {ports!r}"
+            )
+        # The names are not checked here, and that is deliberate rather than
+        # lax. A circuit wires the *scattering matrix's* ports, which are not
+        # always the graph ports a link wires: a 2x2 MMI driven on one side has
+        # three graph ports and a four-port matrix, because the undriven input
+        # still exists physically and still reflects nothing. Only the built
+        # device knows the real set, so the check is where the device is built,
+        # in `maiman.netlist`, and it names the ports it actually has.
+
+        sourced = entry.get("from_netlist") or {}
+        if not isinstance(sourced, dict) or not all(
+            isinstance(k, str) and isinstance(v, str) for k, v in sourced.items()
+        ):
+            raise PDKError(
+                f"{where}: device {device_name!r} has a 'from_netlist' that is not a "
+                f"mapping of parameter name to netlist path, got {sourced!r}"
+            )
+        unknown_sourced = set(sourced) - set(declared)
+        if unknown_sourced:
+            raise PDKError(
+                f"{where}: device {device_name!r} sources {sorted(unknown_sourced)} from the "
+                f"netlist, which {component} does not declare; it has {sorted(declared)}"
+            )
+
+        cell = entry.get("cell")
+        if cell is not None and not isinstance(cell, str):
+            raise PDKError(f"{where}: device {device_name!r} has a 'cell' that is not a name")
+
         devices[device_name] = Device(
             name=device_name,
             component=component,
@@ -372,7 +457,22 @@ def pdk_from_dict(data: dict[str, Any], *, source: Path | None = None) -> PDK:
             valid_wavelengths=window(
                 entry.get("valid_wavelengths"), f"device {device_name!r} valid_wavelengths"
             ),
+            cell=cell,
+            ports=dict(ports),
+            from_netlist=dict(sourced),
         )
+
+    claimed: dict[str, str] = {}
+    for entry_name, entry_device in devices.items():
+        if entry_device.cell is None:
+            continue
+        if entry_device.cell in claimed:
+            raise PDKError(
+                f"{where}: devices {claimed[entry_device.cell]!r} and {entry_name!r} both "
+                f"model the layout cell {entry_device.cell!r}. A netlist naming it could "
+                f"mean either, and picking one would be a coin toss nothing reports."
+            )
+        claimed[entry_device.cell] = entry_name
 
     return PDK(
         name=str(name),

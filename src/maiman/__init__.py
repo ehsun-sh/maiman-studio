@@ -22,6 +22,14 @@ from __future__ import annotations
 from .component import BoolParam, Component, Param, Port, PortType
 from .context import SimulationContext
 from .graph import CycleError, Graph, GraphError, Results
+from .netlist import (
+    Netlist,
+    NetlistError,
+    circuit_from_netlist,
+    load_netlist,
+    missing_cells,
+    parse_netlist,
+)
 from .pdk import PDK, PDKError, load_pdk, pdk_from_dict
 from .project import ProjectError, load, save
 from .registry import UnknownComponentError, manifests, registered_names
@@ -62,6 +70,8 @@ __all__ = [
     "GainTransient",
     "Graph",
     "GraphError",
+    "Netlist",
+    "NetlistError",
     "NoiseBin",
     "OpticalSignal",
     "PDKError",
@@ -76,11 +86,15 @@ __all__ = [
     "SweepResult",
     "UnknownComponentError",
     "__version__",
+    "circuit_from_netlist",
     "effective_time_constant",
     "gain_transient",
     "load",
+    "load_netlist",
     "load_pdk",
     "manifests",
+    "missing_cells",
+    "parse_netlist",
     "pdk_from_dict",
     "registered_names",
     "save",

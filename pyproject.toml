@@ -34,7 +34,11 @@ dependencies = ["numpy>=1.26"]
 # without network isolation. It is the only test that can prove the studio page
 # reaches an installed copy, which is the whole reason the page lives in the
 # package rather than in docs/.
-dev = ["pytest>=8", "mypy>=1.11", "ruff>=0.6", "build>=1.2", "hatchling>=1.25"]
+# pyyaml is dev-only. A layout netlist is YAML, and `maiman.netlist` reads one
+# when a YAML reader is present -- but it is not a runtime dependency: the
+# reader works over a parsed mapping, JSON needs nothing, and the error names
+# the one-liner that converts. It is here so CI exercises the YAML path.
+dev = ["pytest>=8", "mypy>=1.11", "ruff>=0.6", "build>=1.2", "hatchling>=1.25", "pyyaml>=6"]
 
 [project.scripts]
 # The front door. `python -m maiman.server` still works and is what a checkout

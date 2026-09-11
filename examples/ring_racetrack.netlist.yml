@@ -1,0 +1,64 @@
+# A racetrack all-pass ring, in gdsfactory's netlist schema.
+#
+# HAND-WRITTEN, and it matters that you know that. The schema is gdsfactory's --
+# the same keys, the same "instance,port" references, the same split between
+# `settings` (what the cell was asked for) and `info` (what the router worked
+# out) -- and tests/data/gdsfactory_straight_with_bend.yml is a file gdsfactory
+# actually emitted, parsed by the same reader. But gdsfactory's shipped samples
+# contain no ring and no coupler, and a circuit with no feedback in it does not
+# demonstrate the one thing a scattering-matrix solver is for.
+#
+# The loop is 100.000 um: two 180-degree Euler bends of 33.274 um of arc each,
+# and two straights of 16.726. At a group index of 4.20 that is a free spectral
+# range of c / (n_g * L) = 713.8 GHz, which is what the example checks the
+# solved spectrum against.
+
+name: racetrack_100um
+
+instances:
+  cp:
+    component: coupler_ring
+    info: {length: 20.0}
+    settings:
+      gap: 0.2
+      length: 20.0
+      cross_section: strip
+
+  b1:
+    component: bend_euler
+    info: {length: 33.274, radius: 10, min_bend_radius: 7.061}
+    settings: {angle: 180, p: 0.5, radius: 10, cross_section: strip}
+
+  b2:
+    component: bend_euler
+    info: {length: 33.274, radius: 10, min_bend_radius: 7.061}
+    settings: {angle: 180, p: 0.5, radius: 10, cross_section: strip}
+
+  s1:
+    component: straight
+    info: {length: 16.726, width: 0.5}
+    settings: {length: 16.726, npoints: 2, cross_section: strip}
+
+  s2:
+    component: straight
+    info: {length: 16.726, width: 0.5}
+    settings: {length: 16.726, npoints: 2, cross_section: strip}
+
+# The loop: out of the coupler's cross port, round, and back into its second
+# input. That return path is the feedback, and it is why this cannot be solved
+# by running blocks in an order.
+nets:
+  - p1: cp,o3
+    p2: b1,o1
+  - p1: b1,o2
+    p2: s1,o1
+  - p1: s1,o2
+    p2: b2,o1
+  - p1: b2,o2
+    p2: s2,o1
+  - p1: s2,o2
+    p2: cp,o2
+
+ports:
+  in: cp,o1
+  through: cp,o4

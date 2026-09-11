@@ -1333,6 +1333,84 @@ The MMI, the Y-junction, the Mach-Zehnder and PDK import are all downstream of t
 rather than of new physics — an interferometer is already two couplers and two arms in a `Circuit`,
 and the tests build one.
 
+## What a layout tool knows, and what it does not
+
+A `.pdk` here carries a foundry's *fitted numbers*. gdsfactory draws the mask. Joining them is the
+last thing the roadmap had open, and doing it started with two measurements — because this project
+has twice now found that a stated obstacle was never measured.
+
+**The first measurement was the licence.** gdsfactory itself is MIT. Its dependency tree is not:
+
+```
+gdsfactory  →  kfactory  →  klayout          GPL-3.0-or-later
+86 packages resolved in total
+```
+
+That is the exact ground this project already refuses FFTW (GPL-2.0-or-later) and klujax
+(LGPL-2.0-only) on, and `pyproject.toml` says licences are checked before adoption rather than
+after. So gdsfactory is **not a dependency, not even an optional one** — nothing here imports it.
+
+**The second measurement changed what the join could be.** A gdsfactory `CrossSection` carries
+`sections` (width, offset, layer), `radius`, `radius_min`, `bbox_layers` — and `extra="forbid"`, so
+a kit author cannot even attach anything else. There is no effective index, no group index, no
+propagation loss and no dispersion anywhere in the package; the only `neff` in it computes grating
+tooth pitch. **A layout tool does not know what any of it does optically**, so importing a PDK
+*from* gdsfactory cannot produce the numbers a `.pdk` is made of. They were never there.
+
+So the join runs the other way round, and it is the natural division of labour:
+
+```
+netlist (gdsfactory)  →  topology + geometry: what is wired, how long the router made it
+.pdk       (maiman)   →  which model each cell is, and what this process measures
+Circuit.solve()       →  the answer
+```
+
+An instance says it is a `straight` drawn in cross-section `strip`; the kit says `straight` is a
+`Waveguide` in this process, that its `o1` is that model's `in`, and that `strip` is 2.44 / 4.20 /
+2 dB/cm. **That mapping lives in the file and not in this library** — another process draws the
+same geometry under another name, and a table of cell names compiled into a simulator would be
+wrong for every kit but one.
+
+`python examples/netlist_circuit.py` solves a netlist **gdsfactory actually emitted**, shipped
+unmodified in `tests/data/` with its MIT attribution:
+
+```
+instances                       cell         length
+bend_euler_R10_A90_P0p5_2f1…    bend_euler   16.637 um
+straight_L10_N2_CSstrip_5000…   straight     10 um
+
+transmission              -0.0053 dB
+26.637 um at 2 dB/cm      -0.0053 dB
+```
+
+**The bend's 16.637 µm is its arc length**, and the radius alone does not give it — you need the
+Euler parameter too. The kit asks for it with `from_netlist: {length: info.length}`, so every
+routed bend and connecting straight carries the length the router gave *that instance* rather than
+one nominal value standing in for all of them.
+
+The second circuit in that example is a racetrack ring, hand-written in the same schema because
+gdsfactory's shipped samples contain no ring and no coupler, and a circuit without feedback does
+not exercise the one thing a scattering-matrix reduction is for. Its free spectral range comes back
+at **713.74 GHz against `c/(n_g·L)` = 713.79** for the 100.000 µm its five instances sum to.
+
+**It refuses rather than skips.** A cell the kit does not model, a layout port the kit does not
+map, a port wired twice, a circuit with nothing facing outward — each is an error naming the thing.
+A reader that quietly dropped what it did not recognise would hand back a circuit that solves,
+plots like a spectrum, and is not the circuit on the mask, which is the worst of the three
+outcomes.
+
+**YAML is not a dependency either.** The reader works over a parsed mapping and handles JSON with
+the standard library; YAML is read when a YAML parser happens to be installed, and the error names
+the one-liner that converts a file when it is not. `pyyaml` is in the `dev` extra so CI exercises
+that path, and the shipped package still depends on numpy and nothing else.
+
+**What is still missing.** Routing. A schematic's `routes:` section names links between ports, and
+the bends and straights that implement them do not exist until the route is built — so a schematic
+read at this level is the circuit without its interconnect, and its lengths are missing. Read a
+netlist extracted from the built layout, which is what the shipped sample is. And bend loss: a
+bend is modelled as a straight waveguide of the same arc length, which a tight bend in a real
+process beats by some margin the kit would have to carry.
+
 ## The kernels do not know what they are running on
 
 The propagation kernels are the only part of this worth a GPU: a loop over FFTs on a long array,
@@ -1828,7 +1906,7 @@ library, and the UI.
 | [GNPy](https://github.com/Telecominfraproject/oopt-gnpy) | Optical network planning / OSNR budgets | Complementary — network layer, not waveform layer |
 | [QAMPy](https://github.com/ChalmersPhotonicsLab/QAMpy) | Coherent DSP algorithms | Reference for Phase 3 |
 | [SAX](https://github.com/gdsfactory/sax) | S-matrix photonic circuit solver | **Cross-validation reference, not a dependency.** The reduction is thirty lines and SAX resolves to 37 packages including an LGPL sparse back-end; the two agree to 7e-15 |
-| [gdsfactory](https://github.com/gdsfactory/gdsfactory) | Photonic layout & PDK ecosystem | **Not a dependency.** A `.pdk` file here is JSON carrying a foundry's *fitted numbers* — indices, loss, coupling ratios — which is the half of a kit this engine cannot derive. Layout, DRC and the GDS itself are gdsfactory's job and stay there; converting one of its PDKs into a `.pdk` is a script somebody can write without this project taking on the ecosystem |
+| [gdsfactory](https://github.com/gdsfactory/gdsfactory) | Photonic layout & PDK ecosystem | **Connected, and still not a dependency.** [`maiman.netlist`](src/maiman/netlist.py) reads the YAML netlists it writes and solves them against a `.pdk`. Nothing imports it: measured, it resolves to **86 packages** and requires `klayout`, which is **GPL-3.0-or-later** — the same ground FFTW and klujax are refused on. Reading a document costs none of that |
 | [Meep](https://github.com/NanoComp/meep) | FDTD / full-wave EM | Feeds component models *in*; not a competitor |
 | [GNU Radio](https://www.gnuradio.org/) | Block-based SDR | Architectural reference for dataflow scheduling |
 
@@ -2009,6 +2087,11 @@ Every physics block ships with a test against a closed-form result, run in CI
 | A whole symbol is invisible | Delay by one symbol period and the estimate does not move — the limit is `\|A\|²`, not the code | ✅ |
 | Every shipped project still opens | All six `.maiman` files load, run, and carry their canvas layout — the first thing a new user opens, and nothing checked them before | ✅ |
 | **A pilot is an erasure, not an error** | LLR set to zero where the coder's bits were overwritten: 4.9e-4 out of a 9.9e-3 channel, against 2.8e-2 if they are believed | ✅ |
+| **A netlist a layout tool wrote solves** | gdsfactory's own shipped sample, unmodified: -0.0053 dB against the 26.637 µm at 2 dB/cm anyone can work out by hand | ✅ |
+| Lengths come from the netlist, not the kit | The built waveguide is 10 µm where the kit's nominal is 1000 — asserted on the device, so a lost override says *why* | ✅ |
+| A routed circuit resonates where its loop says | FSR 713.74 GHz against `c/(n_g·L)` for the 100.000 µm the instances sum to | ✅ |
+| An unmapped cell or port is refused by name | Skipping either returns a circuit that solves and is not the one drawn | ✅ |
+| A window narrower than one FSR finds nothing | Kept as a test because a flat 0.995 reads as a ring that does not resonate rather than a scan that is too narrow | ✅ |
 | **A ring resonates at two sets of wavelengths** | Two combs, each matching `c/(n_g·L)` for its own group index to a part in a thousand, and their ratio the ratio of the indices | ✅ |
 | The combs coincide when the indices do | The control for the above — an off-by-one in the stacking would separate them where there is nothing to separate them | ✅ |
 | Stacking reduces exactly to one polarization | Same indices twice reproduces the single-polarization matrix element for element, and the block's output to `rel=1e-12` | ✅ |

@@ -46,7 +46,7 @@ we should reuse.
 | **QAMPy** | Coherent DSP (equalization, carrier recovery) | Reference for Phase 3 DSP algorithms. |
 | **SAX** | JAX-based S-matrix photonic circuit solver | **Cross-validation reference.** Not a dependency: 37 packages, and an LGPL-2.0-only sparse back-end. |
 | **Photontorch**, **Simphony** | Photonic circuit simulation | Same space as SAX; alternative back-ends. |
-| **gdsfactory** | Photonic layout + PDK ecosystem | The layout/PDK side of Phase 4. |
+| **gdsfactory** | Photonic layout + PDK ecosystem | Its netlists are read as documents by `maiman.netlist`. Never imported: 86 packages, and klayout is GPL-3.0-or-later. |
 | **Meep**, **Tidy3D** | FDTD / full-wave EM | Component-level physics. Feeds models *into* us; not a competitor. |
 | **GNU Radio** | Block-based SDR | Excellent architectural reference for dataflow scheduling. No optical physics. |
 
@@ -509,9 +509,18 @@ matplotlib, pandas, scipy, sympy, xarray, pydantic — and `klujax`, its sparse 
 written here and SAX is kept as a cross-validation reference: given the same models and wiring the
 two agree to 7e-15 across 4001 frequencies.
 
-For the *ecosystem* the premise stands unchanged. Process design kits, layout, and fitted component
-models are a large body of work with a live open-source home, and PDK import through gdsfactory is
-still integration rather than invention.
+For the *ecosystem* the premise half stands. Layout, DRC and the GDS itself are a large body of
+work with a live open-source home and none of it belongs here. But "PDK import through gdsfactory"
+turned out to describe something that does not exist: a gdsfactory `CrossSection` is width, offset,
+layer and bend radius, with `extra="forbid"`, and there is no effective index anywhere in the
+package. **A layout tool does not carry the numbers a `.pdk` is made of**, so there was nothing to
+import.
+
+What there is instead is the other direction, and it is a better division of labour: gdsfactory
+writes a netlist, `maiman.netlist` reads it as a document, the `.pdk` says which model each layout
+cell is and what this process measures, and `Circuit.solve` answers. Nothing imports gdsfactory —
+it resolves to 86 packages and requires klayout, which is GPL-3.0-or-later, which is the question
+§11 already answers for FFTW.
 
 Shipped: the scattering framework, a straight waveguide, a directional coupler, and all-pass and
 add-drop ring resonators, with the ring assembled from the other two and solved rather than written

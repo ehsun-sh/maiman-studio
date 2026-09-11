@@ -206,7 +206,40 @@ def solve_once(build: Callable[[np.ndarray], SMatrix]) -> Callable[[np.ndarray],
     return solved
 
 
-class _Photonic(Component):
+class ScatteringDevice(Component):
+    """A block whose physics *is* a scattering matrix, and which will hand it over.
+
+    Every photonic block here already builds one and then reduces it to a
+    transfer function between two ports, because that is what a link simulation
+    can propagate. A circuit wants the matrix itself: the whole point of
+    :meth:`maiman.circuit.Circuit.solve` is that a ring's feedback is not a chain
+    of transfer functions, so handing it a port-to-port response would be
+    handing it the answer to a different question.
+
+    Public because something outside this module needs it — building a circuit
+    from a layout netlist, in :mod:`maiman.netlist` — and reaching into a private
+    method from another module is how two things come to disagree about what it
+    means.
+    """
+
+    abstract = True
+
+    def scattering_matrix(self, frequencies: np.ndarray, *, polarization: str = "te") -> SMatrix:
+        """This device's scattering matrix on a frequency grid [Hz]."""
+        grid = np.asarray(frequencies, dtype=np.float64)
+        if grid.ndim != 1:
+            raise ValueError(f"frequencies must be 1-D, got {grid.ndim}-D")
+        if grid.size == 0:
+            raise ValueError("a scattering matrix needs at least one frequency")
+        return self._matrix_factory(polarization)(grid)
+
+    def _matrix_factory(
+        self, polarization: str = "te"
+    ) -> Callable[[np.ndarray], SMatrix]:  # pragma: no cover - overridden
+        raise NotImplementedError
+
+
+class _Photonic(ScatteringDevice):
     """Shared parameters of the integrated blocks: the waveguide they are made of.
 
     Not a block itself. The three devices below all reduce to lengths of the same
@@ -309,11 +342,6 @@ class _Photonic(Component):
             return transverse_electric, None
         return transverse_electric, port_response(factories["tm"], output, input_)
 
-    def _matrix_factory(
-        self, polarization: str = "te"
-    ) -> Callable[[np.ndarray], SMatrix]:  # pragma: no cover - overridden
-        raise NotImplementedError
-
 
 class Waveguide(_Photonic):
     """A length of on-chip waveguide: delay, phase and loss.
@@ -365,7 +393,7 @@ class Waveguide(_Photonic):
         return solve_once(lambda f: straight_waveguide(f, length=length, **settings))
 
 
-class DirectionalCoupler(Component):
+class DirectionalCoupler(ScatteringDevice):
     """Two waveguides run close enough to trade power. The 2x2 splitter of a PIC.
 
     ``coupling`` is the *power* fraction that crosses over, so 0.5 is a 3 dB
@@ -425,7 +453,11 @@ class DirectionalCoupler(Component):
             outputs[out] = _sum_signals(contributions, where=f"{self.label}.{out}")
         return outputs
 
-    def _matrix_factory(self) -> Callable[[np.ndarray], SMatrix]:
+    def _matrix_factory(self, polarization: str = "te") -> Callable[[np.ndarray], SMatrix]:
+        # ``polarization`` is accepted and ignored: this model is a coupling ratio
+        # and an excess loss, with no waveguide in it for an index to act on. A
+        # real one *is* polarization dependent -- TM is less confined and couples
+        # harder -- and that number is per-process. See the note in `_Photonic`.
         coupling = self.coupling
         # Raw dB: si() on a dB parameter returns a linear power ratio, and the
         # model wants the decibels themselves.
@@ -435,7 +467,7 @@ class DirectionalCoupler(Component):
         )
 
 
-class MMI(Component):
+class MMI(ScatteringDevice):
     """A multimode interference coupler: the splitter a foundry actually ships.
 
     Widen a waveguide until it carries several modes, let them run, and at the
@@ -504,7 +536,11 @@ class MMI(Component):
             outputs[out] = _sum_signals(contributions, where=f"{self.label}.{out}")
         return outputs
 
-    def _matrix_factory(self) -> Callable[[np.ndarray], SMatrix]:
+    def _matrix_factory(self, polarization: str = "te") -> Callable[[np.ndarray], SMatrix]:
+        # ``polarization`` is accepted and ignored: this model is a coupling ratio
+        # and an excess loss, with no waveguide in it for an index to act on. A
+        # real one *is* polarization dependent -- TM is less confined and couples
+        # harder -- and that number is per-process. See the note in `_Photonic`.
         ports, loss, imbalance = self.ports, self.excess_loss, self.imbalance
         return solve_once(
             lambda f: mmi_coupler(f, ports=ports, excess_loss_db=loss, imbalance_db=imbalance)
