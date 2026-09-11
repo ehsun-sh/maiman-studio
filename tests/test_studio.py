@@ -637,7 +637,7 @@ def test_the_spectrum_is_read_in_the_bandwidth_it_was_measured_in() -> None:
     would be a number nobody could act on.
     """
     text = STUDIO.read_text(encoding="utf-8")
-    assert "`dBm / ${fmt(source.resolution_bandwidth_ghz)} GHz`" in text
+    assert "`dBm / ${fmt(traces[0].source.resolution_bandwidth_ghz)} GHz`" in text
     assert "power_per_resolution_w" in text, "the plot must draw what an instrument displays"
 
 
@@ -984,3 +984,67 @@ def test_the_canvas_has_a_tool_and_the_cursor_names_it() -> None:
     assert '$("#tool-select")' in text and '$("#tool-pan")' in text, "the toolbar is unwired"
     # Space is a momentary pan whatever the tool is, and must not stick.
     assert 'window.addEventListener("blur"' in text, "space can stick after alt-tab"
+
+
+def test_spectra_share_one_pair_of_axes() -> None:
+    """Tiled, each spectrum fitted its own wavelength range.
+
+    Two analysers looking at different channels then came out as two plots whose
+    axes did not match, which is the opposite of what putting them side by side
+    was for — and with the window fitted to each trace, a channel outside it was
+    simply not on the plot. They share axes now and are told apart by colour,
+    the way two traces on an optical spectrum analyser are.
+
+    The eye and the constellation stay tiled on purpose: they are 2-D
+    histograms, and two of those on one axis is mud rather than a comparison.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    assert "function drawSpectrumOverlay(" in text
+    assert "const SERIES = [" in text and "seriesColour" in text
+    # The range runs over every trace, not the one being drawn.
+    body = text.split("function drawSpectrumOverlay(", 1)[1].split(chr(10) + "  }", 1)[0]
+    assert "for (const trace of traces) {" in body
+    assert "drawTiles(ctx, w, h, shown, drawEyeInto)" in text, "the eye stopped tiling"
+    assert "drawTiles(ctx, w, h, shown, drawConstellationInto)" in text
+
+
+def test_the_wavelength_window_can_be_set_by_hand() -> None:
+    """Fitting is right until two channels are a nanometre apart and both become
+    a spike. A window typed in is the difference between a plot and a picture.
+
+    While fitting, the boxes show what the fit chose, so turning the tick off
+    hands you the current window rather than a stale one; and a peak outside the
+    window is not marked, because a marker pinned to the edge claims a reading
+    that is not there.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    assert "const AXIS = { manual: false" in text
+    assert 'id="axis-auto"' in text and 'id="axis-centre"' in text and 'id="axis-span"' in text
+    assert "if (AXIS.manual && AXIS.span > 0) {" in text
+    assert "if (!(pn >= nm0 && pn <= nm1)) continue;" in text, (
+        "a peak outside the window would be marked on the axis edge"
+    )
+    # Typing "1" on the way to "1550" must not jump the axis.
+    assert "if (Number.isFinite(centre) && centre > 0) AXIS.centre = centre;" in text
+
+
+def test_the_canvas_pans_with_the_right_button_too() -> None:
+    """Asked for, and it costs only a context menu the canvas has nothing to put
+    in. Suppressed on the canvas alone — the palette, inspector and log are text
+    and copying from them is reasonable.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    assert "if (event.button === 1 || event.button === 2) {" in text
+    assert 'svg.addEventListener("contextmenu", (event) => event.preventDefault());' in text
+
+
+def test_align_is_reachable_from_a_menu_and_not_only_an_icon() -> None:
+    """It was an unlabelled toolbar icon, which is findable once you know it is
+    there and not before. The menu is where someone looks for a thing they have
+    not found yet.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    assert 'id="edit-align"' in text
+    assert 'onMenu("edit-align"' in text
+    assert 'setRow("edit-align", { enabled: selection.size >= 2 });' in text
+    assert "tb-caret" in text, "the toolbar button still looks like one that acts"

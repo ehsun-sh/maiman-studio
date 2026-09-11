@@ -479,6 +479,40 @@ The side panel beside the spectrum follows the first ticked trace, and says whic
 by the caption on the tile. It used to be filled from inside the drawing code,
 which with two traces meant the last one drawn won.
 
+## 8e. What tiling got wrong, and two things that were hard to find
+
+**Tiling was right for two of the three panes and wrong for the spectrum.**
+Each tile fitted its wavelength range to its own data, so two analysers looking
+at different channels came out as two plots whose axes did not match — which is
+the opposite of what putting them side by side was for. Worse, a channel outside
+a tile's fitted window was simply not on that plot.
+
+Spectra share one pair of axes now and are told apart by colour, the way two
+traces on an optical spectrum analyser are. The eye and the constellation stay
+tiled, and that is not inconsistency: they are 2-D histograms, and two of those
+on one set of axes is mud rather than a comparison. The rule is whether the
+marks can overlap without destroying each other — lines can, density cannot.
+
+The series colours are **the port hues, reused**. They are already derived from
+wavelengths, already distinguishable, and already re-derived per ground rather
+than inverted; a second five-colour set would be a second thing to check against
+both backgrounds for no gain. On a spectrum plot there are no ports on screen
+for them to be confused with.
+
+**And the window can be typed in.** Fitting is right until two channels sit a
+nanometre apart and the fit makes both of them a spike. While fitting, the boxes
+show what the fit chose, so turning the tick off hands you the window you were
+looking at rather than a stale one. A peak outside the window is *not* marked:
+a marker pinned to the axis edge claims a reading that is not there.
+
+**Two things were built and could not be found.** Align was an unlabelled
+toolbar icon — findable once you know it is there, and not before — so Edit
+carries `Align selected…` and the toolbar button has a caret, because a button
+that opens a menu should not look like one that acts. And panning wanted the
+right button as well as the middle one, which costs only a context menu this
+canvas has nothing to put in; it is suppressed on the canvas alone, since the
+palette, the inspector and the log are text and copying from them is reasonable.
+
 ## 9. Decisions worth not re-litigating
 
 - **Paper is the default**, and it is stamped before first paint so a dark host

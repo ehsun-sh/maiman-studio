@@ -330,6 +330,9 @@ verdict, and DESIGN.md
   .toolbar { position: relative; }
   .tb-pop { top: 100%; left: 0; min-width: 190px; }
   .tb[aria-pressed="true"] { background: var(--raised); color: var(--ink); }
+  /* A caret, so a button that opens a menu does not look like one that acts. */
+  #align-btn { gap: 2px; }
+  .tb-caret { color: var(--ink-4); }
   /* A checkable row marks the state it is already in -- which ground, which
      result pane. The mark holds a column so labels stay aligned whether or not
      they are the current one. */
@@ -594,6 +597,30 @@ verdict, and DESIGN.md
   .trace-bar input { accent-color: var(--optical); margin: 0; }
   .trace-bar .trace-name { font-family: var(--mono); font-size: 10.5px; }
   .trace-bar label:has(input:not(:checked)) .trace-name { color: var(--ink-4); }
+  /* Series colours for overlaid traces. These are the port hues, reused: they
+     are already derived from wavelengths, already distinguishable from each
+     other, and already re-derived per ground rather than inverted. Inventing a
+     second five-colour set would be a second thing to check against both
+     backgrounds for no gain -- and on a spectrum plot there are no ports on
+     screen for them to be confused with. */
+  .trace-swatch { width: 9px; height: 2px; border-radius: 1px; flex: none; }
+  .axis-auto {
+    display: flex; align-items: center; gap: 6px; margin: 0 0 6px;
+    font-size: 11.5px; color: var(--ink-2); cursor: pointer;
+  }
+  .axis-auto input { accent-color: var(--optical); margin: 0; }
+  .axis-grid {
+    display: grid; grid-template-columns: auto 1fr; gap: 4px 8px;
+    align-items: center; margin: 0 0 12px; font-size: 11.5px; color: var(--ink-3);
+  }
+  .axis-field { display: flex; align-items: center; gap: 4px; }
+  .axis-field input {
+    width: 100%; min-width: 0; background: var(--panel-2); color: var(--ink);
+    border: 1px solid var(--rule); border-radius: 3px; padding: 2px 5px;
+    font: inherit; font-family: var(--mono); font-size: 11px; text-align: right;
+  }
+  .axis-field input:disabled { color: var(--ink-4); }
+  .axis-field em { font-style: normal; color: var(--ink-4); font-size: 10.5px; }
   .rubber {
     fill: var(--accent); fill-opacity: 0.07;
     stroke: var(--accent); stroke-width: 1; stroke-dasharray: 3 2; pointer-events: none;
@@ -932,6 +959,8 @@ verdict, and DESIGN.md
         <hr class="menu-sep">
         <button role="menuitem" id="edit-duplicate">Duplicate block<span class="menu-key">ctrl+D</span></button>
         <button role="menuitem" id="edit-delete">Delete<span class="menu-key">del</span></button>
+        <hr class="menu-sep">
+        <button role="menuitem" id="edit-align">Align selected…</button>
       </div>
     </div>
     <div class="menu-wrap">
@@ -1033,6 +1062,9 @@ verdict, and DESIGN.md
            stroke-width="1.4" stroke-linecap="round" aria-hidden="true">
         <path d="M2 4.5h12M2 8h8M2 11.5h12"/>
       </svg>
+      <svg class="tb-caret" width="7" height="7" viewBox="0 0 8 8" fill="none"
+           stroke="currentColor" stroke-width="1.4" stroke-linecap="round"
+           stroke-linejoin="round" aria-hidden="true"><path d="M1.5 3l2.5 2.5L6.5 3"/></svg>
     </button>
     <span class="tb-sep"></span>
     <div class="menu-pop tb-pop" id="align-menu" role="menu" hidden>
@@ -1193,6 +1225,23 @@ verdict, and DESIGN.md
             <div class="plot-wrap"><canvas id="osa-canvas"></canvas></div>
           </div>
           <div class="plot-side">
+            <p class="side-title">Wavelength axis</p>
+            <label class="axis-auto">
+              <input type="checkbox" id="axis-auto" checked>
+              <span>Fit to the traces</span>
+            </label>
+            <div class="axis-grid">
+              <label for="axis-centre">Centre</label>
+              <span class="axis-field">
+                <input type="number" id="axis-centre" step="0.1" value="1550" disabled>
+                <em>nm</em>
+              </span>
+              <label for="axis-span">Span</label>
+              <span class="axis-field">
+                <input type="number" id="axis-span" step="0.1" min="0.01" value="10" disabled>
+                <em>nm</em>
+              </span>
+            </div>
             <p class="side-title">Trace</p>
             <dl style="margin:0">
               <div class="stat"><dt>Resolution</dt><dd id="o-rbw">—</dd></div>
@@ -21896,6 +21945,33 @@ verdict, and DESIGN.md
   /* Rendered from the run's own results every time the pane draws, so a block
      added, renamed or deleted needs no bookkeeping here: the bar is a view of
      what the last run reported, never a list maintained alongside it. */
+  /* Five hues that survive both grounds, in an order that keeps the first two
+     -- the common case -- as far apart as the palette allows. */
+  const SERIES = ["--optical", "--electrical", "--symbol", "--metric", "--binary"];
+  const seriesColour = (i) => tok(SERIES[i % SERIES.length]);
+
+  /* The spectrum's wavelength window. `manual` false means fit to whatever is
+     on screen, which is right until two analysers are looking at different
+     channels and the fit makes both of them a spike. */
+  const AXIS = { manual: false, centre: 1550, span: 10 };
+
+  /* The window is set once and then followed, rather than recomputed from the
+     boxes on every draw: typing "1" on the way to "1550" would otherwise jump
+     the axis to a nanometre-wide window around 1 nm. */
+  function readAxisControls() {
+    AXIS.manual = !$("#axis-auto").checked;
+    const centre = Number($("#axis-centre").value);
+    const span = Number($("#axis-span").value);
+    if (Number.isFinite(centre) && centre > 0) AXIS.centre = centre;
+    if (Number.isFinite(span) && span > 0) AXIS.span = span;
+    $("#axis-centre").disabled = !AXIS.manual;
+    $("#axis-span").disabled = !AXIS.manual;
+    redrawActivePlot();
+  }
+  for (const id of ["#axis-auto", "#axis-centre", "#axis-span"]) {
+    $(id).addEventListener("change", readAxisControls);
+  }
+
   function traceBar(pane, kind) {
     const bar = $(`#traces-${pane}`);
     const traces = SESSION.plots[kind];
@@ -21904,6 +21980,9 @@ verdict, and DESIGN.md
       bar.replaceChildren();
       return;
     }
+    /* Rebuilt from scratch every draw, so the colours follow the *visible*
+       order: unticking the first trace must not leave the second drawn in a
+       colour its swatch no longer shows. */
     bar.hidden = false;
     bar.replaceChildren();
     for (const trace of traces) {
@@ -21919,7 +21998,20 @@ verdict, and DESIGN.md
       const name = document.createElement("span");
       name.className = "trace-name";
       name.textContent = trace.label;
-      label.append(box, name);
+      label.append(box);
+      /* A swatch only where the traces share a plot. On a tiled pane the
+         caption already says which is which, and a colour key for plots that
+         are not colour-coded would be a legend for nothing. */
+      if (kind === "spectrum") {
+        const swatch = document.createElement("span");
+        swatch.className = "trace-swatch";
+        const shownIndex = traces.filter((t) => !SESSION.hidden[kind].has(t.label))
+          .findIndex((t) => t.label === trace.label);
+        swatch.style.background = seriesColour(shownIndex < 0 ? 0 : shownIndex);
+        swatch.style.visibility = box.checked ? "visible" : "hidden";
+        label.append(swatch);
+      }
+      label.append(name);
       bar.append(label);
     }
   }
@@ -22244,16 +22336,22 @@ verdict, and DESIGN.md
       clearSpectrumPanel(); drawNoSpectrum(ctx, w, h); return;
     }
     /* The readings beside the plot belong to one trace, so they follow the
-       first ticked one and the caption on each tile says which is which. */
-    fillSpectrumPanel(spectrumSource(shown.length ? shown[0].value : null));
-    drawTiles(ctx, w, h,
-              shown.length ? shown : [{ label: "reference", value: DATA.spectrum }],
-              drawSpectrumInto);
+       first ticked one and the legend's colours say which is which. */
+    const traces = (shown.length ? shown : [{ label: "reference", value: DATA.spectrum }])
+      .map((t, i) => ({ label: t.label, source: spectrumSource(t.value), colour: seriesColour(i) }));
+    fillSpectrumPanel(traces[0].source);
+    drawSpectrumOverlay(ctx, w, h, traces);
   }
 
-  function drawSpectrumInto(ctx, w, h, raw) {
-    const source = spectrumSource(raw);
-    const nm = source.wavelengths_nm, dbm = source.dbm;
+  /* Several spectra share one pair of axes, the way they would on an optical
+     spectrum analyser with two traces on it. Tiled, each got its own
+     wavelength range fitted to its own data -- so two analysers looking at
+     different channels came out as two plots that could not be compared at all,
+     which is the opposite of what putting them side by side was for.
+
+     The eye and the constellation stay tiled: they are 2-D histograms, and two
+     of those on one axis is mud rather than a comparison. */
+  function drawSpectrumOverlay(ctx, w, h, traces) {
     ctx.fillStyle = tok("--plot-bg"); ctx.fillRect(0, 0, w, h);
 
     const padL = 46, padB = 32, padT = 10, padR = 12;
@@ -22263,11 +22361,29 @@ verdict, and DESIGN.md
        engine's grid ascends in *frequency*, so the trace runs the other way
        along the array; nothing is reversed here, the axis simply maps it. */
     let nm0 = Infinity, nm1 = -Infinity, top = -Infinity;
-    for (let i = 0; i < nm.length; i++) {
-      if (nm[i] < nm0) nm0 = nm[i];
-      if (nm[i] > nm1) nm1 = nm[i];
-      if (dbm[i] > top) top = dbm[i];
+    for (const trace of traces) {
+      const nm = trace.source.wavelengths_nm, dbm = trace.source.dbm;
+      for (let i = 0; i < nm.length; i++) {
+        if (nm[i] < nm0) nm0 = nm[i];
+        if (nm[i] > nm1) nm1 = nm[i];
+        if (dbm[i] > top) top = dbm[i];
+      }
     }
+    /* A window set by hand wins over the fit. Two analysers on channels a
+       nanometre apart fit to a range where both are a single spike; being able
+       to say "1549 to 1552" is the difference between a plot and a picture. */
+    if (AXIS.manual && AXIS.span > 0) {
+      nm0 = AXIS.centre - AXIS.span / 2;
+      nm1 = AXIS.centre + AXIS.span / 2;
+    } else if (Number.isFinite(nm0) && Number.isFinite(nm1) && nm1 > nm0) {
+      /* While fitting, the boxes show what the fit chose, so turning the tick
+         off hands you the current window to edit rather than a stale one. */
+      $("#axis-centre").value = ((nm0 + nm1) / 2).toFixed(2);
+      $("#axis-span").value = (nm1 - nm0).toFixed(2);
+      AXIS.centre = (nm0 + nm1) / 2;
+      AXIS.span = nm1 - nm0;
+    }
+    if (!(nm1 > nm0)) { nm0 -= 0.5; nm1 += 0.5; }
     /* Decade grid anchored above the peak, 80 dB deep. Fixed depth rather than
        fitted to the trace's own minimum: the floor of an unamplified link is
        the encoder's floor and not a measurement, and letting it set the scale
@@ -22287,29 +22403,41 @@ verdict, and DESIGN.md
       ctx.fillText(String(d), padL - 6, y);
     }
 
-    // The trace. Optical hue, because that is the port it was measured on.
-    const optical = tok("--optical");
-    ctx.strokeStyle = optical; ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    for (let i = 0; i < nm.length; i++) {
-      const x = X(nm[i]), y = Y(dbm[i]);
-      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    /* Everything outside the window is clipped rather than drawn off the axes,
+       which matters once the range can be set by hand. */
+    ctx.save();
+    ctx.beginPath(); ctx.rect(padL, padT, pw, ph); ctx.clip();
+    for (const trace of traces) {
+      const nm = trace.source.wavelengths_nm, dbm = trace.source.dbm;
+      ctx.strokeStyle = trace.colour; ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      for (let i = 0; i < nm.length; i++) {
+        const x = X(nm[i]), y = Y(dbm[i]);
+        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      }
+      ctx.stroke();
     }
-    ctx.stroke();
+    ctx.restore();
 
-    /* The peak, marked where it is rather than only named in the panel. An OSA
-       is used to find a wavelength as often as to read a level. */
-    const px = X(source.peak_nm), py = Y(source.peak_dbm);
-    ctx.strokeStyle = alpha(optical, 0.5); ctx.setLineDash([3, 3]);
-    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, padT + ph); ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = optical;
-    ctx.beginPath(); ctx.arc(px, py, 2.5, 0, Math.PI * 2); ctx.fill();
-    const rightish = px > padL + pw * 0.7;
-    ctx.textAlign = rightish ? "right" : "left";
-    ctx.textBaseline = "bottom";
-    ctx.fillText(`${source.peak_nm.toFixed(2)} nm  ${source.peak_dbm.toFixed(1)} dBm`,
-                 px + (rightish ? -5 : 5), py - 5);
+    /* The peak of each trace, marked where it is rather than only named in the
+       panel: an OSA is used to find a wavelength as often as to read a level.
+       Only for peaks inside the window -- a marker pinned to the edge for a
+       peak that is off-screen claims a reading that is not there. */
+    for (const trace of traces) {
+      const { peak_nm: pn, peak_dbm: pd } = trace.source;
+      if (!(pn >= nm0 && pn <= nm1)) continue;
+      const px = X(pn), py = Y(pd);
+      ctx.strokeStyle = alpha(trace.colour, 0.5); ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, padT + ph); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = trace.colour;
+      ctx.beginPath(); ctx.arc(px, py, 2.5, 0, Math.PI * 2); ctx.fill();
+      const rightish = px > padL + pw * 0.7;
+      ctx.textAlign = rightish ? "right" : "left";
+      ctx.textBaseline = "bottom";
+      ctx.fillText(`${pn.toFixed(2)} nm  ${pd.toFixed(1)} dBm`,
+                   px + (rightish ? -5 : 5), py - 5);
+    }
 
     ctx.strokeStyle = tok("--rule"); ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(padL, padT); ctx.lineTo(padL, padT + ph);
@@ -22327,7 +22455,7 @@ verdict, and DESIGN.md
     ctx.textAlign = "center";
     ctx.fillText("wavelength (nm)", padL + pw / 2, padT + ph + 6 + 11);
     ctx.save(); ctx.translate(11, padT + ph / 2); ctx.rotate(-Math.PI / 2);
-    ctx.fillText(`dBm / ${fmt(source.resolution_bandwidth_ghz)} GHz`, 0, 0);
+    ctx.fillText(`dBm / ${fmt(traces[0].source.resolution_bandwidth_ghz)} GHz`, 0, 0);
     ctx.restore();
     /* The side panel is filled by the caller, once, from the first ticked
        trace. Filling it from here would mean the last tile drawn won, which
@@ -22936,9 +23064,12 @@ verdict, and DESIGN.md
   });
 
   svg.addEventListener("pointerdown", (event) => {
-    /* Middle-drag pans from anywhere, including over a block, which is the
-       gesture this audience already has from Blender and every EDA tool. */
-    if (event.button === 1) {
+    /* Middle-drag and right-drag both pan, from anywhere including over a
+       block. Middle is the gesture from Blender and every EDA tool; right is
+       the one people reach for when their mouse has no usable middle button,
+       and it costs only the context menu, which this canvas has nothing to put
+       in anyway. */
+    if (event.button === 1 || event.button === 2) {
       panning = { x: event.clientX, y: event.clientY, from: { ...view }, moved: false };
       $("#canvas-wrap").classList.add("panning");
       capture(event);
@@ -23785,6 +23916,11 @@ verdict, and DESIGN.md
     });
   }
 
+  /* A right-drag that pans must not also open the browser's menu on release.
+     Suppressed on the canvas only -- the palette, the inspector and the log are
+     text and selecting or copying from them is a reasonable thing to want. */
+  svg.addEventListener("contextmenu", (event) => event.preventDefault());
+
   /* Closed on pointerdown, not click.
 
      The canvas calls preventDefault() in its own pointerdown handler so that
@@ -23827,6 +23963,7 @@ verdict, and DESIGN.md
       setRow("edit-redo", { enabled: FUTURE.length > 0 });
       setRow("edit-duplicate", { enabled: Boolean(selected) });
       setRow("edit-delete", { enabled: Boolean(selected) || selectedEdge !== null });
+      setRow("edit-align", { enabled: selection.size >= 2 });
     } else if (menu.name === "sim") {
       setRow("sim-run", { enabled: !SESSION.running });
       setRow("sim-stop", { enabled: SESSION.running });
@@ -23862,6 +23999,11 @@ verdict, and DESIGN.md
   onMenu("edit-redo", redo);
   onMenu("edit-duplicate", duplicateSelected);
   onMenu("edit-delete", deleteSelection);
+  /* The toolbar has had an align button since before it did anything, and it is
+     an icon with no label -- which is findable once you know it is there and
+     not before. The menu is where someone looks for a thing they have not found
+     yet, so Edit opens the same popup. */
+  onMenu("edit-align", () => toggleAlignMenu(true));
 
   /* ---- Simulate ---- */
   onMenu("sim-run", () => { if (!SESSION.running) runBtn.click(); });
