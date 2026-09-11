@@ -1264,12 +1264,74 @@ Straightened out, the same waveguide is a delay line, and the arithmetic is blea
 holds 14.01 ps and costs 0.2 dB; 10 cm holds 1.40 ns and costs 20 dB. Optical buffering is expensive
 and this is why.
 
-**What is not here.** One response is applied to both polarizations. A strip waveguide is strongly
-birefringent and a real ring resonates at two sets of wavelengths; modelling that needs a
-polarization-resolved scattering matrix, which is a second index on every device. Launch into one
-axis until it exists. The MMI, the Y-junction, the Mach-Zehnder and PDK import are all downstream of
-this framework rather than of new physics — an interferometer is already two couplers and two arms
-in a `Circuit`, and the tests build one.
+### Two modes in one waveguide
+
+This section used to say that one response was applied to both polarizations, and that fixing it
+needed "a polarization-resolved scattering matrix, which is a second index on every device". **The
+second half was wrong, and it was wrong in a way worth recording**: it had never been measured. The
+solver needed *no changes at all*.
+
+`SMatrix` identifies ports by **name**. So a device carrying two modes is not a device with an
+extra index — it is a device with twice as many ports, and `Circuit.solve` already solved those.
+What was missing was one combinator:
+
+```python
+dual_polarization({"te": guide_te, "tm": guide_tm})   # -> ports in@te, out@te, in@tm, out@tm
+```
+
+which stacks one matrix per polarization block-diagonally, plus `link_polarizations` and
+`expose_polarizations` so a wire is wired on both modes in one call — the fault they exist to
+prevent being a circuit connected on TE and not on TM, which yields a perfectly plausible spectrum
+on one polarization and silence on the other.
+
+**A strip waveguide's two modes are two different waveguides.** For 500 × 220 nm silicon at
+1550 nm:
+
+```
+              n_eff    n_group    ring FSR (100 µm)
+TE             2.44       4.20         713.8 GHz
+TM             1.78       3.80         788.9 GHz
+```
+
+27 % apart in phase index. So the ring resonates at **two sets of wavelengths that are nowhere near
+each other, on two different free spectral ranges** — and both match `c/(n_g·L)` to a part in a
+thousand, each against its own group index. Measured on a graph: at 1558.16 nm the `Ex` component
+sits in a notch and `Ey` passes; at 1561.71 nm it is the other way round. A ring like this is a
+polarization-selective filter, which is what a real one is.
+
+`python examples/birefringent_ring.py` prints both tables — where each comb sits against
+`c/(n_g·L)`, and then the same ring as a block with the light launched at 45° so both axes carry
+something for it to treat differently. Using TE's group index for TM would put that row 75 GHz out,
+a tenth of a free spectral range, and it would still look like a perfectly plausible ring.
+
+**The flag is off by default**, declared as an idealisation exactly the way `saturate` is on the
+EDFA. Turning `birefringent` on changes the numbers of any link with a photonic block in it; that
+should be a decision someone makes, not a default that moves under an existing project. A test
+asserts that off, the two field components take *exactly* the path they took before the flag
+existed — `rel=1e-12`, not approximately.
+
+**Block diagonal is a choice the models make, not a shape the matrix can hold.** A bend, a sidewall
+that is not vertical, and a mode converter placed there on purpose all convert TE to TM. Nothing
+here produces such a term, so `dual_polarization` takes a `cross` argument for one — because the
+solver never needed the block-diagonal assumption, and the one place where quietly acquiring it
+would be invisible is here.
+
+**What is still shared: loss and dispersion.** A real strip has a different propagation loss for
+TM — it overlaps the sidewalls less and the substrate more — and a different dispersion with it.
+Those are per-process numbers and this library will not invent one, so the two indices are what is
+offered and a test records the rest as shared rather than leaving it to be discovered. A fitted set
+belongs in a PDK, where `maiman.pdk` already refuses to extrapolate past the window it was fitted
+in. The same goes for the couplers: a directional coupler's split ratio is polarization-dependent
+and here it is not, so the two combs come out with the same notch depth where a real pair would
+not.
+
+**Coupling into the die is not modelled either.** `Ex` is taken to be the chip's TE mode and `Ey`
+its TM, which says the die is aligned to the signal's own x axis. A real launch goes through a
+grating or an edge coupler with its own alignment and its own extinction.
+
+The MMI, the Y-junction, the Mach-Zehnder and PDK import are all downstream of this framework
+rather than of new physics — an interferometer is already two couplers and two arms in a `Circuit`,
+and the tests build one.
 
 ## The kernels do not know what they are running on
 
@@ -1870,7 +1932,7 @@ time window, and results are reproducible.
 | **1.5 — Nonlinear & amplified** ✅ | Adaptive-step SSFM, Kerr, EDFA with ASE and Saleh gain compression, erbium gain dynamics on their own time axis, OSNR, PMD, APD, dispersion slope and its third-order term, cross-polarization Kerr coupling, inter-channel stimulated Raman scattering | ~2 months |
 | **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier frequency and phase recovery, coarse frequency acquisition over the whole sampled band, blind square-law timing recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km with blind estimation of the accumulated value, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
 | **3 — GUI & WDM** | ✅ Wavelength-selective filters, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — the OSA's trace drawn in the dock, and 400G/800G reference designs validated against the OSNR relations, and a back-end indirection the propagation kernels dispatch through — CuPy runs it where a device exists, `maiman devices` cross-checks it against NumPy, and a CI job does the same on any runner labelled `gpu` | ~6 months |
-| **4 — PIC** ✅ | Bidirectional S-matrix circuit solver, waveguide, directional coupler, all-pass and add-drop ring resonators, cross-validated against SAX; N×N MMI couplers on the self-imaging phase relations; a Mach-Zehnder interferometer assembled from them — switch, interleaver, or both; and PDK import, which reads a foundry's fitted numbers out of a JSON kit and refuses to extrapolate them past the window they were fitted in | — |
+| **4 — PIC** ✅ | Bidirectional S-matrix circuit solver, waveguide, directional coupler, all-pass and add-drop ring resonators, cross-validated against SAX; N×N MMI couplers on the self-imaging phase relations; a Mach-Zehnder interferometer assembled from them — switch, interleaver, or both; and PDK import, which reads a foundry's fitted numbers out of a JSON kit and refuses to extrapolate them past the window they were fitted in; and birefringence, with each guided polarization carrying its own indices through the same reduction | — |
 
 ¹ One developer, part-time. Estimates, not commitments.
 
@@ -1947,6 +2009,11 @@ Every physics block ships with a test against a closed-form result, run in CI
 | A whole symbol is invisible | Delay by one symbol period and the estimate does not move — the limit is `\|A\|²`, not the code | ✅ |
 | Every shipped project still opens | All six `.maiman` files load, run, and carry their canvas layout — the first thing a new user opens, and nothing checked them before | ✅ |
 | **A pilot is an erasure, not an error** | LLR set to zero where the coder's bits were overwritten: 4.9e-4 out of a 9.9e-3 channel, against 2.8e-2 if they are believed | ✅ |
+| **A ring resonates at two sets of wavelengths** | Two combs, each matching `c/(n_g·L)` for its own group index to a part in a thousand, and their ratio the ratio of the indices | ✅ |
+| The combs coincide when the indices do | The control for the above — an off-by-one in the stacking would separate them where there is nothing to separate them | ✅ |
+| Stacking reduces exactly to one polarization | Same indices twice reproduces the single-polarization matrix element for element, and the block's output to `rel=1e-12` | ✅ |
+| The modes do not leak into each other | Exactly zero, checked at the resonance where circulation would amplify any leak into something visible | ✅ |
+| A cross term lands where the solver finds it | Nothing produces one; the matrix can still hold it, so block-diagonal stays a model's choice | ✅ |
 | **Gain dynamics settle onto the static solve** | The reservoir ODE integrated to rest lands on `EDFA.effective_gain` to 1e-9, at seven input powers — two code paths sharing no arithmetic | ✅ |
 | The effective time constant is `τ/(1+P_out/P_sat)` | Measured from a step response against the closed form, to a part in a thousand, and monotone in drive | ✅ |
 | A transient is far longer than a window | 25,000 windows at the most saturated point — the measurement the decision to keep it out of the component rests on | ✅ |

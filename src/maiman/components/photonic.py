@@ -30,12 +30,14 @@ from typing import Any
 import numpy as np
 
 from ..circuit import SMatrix
-from ..component import Component, Param, PortType
+from ..component import BoolParam, Component, Param, PortType
 from ..context import SimulationContext
 from ..kernels import dispersion_to_beta2
 from ..photonics import (
     SILICON_STRIP_NEFF,
+    SILICON_STRIP_NEFF_TM,
     SILICON_STRIP_NGROUP,
+    SILICON_STRIP_NGROUP_TM,
     directional_coupler,
     free_spectral_range,
     mach_zehnder,
@@ -115,6 +117,7 @@ def apply_response(
     signal: OpticalSignal,
     response: Callable[[np.ndarray], np.ndarray],
     *,
+    response_y: Callable[[np.ndarray], np.ndarray] | None = None,
     period: float | None = None,
     resolution: float | None = None,
     accumulated_gvd: float | None = None,
@@ -125,18 +128,31 @@ def apply_response(
     where in the spectrum it is being asked about — which is what makes a ring
     resonate at the wavelengths it should rather than at the ones the sampling
     grid happens to start at.
+
+    **``response_y`` is what makes a block birefringent.** Left out, one response
+    is applied to both field components, which says the device treats the two
+    polarizations identically — true of a fibre and false of every strip
+    waveguide ever fabricated. Given, ``Ex`` gets ``response`` and ``Ey`` gets
+    ``response_y``, and a device can resonate at two sets of wavelengths.
+
+    The axis mapping is a modelling assumption and is stated rather than implied:
+    **``Ex`` is the chip's TE mode and ``Ey`` its TM**, which says the die is
+    aligned to the signal's own x axis. A real coupling into a chip is through a
+    grating or an edge coupler with its own alignment and its own extinction, and
+    neither is modelled here.
     """
     bands: list[Band] = []
     for band in signal.bands:
         absolute = band.f0 + np.fft.fftfreq(band.num_samples, d=1.0 / band.fs)
         transfer = response(absolute)
+        transfer_y = transfer if response_y is None else response_y(absolute)
         bands.append(
             replace(
                 band,
                 Ex=np.fft.ifft(np.fft.fft(band.Ex.astype(np.complex128)) * transfer).astype(
                     band.Ex.dtype
                 ),
-                Ey=np.fft.ifft(np.fft.fft(band.Ey.astype(np.complex128)) * transfer).astype(
+                Ey=np.fft.ifft(np.fft.fft(band.Ey.astype(np.complex128)) * transfer_y).astype(
                     band.Ey.dtype
                 ),
             )
@@ -145,7 +161,12 @@ def apply_response(
     noise: list[NoiseBin] = []
     for bin_ in signal.noise:
         factor = average_power_response(bin_, response, period=period, resolution=resolution)
-        noise.append(replace(bin_, psd_x=bin_.psd_x * factor, psd_y=bin_.psd_y * factor))
+        factor_y = (
+            factor
+            if response_y is None
+            else average_power_response(bin_, response_y, period=period, resolution=resolution)
+        )
+        noise.append(replace(bin_, psd_x=bin_.psd_x * factor, psd_y=bin_.psd_y * factor_y))
 
     return OpticalSignal(
         bands=tuple(bands),
@@ -216,18 +237,82 @@ class _Photonic(Component):
         0.0, unit="ps/nm/km", doc="Waveguide dispersion D; negligible below a millimetre"
     )
 
+    #: Off by default, and declared as an idealisation the way ``saturate`` is on
+    #: the EDFA. A strip waveguide is strongly birefringent and modelling it as
+    #: though it were not is a *choice*; what is not acceptable is making that
+    #: choice silently. Turning it on changes the numbers of any link that has a
+    #: photonic block in it, which is the point of it being a flag someone throws
+    #: rather than a default that moves under an existing project.
+    birefringent = BoolParam(False, doc="Give TM its own indices instead of TE's")
+    n_eff_tm = Param(
+        SILICON_STRIP_NEFF_TM,
+        unit="",
+        min=1.0,
+        max=5.0,
+        doc="Effective index of the TM mode; ignored unless birefringent",
+    )
+    n_group_tm = Param(
+        SILICON_STRIP_NGROUP_TM,
+        unit="",
+        min=1.0,
+        max=10.0,
+        doc="Group index of the TM mode; ignored unless birefringent",
+    )
+
     def reference_frequency(self) -> float:
         """The frequency the indices are quoted at [Hz]."""
         return wavelength_to_frequency(self.si("reference_wavelength"))
 
-    def _waveguide_kwargs(self) -> dict[str, Any]:
+    def _waveguide_kwargs(self, polarization: str = "te") -> dict[str, Any]:
+        """The waveguide one polarization sees.
+
+        Loss and dispersion are shared. A real strip has different numbers for
+        both — TM overlaps the sidewalls less and the substrate more — but they
+        are per-process and this library will not invent one: the two indices are
+        what split the resonances, and they are what is offered. A fitted set
+        belongs in a PDK, where :mod:`maiman.pdk` already refuses to extrapolate
+        it past the window it was fitted in.
+        """
+        transverse_magnetic = polarization == "tm" and bool(self.birefringent)
         return {
-            "n_eff": self.n_eff,
-            "n_group": self.n_group,
+            "n_eff": self.n_eff_tm if transverse_magnetic else self.n_eff,
+            "n_group": self.n_group_tm if transverse_magnetic else self.n_group,
             "reference_frequency": self.reference_frequency(),
             "dispersion": self.si("dispersion"),
             "loss_db_per_m": self.si("propagation_loss"),
         }
+
+    def _polarization_factories(self) -> dict[str, Callable[[np.ndarray], SMatrix]]:
+        """One solved-circuit factory per polarization this block distinguishes.
+
+        Built once and handed round, because :func:`solve_once` caches on the
+        factory it wraps: rebuilding one inside a loop over output ports would
+        give every port a fresh empty cache and solve the same circuit again.
+
+        A block that is not birefringent returns a single entry, and the TM field
+        then goes through the same response TE does — which is the old behaviour,
+        reached by not asking a second question rather than by asking it and
+        discarding the answer.
+        """
+        factories = {"te": self._matrix_factory("te")}
+        if self.birefringent:
+            factories["tm"] = self._matrix_factory("tm")
+        return factories
+
+    @staticmethod
+    def _paired_responses(
+        factories: dict[str, Callable[[np.ndarray], SMatrix]], output: str, input_: str
+    ) -> tuple[Callable[[np.ndarray], np.ndarray], Callable[[np.ndarray], np.ndarray] | None]:
+        """``(response for Ex, response for Ey or None)`` between two ports."""
+        transverse_electric = port_response(factories["te"], output, input_)
+        if "tm" not in factories:
+            return transverse_electric, None
+        return transverse_electric, port_response(factories["tm"], output, input_)
+
+    def _matrix_factory(
+        self, polarization: str = "te"
+    ) -> Callable[[np.ndarray], SMatrix]:  # pragma: no cover - overridden
+        raise NotImplementedError
 
 
 class Waveguide(_Photonic):
@@ -259,12 +344,8 @@ class Waveguide(_Photonic):
     def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
         signal: OpticalSignal = inputs["in"]
         length = self.si("length")
-        settings = self._waveguide_kwargs()
-
-        def response(frequencies: np.ndarray) -> np.ndarray:
-            return straight_waveguide(frequencies, length=length, **settings).transmission(
-                "out", "in"
-            )
+        factories = self._polarization_factories()
+        response, response_y = self._paired_responses(factories, "out", "in")
 
         beta2 = dispersion_to_beta2(
             self.si("dispersion"), frequency_to_wavelength(self.reference_frequency())
@@ -273,9 +354,15 @@ class Waveguide(_Photonic):
             "out": apply_response(
                 signal,
                 response,
+                response_y=response_y,
                 accumulated_gvd=signal.accumulated_gvd + beta2 * length,
             )
         }
+
+    def _matrix_factory(self, polarization: str = "te") -> Callable[[np.ndarray], SMatrix]:
+        length = self.si("length")
+        settings = self._waveguide_kwargs(polarization)
+        return solve_once(lambda f: straight_waveguide(f, length=length, **settings))
 
 
 class DirectionalCoupler(Component):
@@ -492,18 +579,18 @@ class MachZehnderInterferometer(_Photonic):
         return C_LIGHT / (self.n_group * difference) if difference else float("inf")
 
     def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
-        matrix_for = self._matrix_factory()
+        factories = self._polarization_factories()
         outputs: dict[str, Signal] = {}
         for out in self.outputs:
-            contributions = [
-                apply_response(inputs[in_], port_response(matrix_for, out, in_))
-                for in_ in self.inputs
-            ]
+            contributions = []
+            for in_ in self.inputs:
+                response, response_y = self._paired_responses(factories, out, in_)
+                contributions.append(apply_response(inputs[in_], response, response_y=response_y))
             outputs[out] = _sum_signals(contributions, where=f"{self.label}.{out}")
         return outputs
 
-    def _matrix_factory(self) -> Callable[[np.ndarray], SMatrix]:
-        settings = self._waveguide_kwargs()
+    def _matrix_factory(self, polarization: str = "te") -> Callable[[np.ndarray], SMatrix]:
+        settings = self._waveguide_kwargs(polarization)
         arm = self.si("arm_length")
         difference = self.si("length_difference")
         shift = self.si("phase_shift")
@@ -595,7 +682,7 @@ class RingResonator(_Photonic):
         return float("inf") if width == 0.0 else self.free_spectral_range() / width
 
     def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
-        matrix_for = self._matrix_factory()
+        factories = self._polarization_factories()
         # The comb repeats every free spectral range and its narrowest feature is
         # one resonance: the first says how far the noise average has to reach,
         # the second how finely. See `average_power_response`.
@@ -603,20 +690,23 @@ class RingResonator(_Photonic):
         resolution = self.linewidth()
         outputs: dict[str, Signal] = {}
         for out in ("through", "drop"):
-            contributions = [
-                apply_response(
-                    inputs[in_],
-                    port_response(matrix_for, out, in_),
-                    period=period,
-                    resolution=resolution,
+            contributions = []
+            for in_ in self.inputs:
+                response, response_y = self._paired_responses(factories, out, in_)
+                contributions.append(
+                    apply_response(
+                        inputs[in_],
+                        response,
+                        response_y=response_y,
+                        period=period,
+                        resolution=resolution,
+                    )
                 )
-                for in_ in self.inputs
-            ]
             outputs[out] = _sum_signals(contributions, where=f"{self.label}.{out}")
         return outputs
 
-    def _matrix_factory(self) -> Callable[[np.ndarray], SMatrix]:
-        settings = self._waveguide_kwargs()
+    def _matrix_factory(self, polarization: str = "te") -> Callable[[np.ndarray], SMatrix]:
+        settings = self._waveguide_kwargs(polarization)
         length = self.si("length")
         coupling, drop = self.coupling, self.drop_coupling
         return solve_once(

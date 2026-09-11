@@ -26,6 +26,7 @@ silicon strip waveguide at 1550 nm.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import numpy as np
@@ -42,6 +43,162 @@ SILICON_STRIP_NEFF = 2.44
 #: that sets a ring's free spectral range, so confusing the two is the single
 #: most common way to get an FSR wrong by a factor of two.
 SILICON_STRIP_NGROUP = 4.20
+
+#: The same waveguide's **TM** mode, which as far as every number here is
+#: concerned is a different waveguide. A 220 nm-thick strip confines TM far more
+#: weakly than TE — the mode spreads into the cladding and sees less silicon — and
+#: both indices come down with it. Representative values for 500 x 220 nm at
+#: 1550 nm from the same source as the TE pair; a real design takes them from a
+#: mode solver or a PDK, because they move with every nanometre of width.
+#:
+#: The gap is not small, and that is the point: 2.44 against 1.78 is a 27 %
+#: difference in phase index, so a ring resonates at two sets of wavelengths
+#: nowhere near each other, and 4.20 against 3.80 puts the two combs on different
+#: free spectral ranges as well.
+SILICON_STRIP_NEFF_TM = 1.78
+SILICON_STRIP_NGROUP_TM = 3.80
+
+#: Separator between a port's name and the polarization it carries. No port name
+#: in this library contains it, so a split is unambiguous and an un-suffixed name
+#: stays a legal single-polarization port.
+POLARIZATION_SEPARATOR = "@"
+
+#: The two guided polarizations, in the order a dual-polarization matrix stacks
+#: them. Named rather than numbered: "the second block" is not something anyone
+#: can check against a foundry datasheet, and "tm" is.
+POLARIZATIONS = ("te", "tm")
+
+
+def polarized_port(port: str, polarization: str) -> str:
+    """``"in"`` and ``"te"`` make ``"in@te"``, which is what the solver sees."""
+    if POLARIZATION_SEPARATOR in port:
+        raise ValueError(
+            f"port name {port!r} already contains {POLARIZATION_SEPARATOR!r}, so it "
+            f"cannot carry a polarization suffix unambiguously"
+        )
+    return f"{port}{POLARIZATION_SEPARATOR}{polarization}"
+
+
+def dual_polarization(
+    matrices: Mapping[str, SMatrix],
+    *,
+    cross: Mapping[tuple[str, str], np.ndarray] | None = None,
+) -> SMatrix:
+    """Stack one matrix per polarization into a single scattering matrix.
+
+    **The solver needs nothing added to it for this, and that was worth checking
+    rather than believing.** The roadmap described polarization resolution as
+    "a second index on every device", which would have meant reworking every
+    model and the reduction with them. It is not that.
+    :class:`~maiman.circuit.SMatrix` identifies ports by *name*, so a device with
+    an ``in`` and an ``out`` on each of two polarizations is a four-port device,
+    and :meth:`~maiman.circuit.Circuit.solve` already solves those. All this does
+    is build that four-port matrix out of two two-port ones.
+
+    The result is **block diagonal**: light launched on one polarization stays on
+    it. That is right for a straight waveguide and for a symmetric coupler, where
+    the two modes are orthogonal solutions of the same structure and do not talk
+    to each other. It is *not* right in general — a bend, a sidewall that is not
+    vertical, and a mode converter placed there on purpose all couple TE to TM —
+    so ``cross`` takes those terms, keyed by ``(from, to)`` and shaped like one
+    device block. Nothing in this library produces one. The argument exists
+    because the solver never needed the assumption and should not acquire it
+    here, at the one place where leaving it out would be invisible.
+
+    Every matrix must carry the same ports on the same frequency grid. Different
+    ports would mean the polarizations were measured on different devices, which
+    is not a device.
+    """
+    if not matrices:
+        raise ValueError("a dual-polarization matrix needs at least one polarization")
+    items = list(matrices.items())
+    first = items[0][1]
+    count = len(first.ports)
+    for name, matrix in items[1:]:
+        if matrix.ports != first.ports:
+            raise ValueError(
+                f"every polarization must describe the same device, but {name!r} has "
+                f"ports {list(matrix.ports)} against {list(first.ports)}"
+            )
+        if not np.array_equal(matrix.frequencies, first.frequencies):
+            raise ValueError(
+                f"every polarization must be evaluated on the same frequency grid, "
+                f"and {name!r} is not"
+            )
+
+    ports = tuple(polarized_port(port, name) for name, _ in items for port in first.ports)
+    size = count * len(items)
+    shape = (first.frequencies.shape[0], count, count)
+    s = np.zeros((first.frequencies.shape[0], size, size), dtype=np.complex128)
+    offsets = {name: index * count for index, (name, _) in enumerate(items)}
+    for name, matrix in items:
+        start = offsets[name]
+        s[:, start : start + count, start : start + count] = matrix.s
+
+    for (source, target), block in (cross or {}).items():
+        for end, role in ((source, "source"), (target, "target")):
+            if end not in offsets:
+                raise KeyError(
+                    f"cross term names {end!r} as its {role}, which is not a polarization "
+                    f"here; have {sorted(offsets)}"
+                )
+        if source == target:
+            raise ValueError(
+                f"a cross term from {source!r} to itself is that polarization's own matrix"
+            )
+        values = np.asarray(block, dtype=np.complex128)
+        if values.shape != shape:
+            raise ValueError(
+                f"cross term {source!r}->{target!r} must be shaped like one device "
+                f"block, {shape}, got {values.shape}"
+            )
+        row, column = offsets[target], offsets[source]
+        s[:, row : row + count, column : column + count] = values
+
+    return SMatrix(ports=ports, frequencies=first.frequencies, s=s)
+
+
+def link_polarizations(
+    circuit: Circuit,
+    a_instance: str,
+    a_port: str,
+    b_instance: str,
+    b_port: str,
+    *,
+    polarizations: Sequence[str] = POLARIZATIONS,
+) -> Circuit:
+    """Wire a port to a port, on every polarization, as one call.
+
+    A wire in a photonic circuit is a physical waveguide and it carries both
+    modes. Writing the two :meth:`~maiman.circuit.Circuit.link` calls out by hand
+    works, and is exactly where a circuit acquires a connection on TE that it
+    does not have on TM — a fault that yields a perfectly plausible spectrum on
+    one polarization and silence on the other.
+    """
+    for polarization in polarizations:
+        circuit.link(
+            a_instance,
+            polarized_port(a_port, polarization),
+            b_instance,
+            polarized_port(b_port, polarization),
+        )
+    return circuit
+
+
+def expose_polarizations(
+    circuit: Circuit,
+    name: str,
+    instance: str,
+    port: str,
+    *,
+    polarizations: Sequence[str] = POLARIZATIONS,
+) -> Circuit:
+    """Expose one instance's port on every polarization, under suffixed names."""
+    for polarization in polarizations:
+        circuit.expose(
+            polarized_port(name, polarization), instance, polarized_port(port, polarization)
+        )
+    return circuit
 
 
 def propagation_constant(

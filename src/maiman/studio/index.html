@@ -2269,6 +2269,27 @@ verdict, and DESIGN.md
      "unit": "ps/nm/km",
      "doc": "Waveguide dispersion D; negligible below a millimetre"
     },
+    "birefringent": {
+     "type": "bool",
+     "default": false,
+     "doc": "Give TM its own indices instead of TE's"
+    },
+    "n_eff_tm": {
+     "type": "float",
+     "default": 1.78,
+     "unit": "",
+     "min": 1.0,
+     "max": 5.0,
+     "doc": "Effective index of the TM mode; ignored unless birefringent"
+    },
+    "n_group_tm": {
+     "type": "float",
+     "default": 3.8,
+     "unit": "",
+     "min": 1.0,
+     "max": 10.0,
+     "doc": "Group index of the TM mode; ignored unless birefringent"
+    },
     "arm_length": {
      "type": "float",
      "default": 100.0,
@@ -2845,6 +2866,27 @@ verdict, and DESIGN.md
      "unit": "ps/nm/km",
      "doc": "Waveguide dispersion D; negligible below a millimetre"
     },
+    "birefringent": {
+     "type": "bool",
+     "default": false,
+     "doc": "Give TM its own indices instead of TE's"
+    },
+    "n_eff_tm": {
+     "type": "float",
+     "default": 1.78,
+     "unit": "",
+     "min": 1.0,
+     "max": 5.0,
+     "doc": "Effective index of the TM mode; ignored unless birefringent"
+    },
+    "n_group_tm": {
+     "type": "float",
+     "default": 3.8,
+     "unit": "",
+     "min": 1.0,
+     "max": 10.0,
+     "doc": "Group index of the TM mode; ignored unless birefringent"
+    },
     "length": {
      "type": "float",
      "default": 100.0,
@@ -3157,6 +3199,27 @@ verdict, and DESIGN.md
      "default": 0.0,
      "unit": "ps/nm/km",
      "doc": "Waveguide dispersion D; negligible below a millimetre"
+    },
+    "birefringent": {
+     "type": "bool",
+     "default": false,
+     "doc": "Give TM its own indices instead of TE's"
+    },
+    "n_eff_tm": {
+     "type": "float",
+     "default": 1.78,
+     "unit": "",
+     "min": 1.0,
+     "max": 5.0,
+     "doc": "Effective index of the TM mode; ignored unless birefringent"
+    },
+    "n_group_tm": {
+     "type": "float",
+     "default": 3.8,
+     "unit": "",
+     "min": 1.0,
+     "max": 10.0,
+     "doc": "Group index of the TM mode; ignored unless birefringent"
     },
     "length": {
      "type": "float",
