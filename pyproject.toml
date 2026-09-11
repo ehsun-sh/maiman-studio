@@ -13,7 +13,11 @@ license-files = ["LICENSE"]
 authors = [{ name = "Ehsan Shahmohammadi" }]
 keywords = ["photonics", "optical-communications", "simulation", "fiber-optics", "dsp"]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    # 3, not 4. Beta would claim an API that is settling, and CONTRIBUTING.md
+    # says the opposite in as many words: the core is still cheap to change and
+    # that is the point. Pre-Alpha stopped being true some time before the
+    # release -- it means "not usable yet", and this installs and runs links.
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",

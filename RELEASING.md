@@ -1,6 +1,6 @@
 # Releasing
 
-`maiman` is not on PyPI yet. This is what stands between here and there.
+`maiman` is on PyPI. This is how a release is cut.
 
 Everything mechanical is in [`.github/workflows/release.yml`](.github/workflows/release.yml). The
 steps below are the ones a workflow cannot do: they involve web interfaces and an account, and
@@ -8,9 +8,9 @@ they are deliberately the only ones.
 
 ## The version
 
-The package declares **`0.1.0`** — a real release, not a `.devN` placeholder, so
-`pip install maiman` will find it. The `Development Status :: 2 - Pre-Alpha` classifier says what
-it is, and `0.1.0` does not claim otherwise.
+The package declares **`0.1.0`**, which is published. The next release picks the next number;
+a `.devN` version is not worth publishing, because pip excludes pre-releases and
+`pip install maiman` would not find it.
 
 The number lives in **three** places and they are checked against each other on every commit:
 `pyproject.toml`, `src/maiman/__init__.py`, and `CITATION.cff`. Change one and the suite tells you
@@ -30,8 +30,10 @@ way a stranger will.
 No API token is involved anywhere in this repository, and none should be. PyPI mints trust from
 GitHub's OIDC identity instead — nothing long-lived exists to leak or rotate.
 
-Because the project does not exist on PyPI yet, register it as a **pending publisher**:
-<https://pypi.org/manage/account/publishing/>
+Already done for this repository, and recorded here for anyone forking it. The first
+registration is a **pending publisher**, because the project does not exist on the index yet:
+<https://pypi.org/manage/account/publishing/>. Afterwards it lives under the project's own
+settings.
 
 | Field | Value |
 | :--- | :--- |
@@ -91,19 +93,16 @@ suite cannot do:
 * more than forty components register.
 
 
-## After the first successful upload
+## After a release
 
-Three statements in this repository are true only until the moment the upload lands, and nothing
-can check them from inside:
+Three things go stale the moment an upload lands, and no test can check them without a network
+call in CI:
 
-* `README.md` says "Not on PyPI yet" above the install instructions. Replace it with
-  `pip install maiman`.
-* `RELEASING.md` — this file — opens with the same claim.
-* `CITATION.cff` has no `date-released`, on the grounds that there has been no release. Add the
-  date the release was actually published, not the date the version was bumped.
-
-None of these is guarded, because a test cannot ask PyPI whether an upload happened without a
-network call in CI. They are listed here instead, which is the honest substitute.
+* `README.md` and this file describe the install. They were updated at 0.1.0.
+* `CITATION.cff` needs `date-released` set to the date the release was *published*, not the date
+  the version was bumped. Its `version` is already checked against the package on every commit.
+* The version in `pyproject.toml`, `src/maiman/__init__.py` and `CITATION.cff` must move together
+  for the next release — that one *is* checked.
 
 ## When the upload fails with `invalid-publisher`
 

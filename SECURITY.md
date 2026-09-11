@@ -9,8 +9,8 @@ say about it.
 If that is not available, email **ehsun.ca@gmail.com**. Please do not open a public issue for a
 vulnerability first.
 
-Expect an acknowledgement within a week. This is a pre-alpha project maintained by one person in
-their own time, and pretending to a response time it cannot meet would be worse than saying so.
+Expect an acknowledgement within a week. This is a 0.x project maintained by one person in their
+own time, and pretending to a response time it cannot meet would be worse than saying so.
 
 ## Supported versions
 

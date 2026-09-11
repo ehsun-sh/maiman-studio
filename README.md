@@ -17,36 +17,42 @@ link in this simulator descends from.*
 
 ---
 
-> ### ⚠️ Project status: pre-alpha — Phases 0 through 4 complete.
+> ### Project status: 0.1.0 — released, and still moving.
 >
-> Two complete links run end to end and produce numbers that match theory.
-> **Direct detection:** PRBS → NRZ → CW laser → MZM → fiber (loss + dispersion) → PIN → filter →
-> eye/Q/BER. **Coherent:** PRBS → Gray-coded M-QAM → RRC shaping → IQ modulator → **fiber** →
-> 90° hybrid with balanced detection → dispersion compensation → carrier recovery → EVM/SNR and
-> counted errors, at every whole number of bits per symbol up to 256-QAM, and dual polarization at 256 Gb/s with a blind butterfly
-> equaliser. The coherent chain now runs over a real span: 1000 km of fiber leaves nothing
-> recoverable at the photodiode, and the receiver returns it to back-to-back quality.
-> Every physics block is validated against a closed-form result in CI.
+> `pip install maiman`. Phases 0 through 4 are done: **48 components, 1184 tests, and every
+> physics block checked against a closed-form result in CI.**
 >
-> Projects save to versioned JSON and sweeps are first-class, so a curve is one call rather than
-> a hand-written loop that mutates the graph.
+> **Links run end to end.** Direct detection — PRBS → NRZ → laser → MZM → fiber → PIN → filter →
+> eye/Q/BER. Coherent — Gray-coded M-QAM at every whole number of bits per symbol to 256, RRC
+> shaping, IQ modulator, 90° hybrid with balanced detection, and a receiver that recovers the
+> sampling instant, the carrier frequency and the carrier phase *blind*, over 1000 km of fiber
+> that leaves nothing recoverable at the photodiode. Dual polarization at 256 Gb/s with a blind
+> butterfly equaliser.
 >
-> Fiber nonlinearity is solved by adaptive-step split-step Fourier, EDFAs emit ASE into the
-> noise-bin model so amplified multi-span links give correct OSNR **and a Q-factor that follows
-> from it** — signal-ASE and ASE-ASE beat noise are modelled in both detector families, and in both polarizations — and PMD
-> is drawn as a random realisation with the right Maxwellian statistics.
->
-> Channels interact: the split-step propagates them coupled, so a neighbour's power modulates
+> **Channels interact.** The split-step propagates them coupled, so a neighbour's power modulates
 > each channel's phase at twice the rate its own does, sliding past under walk-off derived from
-> the dispersion — and triplets of channels mix to put light where nobody launched it.
+> the dispersion, and triplets mix to put light where nobody launched it. EDFAs emit ASE into the
+> noise-bin model, saturate on total power so WDM channels share one inversion, and give an OSNR
+> **and a Q-factor that follows from it**.
 >
-> The interface is a working application: `maiman serve`, open the page, build a link by
-> dragging blocks and wires, press Run, sweep a parameter, save the project. Every number on screen
-> comes from the engine. See the [roadmap](#roadmap).
+> **Errors get corrected.** RS(255,239) per ITU-T G.709, and a soft-decision braided BCH staircase
+> decoded on log-likelihood ratios — which clears a line at 7.4e-3 that the hard code returns
+> untouched.
 >
-> This is not yet a useful simulator. It is a foundation with the expensive decisions made and
-> tested. Criticism of those decisions is worth more right now than any feature —
-> **[the architecture document](docs/ARCHITECTURE.md)** is where they are argued out.
+> **Photonic circuits solve** as bidirectional S-matrices, cross-validated against SAX to 7e-15,
+> with PDK import that reads a foundry's fitted numbers and refuses to extrapolate past the window
+> they were fitted in.
+>
+> **The interface is a working application**: `maiman serve`, build a link by dragging blocks and
+> wires, press Run, sweep a parameter, save the project. Every number on screen comes from the
+> engine.
+>
+> **0.x means the API is not stable yet.** That is the honest reading of the version and not a
+> formality — the core is still small enough that changing it is cheap, which makes now the most
+> useful time to argue with it. **[The architecture document](docs/ARCHITECTURE.md)** is where the
+> expensive decisions are set out, and criticism of them is still worth more than any feature.
+> What is *absent* is listed as plainly as what works: see the [roadmap](#roadmap) and the
+> per-section notes on what each model does not do.
 
 ---
 
@@ -1773,15 +1779,16 @@ and warns if you tell it not to.
 
 ## Installing
 
-Not on PyPI yet. From a checkout:
-
 ```bash
-pip install -e ".[dev]"
+pip install maiman
 ```
 
-[`RELEASING.md`](RELEASING.md) is what stands between that and `pip install maiman` — the
-mechanical half is a workflow that publishes with no API token anywhere (PyPI mints trust from
-GitHub's OIDC identity instead), and the half left is an account and two web forms.
+Python 3.11 or newer. The only runtime dependency is NumPy, deliberately — the interface ships
+inside the package, so `maiman serve` works from a plain install with nothing else to fetch.
+
+For a checkout, `pip install -e ".[dev]"`. Releases are published with PyPI trusted publishing,
+so no API token exists anywhere in this repository; [`RELEASING.md`](RELEASING.md) has the
+procedure.
 
 ## Citing this
 

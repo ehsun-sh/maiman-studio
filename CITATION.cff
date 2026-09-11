@@ -33,12 +33,12 @@ keywords:
   - photonic integrated circuits
 license: Apache-2.0
 version: 0.1.0
+date-released: '2026-09-11'
 
-# No `date-released`, deliberately. There has been no release: the version
-# above is a development version, the package is not on PyPI, and the field
-# would have to be invented to be present. Cite the repository and, if the
-# result matters, the commit you ran — `git rev-parse HEAD` — because a
-# pre-alpha tree is not a stable thing to cite by name alone.
+# `date-released` is the date 0.1.0 was published, not the date the version was
+# bumped -- they were the same day here, and will not always be.
 #
-# No ORCID and no affiliation either, for the same reason: neither is on
-# hand, and a citation file is exactly the wrong place to approximate.
+# No ORCID and no affiliation: neither is on hand, and a citation file is
+# exactly the wrong place to approximate. If the result matters, cite the commit
+# you ran as well as the version -- `git rev-parse HEAD` -- because a 0.x tree
+# moves between releases.
