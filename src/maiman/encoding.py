@@ -34,6 +34,7 @@ import numpy as np
 
 from .components.dsp import DispersionDiagnostics, FrequencyEstimate, TimingEstimate
 from .components.electrical import FECReport, SoftFECReport
+from .components.mapping import PilotEstimate
 from .kernels import PropagationDiagnostics
 from .signals import (
     BinarySignal,
@@ -293,6 +294,19 @@ def _timing(estimate: TimingEstimate) -> dict[str, Any]:
     }
 
 
+def _pilot(estimate: PilotEstimate) -> dict[str, Any]:
+    # The residual goes out in radians *and* the quarter turns as an integer,
+    # because they answer different questions: the integer is what was wrong and
+    # the residual is whether "a quarter turn" was the whole story.
+    return {
+        "kind": "pilot",
+        "rotation": number(estimate.rotation),
+        "quarter_turns": estimate.quarter_turns,
+        "pilots": estimate.pilots,
+        "residual": number(estimate.residual),
+    }
+
+
 def _soft_fec(report: SoftFECReport) -> dict[str, Any]:
     # ``corrections`` rather than a count of repaired codewords: an iterative
     # decoder has no such thing. It moves decisions, some of them more than once
@@ -362,6 +376,7 @@ def _dispersion(diagnostics: DispersionDiagnostics) -> dict[str, Any]:
 _ENCODERS: dict[type, Any] = {
     DispersionDiagnostics: _dispersion,
     FECReport: _fec,
+    PilotEstimate: _pilot,
     SoftFECReport: _soft_fec,
     FrequencyEstimate: _frequency,
     TimingEstimate: _timing,

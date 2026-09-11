@@ -30,7 +30,6 @@ from maiman.components import (
     ConstellationAnalyzer,
     ConstellationDiagram,
     CWLaser,
-    DifferentialDecoder,
     DispersionCompensator,
     ElectricalFilter,
     EyeDiagram,
@@ -43,6 +42,8 @@ from maiman.components import (
     NRZDriver,
     OpticalSpectrumAnalyzer,
     OSNRMeter,
+    PilotInserter,
+    PilotPhaseRecovery,
     PINPhotodiode,
     PowerMeter,
     PRBSGenerator,
@@ -391,12 +392,18 @@ def build(sequence_length: int = 4096) -> Graph:
     prbs = graph.add(
         PRBSGenerator(order=23.0, bits_per_symbol=float(BITS_PER_SYMBOL), label="prbs")
     )
+    # One mapper, not two. The second used to exist only to give the error
+    # analyser a non-differential copy of the same bits; with the quadrant
+    # resolved by pilots instead there is nothing to undo, so what was
+    # transmitted *is* the reference.
     mapper = graph.add(
-        QAMMapper(bits_per_symbol=float(BITS_PER_SYMBOL), differential=True, label="map")
+        QAMMapper(bits_per_symbol=float(BITS_PER_SYMBOL), differential=False, label="map")
     )
-    reference = graph.add(
-        QAMMapper(bits_per_symbol=float(BITS_PER_SYMBOL), differential=False, label="ref")
-    )
+    # Pilots replace payload rather than adding to it -- the window is a fixed
+    # number of symbols on the line -- so this costs 1/spacing of the rate, 1.6 %
+    # here. What it buys is a quarter turn resolved *without slicing*, which is
+    # what lets soft information reach a decoder. See PilotPhaseRecovery.
+    pilots = graph.add(PilotInserter(spacing=64.0, label="pil"))
     # Backed off because a root-raised-cosine waveform overshoots between symbols
     # and a full-swing drive would run the pre-distortion past arcsin(1).
     driver = graph.add(
@@ -454,18 +461,18 @@ def build(sequence_length: int = 4096) -> Graph:
     sampler = graph.add(IQSampler(matched_filter=True, roll_off=0.2, label="smp"))
     frequency = graph.add(FrequencyRecovery(label="fo"))
     recovery = graph.add(CarrierRecovery(window=64.0, test_phases=32.0, label="cr"))
-    decoder = graph.add(DifferentialDecoder(label="dec"))
-    # Two analysers, because the two numbers come from different places. EVM is a
-    # soft measurement and has to be taken on the recovered symbols; the decoder
-    # emits decisions, so an EVM after it would read zero however bad the link is.
-    # The error count is the opposite: it only exists once the data is decoded.
+    quadrant = graph.add(PilotPhaseRecovery(spacing=64.0, label="pqr"))
+    # One analyser now. There used to be two because the differential decoder
+    # emitted decisions: an EVM taken after it read exactly zero however bad the
+    # link was, so the soft measurement had to happen upstream and the error
+    # count downstream. Pilot recovery decides nothing, so both numbers come from
+    # the same place and one block reports them.
     analyzer = graph.add(ConstellationAnalyzer(ignore_edges=64.0, label="vsa"))
-    errors = graph.add(ConstellationAnalyzer(ignore_edges=64.0, label="ber"))
     diagram = graph.add(ConstellationDiagram(bins=96.0, extent=1.5, label="cd"))
 
     graph.connect(prbs["out"], mapper["in"])
-    graph.connect(prbs["out"], reference["in"])
-    graph.connect(mapper["out"], driver["in"])
+    graph.connect(mapper["out"], pilots["in"])
+    graph.connect(pilots["out"], driver["in"])
     graph.connect(laser, modulator["optical_in"])
     graph.connect(driver["i"], modulator["i"])
     graph.connect(driver["q"], modulator["q"])
@@ -480,15 +487,14 @@ def build(sequence_length: int = 4096) -> Graph:
     graph.connect(compensator["q"], timing["q"])
     graph.connect(timing["i"], sampler["i"])
     graph.connect(timing["q"], sampler["q"])
-    graph.connect(mapper["out"], sampler["reference"])
+    graph.connect(pilots["out"], sampler["reference"])
     graph.connect(sampler["out"], frequency["in"])
     graph.connect(frequency["out"], recovery["in"])
-    graph.connect(recovery["out"], decoder["in"])
-    graph.connect(recovery["out"], analyzer["in"])
-    graph.connect(mapper["out"], analyzer["reference"])
-    graph.connect(decoder["out"], errors["in"])
-    graph.connect(reference["out"], errors["reference"])
-    graph.connect(recovery["out"], diagram["in"])
+    graph.connect(recovery["out"], quadrant["in"])
+    graph.connect(pilots["out"], quadrant["reference"])
+    graph.connect(quadrant["out"], analyzer["in"])
+    graph.connect(pilots["out"], analyzer["reference"])
+    graph.connect(quadrant["out"], diagram["in"])
     return graph
 
 
@@ -499,7 +505,11 @@ def of_type(graph: Graph, kind: type) -> Any:
 def main() -> None:
     graph = build()
     analyzer = next(c for c in graph.components if c.label == "vsa")
-    errors = next(c for c in graph.components if c.label == "ber")
+    # One analyser now: pilot recovery decides nothing, so the soft measurement
+    # and the counted errors come from the same block. There used to be a second
+    # one downstream of the differential decoder because an EVM taken there read
+    # exactly zero.
+    errors = analyzer
     diagram = of_type(graph, ConstellationDiagram)
     meter = of_type(graph, PowerMeter)
     receiver = of_type(graph, CoherentReceiver)

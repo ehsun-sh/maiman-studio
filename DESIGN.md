@@ -293,16 +293,28 @@ Two findings worth keeping:
   a single-carrier link has nothing for an OSA to show — and tests keep both off
   this canvas rather than trusting that nobody wires one on.
 
-  The third is a sharper case, and it is not about space. This canvas uses
-  differential *quadrant* encoding, and
+  The third is there for space alone, now. It used to be there for a harder
+  reason: this canvas resolved its quarter-turn ambiguity with differential
+  *quadrant* encoding, and
   [`DifferentialDecoder`](src/maiman/components/mapping.py) has to slice to
-  difference the quadrant back out, so what leaves it is ideal constellation
-  points — measured, the distance to the nearest one is exactly zero and a
-  demapper reading it returns log-likelihood ratios of order 1e29. Soft
-  information does not survive a block that emits decisions, and tapping
-  upstream of it means demapping against an alphabet that may be a quarter turn
-  out. **Differential coding and soft-decision FEC are alternatives, not a
-  stack**, so the coded link declares an ideal carrier instead and says so.
+  difference the quadrant back out — so what left it was ideal constellation
+  points, the distance to the nearest one exactly zero, and a demapper reading
+  it returned log-likelihood ratios of order 1e29. Soft information does not
+  survive a block that emits decisions.
+
+  That is fixed rather than worked around. The canvas now carries
+  [`PilotInserter`](src/maiman/components/mapping.py) and `PilotPhaseRecovery`:
+  a known symbol every 64th position, and one constant angle removed from the
+  whole window. It decides nothing, so soft information reaches the end of the
+  chain — and it costs 1.6 % of the rate instead of the factor of two in errors
+  differential coding charges near threshold. The link came out *better*: 7.31 %
+  EVM against 7.34 %, and a counted BER of 3.6e-10 against 4.2e-10.
+
+  It also came out **smaller**. Two blocks went — the second mapper existed only
+  to hand the error analyser a non-differential copy of the same bits, and the
+  second analyser existed only because an EVM taken after the decision device
+  read exactly zero. Neither has a reason to exist any more, so nineteen blocks
+  became eighteen while gaining a capability.
 - No motion beyond the run pulse and the control transitions.
 - Progress on a long run is **done**, and done the way this section said it
   would have to be: a real fraction from the engine rather than an animation

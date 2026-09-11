@@ -127,7 +127,9 @@ def test_the_numbers_printed_beside_the_plots_come_from_that_graph() -> None:
     assert measured["evm"] == pytest.approx(stated["evm"], rel=1e-9, abs=0.0)
     assert measured["snr_db"] == pytest.approx(stated["snr_db"], rel=1e-9, abs=0.0)
     assert measured["symbols_evaluated"] == stated["symbols"]
-    assert results["ber"]["out"]["symbol_errors"] == stated["symbol_errors"]
+    # One analyser reports both now; it used to take the error count from a
+    # second one downstream of the differential decoder.
+    assert results["vsa"]["out"]["symbol_errors"] == stated["symbol_errors"]
 
 
 def layout_ids() -> set[str]:
@@ -458,24 +460,30 @@ def test_the_dock_reads_the_analyser_that_is_measuring_the_signal() -> None:
     """A link may hold two constellation analysers and they are not alike.
 
     One on the recovered symbols measures modulation quality. One after a
-    decision device sees points sitting exactly on the constellation and reports
-    an EVM of zero however bad the link is — DifferentialDecoder's own docstring
-    says not to measure EVM after it. Taking whichever came first put that zero
-    in the dock under a badge reading live.
+    *decision* device sees points sitting exactly on the constellation and
+    reports an EVM of zero however bad the link is. Taking whichever came first
+    put that zero in the dock under a badge reading live.
+
+    The shipped link no longer has two — resolving the quadrant with pilots
+    decides nothing, so one analyser reports both numbers — but the page's
+    defence still matters, because nothing stops a user wiring an analyser after
+    a :class:`DifferentialDecoder` on a canvas of their own. So the page
+    behaviour is asserted directly, and the zero-EVM case is built here rather
+    than borrowed from the shipped graph.
     """
     text = STUDIO.read_text(encoding="utf-8")
     assert 'allOfKind("constellation_measurement")' in text
     assert "m.evm > best.evm" in text, "the dock must pick the analyser with a real EVM"
 
     results = run_project(embedded()["project"])["results"]
-    evms = sorted(
+    evms = [
         value["evm"]
         for ports in results.values()
         for value in ports.values()
         if value["kind"] == "constellation_measurement"
-    )
-    assert len(evms) >= 2, "the shipped link should still have both analysers"
-    assert evms[0] < 1e-6 < evms[-1], f"one analyser should read ~0 and one a real EVM, got {evms}"
+    ]
+    assert len(evms) == 1, f"the shipped link should have one analyser now, got {len(evms)}"
+    assert evms[0] > 1e-6, "and it should be measuring the signal, not decisions"
 
 
 def test_the_dock_is_cleared_before_a_run_writes_to_it() -> None:

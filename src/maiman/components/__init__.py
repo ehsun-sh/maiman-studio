@@ -41,7 +41,12 @@ from .electrical import (
 )
 from .fiber import Fiber
 from .filters import ElectricalFilter, OpticalFilter, OpticalSpectrumAnalyzer
-from .mapping import DifferentialDecoder, QAMMapper
+from .mapping import (
+    DifferentialDecoder,
+    PilotInserter,
+    PilotPhaseRecovery,
+    QAMMapper,
+)
 from .meters import OSNRMeter, PowerMeter
 from .modulators import IQModulator, MachZehnderModulator
 from .passive import (
@@ -96,6 +101,8 @@ __all__ = [
     "OpticalSpectrumAnalyzer",
     "PINPhotodiode",
     "PRBSGenerator",
+    "PilotInserter",
+    "PilotPhaseRecovery",
     "PolarizationCombiner",
     "PolarizationRotator",
     "PowerMeter",

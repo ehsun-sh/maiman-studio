@@ -24,6 +24,7 @@ from maiman.components import (
     IQDriver,
     IQModulator,
     IQSampler,
+    PilotInserter,
     PRBSGenerator,
     QAMMapper,
     TimingRecovery,
@@ -31,7 +32,7 @@ from maiman.components import (
 )
 from maiman.dsp import derotate, estimate_carrier_offset, estimate_timing, resample_to_instant
 from maiman.modulation import qam_constellation, rotational_symmetry
-from maiman.signals import ConstellationMeasurement
+from maiman.signals import ConstellationMeasurement, SymbolSignal
 from maiman.units import C_LIGHT
 
 #: Enough symbols for the walk to actually wander, and a window edge to discard.
@@ -636,8 +637,10 @@ def shipped_variant(*, timing: bool, frequency: bool, detuned: bool = True) -> A
 
     graph = graph_from_dict(document)
     results = graph.run()
+    # One analyser reports both numbers since the quadrant stopped being
+    # resolved by a decision device.
     soft = next(c for c in graph.components if c.label == "vsa")
-    counted = next(c for c in graph.components if c.label == "ber")
+    counted = soft
     return results[soft], results[counted]
 
 
@@ -664,7 +667,13 @@ def test_the_reference_design_needs_both_front_end_stages() -> None:
     )
 
     frequency_only, frequency_errors = shipped_variant(timing=False, frequency=True)
-    assert frequency_errors.symbol_errors == 0
+    # Essentially clean rather than exactly clean. The pilots are the alphabet's
+    # *outermost* points, which is what makes them good for a phase estimate and
+    # also what makes them the first to fall over when the sampling instant is
+    # wrong -- so a mistimed link now leaves a couple of errors here where the
+    # differentially-coded one left none. A tenth of a symbol error per thousand
+    # does not affect the claim, and pinning it at exactly zero was brittle.
+    assert frequency_errors.symbol_errors < frequency_errors.symbols_evaluated // 1000
     assert 0.11 < frequency_only.evm < 0.15, "13 % EVM: the offset is gone, the instant is not"
 
     both, both_errors = shipped_variant(timing=True, frequency=True)
@@ -675,3 +684,169 @@ def test_the_reference_design_needs_both_front_end_stages() -> None:
     assert both.evm == pytest.approx(ideal.evm, abs=0.002), (
         "the two stages together should return the detuned link to the co-tuned one"
     )
+
+
+# ---------------------------------------------------------------------------
+# pilot symbols
+
+
+def piloted(spacing: float = 64.0, turns: int = 0, seed: int = 12) -> tuple[Any, Any, Any]:
+    """A mapper, a pilot inserter and a recovery stage, with a rotation injected.
+
+    No channel: the point under test is whether a known sequence resolves a
+    constant rotation, and a fiber in the way would only make that harder to see.
+    """
+    ctx = SimulationContext(bit_rate=32e9, samples_per_symbol=4, sequence_length=4096, seed=seed)
+    graph = Graph(ctx)
+    prbs = graph.add(PRBSGenerator(order=15.0, bits_per_symbol=4.0, label="prbs"))
+    mapper = graph.add(QAMMapper(bits_per_symbol=4.0, differential=False, label="map"))
+    pilots = graph.add(PilotInserter(spacing=spacing, label="pil"))
+    graph.chain(prbs, mapper, pilots)
+    return graph, mapper, pilots
+
+
+@pytest.mark.parametrize("turns", [0, 1, 2, 3])
+def test_pilots_resolve_every_quarter_turn_identically(turns: int) -> None:
+    """The whole job. A blind stage lands on one of four answers; this picks it.
+
+    Identically is the assertion that matters: if one rotation came back better
+    than another, the block would be resolving *some* of the ambiguity and the
+    link would work three times in four.
+    """
+    from maiman.components.mapping import PilotPhaseRecovery as _Recovery
+
+    graph, _mapper, pilots = piloted()
+    transmitted = graph.run(keep=[pilots])[pilots]
+    symbols = np.asarray(transmitted.symbols)
+    constellation = np.asarray(transmitted.constellation)
+
+    rotated = symbols * np.exp(1j * np.pi / 2.0 * turns)
+    reference = SymbolSignal(
+        symbols=symbols, symbol_rate=transmitted.symbol_rate, constellation=constellation
+    )
+    received = SymbolSignal(
+        symbols=rotated, symbol_rate=transmitted.symbol_rate, constellation=constellation
+    )
+
+    block = _Recovery(spacing=64.0, label="pqr")
+    out = block.run(graph.ctx, {"in": received, "reference": reference})
+    recovered = np.asarray(out["out"].symbols)
+    estimate = out["diagnostics"]
+
+    assert estimate.quarter_turns == turns
+    assert estimate.residual < 1e-6, "with no noise there is nothing but the ambiguity"
+    assert np.allclose(recovered, symbols, atol=1e-9)
+
+
+def test_the_pilots_are_constellation_points_and_are_not_all_the_same() -> None:
+    """Two failure modes that both look fine until they are measured.
+
+    An off-grid pilot — unit-power QPSK inside a 16-QAM link, say — sits exactly
+    between four legal points, so every pilot is counted as a symbol error and
+    the error rate measures the pilots rather than the channel. And a *constant*
+    pilot puts a line in the spectrum at the pilot rate, which is a real
+    impairment on a real link and an invisible one here.
+    """
+    graph, mapper, pilots = piloted(spacing=32.0)
+    results = graph.run(keep=[mapper, pilots])
+    plain = np.asarray(results[mapper].symbols)
+    with_pilots = np.asarray(results[pilots].symbols)
+    constellation = np.asarray(results[pilots].constellation)
+
+    positions = np.arange(0, with_pilots.size, 32)
+    inserted = with_pilots[positions]
+
+    distance = np.abs(inserted[:, None] - constellation[None, :]).min(axis=1)
+    assert np.allclose(distance, 0.0, atol=1e-12), "a pilot must be a legal symbol"
+
+    assert len(set(np.round(inserted, 9))) > 1, "a constant pilot is a spectral line"
+    # Drawn from the outermost ring, which is what a phase estimate is made of.
+    assert np.allclose(np.abs(inserted), np.abs(constellation).max(), atol=1e-12)
+
+    # Everything else is untouched.
+    mask = np.ones(with_pilots.size, dtype=bool)
+    mask[positions] = False
+    assert np.array_equal(with_pilots[mask], plain[mask])
+
+
+def test_the_recovery_reads_the_reference_only_where_the_pilots_are() -> None:
+    """Otherwise it is a data-aided estimator wearing a pilot block's name.
+
+    It is handed the whole transmitted sequence, the way ``IQSampler`` is, and
+    nothing in the type system stops it using all of it — which would make it far
+    better than any receiver could be and would look entirely normal. So the
+    reference is corrupted everywhere *except* the pilot positions and the answer
+    has to be unchanged.
+    """
+    from maiman.components.mapping import PilotPhaseRecovery as _Recovery
+
+    graph, _mapper, pilots = piloted()
+    transmitted = graph.run(keep=[pilots])[pilots]
+    symbols = np.asarray(transmitted.symbols)
+    constellation = np.asarray(transmitted.constellation)
+    rate = transmitted.symbol_rate
+
+    rng = np.random.default_rng(2)
+    received = SymbolSignal(
+        symbols=symbols * np.exp(1j * np.pi / 2.0),
+        symbol_rate=rate,
+        constellation=constellation,
+    )
+
+    honest = SymbolSignal(symbols=symbols, symbol_rate=rate, constellation=constellation)
+    corrupted = symbols.copy()
+    mask = np.ones(symbols.size, dtype=bool)
+    mask[np.arange(0, symbols.size, 64)] = False
+    corrupted[mask] = constellation[rng.integers(0, constellation.size, int(mask.sum()))]
+    lying = SymbolSignal(symbols=corrupted, symbol_rate=rate, constellation=constellation)
+
+    block = _Recovery(spacing=64.0, label="pqr")
+    clean = block.run(graph.ctx, {"in": received, "reference": honest})["diagnostics"]
+    messy = block.run(graph.ctx, {"in": received, "reference": lying})["diagnostics"]
+
+    assert messy.rotation == pytest.approx(clean.rotation, abs=1e-12)
+    assert messy.quarter_turns == clean.quarter_turns
+
+
+def test_soft_information_survives_the_flagship_now() -> None:
+    """The reason the flagship stopped using differential coding.
+
+    ``DifferentialDecoder`` resolves the same ambiguity by slicing, and a slice
+    puts every symbol exactly on a constellation point — measured on the shipped
+    graph before this change, the distance to the nearest point was exactly zero
+    and a demapper returned log-likelihood ratios of order 1e29. Pilot recovery
+    moves every symbol by one constant angle and decides nothing, so what leaves
+    it is still a measurement.
+    """
+    import sys
+    from pathlib import Path as _Path
+
+    sys.path.insert(0, str(_Path(__file__).resolve().parent.parent / "examples"))
+    from export_ui_data import build
+
+    from maiman.modulation import soft_demap
+
+    graph = build(sequence_length=1024)
+    quadrant = next(c for c in graph.components if c.label == "pqr")
+    output = graph.run(keep=[quadrant]).port(quadrant, "out")
+
+    symbols = np.asarray(output.symbols)
+    constellation = np.asarray(output.constellation)
+    distance = np.abs(symbols[:, None] - constellation[None, :]).min(axis=1)
+    assert distance.mean() > 1e-3, "the output is decisions, not measurements"
+
+    llr = soft_demap(symbols, constellation, 4)
+    assert np.all(np.isfinite(llr))
+    assert float(np.std(np.abs(llr))) > 0.0, "every bit equally certain is a hard decision"
+
+
+def test_a_spacing_with_too_few_pilots_is_refused() -> None:
+    """One pilot in a window estimates nothing, and saying so beats a NaN."""
+    ctx = SimulationContext(bit_rate=32e9, samples_per_symbol=4, sequence_length=64, seed=1)
+    graph = Graph(ctx)
+    prbs = graph.add(PRBSGenerator(order=15.0, bits_per_symbol=4.0, label="prbs"))
+    mapper = graph.add(QAMMapper(bits_per_symbol=4.0, differential=False, label="map"))
+    pilots = graph.add(PilotInserter(spacing=4096.0, label="pil"))
+    graph.chain(prbs, mapper, pilots)
+    with pytest.raises(ValueError, match="not enough"):
+        graph.run()

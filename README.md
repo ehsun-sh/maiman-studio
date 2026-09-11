@@ -422,6 +422,50 @@ it. A loop that let each stripe overwrite the previous one's result discarded ha
 braiding exists to produce. And a component decoder fed its own previous extrinsic agreed with
 itself, so its output collapsed to zero and its corrections quietly unwound two passes later.
 
+### How the flagship resolves its quarter turn
+
+Every blind stage in a coherent receiver gets the phase right *modulo* the
+alphabet's own symmetry — rotate a square QAM constellation by 90° and nothing about the received
+samples changes, so no amount of data distinguishes the two. Something has to break the tie, and
+there are exactly two ways: difference the quadrant out, or know some of the symbols.
+
+The link used to do the first. `DifferentialDecoder` has to **slice** in order to difference, and
+that is fatal to anything downstream that wants a measurement rather than a decision — the distance
+from its output to the nearest constellation point is *exactly zero*, and a demapper reading it
+returns LLRs of order 1e29.
+
+It now does the second. `PilotInserter` overwrites every 64th symbol with one the receiver already
+knows; `PilotPhaseRecovery` estimates `angle(Σ r·conj(p))` over those positions and removes one
+constant angle from the whole window. It decides nothing.
+
+```
+                      differential            pilots
+overhead              0 % of the rate         1.6 % of the rate
+cost near threshold   2× the errors           none
+EVM                   7.34 %                  7.31 %
+counted BER           4.20e-10                3.56e-10
+soft output           LLR ~1e29 (useless)     LLR ~121, real spread
+blocks on the canvas  19                      18
+```
+
+**It is cheaper in blocks, not just in errors.** Two disappeared with the differential arrangement:
+a second mapper that existed only to hand the error analyser a non-differential copy of the same
+bits, and a second analyser that existed only because an EVM taken after a decision device reads
+zero however bad the link is. Neither has a reason to exist now, so the canvas lost a block while
+gaining a capability.
+
+**Pilots replace payload, they do not add to it** — the window is a fixed number of symbols on the
+line, so a pilot costs a data symbol. They are drawn from the alphabet's own **outermost** points,
+which carry the most energy a phase estimate can be made from and, unlike an off-grid pilot, are
+legal symbols: unit-power QPSK pilots inside a 16-QAM link sit exactly between four points, and the
+error count then measures the pilots rather than the channel. The sequence is not constant either,
+because a repeated symbol puts a line in the spectrum at the pilot rate.
+
+The diagnostics report the **residual** — how far the removed angle sat from an exact multiple of
+90°. Everything upstream is supposed to leave only an ambiguity, so a few milliradians says that
+held. On the shipped link it is 10.9 mrad over 64 pilots. A large one would mean the constant
+removed here was covering for a stage that did not do its job.
+
 ### A coherent link that runs on soft decisions
 
 `examples/coherent_sdfec.maiman` — open it from the File menu. 32 GBd 16-QAM, the staircase code at
@@ -435,13 +479,12 @@ pre-FEC BER   post-FEC BER   blocks
 At −25 dBm the line is running at a few times 1e-3 — past what RS(255,239) can touch — and the
 payload comes out exact.
 
-**It is a separate project, and the reason is not layout.** The flagship coherent link uses
-differential *quadrant* encoding to survive the quarter-turn ambiguity every blind stage leaves,
-and `DifferentialDecoder` has to slice in order to difference the quadrant out. Measured on the
-shipped graph: the distance from its output to the nearest constellation point is **exactly zero**,
-and a demapper reading it returns LLRs of order 1e29. Soft information does not survive a block
-that emits decisions — and tapping upstream of it means demapping against an alphabet that may be a
-quarter turn out. **Differential coding and soft-decision FEC are alternatives, not a stack.**
+**It is a separate project because of the canvas, not because of the physics.** It used to be the
+physics: the flagship resolved its quarter turn by differencing, which requires slicing, and soft
+information does not survive a block that emits decisions. That is now fixed — the flagship uses
+pilots and its output is still a measurement — so the remaining reason is size. `DESIGN.md` puts
+the readable ceiling near twenty blocks and the flagship sits at eighteen; the coder, the demapper
+and the decoder would take it to twenty-one.
 
 So the coded link declares an **ideal carrier** — both lasers at 1550 nm, no linewidth — which
 removes the ambiguity rather than resolving it. A real system pairs soft FEC with pilot symbols,
@@ -1727,6 +1770,10 @@ Every physics block ships with a test against a closed-form result, run in CI
 | Timing recovery earns its place | 500 µm of waveguide costs 675 symbol errors in 1920; with the stage, none, and it moves by the 7.00 ps the guide actually holds | ✅ |
 | A whole symbol is invisible | Delay by one symbol period and the estimate does not move — the limit is `\|A\|²`, not the code | ✅ |
 | Every shipped project still opens | All six `.maiman` files load, run, and carry their canvas layout — the first thing a new user opens, and nothing checked them before | ✅ |
+| **Pilots resolve every quarter turn** | All four rotations recovered identically and exactly — resolving three of four would make the link work three times in a row and then not | ✅ |
+| Pilots are legal symbols, and vary | Drawn from the alphabet's outermost ring, so a pilot is not itself an error, and never constant, so it is not a spectral line | ✅ |
+| The estimate reads only the pilots | Every other reference symbol corrupted, and the answer unchanged to 1e-12 — otherwise it is a data-aided estimator in disguise | ✅ |
+| Soft information survives the flagship | Real distance to the nearest point and real spread in the LLRs, where the differential decoder gave zero and 1e29 | ✅ |
 | **Soft FEC clears what hard FEC cannot** | −25 dBm, 7.4e-3 on the line: the staircase delivers an exact payload where RS(255,239) returns its input | ✅ |
 | A staircase stripe row is a codeword | Structural, block by block — the braiding asserted rather than inferred from a curve | ✅ |
 | Chase beats its component code | Four errors recovered on a `t=2` code, because they were the least reliable bits | ✅ |
