@@ -598,9 +598,62 @@ was worse than an idealisation, because a clamp claims to be a saturation model 
 other retirements in this library that **does** change the link they describe, which is stated in
 the code rather than glossed. The value it carried was fitted to a fiction.
 
-What is still absent is **dynamics**: this is the steady state the erbium settles into, not the
-millisecond transient after a channel is added or dropped. That is a real effect in a deployed
-system and it is genuinely missing rather than approximated.
+### What happens between two steady states
+
+The gain above is the one the erbium *settles* into. Getting there takes milliseconds, and what a
+line system actually fears is the trip rather than either endpoint: an erbium amplifier shares one
+inversion between everything passing through it, so take channels away and the survivors inherit
+the gain those channels were using.
+
+**This is an analysis, not a block, and the reason is a measurement.** The relaxation constant is
+`τ / (1 + P_out/P_sat)` — for the 20 dB amplifier here, between 3.3 and 9.9 ms. A simulation window
+of 4096 symbols at 32 GBd is **128 ns**. The fastest transient is twenty-five thousand windows
+long, so within one window the gain is a constant, which is exactly what `EDFA` already assumes and
+is right to. A per-sample block could not show any part of this.
+
+So there is no `metastable_lifetime` parameter on the amplifier. **A parameter that cannot change
+the result of a run is a control the interface cannot back**, and this library does not ship those.
+The lifetime belongs to [`maiman.transient`](src/maiman/transient.py), which can use it.
+
+**It is the dynamic form of the equation already in the component, not a second model beside it.**
+Writing the Saleh reservoir in terms of `g = ln G`:
+
+```
+τ · dg/dt  =  ln G₀ − g − (e^g − 1)·P_in/P_sat
+```
+
+Set `dg/dt = 0` and it returns `G = G₀·exp(−(G−1)·P_in/P_sat)`, which is what `effective_gain`
+solves by Newton. Same `G₀`, same `P_sat`, exactly one quantity added — so a test integrates the
+ODE from a long way off and checks it lands on the component's own solver. Two code paths sharing
+no arithmetic, meeting to **1e-9**.
+
+Linearising about that rest point gives the effective constant, which is why a saturated amplifier
+answers in a fraction of its own lifetime: the stimulated emission draining the reservoir is itself
+proportional to how full it is. That closed form is tested against a step response measured from
+the integrator, to a part in a thousand.
+
+`python examples/edfa_transient.py` drops seven channels of eight from a −6 dBm comb:
+
+```
+                      one amplifier      down a chain of 8
+gain before                15.63 dB
+gain after                 18.84 dB
+survivor excursion         +3.21 dB               +9.94 dB
+settles in                 47.9 ms
+```
+
+**The chain is the number that matters**, and it accumulates *sub*-linearly rather than as eight
+times the first: each amplifier down the chain starts less saturated than the one before, so it has
+less compression left to give back. Eight times 3.21 dB would be 25.7; the measured figure is 9.94.
+Chaining is exact rather than approximate — there is no feedback from a later amplifier to an
+earlier one, so a span integrates in order, each taking the previous one's output on the same grid.
+
+**What is absent.** One reservoir means one gain for every wavelength, and a real erbium transient
+*tilts* the gain spectrum as the inversion changes, so a survivor's excursion depends on where in
+the band it sits. The pump is implicit in `G₀` and does not respond — a deployed amplifier has a
+control loop pushing back on exactly this excursion, and what is computed here is the uncontrolled
+case, which is the one such a loop is sized against. Both are real and both are missing rather than
+approximated.
 
 ### What RIN is for
 
@@ -1814,7 +1867,7 @@ time window, and results are reproducible.
 | :--- | :--- | :--- |
 | **0 — Foundations** ✅ | Signal model, context, port types, component base, registry, scheduler, `.maiman` project format, sweeps, CI | ~1 month |
 | **1 — MVP: linear link** ✅ | ✅ PRBS → NRZ → laser → MZM → fiber (α + CD) → PIN → filter → eye/Q/BER, validated end to end. **Python only, no GUI.** | ~2–3 months |
-| **1.5 — Nonlinear & amplified** ✅ | Adaptive-step SSFM, Kerr, EDFA with ASE, OSNR, PMD, APD, dispersion slope and its third-order term, cross-polarization Kerr coupling, inter-channel stimulated Raman scattering | ~2 months |
+| **1.5 — Nonlinear & amplified** ✅ | Adaptive-step SSFM, Kerr, EDFA with ASE and Saleh gain compression, erbium gain dynamics on their own time axis, OSNR, PMD, APD, dispersion slope and its third-order term, cross-polarization Kerr coupling, inter-channel stimulated Raman scattering | ~2 months |
 | **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier frequency and phase recovery, coarse frequency acquisition over the whole sampled band, blind square-law timing recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km with blind estimation of the accumulated value, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
 | **3 — GUI & WDM** | ✅ Wavelength-selective filters, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — the OSA's trace drawn in the dock, and 400G/800G reference designs validated against the OSNR relations, and a back-end indirection the propagation kernels dispatch through — CuPy runs it where a device exists, `maiman devices` cross-checks it against NumPy, and a CI job does the same on any runner labelled `gpu` | ~6 months |
 | **4 — PIC** ✅ | Bidirectional S-matrix circuit solver, waveguide, directional coupler, all-pass and add-drop ring resonators, cross-validated against SAX; N×N MMI couplers on the self-imaging phase relations; a Mach-Zehnder interferometer assembled from them — switch, interleaver, or both; and PDK import, which reads a foundry's fitted numbers out of a JSON kit and refuses to extrapolate them past the window they were fitted in | — |
@@ -1894,6 +1947,11 @@ Every physics block ships with a test against a closed-form result, run in CI
 | A whole symbol is invisible | Delay by one symbol period and the estimate does not move — the limit is `\|A\|²`, not the code | ✅ |
 | Every shipped project still opens | All six `.maiman` files load, run, and carry their canvas layout — the first thing a new user opens, and nothing checked them before | ✅ |
 | **A pilot is an erasure, not an error** | LLR set to zero where the coder's bits were overwritten: 4.9e-4 out of a 9.9e-3 channel, against 2.8e-2 if they are believed | ✅ |
+| **Gain dynamics settle onto the static solve** | The reservoir ODE integrated to rest lands on `EDFA.effective_gain` to 1e-9, at seven input powers — two code paths sharing no arithmetic | ✅ |
+| The effective time constant is `τ/(1+P_out/P_sat)` | Measured from a step response against the closed form, to a part in a thousand, and monotone in drive | ✅ |
+| A transient is far longer than a window | 25,000 windows at the most saturated point — the measurement the decision to keep it out of the component rests on | ✅ |
+| A coarse output grid still gets the right curve | Identical to 1e-6 dB across a 200× range of grid spacing; the integrator takes its own steps and reports how many | ✅ |
+| Relaxation is monotone | A first-order system cannot ring, so an overshoot is an integrator bug rather than physics | ✅ |
 | **Acquisition reaches where the fine stage folds** | Band located to ±200 MHz from 0 to ±200 GHz, both signs — 50× past the M-th power's unambiguous range | ✅ |
 | The two failure modes are opposites | The fine stage wrong by a whole `symbol_rate/M` at unchanged confidence; the coarse stage's Nyquist wrap correct to derotate by | ✅ |
 | No bandwidth is told to it | Roll-off 0 through 1 located identically — a window formulation given 1.6·R_s for a 1.2·R_s band lands 3.9 GHz out | ✅ |

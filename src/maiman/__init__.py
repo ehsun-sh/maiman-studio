@@ -37,10 +37,18 @@ from .signals import (
     PowerReading,
 )
 from .sweep import SweepPoint, SweepResult, sweep
+from .transient import (
+    METASTABLE_LIFETIME,
+    GainTransient,
+    effective_time_constant,
+    gain_transient,
+    step_schedule,
+)
 
 __version__ = "0.1.0"
 
 __all__ = [
+    "METASTABLE_LIFETIME",
     "PDK",
     "Band",
     "BandPower",
@@ -51,6 +59,7 @@ __all__ = [
     "ElectricalSignal",
     "EyeHistogram",
     "EyeMeasurement",
+    "GainTransient",
     "Graph",
     "GraphError",
     "NoiseBin",
@@ -67,12 +76,15 @@ __all__ = [
     "SweepResult",
     "UnknownComponentError",
     "__version__",
+    "effective_time_constant",
+    "gain_transient",
     "load",
     "load_pdk",
     "manifests",
     "pdk_from_dict",
     "registered_names",
     "save",
+    "step_schedule",
     "sweep",
 ]
 

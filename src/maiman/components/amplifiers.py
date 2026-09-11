@@ -75,10 +75,21 @@ class EDFA(Component):
     and it is why a high-gain amplifier left in the dark still does not deliver
     its small-signal gain: its own spontaneous emission is a load like any other.
 
-    What this does *not* model is **dynamics**. The gain here is the steady state
-    the erbium settles into; the millisecond transient after a channel is added
-    or dropped is a real effect in a deployed system and is genuinely absent
-    rather than approximated.
+    **The gain here is the steady state the erbium settles into**, and within any
+    window this engine runs that is not an approximation but the right answer.
+    The transient after a channel is added or dropped relaxes with
+    ``tau / (1 + P_out / P_sat)``, which for this amplifier is between 3.3 and
+    9.9 ms; a window of 4096 symbols at 32 GBd is 128 ns. The fastest transient
+    is twenty-five thousand windows long, so the gain across one of them is a
+    constant to a part in ten thousand.
+
+    What happens *between* steady states is :mod:`maiman.transient`, which
+    integrates the dynamic form of the very equation solved above — same ``G_0``,
+    same ``P_sat``, one lifetime added — and a test runs it to rest against
+    :meth:`effective_gain` to make sure the two never drift apart. It is an
+    analysis on its own time axis rather than a parameter here, because a
+    parameter that cannot change the result of a run is a control this library
+    will not show.
     """
 
     display_name = "EDFA"
