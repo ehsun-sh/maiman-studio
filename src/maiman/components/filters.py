@@ -6,7 +6,7 @@ from dataclasses import replace
 
 import numpy as np
 
-from ..component import Component, Param, PortType
+from ..component import BoolParam, Component, Param, PortType
 from ..context import SimulationContext
 from ..kernels import (
     gaussian_noise_bandwidth,
@@ -207,15 +207,37 @@ class OpticalSpectrumAnalyzer(Component):
     asymmetry is the whole reason OSNR has to be quoted in a stated reference
     bandwidth, and watching the two respond differently to one knob is the
     clearest demonstration of it available.
+
+    **Full span is the default, because an instrument you have to aim is no use
+    for finding something.** A real OSA powers up sweeping its whole range; you
+    narrow it once you know where to look. This one used to start at 1550 nm
+    with a 1000 GHz window and drop everything outside — so a laser at 1560 nm
+    produced an empty trace, and the only way to see it was to already know its
+    wavelength and type it in here as well. That is backwards: the wavelength is
+    usually the thing being measured.
+
+    With ``auto_span`` on, the window is whatever the signal actually occupies —
+    every band's sampled bandwidth and every noise bin, plus a small margin —
+    so the trace shows what is there rather than what you guessed. Turn it off
+    and ``center_wavelength`` and ``span`` mean what they always did, which is
+    what you want once you are looking at a known channel and care about
+    resolution rather than coverage.
+
+    Full span is not free and the instrument says so rather than hiding it:
+    ``points`` is fixed, so a wider window is a coarser trace. That is true of a
+    real OSA at full span too, and it is why the narrow mode still exists.
     """
 
     display_name = "Optical Spectrum Analyzer"
     category = "Measurements"
 
-    center_wavelength = Param(
-        1550.0, unit="nm", min=1200.0, max=1700.0, doc="Centre of the displayed span"
+    auto_span = BoolParam(
+        True, doc="Sweep whatever the signal occupies, instead of a window you set"
     )
-    span = Param(1000.0, unit="GHz", min=1.0, doc="Displayed frequency span")
+    center_wavelength = Param(
+        1550.0, unit="nm", min=1200.0, max=1700.0, doc="Centre of the span, when not automatic"
+    )
+    span = Param(1000.0, unit="GHz", min=1.0, doc="Displayed frequency span, when not automatic")
     points = Param(1024.0, unit="", min=16.0, max=16384.0, doc="Trace points")
     resolution_bandwidth = Param(
         12.5, unit="GHz", min=0.001, doc="Instrument resolution; 12.5 GHz is 0.1 nm at 1550 nm"
@@ -224,15 +246,50 @@ class OpticalSpectrumAnalyzer(Component):
     inputs = {"in": PortType.OPTICAL}
     outputs = {"out": PortType.METRIC}
 
+    #: Margin left either side of the occupied range in automatic mode, as a
+    #: fraction of it. A trace that ends exactly on the outermost sample looks
+    #: like one that was cut off there.
+    AUTO_MARGIN = 0.05
+
+    def occupied_range(self, signal: OpticalSignal) -> tuple[float, float] | None:
+        """Lowest and highest frequency the signal has anything at [Hz].
+
+        Everything the instrument could possibly see: each band covers its own
+        sample rate about its centre frequency, and each noise bin its declared
+        extent. ``None`` when there is nothing at all to look at, which is a
+        real case — an unwired analyser, or one downstream of a block that
+        emitted an empty signal — and the declared window is the only sensible
+        answer to it.
+        """
+        low, high = float("inf"), float("-inf")
+        for band in signal.bands:
+            low = min(low, band.f0 - band.fs / 2.0)
+            high = max(high, band.f0 + band.fs / 2.0)
+        for bin_ in signal.noise:
+            low = min(low, bin_.f_start)
+            high = max(high, bin_.f_end)
+        if not np.isfinite(low) or not np.isfinite(high) or high <= low:
+            return None
+        return low, high
+
     def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
         signal: OpticalSignal = inputs["in"]
-        centre = wavelength_to_frequency(self.si("center_wavelength"))
-        span = self.si("span")
         points = int(self.points)
 
-        frequencies = np.linspace(centre - span / 2.0, centre + span / 2.0, points)
+        window = self.occupied_range(signal) if self.auto_span else None
+        if window is None:
+            centre = wavelength_to_frequency(self.si("center_wavelength"))
+            span = self.si("span")
+            start, stop = centre - span / 2.0, centre + span / 2.0
+        else:
+            low, high = window
+            margin = (high - low) * self.AUTO_MARGIN
+            start, stop = low - margin, high + margin
+            span = stop - start
+
+        frequencies = np.linspace(start, stop, points)
         power = np.zeros(points, dtype=np.float64)
-        step = span / max(points - 1, 1)
+        step = (stop - start) / max(points - 1, 1)
 
         for band in signal.bands:
             # Periodogram normalised so that summing it returns the band's average

@@ -43,6 +43,7 @@ from maiman.kernels import (
     super_gaussian_noise_bandwidth,
     super_gaussian_response,
 )
+from maiman.signals import OpticalSignal
 from maiman.units import C_LIGHT, wavelength_to_frequency
 
 CHANNEL = 1550.0  # nm
@@ -492,3 +493,93 @@ def test_the_floor_can_be_switched_off() -> None:
     meter = graph.add(PowerMeter())
     graph.chain(laser, ideal, meter)
     assert graph.run()[meter].power_w == 0.0
+
+
+# ---------------------------------------------------------------------------
+# full span
+
+
+def osa_trace(wavelength_nm: float, **osa: float | bool) -> tuple[np.ndarray, np.ndarray]:
+    """One CW laser into one analyser, and what the analyser saw."""
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=16, sequence_length=256)
+    graph = Graph(ctx)
+    laser = graph.add(CWLaser(power=0.0, wavelength=wavelength_nm, label="tx"))
+    analyzer = graph.add(OpticalSpectrumAnalyzer(label="osa", **osa))
+    graph.chain(laser, analyzer)
+    trace = graph.run()[analyzer]
+    return np.asarray(trace.frequencies), np.asarray(trace.power_w)
+
+
+@pytest.mark.parametrize("wavelength", [1310.0, 1480.0, 1550.0, 1560.0, 1625.0])
+def test_the_analyser_finds_a_carrier_without_being_told_where_it_is(
+    wavelength: float,
+) -> None:
+    """The whole point of a full-span mode, and it is not a convenience.
+
+    The window used to be ``center_wavelength`` +/- ``span``/2 and everything
+    outside it was dropped, so a laser anywhere but 1550 nm produced an *empty*
+    trace. The only way to see it was to already know the wavelength and type it
+    in here as well — and the wavelength is usually the thing being measured,
+    which makes that backwards.
+    """
+    frequencies, power = osa_trace(wavelength)
+    assert power.sum() == pytest.approx(1e-3, rel=1e-6), "all of the laser's 0 dBm"
+
+    peak_nm = C_LIGHT / frequencies[int(np.argmax(power))] * 1e9
+    assert peak_nm == pytest.approx(wavelength, abs=0.05)
+
+
+def test_a_fixed_window_still_means_what_it_always_did() -> None:
+    """Automatic is the default, not the only mode.
+
+    Once the channel is known, a narrow window is what you want — the trace is
+    `points` long either way, so span buys coverage and costs resolution. This
+    pins that turning it off restores exactly the old behaviour, missing carrier
+    and all: a laser outside the declared window is not in the trace.
+    """
+    frequencies, power = osa_trace(1560.0, auto_span=False)
+    low = C_LIGHT / frequencies.max() * 1e9
+    high = C_LIGHT / frequencies.min() * 1e9
+    assert 1545.0 < low < 1547.0 and 1553.0 < high < 1555.0, "the declared 1550 nm window"
+    assert power.sum() < 1e-12, "and the 1560 nm carrier is outside it, as it was before"
+
+
+def test_full_span_covers_every_band_and_not_merely_the_loudest() -> None:
+    """Two carriers far apart must both be in the window.
+
+    Fitting to the strongest would put a dim neighbour outside the trace, which
+    is the failure the fixed window already had and would be worse for arriving
+    silently.
+    """
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=16, sequence_length=256)
+    graph = Graph(ctx)
+    near = graph.add(CWLaser(power=0.0, wavelength=1530.0, label="a"))
+    far = graph.add(CWLaser(power=-20.0, wavelength=1570.0, label="b"))
+    combiner = graph.add(Combiner(num_inputs=2, label="mix"))
+    analyzer = graph.add(OpticalSpectrumAnalyzer(label="osa"))
+    graph.connect(near, combiner["in0"])
+    graph.connect(far, combiner["in1"])
+    graph.connect(combiner, analyzer["in"])
+    trace = graph.run()[analyzer]
+
+    frequencies = np.asarray(trace.frequencies)
+    low = C_LIGHT / frequencies.max() * 1e9
+    high = C_LIGHT / frequencies.min() * 1e9
+    assert low < 1530.0 and high > 1570.0, f"window {low:.1f}-{high:.1f} nm misses a carrier"
+    assert np.asarray(trace.power_w).sum() == pytest.approx(1e-3 + 1e-5, rel=1e-6)
+
+
+def test_an_analyser_with_nothing_to_look_at_falls_back_to_its_declared_window() -> None:
+    """A real case — an unwired analyser — and a range of zero width is not a plot."""
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=16, sequence_length=64)
+    graph = Graph(ctx)
+    analyzer = OpticalSpectrumAnalyzer(label="osa")
+    empty = OpticalSignal(bands=(), noise=())
+    trace = analyzer.run(ctx, {"in": empty})["out"]
+
+    frequencies = np.asarray(trace.frequencies)
+    assert analyzer.occupied_range(empty) is None
+    assert np.all(np.diff(frequencies) > 0), "a usable grid, not a single repeated point"
+    centre = C_LIGHT / frequencies[frequencies.size // 2] * 1e9
+    assert centre == pytest.approx(1550.0, abs=0.5)
+    del graph

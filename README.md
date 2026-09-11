@@ -1373,6 +1373,29 @@ noise bins rendered onto one grid, the way an instrument shows them. Its resolut
 not cosmetic — widening it raises the ASE trace decibel for decibel and leaves a carrier exactly
 where it is, which is the clearest demonstration of why OSNR needs a stated reference bandwidth.
 
+**It sweeps full span by default, because an instrument you have to aim is no use for finding
+something.** It used to start at 1550 nm with a 1000 GHz window and drop everything outside, so a
+laser at 1560 nm produced an empty trace and the only way to see it was to already know the
+wavelength and type it in here as well — which is backwards, since the wavelength is usually the
+thing being measured. Measured, before and after:
+
+```
+laser at   fixed window (1550, 1000 GHz)   automatic
+1550 nm    1.0000 mW, peak 1550.00         1.0000 mW, peak 1550.00
+1560 nm    0.0000 mW  — nothing at all     1.0000 mW, peak 1560.00
+1310 nm    0.0000 mW  — nothing at all     1.0000 mW, peak 1310.00
+```
+
+Automatic covers what the signal actually occupies — every band's sampled bandwidth and every noise
+bin, plus 5 % margin — so two carriers forty nanometres apart are both in the trace rather than the
+loudest one deciding. `auto_span` off restores the declared window exactly, which is what you want
+once the channel is known: `points` is fixed either way, so span buys coverage and costs
+resolution, and that trade is the reason both modes exist.
+
+**A default changed here, and it changes numbers.** An OSA in an existing project now sweeps a
+different window, so its trace is not the trace it was — the shipped WDM demo went from a 6.40 nm
+slice to the whole 35.27 nm comb. Set `auto_span` to false to get the old one back.
+
 ## A circuit is not a chain
 
 A fibre link is a chain: each block takes a waveform and returns one, and the scheduler runs them in
@@ -2316,6 +2339,9 @@ Every physics block ships with a test against a closed-form result, run in CI
 | A transient is far longer than a window | 25,000 windows at the most saturated point — the measurement the decision to keep it out of the component rests on | ✅ |
 | A coarse output grid still gets the right curve | Identical to 1e-6 dB across a 200× range of grid spacing; the integrator takes its own steps and reports how many | ✅ |
 | Relaxation is monotone | A first-order system cannot ring, so an overshoot is an integrator bug rather than physics | ✅ |
+| **The analyser finds a carrier it was not aimed at** | 1310, 1480, 1550, 1560 and 1625 nm, each located to 0.05 nm with all of its power in the trace — where a fixed window saw nothing outside 1550 | ✅ |
+| Full span covers every band, not the loudest | Two carriers 40 nm apart and 20 dB different are both inside the window | ✅ |
+| A fixed window still means what it did | `auto_span` off and the 1560 nm carrier is outside the declared span again, exactly as before | ✅ |
 | **Acquisition reaches where the fine stage folds** | Band located to ±200 MHz from 0 to ±200 GHz, both signs — 50× past the M-th power's unambiguous range | ✅ |
 | The two failure modes are opposites | The fine stage wrong by a whole `symbol_rate/M` at unchanged confidence; the coarse stage's Nyquist wrap correct to derotate by | ✅ |
 | No bandwidth is told to it | Roll-off 0 through 1 located identically — a window formulation given 1.6·R_s for a 1.2·R_s band lands 3.9 GHz out | ✅ |
