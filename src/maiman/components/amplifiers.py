@@ -112,6 +112,7 @@ class EDFA(Component):
         17.0,
         unit="dBm",
         doc="Output power at 3 dB gain compression, as a datasheet quotes it",
+        applies_when="saturate",
     )
     center_wavelength = Param(
         1550.0, unit="nm", min=1200.0, max=1700.0, doc="Centre of the ASE band"

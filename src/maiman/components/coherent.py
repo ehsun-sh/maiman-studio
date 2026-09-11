@@ -84,8 +84,12 @@ class CoherentReceiver(Component):
     category = "Receivers"
 
     responsivity = Param(0.8, unit="", min=0.0, doc="Responsivity R [A/W]")
-    load_resistance = Param(50.0, unit="", min=0.0, doc="Load resistance [ohm]")
-    temperature = Param(300.0, unit="", min=0.0, doc="Receiver temperature [K]")
+    load_resistance = Param(
+        50.0, unit="", min=0.0, doc="Load resistance [ohm]", applies_when="thermal_noise"
+    )
+    temperature = Param(
+        300.0, unit="", min=0.0, doc="Receiver temperature [K]", applies_when="thermal_noise"
+    )
     shot_noise = BoolParam(True, doc="Add LO-dominated shot noise")
     thermal_noise = BoolParam(True, doc="Add thermal (Johnson) noise")
     ase_beat_noise = BoolParam(True, doc="Add LO-ASE beat noise")
@@ -396,8 +400,22 @@ class IQSampler(Component):
     matched_filter = BoolParam(
         False, doc="Apply the receiver's root-raised-cosine half of the pulse shaping"
     )
-    roll_off = Param(0.2, unit="", min=0.0, max=1.0, doc="Must match the transmitter's")
-    filter_span = Param(16.0, unit="", min=2.0, max=64.0, doc="RRC length in symbols")
+    roll_off = Param(
+        0.2,
+        unit="",
+        min=0.0,
+        max=1.0,
+        doc="Must match the transmitter's",
+        applies_when="matched_filter",
+    )
+    filter_span = Param(
+        16.0,
+        unit="",
+        min=2.0,
+        max=64.0,
+        doc="RRC length in symbols",
+        applies_when="matched_filter",
+    )
 
     inputs = {"i": PortType.ELECTRICAL, "q": PortType.ELECTRICAL, "reference": PortType.SYMBOL}
     outputs = {"out": PortType.SYMBOL}

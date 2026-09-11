@@ -73,8 +73,12 @@ class PINPhotodiode(Component):
 
     responsivity = Param(0.8, unit="", min=0.0, doc="Responsivity R [A/W]")
     dark_current = Param(0.0, unit="", min=0.0, doc="Dark current [A]")
-    load_resistance = Param(50.0, unit="", min=0.0, doc="Load resistance [ohm]")
-    temperature = Param(300.0, unit="", min=0.0, doc="Receiver temperature [K]")
+    load_resistance = Param(
+        50.0, unit="", min=0.0, doc="Load resistance [ohm]", applies_when="thermal_noise"
+    )
+    temperature = Param(
+        300.0, unit="", min=0.0, doc="Receiver temperature [K]", applies_when="thermal_noise"
+    )
     shot_noise = BoolParam(True, doc="Add shot noise")
     thermal_noise = BoolParam(True, doc="Add thermal (Johnson) noise")
     ase_beat_noise = BoolParam(True, doc="Add signal-ASE and ASE-ASE beat noise")

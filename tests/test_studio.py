@@ -1080,3 +1080,60 @@ def test_the_plot_area_fits_the_box_that_holds_it() -> None:
     # The column it sits in needs the same, for the same reason.
     col = text.split(".plot-col {", 1)[1].split("}", 1)[0]
     assert "min-height: 0" in col
+
+
+def test_the_inspector_greys_a_parameter_the_engine_will_not_read() -> None:
+    """A box that is quietly ignored is a control the interface cannot back.
+
+    The condition comes from the manifest — `applies_when` on the Param — so the
+    page never decides for itself which boxes matter. A table maintained beside
+    the editor would go stale the first time a flag was renamed, three files away
+    from anything that would notice.
+
+    Greyed rather than hidden, and with the reason: a box that disappears takes
+    the knowledge that it exists with it, and one that is simply grey leaves you
+    guessing which switch owns it.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    assert "function applies(spec, manifest, values) {" in text
+    assert "spec.applies_when" in text
+    assert 'condition.startsWith("!")' in text, "the negated form is not handled"
+    assert "no effect while" in text, "the reason is not shown"
+    assert ".field.inert label" in text, "the row does not read as inactive"
+
+    # Toggling a flag has to rebuild the panel, since it owns other rows.
+    assert "function gatesSomething(type, flag) {" in text
+    assert "if (gatesSomething(node.type, name)) {" in text
+
+    # The manifests the page ships with carry the conditions, so this works
+    # before the first call to /api/manifests returns.
+    baked = embedded()["manifests"]
+    assert baked["EDFA"]["parameters"]["saturation_power"]["applies_when"] == "saturate"
+    assert baked["OpticalSpectrumAnalyzer"]["parameters"]["span"]["applies_when"] == "!auto_span"
+
+
+def test_the_page_keeps_no_list_of_which_parameters_are_gated() -> None:
+    """The one way this feature can rot, closed off.
+
+    Every condition is read from the manifest at render time. A hard-coded pair
+    here would work until somebody renamed a flag in the engine, and then grey
+    out the wrong box for as long as it took anyone to notice.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    # The baked manifests are in a script tag of their own and are *full* of
+    # these names -- they are the declaration. What must not name them is the
+    # code that renders the panel.
+    script = re.sub(r'<script id="maiman-data".*?</script>', "", text, flags=re.S).split(
+        "<script>", 1
+    )[1]
+    for flag, gated in (
+        ("saturate", "saturation_power"),
+        ("auto_span", "center_wavelength"),
+        ("thermal_noise", "load_resistance"),
+        ("matched_filter", "roll_off"),
+    ):
+        pair = f'"{flag}"' in script and f'"{gated}"' in script
+        assert not pair, (
+            f"the page names both {flag!r} and {gated!r}; if that is a hard-coded "
+            f"dependency, delete it and let the manifest say so"
+        )

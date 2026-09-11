@@ -683,6 +683,20 @@ verdict, and DESIGN.md
   }
   .field { padding: 7px 12px; border-bottom: 1px solid var(--rule-soft); }
   .field-row { display: flex; align-items: center; gap: 8px; }
+  /* A parameter the engine will not read. The label fades with the control so
+     the whole row reads as one inactive thing, rather than a live label over a
+     dead box. */
+  .field.inert label { color: var(--ink-4); }
+  .field.inert .unit { color: var(--ink-4); }
+  .field.inert .field-doc { color: var(--ink-4); }
+  .field-inert {
+    margin: 3px 0 0; font-size: 10.5px; color: var(--warn);
+    font-family: var(--mono);
+  }
+  .field input:disabled, .field select:disabled {
+    color: var(--ink-4); cursor: default;
+  }
+  .field input.toggle:disabled { opacity: 0.45; cursor: default; }
   .field label {
     flex: 1; font-size: 12px; color: var(--ink-2); min-width: 0;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -1401,14 +1415,16 @@ verdict, and DESIGN.md
      "default": 50.0,
      "unit": "",
      "min": 0.0,
-     "doc": "Load resistance [ohm]"
+     "doc": "Load resistance [ohm]",
+     "applies_when": "thermal_noise"
     },
     "temperature": {
      "type": "float",
      "default": 300.0,
      "unit": "",
      "min": 0.0,
-     "doc": "Receiver temperature [K]"
+     "doc": "Receiver temperature [K]",
+     "applies_when": "thermal_noise"
     },
     "shot_noise": {
      "type": "bool",
@@ -1686,14 +1702,16 @@ verdict, and DESIGN.md
      "default": 50.0,
      "unit": "",
      "min": 0.0,
-     "doc": "Load resistance [ohm]"
+     "doc": "Load resistance [ohm]",
+     "applies_when": "thermal_noise"
     },
     "temperature": {
      "type": "float",
      "default": 300.0,
      "unit": "",
      "min": 0.0,
-     "doc": "Receiver temperature [K]"
+     "doc": "Receiver temperature [K]",
+     "applies_when": "thermal_noise"
     },
     "shot_noise": {
      "type": "bool",
@@ -1960,14 +1978,16 @@ verdict, and DESIGN.md
      "default": 50.0,
      "unit": "",
      "min": 0.0,
-     "doc": "Load resistance [ohm]"
+     "doc": "Load resistance [ohm]",
+     "applies_when": "thermal_noise"
     },
     "temperature": {
      "type": "float",
      "default": 300.0,
      "unit": "",
      "min": 0.0,
-     "doc": "Receiver temperature [K]"
+     "doc": "Receiver temperature [K]",
+     "applies_when": "thermal_noise"
     },
     "shot_noise": {
      "type": "bool",
@@ -2029,7 +2049,8 @@ verdict, and DESIGN.md
      "type": "float",
      "default": 17.0,
      "unit": "dBm",
-     "doc": "Output power at 3 dB gain compression, as a datasheet quotes it"
+     "doc": "Output power at 3 dB gain compression, as a datasheet quotes it",
+     "applies_when": "saturate"
     },
     "center_wavelength": {
      "type": "float",
@@ -2402,7 +2423,8 @@ verdict, and DESIGN.md
      "unit": "",
      "min": 0.0,
      "max": 1.0,
-     "doc": "RRC excess bandwidth factor"
+     "doc": "RRC excess bandwidth factor",
+     "applies_when": "pulse_shaping"
     },
     "filter_span": {
      "type": "float",
@@ -2410,7 +2432,8 @@ verdict, and DESIGN.md
      "unit": "",
      "min": 2.0,
      "max": 64.0,
-     "doc": "RRC length in symbols; longer leaves less residual ISI"
+     "doc": "RRC length in symbols; longer leaves less residual ISI",
+     "applies_when": "pulse_shaping"
     }
    },
    "structural": {},
@@ -2505,7 +2528,8 @@ verdict, and DESIGN.md
      "unit": "",
      "min": 0.0,
      "max": 1.0,
-     "doc": "Must match the transmitter's"
+     "doc": "Must match the transmitter's",
+     "applies_when": "matched_filter"
     },
     "filter_span": {
      "type": "float",
@@ -2513,7 +2537,8 @@ verdict, and DESIGN.md
      "unit": "",
      "min": 2.0,
      "max": 64.0,
-     "doc": "RRC length in symbols"
+     "doc": "RRC length in symbols",
+     "applies_when": "matched_filter"
     }
    },
    "structural": {},
@@ -2860,14 +2885,16 @@ verdict, and DESIGN.md
      "unit": "nm",
      "min": 1200.0,
      "max": 1700.0,
-     "doc": "Centre of the span, when not automatic"
+     "doc": "Centre of the span, when not automatic",
+     "applies_when": "!auto_span"
     },
     "span": {
      "type": "float",
      "default": 1000.0,
      "unit": "GHz",
      "min": 1.0,
-     "doc": "Displayed frequency span, when not automatic"
+     "doc": "Displayed frequency span, when not automatic",
+     "applies_when": "!auto_span"
     },
     "points": {
      "type": "float",
@@ -2921,14 +2948,16 @@ verdict, and DESIGN.md
      "default": 50.0,
      "unit": "",
      "min": 0.0,
-     "doc": "Load resistance [ohm]"
+     "doc": "Load resistance [ohm]",
+     "applies_when": "thermal_noise"
     },
     "temperature": {
      "type": "float",
      "default": 300.0,
      "unit": "",
      "min": 0.0,
-     "doc": "Receiver temperature [K]"
+     "doc": "Receiver temperature [K]",
+     "applies_when": "thermal_noise"
     },
     "shot_noise": {
      "type": "bool",
@@ -21738,7 +21767,23 @@ verdict, and DESIGN.md
     return `${value}`;
   }
 
-  function fieldFor(name, spec, value) {
+  /* Whether a parameter is doing anything, given the rest of this block's
+     settings. The condition is the engine's -- `applies_when` on the Param,
+     carried through the manifest -- so the interface never decides for itself
+     which boxes matter, and a flag renamed in the model cannot leave a stale
+     rule behind here. */
+  function applies(spec, manifest, values) {
+    const condition = spec.applies_when;
+    if (!condition) return true;
+    const negated = condition.startsWith("!");
+    const flag = negated ? condition.slice(1) : condition;
+    const gate = manifest.parameters[flag];
+    if (!gate) return true;
+    const set = values && values[flag] !== undefined ? values[flag] : gate.default;
+    return negated ? !set : Boolean(set);
+  }
+
+  function fieldFor(name, spec, value, live = true, because = "") {
     const isBool = spec.type === "bool";
     const shown = value === undefined ? spec.default : value;
     /* No range line under a list: the options *are* the range, and printing
@@ -21753,12 +21798,13 @@ verdict, and DESIGN.md
        for one is an invitation to type a value that will be refused, which is
        what "range 1 … 8" did to anyone who tried 3. Everything else is a
        quantity on an interval, and a box is the only thing that can be. */
+    const off = live ? "" : " disabled";
     const control = isBool
-      ? `<input class="toggle" type="checkbox" ${shown ? "checked" : ""}
+      ? `<input class="toggle" type="checkbox" ${shown ? "checked" : ""}${off}
                 aria-label="${escapeHtml(name)}">`
       : spec.choices
       ? `<span class="field-input">
-           <select aria-label="${escapeHtml(name)}">
+           <select aria-label="${escapeHtml(name)}"${off}>
              ${spec.choices.map((c) =>
                `<option value="${c}"${Number(c) === Number(shown) ? " selected" : ""}>` +
                `${escapeHtml(choiceLabel(name, c))}</option>`).join("")}
@@ -21766,14 +21812,27 @@ verdict, and DESIGN.md
            <span class="unit">${escapeHtml(spec.unit || "")}</span>
          </span>`
       : `<span class="field-input">
-           <input type="text" value="${fmt(shown)}" aria-label="${escapeHtml(name)}">
+           <input type="text" value="${fmt(shown)}" aria-label="${escapeHtml(name)}"${off}>
            <span class="unit">${escapeHtml(spec.unit || "")}</span>
          </span>`;
-    return `<div class="field">
+    /* Greyed rather than hidden, and with the reason rather than only the
+       state. A box that disappears takes the knowledge that it exists with it;
+       a box that is simply grey leaves you guessing which switch owns it. */
+    return `<div class="field${live ? "" : " inert"}">
         <div class="field-row"><label>${escapeHtml(name)}</label>${control}</div>
+        ${!live ? `<p class="field-inert">no effect while ${escapeHtml(because)}</p>` : ""}
         ${spec.doc ? `<p class="field-doc">${escapeHtml(spec.doc)}</p>` : ""}
         ${range ? `<p class="field-range">range ${range}</p>` : ""}
       </div>`;
+  }
+
+  /* "saturate is off", "auto_span is on" -- the switch and the state it is in,
+     so the sentence names the thing to go and change. */
+  function conditionText(spec) {
+    const condition = spec.applies_when || "";
+    const negated = condition.startsWith("!");
+    const flag = negated ? condition.slice(1) : condition;
+    return `${flag} is ${negated ? "on" : "off"}`;
   }
 
   function renderInspector(key, label, values) {
@@ -21792,7 +21851,8 @@ verdict, and DESIGN.md
          </div>
        </div>
        ${Object.entries(m.parameters)
-          .map(([n, s]) => fieldFor(n, s, values && values[n])).join("")}
+          .map(([n, s]) => fieldFor(n, s, values && values[n],
+                                    applies(s, m, values), conditionText(s))).join("")}
        <div class="field" style="border-bottom:0">
          <p class="side-title" style="margin-bottom:5px">Ports</p>
          ${ports.map(([n, t, dir]) => `
@@ -21857,6 +21917,16 @@ verdict, and DESIGN.md
     return changed;
   }
 
+  /* Does any parameter on this component name that flag as its condition? */
+  function gatesSomething(type, flag) {
+    const specs = DATA.manifests[type].parameters;
+    return Object.values(specs).some((spec) => {
+      const condition = spec.applies_when;
+      if (!condition) return false;
+      return (condition.startsWith("!") ? condition.slice(1) : condition) === flag;
+    });
+  }
+
   function bindFields(nodeId) {
     if (!nodeId) return;
     const node = nodeById(nodeId);
@@ -21875,6 +21945,18 @@ verdict, and DESIGN.md
         let applied = null;   // declared out here: the hint below needs it
         if (spec.type === "bool") {
           node.params[name] = input.checked;
+          /* A flag may be the condition another parameter applies under, so the
+             panel is rebuilt rather than patched: the boxes it owns have to
+             grey or wake with it, and working out which ones here would be a
+             second copy of a rule the manifest already carries. */
+          if (gatesSomething(node.type, name)) {
+            SESSION.captions = {};
+            SESSION.live = false;
+            markProvenance();
+            drawGraph();
+            showNode(NODES.find((n) => n.id === node.id));
+            return;
+          }
         } else {
           const value = Number(input.value);
           applied = value;

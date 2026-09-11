@@ -541,6 +541,41 @@ element had only ever been a row item and had just become a column one — which
 is the shape of this whole bug and the reason it arrived with a feature that
 looked unrelated to layout.
 
+## 8g. A box the engine will not read
+
+`auto_span` arrived and left `center_wavelength` and `span` on screen doing
+nothing. That is the same failure as a menu label with no menu behind it, in the
+panel where it matters most — the inspector is where someone goes to change a
+number, and offering one that is quietly ignored is worse than not offering it.
+
+**The condition is declared in the model, not in the editor.** A `Param` takes
+`applies_when="saturate"`, or `"!auto_span"` for one that applies when the flag
+is *off*, and the manifest carries it. The interface asks; it never decides. The
+alternative is a table beside the editor listing which parameter depends on
+which flag — three files from the code that reads it, and stale the first time
+anyone renames a flag. A test refuses a page that names both halves of a known
+pair in its own code, so that table cannot quietly come back.
+
+A condition that names nothing is refused **when the class is defined**, not
+when somebody opens the panel. The obvious fallback for an unresolvable
+condition is to assume the parameter applies, which is exactly the stale control
+this removes.
+
+Fifteen parameters across eight components turned out to be gated, and only two
+of them were the ones that prompted this: the receivers' `load_resistance` and
+`temperature` do nothing without `thermal_noise`, the driver's and sampler's
+`roll_off` and `filter_span` do nothing without their shaping flags, and the
+EDFA's `saturation_power` does nothing without `saturate` — which had been true
+since saturation shipped.
+
+**Greyed, not hidden, and with the reason.** A box that disappears takes the
+knowledge that it exists with it; a box that is merely grey leaves you guessing
+which switch owns it. The row says *no effect while auto_span is on* — the
+switch and the state it is in, so the sentence names the thing to go and change.
+Toggling a flag rebuilds the panel rather than patching it, because working out
+which rows it owns at that point would be a second copy of a rule the manifest
+already carries.
+
 ## 9. Decisions worth not re-litigating
 
 - **Paper is the default**, and it is stamped before first paint so a dark host

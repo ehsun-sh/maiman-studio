@@ -235,9 +235,20 @@ class OpticalSpectrumAnalyzer(Component):
         True, doc="Sweep whatever the signal occupies, instead of a window you set"
     )
     center_wavelength = Param(
-        1550.0, unit="nm", min=1200.0, max=1700.0, doc="Centre of the span, when not automatic"
+        1550.0,
+        unit="nm",
+        min=1200.0,
+        max=1700.0,
+        doc="Centre of the span, when not automatic",
+        applies_when="!auto_span",
     )
-    span = Param(1000.0, unit="GHz", min=1.0, doc="Displayed frequency span, when not automatic")
+    span = Param(
+        1000.0,
+        unit="GHz",
+        min=1.0,
+        doc="Displayed frequency span, when not automatic",
+        applies_when="!auto_span",
+    )
     points = Param(1024.0, unit="", min=16.0, max=16384.0, doc="Trace points")
     resolution_bandwidth = Param(
         12.5, unit="GHz", min=0.001, doc="Instrument resolution; 12.5 GHz is 0.1 nm at 1550 nm"

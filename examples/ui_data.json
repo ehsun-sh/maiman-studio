@@ -26,14 +26,16 @@
      "default": 50.0,
      "unit": "",
      "min": 0.0,
-     "doc": "Load resistance [ohm]"
+     "doc": "Load resistance [ohm]",
+     "applies_when": "thermal_noise"
     },
     "temperature": {
      "type": "float",
      "default": 300.0,
      "unit": "",
      "min": 0.0,
-     "doc": "Receiver temperature [K]"
+     "doc": "Receiver temperature [K]",
+     "applies_when": "thermal_noise"
     },
     "shot_noise": {
      "type": "bool",
@@ -311,14 +313,16 @@
      "default": 50.0,
      "unit": "",
      "min": 0.0,
-     "doc": "Load resistance [ohm]"
+     "doc": "Load resistance [ohm]",
+     "applies_when": "thermal_noise"
     },
     "temperature": {
      "type": "float",
      "default": 300.0,
      "unit": "",
      "min": 0.0,
-     "doc": "Receiver temperature [K]"
+     "doc": "Receiver temperature [K]",
+     "applies_when": "thermal_noise"
     },
     "shot_noise": {
      "type": "bool",
@@ -585,14 +589,16 @@
      "default": 50.0,
      "unit": "",
      "min": 0.0,
-     "doc": "Load resistance [ohm]"
+     "doc": "Load resistance [ohm]",
+     "applies_when": "thermal_noise"
     },
     "temperature": {
      "type": "float",
      "default": 300.0,
      "unit": "",
      "min": 0.0,
-     "doc": "Receiver temperature [K]"
+     "doc": "Receiver temperature [K]",
+     "applies_when": "thermal_noise"
     },
     "shot_noise": {
      "type": "bool",
@@ -654,7 +660,8 @@
      "type": "float",
      "default": 17.0,
      "unit": "dBm",
-     "doc": "Output power at 3 dB gain compression, as a datasheet quotes it"
+     "doc": "Output power at 3 dB gain compression, as a datasheet quotes it",
+     "applies_when": "saturate"
     },
     "center_wavelength": {
      "type": "float",
@@ -1027,7 +1034,8 @@
      "unit": "",
      "min": 0.0,
      "max": 1.0,
-     "doc": "RRC excess bandwidth factor"
+     "doc": "RRC excess bandwidth factor",
+     "applies_when": "pulse_shaping"
     },
     "filter_span": {
      "type": "float",
@@ -1035,7 +1043,8 @@
      "unit": "",
      "min": 2.0,
      "max": 64.0,
-     "doc": "RRC length in symbols; longer leaves less residual ISI"
+     "doc": "RRC length in symbols; longer leaves less residual ISI",
+     "applies_when": "pulse_shaping"
     }
    },
    "structural": {},
@@ -1130,7 +1139,8 @@
      "unit": "",
      "min": 0.0,
      "max": 1.0,
-     "doc": "Must match the transmitter's"
+     "doc": "Must match the transmitter's",
+     "applies_when": "matched_filter"
     },
     "filter_span": {
      "type": "float",
@@ -1138,7 +1148,8 @@
      "unit": "",
      "min": 2.0,
      "max": 64.0,
-     "doc": "RRC length in symbols"
+     "doc": "RRC length in symbols",
+     "applies_when": "matched_filter"
     }
    },
    "structural": {},
@@ -1485,14 +1496,16 @@
      "unit": "nm",
      "min": 1200.0,
      "max": 1700.0,
-     "doc": "Centre of the span, when not automatic"
+     "doc": "Centre of the span, when not automatic",
+     "applies_when": "!auto_span"
     },
     "span": {
      "type": "float",
      "default": 1000.0,
      "unit": "GHz",
      "min": 1.0,
-     "doc": "Displayed frequency span, when not automatic"
+     "doc": "Displayed frequency span, when not automatic",
+     "applies_when": "!auto_span"
     },
     "points": {
      "type": "float",
@@ -1546,14 +1559,16 @@
      "default": 50.0,
      "unit": "",
      "min": 0.0,
-     "doc": "Load resistance [ohm]"
+     "doc": "Load resistance [ohm]",
+     "applies_when": "thermal_noise"
     },
     "temperature": {
      "type": "float",
      "default": 300.0,
      "unit": "",
      "min": 0.0,
-     "doc": "Receiver temperature [K]"
+     "doc": "Receiver temperature [K]",
+     "applies_when": "thermal_noise"
     },
     "shot_noise": {
      "type": "bool",

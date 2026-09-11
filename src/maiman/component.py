@@ -68,6 +68,18 @@ class Param:
     interface can offer a set as a list to choose from and cannot offer an
     interval as anything but a box to type in, so the distinction earns its
     keep on screen as well as in validation.
+
+    ``applies_when`` names a :class:`BoolParam` on the same component that this
+    parameter only takes effect under — ``"saturate"``, or ``"!auto_span"`` for
+    one that applies when the flag is *off*. It changes nothing about how the
+    parameter behaves; what it does is let an interface grey out a box that
+    cannot do anything, instead of offering a control that is quietly ignored.
+
+    It lives here rather than in the interface for the reason every other part of
+    a manifest does: the condition is a fact about the model, the code that reads
+    the parameter is three files away from the code that draws the box, and a
+    table of these maintained beside the editor is a table that goes stale the
+    first time a flag is renamed.
     """
 
     def __init__(
@@ -79,6 +91,7 @@ class Param:
         max: float | None = None,
         choices: Sequence[float] | None = None,
         doc: str = "",
+        applies_when: str | None = None,
     ) -> None:
         if unit not in known_units():
             raise ValueError(f"unknown unit {unit!r}; known units: {sorted(known_units())}")
@@ -88,6 +101,7 @@ class Param:
         self.max = max
         self.choices = tuple(choices) if choices is not None else None
         self.doc = doc
+        self.applies_when = applies_when
         self.name = "<unbound>"
         if self.choices is not None and default not in self.choices:
             raise ValueError(
@@ -135,6 +149,8 @@ class Param:
             d["choices"] = list(self.choices)
         if self.doc:
             d["doc"] = self.doc
+        if self.applies_when:
+            d["applies_when"] = self.applies_when
         return d
 
 
@@ -211,7 +227,37 @@ class Component:
 
         if cls.__dict__.get("abstract", False):
             return
+        cls._check_conditions()
         register(cls)
+
+    @classmethod
+    def _check_conditions(cls) -> None:
+        """Refuse an ``applies_when`` that names nothing, at import time.
+
+        A condition naming a flag that does not exist -- or one that was renamed
+        out from under it -- would leave the interface unable to decide whether
+        the box applies, and the obvious fallback (assume it does) is exactly the
+        stale control this feature exists to remove. Checking at class creation
+        means the failure arrives when the component is defined rather than when
+        somebody opens its inspector.
+        """
+        specs = cls.param_specs()
+        for name, spec in specs.items():
+            condition = getattr(spec, "applies_when", None)
+            if not condition:
+                continue
+            flag = condition[1:] if condition.startswith("!") else condition
+            gate = specs.get(flag)
+            if gate is None:
+                raise TypeError(
+                    f"{cls.__name__}.{name} applies_when={condition!r}, and this component "
+                    f"has no parameter {flag!r}; it has {sorted(specs)}"
+                )
+            if not isinstance(gate, BoolParam):
+                raise TypeError(
+                    f"{cls.__name__}.{name} applies_when={condition!r}, but {flag!r} is a "
+                    f"quantity rather than a flag. A condition has to be true or false."
+                )
 
     @classmethod
     def type_name(cls) -> str:

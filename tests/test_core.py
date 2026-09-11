@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from maiman import Band, NoiseBin, OpticalSignal, SimulationContext
+from maiman.component import BoolParam, Component, Param
 from maiman.units import (
     dbm_to_w,
     frequency_to_wavelength,
@@ -178,3 +179,72 @@ def test_band_lookup_by_centre_frequency() -> None:
     assert signal.band_at(193.5e12).f0 == 193.5e12
     with pytest.raises(KeyError):
         signal.band_at(190.0e12)
+
+
+# ---------------------------------------------------------------------------
+# parameters that only apply under a flag
+
+
+def test_a_parameter_can_declare_the_flag_it_applies_under() -> None:
+    """The condition is a fact about the model, so the model is where it lives.
+
+    An interface that wanted to grey out a box the engine will not read had two
+    options: keep its own table of which parameter depends on which flag — which
+    goes stale the first time one is renamed, three files away from anything
+    that would notice — or be told. This is being told.
+    """
+    from maiman.components import EDFA, OpticalSpectrumAnalyzer
+
+    assert EDFA.param_specs()["saturation_power"].applies_when == "saturate"
+    assert EDFA.manifest()["parameters"]["saturation_power"]["applies_when"] == "saturate"
+
+    # `!` for a parameter that applies when the flag is *off*.
+    osa = OpticalSpectrumAnalyzer.param_specs()
+    assert osa["center_wavelength"].applies_when == "!auto_span"
+    assert osa["span"].applies_when == "!auto_span"
+
+
+def test_a_condition_that_names_nothing_is_refused_when_the_class_is_defined() -> None:
+    """At import, not when somebody opens the inspector.
+
+    A condition naming a flag that does not exist leaves an interface unable to
+    decide whether the box applies, and the obvious fallback — assume it does —
+    is exactly the stale control the feature exists to remove.
+    """
+    with pytest.raises(TypeError, match="has no parameter 'nonexistent'"):
+
+        class Bad(Component):
+            display_name = "Bad"
+            width = Param(1.0, unit="", applies_when="nonexistent")
+
+    with pytest.raises(TypeError, match="is a quantity rather than a flag"):
+
+        class AlsoBad(Component):
+            display_name = "Also bad"
+            length = Param(1.0, unit="")
+            width = Param(1.0, unit="", applies_when="length")
+
+
+def test_every_declared_condition_names_a_flag_that_exists() -> None:
+    """Across the whole library, not only the ones a test remembered to name.
+
+    ``_check_conditions`` runs at class creation, so importing the package is
+    itself the check — but a component defined in a plugin, or one whose flag is
+    renamed by an edit that does not re-run the import, would slip past. This
+    walks the registry instead.
+    """
+    from maiman import registered_names
+    from maiman.registry import lookup
+
+    gated = 0
+    for name in registered_names():
+        specs = lookup(name).param_specs()
+        for param, spec in specs.items():
+            condition = spec.applies_when
+            if not condition:
+                continue
+            gated += 1
+            flag = condition.removeprefix("!")
+            assert flag in specs, f"{name}.{param} depends on {flag!r}, which it has not got"
+            assert isinstance(specs[flag], BoolParam), f"{name}.{param}: {flag!r} is not a flag"
+    assert gated >= 10, f"only {gated} gated parameters found; has the declaration been lost?"

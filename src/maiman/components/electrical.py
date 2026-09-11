@@ -582,12 +582,20 @@ class IQDriver(Component):
     pulse_shaping = BoolParam(
         False, doc="Root-raised-cosine shaping instead of holding each symbol flat"
     )
-    roll_off = Param(0.2, unit="", min=0.0, max=1.0, doc="RRC excess bandwidth factor")
+    roll_off = Param(
+        0.2,
+        unit="",
+        min=0.0,
+        max=1.0,
+        doc="RRC excess bandwidth factor",
+        applies_when="pulse_shaping",
+    )
     filter_span = Param(
         16.0,
         unit="",
         min=2.0,
         max=64.0,
+        applies_when="pulse_shaping",
         doc="RRC length in symbols; longer leaves less residual ISI",
     )
 
