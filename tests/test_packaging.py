@@ -114,14 +114,19 @@ def test_the_component_count_the_readme_states_is_the_number_registered() -> Non
     edit it, and three separate pieces of work had added components since.
     """
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    match = re.search(r"\*\*(\d+) components,", readme)
-    assert match, "the README no longer states a component count; this guard has nothing to hold"
+    # Every place it is stated, not the first one. The getting-started section
+    # quotes `maiman serve`'s own startup banner, which carries the count as part
+    # of real terminal output -- so there are two now, in different shapes, and
+    # a guard that checked only the headline would let the transcript go stale
+    # while reporting that the README was fine.
+    claims = [int(n) for n in re.findall(r"([0-9]+) components", readme)]
+    assert claims, "the README no longer states a component count; this guard has nothing to hold"
 
-    claimed = int(match.group(1))
     actual = len(registered_names())
-    assert claimed == actual, (
-        f"the README says {claimed} components and the registry has {actual}. "
-        f"Update the README rather than this test: the registry is the fact."
+    assert all(claimed == actual for claimed in claims), (
+        f"the README states {claims} components in {len(claims)} place(s) and the registry "
+        f"has {actual}. Update the README rather than this test: the registry is the fact, "
+        f"and one of those places is a pasted terminal transcript that has to stay true."
     )
 
 
