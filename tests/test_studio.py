@@ -377,19 +377,17 @@ def test_the_dock_draws_the_run_s_plots_and_not_the_bundled_ones() -> None:
     before there was a block behind it.
     """
     text = STUDIO.read_text(encoding="utf-8")
-    for stored, read in (
-        ('SESSION.plots.eye = firstOfKind("eye")', "const live = SESSION.plots.eye;"),
-        (
-            'SESSION.plots.constellation = firstOfKind("constellation")',
-            "SESSION.plots.constellation || DATA.constellation",
-        ),
-    ):
+    # Every analyser of a kind is kept, not the first one found: a graph with
+    # three spectrum analysers has three things to say, and which one used to
+    # win depended on the order the engine returned its results in.
+    for kind in ("constellation", "eye", "spectrum"):
+        stored = f'SESSION.plots.{kind} = tracesOfKind("{kind}")'
         assert stored in text, f"a run's plots no longer reach: {stored}"
-        assert read in text, f"nothing draws from it: {read}"
+    assert "function visibleTraces(kind) {" in text, "nothing draws from them"
+    assert 'visibleTraces("eye")' in text and 'visibleTraces("constellation")' in text
 
     # And the pane says so rather than drawing the reference, when a run
     # produced no plot of that kind at all.
-    assert "SESSION.hasRun && !SESSION.plots.eye" in text
     assert "No eye in this run" in text
 
 
@@ -557,17 +555,17 @@ def test_the_coherent_link_has_no_spectrum_and_does_not_pretend_to() -> None:
         'const canProduce = PROJECT.nodes.some((n) => n.type === "OpticalSpectrumAnalyzer");'
         in text
     ), "the spectrum pane must show the reference only while the graph could produce one"
-    assert "SESSION.hasRun && !SESSION.plots.spectrum" in text
+    assert 'visibleTraces("spectrum")' in text
     assert "No spectrum in this run" in text
 
 
 def test_the_dock_draws_the_run_s_spectrum_and_not_the_bundled_one() -> None:
     """The run's trace has to reach the pane, and the pane has to read it."""
     text = STUDIO.read_text(encoding="utf-8")
-    assert 'SESSION.plots.spectrum = firstOfKind("spectrum")' in text, (
+    assert 'SESSION.plots.spectrum = tracesOfKind("spectrum")' in text, (
         "a run's spectrum no longer reaches the dock"
     )
-    assert "const live = SESSION.plots.spectrum;" in text, "nothing draws from it"
+    assert 'visibleTraces("spectrum")' in text, "nothing draws from it"
 
 
 def test_the_readings_are_cleared_with_the_trace_they_describe() -> None:
@@ -763,10 +761,14 @@ def test_every_menu_row_runs_something() -> None:
     assert len(rows) >= 20, f"only {len(rows)} menu rows found; has the markup changed shape?"
 
     wired = set(re.findall(r'onMenu\(\s*[`"\']([a-z0-9${}+-]+)', text))
-    # The five result panes and the two grounds are wired in loops, by template.
-    for key in ("con", "eye", "osa", "sens", "log"):
-        if "view-pane-${key}" in text or "view-pane-${key}" in text:
-            wired.add(f"view-pane-{key}")
+    # Rows wired in a loop are named by template: onMenu(`view-pane-${key}`).
+    # A template's literal prefix covers every row starting with it, which is
+    # general rather than a list of whichever loops happen to exist today.
+    prefixes = {name.split("$", 1)[0] for name in wired if "$" in name}
+    wired = {name for name in wired if "$" not in name}
+    for row in rows:
+        if any(prefix and row.startswith(prefix) for prefix in prefixes):
+            wired.add(row)
 
     unbacked = sorted(rows - wired)
     assert not unbacked, (
@@ -837,12 +839,14 @@ def test_no_pane_shows_the_bundled_reference_after_a_run() -> None:
     """
     text = STUDIO.read_text(encoding="utf-8")
     for guard in (
-        "if (SESSION.hasRun && !SESSION.plots.constellation) {",
-        "if (SESSION.hasRun && !SESSION.plots.eye)",
-        "if (SESSION.hasRun && !SESSION.plots.spectrum)",
+        "if (!shown.length && SESSION.hasRun) { drawNoEye(ctx, w, h); return; }",
+        "if (!shown.length && SESSION.hasRun) {" + chr(10) + "      clearSpectrumPanel();",
         "if (SESSION.hasRun && !SWEEP.points) {",
     ):
         assert guard in text, f"a pane lost its post-run guard: {guard}"
+    # The constellation's is the one that was missing and caused the bug.
+    assert "if (!SESSION.hasRun && !shown.length) {" in text
+    assert "No constellation in this run" in text
 
     assert "function drawNothing(" in text, "the shared empty state is gone"
     # And New repaints, because clearing the data a canvas reads does not clear
@@ -917,3 +921,66 @@ def test_the_wheel_zooms_about_the_pointer_and_the_view_is_remembered() -> None:
     for opener in ("function newProject()", "function loadProject("):
         body = text.split(opener, 1)[1].split(chr(10) + "  }", 1)[0]
         assert "resetView()" in body, f"{opener} keeps the previous project's viewport"
+
+
+def test_every_analyser_of_a_kind_reaches_its_pane() -> None:
+    """A graph with three spectrum analysers used to show one of them.
+
+    `firstOfKind` returned the first match and dropped the rest, and *which* one
+    that was depended on the order the engine happened to return its results in
+    — so adding an unrelated block could silently change which trace you were
+    looking at. Every one is kept now, tiled, captioned with the block it came
+    from, and each has a checkbox.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    assert "firstOfKind" not in text, "a pane is back to showing only the first analyser"
+    assert "function tilesFor(" in text and "function drawTiles(" in text
+    assert "function traceBar(" in text, "nothing renders the checkboxes"
+    for kind in ("constellation", "eye", "spectrum"):
+        assert 'traceBar("' in text
+        assert f'visibleTraces("{kind}")' in text, f"{kind} does not filter by the checkboxes"
+
+    # The bar is a view of the run, never a list kept alongside it.
+    bar = text.split("function traceBar(", 1)[1].split(chr(10) + "  }", 1)[0]
+    assert "replaceChildren()" in bar, "the bar accumulates instead of being rebuilt"
+    assert "SESSION.hidden[kind]" in bar
+
+    # A deleted analyser must not leave a hidden ghost that would silently hide
+    # a later block of the same name.
+    assert "if (!live.has(label)) SESSION.hidden[kind].delete(label);" in text
+
+
+def test_more_than_one_block_can_be_selected() -> None:
+    """Align needs it, and the always-hand cursor was hiding that it was missing.
+
+    The selection is a set; `selected` stays the one the inspector shows, and the
+    two are kept in step by helpers rather than by hand. Delete takes the whole
+    group in one snapshot, so undo brings all of them back in one step — which is
+    what "I deleted those four" means.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    assert "const selection = new Set([" in text
+    for helper in ("function selectOnly(", "function selectAlso(", "function clearSelection("):
+        assert helper in text, f"{helper} is gone; the two selections can now disagree"
+    assert "picked: [...selection]" in text, "undo no longer restores the whole selection"
+    assert 'class="rubber"' in text or ".rubber {" in text
+
+    # One snapshot for a group delete, not one per block.
+    body = text.split("function deleteSelection()", 1)[1].split(chr(10) + "  }", 1)[0]
+    assert body.count("snapshot()") == 1, "a group delete takes more than one undo to reverse"
+
+
+def test_the_canvas_has_a_tool_and_the_cursor_names_it() -> None:
+    """The hand used to be on the grid always, which said the bed could only be
+    pushed around — and it was, because a drag there could not select. Now a
+    drag draws a selection box, so the arrow is the truth and the hand appears
+    only when a drag would pan.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    assert "#graph { cursor: default; }" in text
+    assert '#canvas-wrap[data-tool="pan"] #graph { cursor: grab; }' in text
+    assert 'let tool = "select";' in text
+    assert 'const panningNow = () => tool === "pan" || spaceHeld;' in text
+    assert '$("#tool-select")' in text and '$("#tool-pan")' in text, "the toolbar is unwired"
+    # Space is a momentary pan whatever the tool is, and must not stick.
+    assert 'window.addEventListener("blur"' in text, "space can stick after alt-tab"

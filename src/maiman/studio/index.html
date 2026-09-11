@@ -325,6 +325,11 @@ verdict, and DESIGN.md
   .menu-pop button:disabled { color: var(--ink-4); cursor: default; }
   .menu-pop button:disabled .menu-key { color: var(--ink-4); opacity: 0.55; }
   .menu-sep { height: 1px; background: var(--rule); margin: 4px 6px; border: 0; }
+  /* The align menu drops from a toolbar button rather than from the menubar, so
+     it positions against the toolbar. Same furniture, one different anchor. */
+  .toolbar { position: relative; }
+  .tb-pop { top: 100%; left: 0; min-width: 190px; }
+  .tb[aria-pressed="true"] { background: var(--raised); color: var(--ink); }
   /* A checkable row marks the state it is already in -- which ground, which
      result pane. The mark holds a column so labels stay aligned whether or not
      they are the current one. */
@@ -561,15 +566,43 @@ verdict, and DESIGN.md
   .node-box { fill: var(--node-fill); stroke: var(--rule); stroke-width: 1; }
   .node-g { cursor: pointer; }
   .node-g:hover .node-box { stroke: var(--node-hover-stroke); }
-  /* The grid says it can be dragged before you try it. A block keeps its own
-     cursor, so the two affordances do not argue: over a block you move the
-     block, over the bed you move the view. */
-  #graph { cursor: grab; }
-  #graph [data-node], #graph [data-port] { cursor: default; }
+  /* The cursor names the *tool*, not the surface. It used to be `grab`
+     everywhere, which said the canvas was a thing to be pushed around and
+     nothing else -- and that is exactly what it was, because a drag on the bed
+     could only pan. Now a drag on the bed draws a selection box, so the default
+     arrow is the truth and the hand appears only when panning is what a drag
+     will do. */
+  #graph { cursor: default; }
   #graph [data-port] { cursor: crosshair; }
+  #canvas-wrap[data-tool="pan"] #graph { cursor: grab; }
   #canvas-wrap.panning, #canvas-wrap.panning #graph,
   #canvas-wrap.panning #graph [data-node] { cursor: grabbing; }
+  /* The band itself. Drawn in the accent because it is a selection, dashed
+     because it is a gesture in progress rather than a thing on the schematic. */
+  /* One row per pane, listing the analysers that produced a trace. Hidden
+     entirely when there is only one, because a checkbox for a single thing is a
+     control that can only make the pane worse. */
+  .plot-col { display: flex; flex-direction: column; min-width: 0; min-height: 0; flex: 1; }
+  .trace-bar {
+    display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center;
+    padding: 5px 8px; border-bottom: 1px solid var(--rule); background: var(--panel-2);
+  }
+  .trace-bar label {
+    display: flex; align-items: center; gap: 5px; cursor: pointer;
+    font-size: 11px; color: var(--ink-2);
+  }
+  .trace-bar input { accent-color: var(--optical); margin: 0; }
+  .trace-bar .trace-name { font-family: var(--mono); font-size: 10.5px; }
+  .trace-bar label:has(input:not(:checked)) .trace-name { color: var(--ink-4); }
+  .rubber {
+    fill: var(--accent); fill-opacity: 0.07;
+    stroke: var(--accent); stroke-width: 1; stroke-dasharray: 3 2; pointer-events: none;
+  }
   .node-g.selected .node-box { stroke: var(--accent); }
+  /* Which member of a group the inspector is showing. A dashed edge rather than
+     a second colour: the accent already means "selected" and a group where one
+     block is a different colour reads as one block being a different *kind*. */
+  .node-g.primary .node-box { stroke-dasharray: 4 2; }
   .node-g.selected .node-halo { opacity: 1; }
   .node-halo {
     fill: none; stroke: var(--accent); stroke-width: 1; opacity: 0;
@@ -983,25 +1016,37 @@ verdict, and DESIGN.md
       Sweep
     </button>
     <span class="tb-sep"></span>
-    <button class="tb" aria-pressed="true" title="Select">
+    <button class="tb" id="tool-select" aria-pressed="true" title="Select (V)">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor"
            stroke-width="1.4" stroke-linejoin="round" aria-hidden="true">
         <path d="M3.5 2.2l9 4.6-4 1.2-1.2 4z"/>
       </svg>
     </button>
-    <button class="tb" title="Pan">
+    <button class="tb" id="tool-pan" aria-pressed="false" title="Pan — or hold space with any tool (H)">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor"
            stroke-width="1.4" stroke-linecap="round" aria-hidden="true">
         <path d="M8 2v12M2 8h12M8 2L6 4M8 2l2 2M8 14l-2-2M8 14l2-2M2 8l2-2M2 8l2 2M14 8l-2-2M14 8l-2 2"/>
       </svg>
     </button>
-    <button class="tb" title="Align selected">
+    <button class="tb" id="align-btn" aria-haspopup="true" aria-expanded="false" title="Align the selected blocks">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor"
            stroke-width="1.4" stroke-linecap="round" aria-hidden="true">
         <path d="M2 4.5h12M2 8h8M2 11.5h12"/>
       </svg>
     </button>
     <span class="tb-sep"></span>
+    <div class="menu-pop tb-pop" id="align-menu" role="menu" hidden>
+      <button role="menuitem" id="align-left">Align left</button>
+      <button role="menuitem" id="align-centre">Align centre</button>
+      <button role="menuitem" id="align-right">Align right</button>
+      <hr class="menu-sep">
+      <button role="menuitem" id="align-top">Align top</button>
+      <button role="menuitem" id="align-middle">Align middle</button>
+      <button role="menuitem" id="align-bottom">Align bottom</button>
+      <hr class="menu-sep">
+      <button role="menuitem" id="align-dist-h">Space evenly across</button>
+      <button role="menuitem" id="align-dist-v">Space evenly down</button>
+    </div>
     <div class="zoom">
       <button class="tb" id="zoom-out" title="Zoom out">
         <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor"
@@ -1099,7 +1144,10 @@ verdict, and DESIGN.md
       </div>
       <div class="dock-body">
         <div class="pane" data-pane="con" data-active="true">
-          <div class="plot-wrap"><canvas id="con-canvas"></canvas></div>
+          <div class="plot-col">
+            <div class="trace-bar" id="traces-con" hidden></div>
+            <div class="plot-wrap"><canvas id="con-canvas"></canvas></div>
+          </div>
           <div class="plot-side">
             <p class="side-title">Format</p>
             <dl style="margin:0">
@@ -1117,7 +1165,10 @@ verdict, and DESIGN.md
           </div>
         </div>
         <div class="pane" data-pane="eye">
-          <div class="plot-wrap"><canvas id="eye-canvas"></canvas></div>
+          <div class="plot-col">
+            <div class="trace-bar" id="traces-eye" hidden></div>
+            <div class="plot-wrap"><canvas id="eye-canvas"></canvas></div>
+          </div>
           <div class="plot-side">
             <p class="side-title">Detected intensity</p>
             <dl style="margin:0">
@@ -1137,7 +1188,10 @@ verdict, and DESIGN.md
           </div>
         </div>
         <div class="pane" data-pane="osa">
-          <div class="plot-wrap"><canvas id="osa-canvas"></canvas></div>
+          <div class="plot-col">
+            <div class="trace-bar" id="traces-osa" hidden></div>
+            <div class="plot-wrap"><canvas id="osa-canvas"></canvas></div>
+          </div>
           <div class="plot-side">
             <p class="side-title">Trace</p>
             <dl style="margin:0">
@@ -20990,7 +21044,11 @@ verdict, and DESIGN.md
        here rather than beside the run code because applyTheme() redraws the
        plots while the page is still loading, so a plot cannot read anything
        declared further down the file. */
-    plots: { constellation: null, eye: null, spectrum: null, osnr: null }
+    plots: { constellation: [], eye: [], spectrum: [], osnr: null },
+    /* Which traces the user has unticked, by block label, per kind. Kept out of
+       `plots` because it survives a run: hiding a noisy analyser and then
+       re-running should not bring it back. */
+    hidden: { constellation: new Set(), eye: new Set(), spectrum: new Set() }
   };
 
   async function callApi(path, options) {
@@ -21131,7 +21189,39 @@ verdict, and DESIGN.md
   /* ---------- Canvas ----------------------------------------------------- */
   const svg = $("#graph");
   const NS = "http://www.w3.org/2000/svg";
+  /* `selected` is the block the inspector is showing — one, because a parameter
+     form for four blocks at once is a different feature. `selection` is
+     everything picked out, which is what Delete, a group drag and Align act on.
+
+     They are kept in step by the three helpers below rather than by hand:
+     `selected` is always in `selection`, and an empty `selection` means a null
+     `selected`. Two variables that can disagree is the bug this shape avoids. */
   let selected = "map";
+  const selection = new Set(["map"]);
+
+  function selectOnly(id) {
+    selection.clear();
+    if (id) selection.add(id);
+    selected = id || null;
+  }
+
+  function selectAlso(id) {
+    if (!id) return;
+    if (selection.has(id) && selection.size > 1) {
+      /* Clicking a member of a group with the modifier held takes it out, and
+         hands the inspector whatever is left rather than nothing. */
+      selection.delete(id);
+      if (selected === id) selected = selection.values().next().value || null;
+      return;
+    }
+    selection.add(id);
+    selected = id;
+  }
+
+  function clearSelection() {
+    selection.clear();
+    selected = null;
+  }
 
   function portsOf(node) {
     const m = DATA.manifests[node.type];
@@ -21203,7 +21293,7 @@ verdict, and DESIGN.md
   function currentState() {
     return JSON.stringify({
       nodes: PROJECT.nodes, edges: PROJECT.edges, layout: LAYOUT, selected,
-      name: projectName
+      picked: [...selection], name: projectName
     });
   }
 
@@ -21214,6 +21304,8 @@ verdict, and DESIGN.md
     for (const key of Object.keys(LAYOUT)) delete LAYOUT[key];
     Object.assign(LAYOUT, past.layout);
     selected = past.selected;
+    selection.clear();
+    for (const id of past.picked || (past.selected ? [past.selected] : [])) selection.add(id);
     selectedEdge = null;
     if (past.name !== undefined && past.name !== projectName) {
       projectName = past.name;
@@ -21310,7 +21402,7 @@ verdict, and DESIGN.md
     }
     PROJECT.nodes.push(node);
     LAYOUT[id] = at || freeSpot();
-    selected = id;
+    selectOnly(id);
     selectedEdge = null;
     afterEdit();
     flashHint(manifest.name + " added as " + id);
@@ -21327,7 +21419,12 @@ verdict, and DESIGN.md
        only consistent choice, and undo is what makes it a safe one. */
     PROJECT.edges = PROJECT.edges.filter((e) => e.from[0] !== id && e.to[0] !== id);
     delete LAYOUT[id];
-    if (selected === id) selected = PROJECT.nodes.length ? PROJECT.nodes[0].id : null;
+    selection.delete(id);
+    if (selected === id) {
+      selected = selection.values().next().value
+        || (PROJECT.nodes.length ? PROJECT.nodes[0].id : null);
+      if (selected && !selection.size) selection.add(selected);
+    }
     afterEdit();
     flashHint(lost ? id + " deleted with " + lost + " wire(s) — ctrl+Z to undo"
                    : id + " deleted — ctrl+Z to undo");
@@ -21438,7 +21535,7 @@ verdict, and DESIGN.md
       grab.addEventListener("pointerdown", (ev) => {
         ev.stopPropagation();
         selectedEdge = index;
-        selected = null;
+        clearSelection();
         drawGraph();
         showEmptyInspector();
       });
@@ -21446,7 +21543,8 @@ verdict, and DESIGN.md
 
     for (const n of NODES) {
       const m = DATA.manifests[n.type];
-      const g = el("g", { class: "node-g" + (n.id === selected ? " selected" : ""),
+      const g = el("g", { class: "node-g" + (selection.has(n.id) ? " selected" : "")
+                            + (n.id === selected && selection.size > 1 ? " primary" : ""),
                           tabindex: "0", role: "button", "data-node": n.id,
                           "aria-label": m.name + " " + n.label }, nodeLayer);
       el("rect", { x: n.x - 3, y: n.y - 3, width: NODE_W + 6, height: NODE_H + 6,
@@ -21492,7 +21590,7 @@ verdict, and DESIGN.md
       g.addEventListener("keydown", (ev) => {
         if (ev.key === "Enter" || ev.key === " ") {
           ev.preventDefault();
-          selected = n.id; selectedEdge = null; drawGraph(); showNode(n);
+          selectOnly(n.id); selectedEdge = null; drawGraph(); showNode(n);
         }
       });
     }
@@ -21724,14 +21822,16 @@ verdict, and DESIGN.md
      written that way; a live result carries SI, because that is what the engine
      works in and what every other encoded value uses. Converted here, in one
      place, rather than by teaching the plot two vocabularies. */
-  function eyeSource() {
-    const live = SESSION.plots.eye;
-    if (!live) return { ...DATA.eye, live: false };
+  /* The engine sends seconds and amperes; the axes are drawn in ps and uA. The
+     bundled reference is already in those units, so one converter takes either
+     and the drawing code below never has to know which it was given. */
+  function eyeDisplay(raw) {
+    if (!raw || !raw.time_edges) return { ...(raw || DATA.eye), live: false };
     return {
-      counts: live.counts,
-      time_ps: live.time_edges.map((s) => s * 1e12),
-      amplitude_ua: live.amplitude_edges.map((a) => a * 1e6),
-      unit: live.unit,
+      counts: raw.counts,
+      time_ps: raw.time_edges.map((t) => t * 1e12),
+      amplitude_ua: raw.amplitude_edges.map((a) => a * 1e6),
+      unit: raw.unit,
       live: true
     };
   }
@@ -21744,6 +21844,93 @@ verdict, and DESIGN.md
      link with a laser and a power meter on it ran and drew a 16-QAM
      constellation from the demo -- which reads as *your last project's result*
      and is the one kind of wrong this interface is least allowed to be. */
+  /* The traces of one kind that are currently ticked, in the order the engine
+     reported them. One place, because three panes and the trace bar all have to
+     agree about what "shown" means. */
+  /* How to cut a pane into tiles for n traces. Columns before rows, and never
+     more than two columns, because these plots are square-ish and a row of four
+     across a dock panel is four unreadable slivers. */
+  function tilesFor(count, w, h) {
+    const cols = count <= 1 ? 1 : 2;
+    const rows = Math.ceil(count / cols);
+    const tiles = [];
+    for (let i = 0; i < count; i += 1) {
+      tiles.push({
+        x: (i % cols) * (w / cols),
+        y: Math.floor(i / cols) * (h / rows),
+        w: w / cols,
+        h: h / rows,
+      });
+    }
+    return tiles;
+  }
+
+  /* Draws one trace into its tile and captions it with the block it came from.
+     The caption is why tiling beats a single plot with a picker: with two
+     spectra side by side, which is which has to be on screen, not remembered. */
+  function drawTiles(ctx, w, h, traces, drawOne) {
+    ctx.fillStyle = tok("--plot-bg");
+    ctx.fillRect(0, 0, w, h);
+    const tiles = tilesFor(traces.length, w, h);
+    traces.forEach((trace, i) => {
+      const tile = tiles[i];
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(tile.x, tile.y, tile.w, tile.h);
+      ctx.clip();
+      ctx.translate(tile.x, tile.y);
+      drawOne(ctx, tile.w, tile.h, trace.value);
+      if (traces.length > 1) {
+        /* Top right, because top left is where every one of these plots puts
+           its y-axis labels and the caption landed on top of them. */
+        ctx.fillStyle = tok("--ink-3");
+        ctx.font = MONO_10;
+        ctx.textAlign = "right";
+        ctx.textBaseline = "top";
+        ctx.fillText(trace.label, tile.w - 6, 5);
+      }
+      ctx.restore();
+    });
+  }
+
+  /* Rendered from the run's own results every time the pane draws, so a block
+     added, renamed or deleted needs no bookkeeping here: the bar is a view of
+     what the last run reported, never a list maintained alongside it. */
+  function traceBar(pane, kind) {
+    const bar = $(`#traces-${pane}`);
+    const traces = SESSION.plots[kind];
+    if (!Array.isArray(traces) || traces.length < 2) {
+      bar.hidden = true;
+      bar.replaceChildren();
+      return;
+    }
+    bar.hidden = false;
+    bar.replaceChildren();
+    for (const trace of traces) {
+      const label = document.createElement("label");
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.checked = !SESSION.hidden[kind].has(trace.label);
+      box.addEventListener("change", () => {
+        if (box.checked) SESSION.hidden[kind].delete(trace.label);
+        else SESSION.hidden[kind].add(trace.label);
+        redrawActivePlot();
+      });
+      const name = document.createElement("span");
+      name.className = "trace-name";
+      name.textContent = trace.label;
+      label.append(box, name);
+      bar.append(label);
+    }
+  }
+
+  function visibleTraces(kind) {
+    const traces = SESSION.plots[kind];
+    if (!Array.isArray(traces)) return [];
+    const hidden = SESSION.hidden[kind];
+    return traces.filter((t) => !hidden.has(t.label));
+  }
+
   function drawNothing(ctx, w, h, heading, lines) {
     ctx.fillStyle = tok("--plot-bg"); ctx.fillRect(0, 0, w, h);
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
@@ -21778,10 +21965,25 @@ verdict, and DESIGN.md
        shown only while the current graph could produce one and has not yet.
        Otherwise the pane says so. Drawing an unrelated trace under a badge
        reading "live" is the mistake this whole panel already made once. */
+    traceBar("eye", "eye");
     const canProduce = PROJECT.nodes.some((n) => n.type === "EyeDiagram");
-    if (!SESSION.plots.eye && !canProduce) { drawNoEye(ctx, w, h); return; }
-    if (SESSION.hasRun && !SESSION.plots.eye) { drawNoEye(ctx, w, h); return; }
-    const source = eyeSource();
+    const shown = visibleTraces("eye");
+    const any = (SESSION.plots.eye || []).length;
+    if (!shown.length && any) {
+      drawNothing(ctx, w, h, "All eyes hidden", ["Tick one in the bar above to bring it back."]);
+      return;
+    }
+    if (!shown.length && !canProduce) { drawNoEye(ctx, w, h); return; }
+    if (!shown.length && SESSION.hasRun) { drawNoEye(ctx, w, h); return; }
+    if (!shown.length) {
+      drawTiles(ctx, w, h, [{ label: "reference", value: DATA.eye }], drawEyeInto);
+      return;
+    }
+    drawTiles(ctx, w, h, shown, drawEyeInto);
+  }
+
+  function drawEyeInto(ctx, w, h, raw) {
+    const source = eyeDisplay(raw);
     const counts = source.counts;
     const rows = counts.length, cols = counts[0].length;
 
@@ -21862,22 +22064,32 @@ verdict, and DESIGN.md
     const c = $("#con-canvas");
     if (!c.parentElement.offsetWidth) return;
     const { ctx, w, h } = sizeCanvas(c);
-    /* The last run's histogram when there was one. Before a run, the reference
-       one bundled into the page — which the badge in the dock header labels, so
-       which of the two is on screen is never left to be inferred.
+    traceBar("con", "constellation");
 
-       *After* a run that produced none, neither: the fallback used to apply
-       here too, so running a link with no constellation analyser on it left the
-       demo's 16-QAM cloud on screen looking exactly like a result. The eye and
-       the spectrum already refused to do that; this is the pane that did not. */
-    if (SESSION.hasRun && !SESSION.plots.constellation) {
-      drawNothing(ctx, w, h, "No constellation in this run", [
-        "This graph has no Constellation Diagram block.",
-        "Add one from the palette and wire it to a symbol port.",
-      ]);
+    /* Before a run, the reference histogram bundled into the page — which the
+       badge in the dock header labels, so which of the two is on screen is never
+       left to be inferred. After a run, only what the run produced: the fallback
+       used to apply here too, so a link with no constellation analyser left the
+       demo's 16-QAM cloud on screen looking exactly like a result. */
+    const shown = visibleTraces("constellation");
+    if (!SESSION.hasRun && !shown.length) {
+      drawTiles(ctx, w, h, [{ label: "reference", value: DATA.constellation }],
+                drawConstellationInto);
       return;
     }
-    const source = SESSION.plots.constellation || DATA.constellation;
+    if (!shown.length) {
+      const any = (SESSION.plots.constellation || []).length;
+      drawNothing(ctx, w, h, any ? "All constellations hidden" : "No constellation in this run",
+        any
+          ? ["Tick one in the bar above to bring it back."]
+          : ["This graph has no Constellation Diagram block.",
+             "Add one from the palette and wire it to a symbol port."]);
+      return;
+    }
+    drawTiles(ctx, w, h, shown, drawConstellationInto);
+  }
+
+  function drawConstellationInto(ctx, w, h, source) {
     const counts = source.counts;
     const rows = counts.length, cols = counts[0].length;
 
@@ -21965,9 +22177,8 @@ verdict, and DESIGN.md
      the plot reads, already in nm and dBm, because baking the other two into
      every copy of the file buys nothing. Reconciled here rather than by
      teaching the plot two vocabularies. */
-  function spectrumSource() {
-    const live = SESSION.plots.spectrum;
-    if (!live) return { ...DATA.spectrum, live: false };
+  function spectrumSource(live) {
+    if (!live || !live.power_per_resolution_w) return { ...(live || DATA.spectrum), live: false };
     /* dBm per resolution bandwidth, which is what an instrument displays and
        what `power_per_resolution_w` already is. Floored at -90 so an empty
        display bin lands on the axis instead of setting the range from a bin
@@ -22017,14 +22228,31 @@ verdict, and DESIGN.md
     /* The readings go with the trace. Leaving the bundled ones up beside a pane
        that has just said there is no spectrum is the same lie the plot was
        careful not to tell. */
-    if (!SESSION.plots.spectrum && !canProduce) {
+    traceBar("osa", "spectrum");
+    const shown = visibleTraces("spectrum");
+    const any = (SESSION.plots.spectrum || []).length;
+    if (!shown.length && any) {
+      clearSpectrumPanel();
+      drawNothing(ctx, w, h, "All spectra hidden",
+                  ["Tick one in the bar above to bring it back."]);
+      return;
+    }
+    if (!shown.length && !canProduce) {
       clearSpectrumPanel(); drawNoSpectrum(ctx, w, h); return;
     }
-    if (SESSION.hasRun && !SESSION.plots.spectrum) {
+    if (!shown.length && SESSION.hasRun) {
       clearSpectrumPanel(); drawNoSpectrum(ctx, w, h); return;
     }
+    /* The readings beside the plot belong to one trace, so they follow the
+       first ticked one and the caption on each tile says which is which. */
+    fillSpectrumPanel(spectrumSource(shown.length ? shown[0].value : null));
+    drawTiles(ctx, w, h,
+              shown.length ? shown : [{ label: "reference", value: DATA.spectrum }],
+              drawSpectrumInto);
+  }
 
-    const source = spectrumSource();
+  function drawSpectrumInto(ctx, w, h, raw) {
+    const source = spectrumSource(raw);
     const nm = source.wavelengths_nm, dbm = source.dbm;
     ctx.fillStyle = tok("--plot-bg"); ctx.fillRect(0, 0, w, h);
 
@@ -22101,8 +22329,9 @@ verdict, and DESIGN.md
     ctx.save(); ctx.translate(11, padT + ph / 2); ctx.rotate(-Math.PI / 2);
     ctx.fillText(`dBm / ${fmt(source.resolution_bandwidth_ghz)} GHz`, 0, 0);
     ctx.restore();
-
-    fillSpectrumPanel(source);
+    /* The side panel is filled by the caller, once, from the first ticked
+       trace. Filling it from here would mean the last tile drawn won, which
+       with two spectra is whichever happened to be second. */
   }
 
   const SPECTRUM_READINGS =
@@ -22662,10 +22891,49 @@ verdict, and DESIGN.md
   }
 
   /* An in-progress pan: where the pointer went down, and where the view was
-     then. Held in screen pixels rather than user units because that is what the
-     pointer reports and what the transform consumes -- converting through the
-     CTM in both directions would be arithmetic with nothing to gain. */
+     then. The pointer is in screen pixels and the view in canvas units, so both
+     are kept and the conversion happens once, on the move. */
   let panning = null;
+  /* An in-progress rubber band, in canvas units. */
+  let banding = null;
+
+  /* "select" or "pan". Space held down is a momentary pan whatever the tool is,
+     which is the gesture every canvas tool shares and the reason the toolbar
+     button is a convenience rather than the only way. */
+  let tool = "select";
+  let spaceHeld = false;
+
+  function setTool(next) {
+    tool = next;
+    $("#canvas-wrap").dataset.tool = next;
+    $("#tool-select").setAttribute("aria-pressed", String(next === "select"));
+    $("#tool-pan").setAttribute("aria-pressed", String(next === "pan"));
+  }
+
+  const panningNow = () => tool === "pan" || spaceHeld;
+
+  $("#tool-select").addEventListener("click", () => setTool("select"));
+  $("#tool-pan").addEventListener("click", () => setTool("pan"));
+  setTool("select");
+
+  document.addEventListener("keydown", (event) => {
+    if (event.code !== "Space" || spaceHeld) return;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) return;
+    spaceHeld = true;
+    $("#canvas-wrap").dataset.tool = "pan";
+    event.preventDefault();
+  });
+  document.addEventListener("keyup", (event) => {
+    if (event.code !== "Space") return;
+    spaceHeld = false;
+    $("#canvas-wrap").dataset.tool = tool;
+  });
+  /* Alt-tabbing away with space down would otherwise leave the canvas stuck in
+     pan mode with no key to release. */
+  window.addEventListener("blur", () => {
+    spaceHeld = false;
+    $("#canvas-wrap").dataset.tool = tool;
+  });
 
   svg.addEventListener("pointerdown", (event) => {
     /* Middle-drag pans from anywhere, including over a block, which is the
@@ -22695,33 +22963,77 @@ verdict, and DESIGN.md
     if (node) {
       const id = node.dataset.node;
       const at = svgPoint(event);
-      const position = LAYOUT[id] || { x: 0, y: 0 };
-      drag = { id, dx: at.x - position.x, dy: at.y - position.y, moved: false };
       selectedEdge = null;
-      if (selected !== id) {
+      const additive = event.shiftKey || event.ctrlKey || event.metaKey;
+      if (additive) {
+        selectAlso(id);
+        drawGraph();
+        if (selected) showNode(NODES.find((n) => n.id === selected));
+        else showEmptyInspector();
+        event.preventDefault();
+        return;
+      }
+      /* Pressing a block that is already part of a group keeps the group, so a
+         multiple selection can be dragged as one. Pressing one outside it
+         selects just that block, which is what a plain click means everywhere
+         else. */
+      if (!selection.has(id)) {
+        selectOnly(id);
+        drawGraph();
+        showNode(NODES.find((n) => n.id === id));
+      } else if (selected !== id) {
         selected = id;
         drawGraph();
         showNode(NODES.find((n) => n.id === id));
       }
+      /* Every member's offset from the pointer, so the group keeps its shape. */
+      const offsets = new Map();
+      for (const member of selection) {
+        const where = LAYOUT[member] || { x: 0, y: 0 };
+        offsets.set(member, { dx: at.x - where.x, dy: at.y - where.y });
+      }
+      /* Pressing a member of a group keeps the group so it can be dragged; if
+         the press turns out to be a *click*, it collapses to the one block on
+         release. Deciding on the way up is the only way to have both. */
+      drag = { id, offsets, moved: false, collapse: selection.size > 1 };
       capture(event);
       event.preventDefault();
       return;
     }
 
-    /* Empty canvas: start a pan, and remember that a *click* here -- a press
-       that never moved -- clears the selection instead. Clearing it on the way
-       down would mean dragging the view also threw away what you had selected,
-       for no reason anyone asked for. */
     const wire = event.target.closest("[data-edge]");
-    if (!wire) {
+    if (wire) return;
+
+    /* Empty canvas. With the pan tool -- or space held -- a drag moves the view;
+       otherwise it draws a selection box. Either way a press that never moved is
+       a click, and a click on the bed clears the selection. Clearing on the way
+       *down* would mean dragging the view threw away what you had picked out. */
+    if (panningNow()) {
       panning = { x: event.clientX, y: event.clientY, from: { ...view }, moved: false };
       $("#canvas-wrap").classList.add("panning");
-      capture(event);
-      event.preventDefault();
+    } else {
+      const at = svgPoint(event);
+      banding = {
+        x: at.x, y: at.y, moved: false,
+        keep: (event.shiftKey || event.ctrlKey || event.metaKey) ? [...selection] : null,
+      };
     }
+    capture(event);
+    event.preventDefault();
   });
 
   svg.addEventListener("pointermove", (event) => {
+    if (banding) {
+      const at = svgPoint(event);
+      if (!banding.moved
+          && Math.abs(at.x - banding.x) < 3 && Math.abs(at.y - banding.y) < 3) return;
+      banding.moved = true;
+      banding.toX = at.x;
+      banding.toY = at.y;
+      applyBand();
+      drawBand();
+      return;
+    }
     if (panning) {
       const dx = event.clientX - panning.x;
       const dy = event.clientY - panning.y;
@@ -22746,7 +23058,8 @@ verdict, and DESIGN.md
     }
     if (!drag) return;
     const at = svgPoint(event);
-    const next = { x: Math.round(at.x - drag.dx), y: Math.round(at.y - drag.dy) };
+    const lead = drag.offsets.get(drag.id) || { dx: 0, dy: 0 };
+    const next = { x: Math.round(at.x - lead.dx), y: Math.round(at.y - lead.dy) };
     if (!drag.moved) {
       /* A click and a drag start identically. The snapshot is taken on the
          first movement so that clicking a block does not fill the undo stack
@@ -22757,10 +23070,135 @@ verdict, and DESIGN.md
       snapshot();
       drag.moved = true;
     }
-    LAYOUT[drag.id] = next;
+    /* Every member moves, each from its own offset, so the group arrives with
+       the shape it left with. */
+    for (const [member, offset] of drag.offsets) {
+      LAYOUT[member] = { x: Math.round(at.x - offset.dx), y: Math.round(at.y - offset.dy) };
+    }
     rebuildViews();
     drawGraph();
   });
+
+  /* ---------- Align --------------------------------------------------------
+     Eight operations on the selection, and every one of them is one snapshot,
+     so undo takes back "I aligned those" rather than six block moves.
+
+     Two or more blocks, because aligning one block to itself is a no-op that
+     still looks like it did something. Distributing needs three: with two there
+     is nothing between the ends to space out. The menu disables what does not
+     apply rather than letting it run and do nothing visible. */
+
+  function alignBoxes() {
+    return [...selection]
+      .map((id) => ({ id, at: LAYOUT[id] }))
+      .filter((b) => b.at);
+  }
+
+  function alignSelection(how) {
+    const boxes = alignBoxes();
+    if (boxes.length < 2) { flashHint("select two or more blocks to align"); return; }
+    snapshot();
+
+    const lefts = boxes.map((b) => b.at.x);
+    const tops = boxes.map((b) => b.at.y);
+    if (how === "left") {
+      const x = Math.min(...lefts);
+      for (const b of boxes) LAYOUT[b.id] = { ...b.at, x };
+    } else if (how === "right") {
+      const x = Math.max(...lefts);
+      for (const b of boxes) LAYOUT[b.id] = { ...b.at, x };
+    } else if (how === "centre") {
+      const x = Math.round(lefts.reduce((a, v) => a + v, 0) / boxes.length);
+      for (const b of boxes) LAYOUT[b.id] = { ...b.at, x };
+    } else if (how === "top") {
+      const y = Math.min(...tops);
+      for (const b of boxes) LAYOUT[b.id] = { ...b.at, y };
+    } else if (how === "bottom") {
+      const y = Math.max(...tops);
+      for (const b of boxes) LAYOUT[b.id] = { ...b.at, y };
+    } else if (how === "middle") {
+      const y = Math.round(tops.reduce((a, v) => a + v, 0) / boxes.length);
+      for (const b of boxes) LAYOUT[b.id] = { ...b.at, y };
+    } else if (how === "dist-h" || how === "dist-v") {
+      const axis = how === "dist-h" ? "x" : "y";
+      const order = [...boxes].sort((a, b) => a.at[axis] - b.at[axis]);
+      const first = order[0].at[axis];
+      const last = order[order.length - 1].at[axis];
+      const step = (last - first) / (order.length - 1);
+      order.forEach((b, i) => {
+        LAYOUT[b.id] = { ...b.at, [axis]: Math.round(first + step * i) };
+      });
+    }
+
+    rebuildViews();
+    drawGraph();
+    /* Moving blocks changes where they are drawn and nothing about what they
+       compute, so the results on screen are still answers to this graph. */
+    markProvenance();
+    flashHint(`${boxes.length} blocks aligned — ctrl+Z to undo`);
+  }
+
+  const alignBtn = $("#align-btn"), alignMenu = $("#align-menu");
+
+  function toggleAlignMenu(show) {
+    const open = show === undefined ? alignMenu.hidden : show;
+    if (open) {
+      closeMenus();
+      const enough = selection.size >= 2;
+      for (const id of ["left", "centre", "right", "top", "middle", "bottom"]) {
+        $(`#align-${id}`).disabled = !enough;
+      }
+      $("#align-dist-h").disabled = selection.size < 3;
+      $("#align-dist-v").disabled = selection.size < 3;
+    }
+    alignMenu.hidden = !open;
+    alignBtn.setAttribute("aria-expanded", String(open));
+  }
+
+  alignBtn.addEventListener("click", () => toggleAlignMenu());
+  document.addEventListener("pointerdown", (event) => {
+    if (alignMenu.hidden) return;
+    if (alignMenu.contains(event.target) || alignBtn.contains(event.target)) return;
+    toggleAlignMenu(false);
+  });
+  for (const how of ["left", "centre", "right", "top", "middle", "bottom", "dist-h", "dist-v"]) {
+    onMenu(`align-${how}`, () => alignSelection(how));
+  }
+
+  /* ---------- The rubber band ----------------------------------------------
+     What the box currently covers, recomputed on every move rather than
+     accumulated, so dragging back over a block takes it out again. A block
+     counts when the box touches it at all: requiring full containment means a
+     careful drag around a row of blocks that just clips one of them silently
+     leaves it behind. */
+
+  function applyBand() {
+    const x0 = Math.min(banding.x, banding.toX), x1 = Math.max(banding.x, banding.toX);
+    const y0 = Math.min(banding.y, banding.toY), y1 = Math.max(banding.y, banding.toY);
+    selection.clear();
+    for (const id of banding.keep || []) selection.add(id);
+    for (const n of NODES) {
+      if (n.x <= x1 && n.x + NODE_W >= x0 && n.y <= y1 && n.y + NODE_H >= y0) {
+        selection.add(n.id);
+      }
+    }
+    if (!selection.has(selected)) {
+      selected = selection.values().next().value || null;
+    }
+    drawGraph();
+  }
+
+  function drawBand() {
+    let box = svg.querySelector(".rubber");
+    if (!banding || !banding.moved) { if (box) box.remove(); return; }
+    if (!box) {
+      box = el("rect", { class: "rubber" }, svg);
+    }
+    box.setAttribute("x", Math.min(banding.x, banding.toX));
+    box.setAttribute("y", Math.min(banding.y, banding.toY));
+    box.setAttribute("width", Math.abs(banding.toX - banding.x));
+    box.setAttribute("height", Math.abs(banding.toY - banding.y));
+  }
 
   function endPointer(event) {
     if (wiring) {
@@ -22778,7 +23216,29 @@ verdict, and DESIGN.md
       /* Moving a block changes where it is drawn and nothing about what it
          computes, so the results on screen are still answers to this graph. */
       if (drag.moved) { markProvenance(); }
+      else if (drag.collapse) {
+        selectOnly(drag.id);
+        drawGraph();
+        showNode(NODES.find((n) => n.id === drag.id));
+      }
       drag = null;
+    }
+    if (banding) {
+      const wasDrag = banding.moved;
+      banding = null;
+      drawBand();
+      if (wasDrag) {
+        if (selected) showNode(NODES.find((n) => n.id === selected));
+        else showEmptyInspector();
+        flashHint(selection.size
+          ? `${selection.size} block${selection.size === 1 ? "" : "s"} selected`
+          : "nothing in that box");
+      } else {
+        clearSelection();
+        selectedEdge = null;
+        drawGraph();
+        showEmptyInspector();
+      }
     }
     if (panning) {
       const wasDrag = panning.moved;
@@ -22790,7 +23250,7 @@ verdict, and DESIGN.md
          Panning the view leaves the selection alone. */
       if (!wasDrag && event.target && !event.target.closest("[data-node]")) {
         selectedEdge = null;
-        selected = null;
+        clearSelection();
         drawGraph();
         showEmptyInspector();
       }
@@ -22848,6 +23308,8 @@ verdict, and DESIGN.md
     [`${MOD}+=`, "Zoom in", { mod: true, key: "=", run: () => setZoom(zoom + 20) }],
     [`${MOD}+-`, "Zoom out", { mod: true, key: "-", run: () => setZoom(zoom - 20) }],
     [`${MOD}+0`, "Reset view (zoom and position)", { mod: true, key: "0", run: resetView }],
+    ["V", "Select tool", { key: "v", run: () => setTool("select") }],
+    ["H", "Pan tool (or hold space)", { key: "h", run: () => setTool("pan") }],
     ["?", "Keyboard shortcuts", { key: "?", run: () => showShortcuts() }],
     ["esc", "Close a menu, cancel a wire, or stop a run", { key: "escape", run: onEscape }],
   ];
@@ -23051,9 +23513,9 @@ verdict, and DESIGN.md
     SESSION.live = false;
     SESSION.hasRun = false;
     SESSION.captions = {};
-    SESSION.plots.constellation = null;
-    SESSION.plots.eye = null;
-    SESSION.plots.spectrum = null;
+    SESSION.plots.constellation = [];
+    SESSION.plots.eye = [];
+    SESSION.plots.spectrum = [];
     SESSION.plots.osnr = null;
     SWEEP.points = null;
     afterEdit({ record: false });
@@ -23093,9 +23555,9 @@ verdict, and DESIGN.md
     SESSION.live = false;
     SESSION.hasRun = false;
     SESSION.captions = {};
-    SESSION.plots.constellation = null;
-    SESSION.plots.eye = null;
-    SESSION.plots.spectrum = null;
+    SESSION.plots.constellation = [];
+    SESSION.plots.eye = [];
+    SESSION.plots.spectrum = [];
     SESSION.plots.osnr = null;
     SWEEP.points = null;
     /* A new document gets a new window onto it. Keeping the old pan would open
@@ -23156,9 +23618,24 @@ verdict, and DESIGN.md
      done this since blocks became deletable; the menu calls the same path so
      there is one definition of what Delete means. */
   function deleteSelection() {
-    if (selectedEdge !== null) removeEdge(selectedEdge);
-    else if (selected) removeNode(selected);
-    else flashHint("nothing selected");
+    if (selectedEdge !== null) { removeEdge(selectedEdge); return; }
+    if (!selection.size) { flashHint("nothing selected"); return; }
+    /* One snapshot for the group, not one per block, so undo brings all of them
+       back in a single step -- which is what "I deleted those four" means. */
+    const doomed = [...selection];
+    snapshot();
+    for (const id of doomed) {
+      PROJECT.nodes = PROJECT.nodes.filter((n) => n.id !== id);
+      PROJECT.edges = PROJECT.edges.filter((e) => e.from[0] !== id && e.to[0] !== id);
+      delete LAYOUT[id];
+    }
+    clearSelection();
+    selected = PROJECT.nodes.length ? PROJECT.nodes[0].id : null;
+    if (selected) selection.add(selected);
+    afterEdit();
+    flashHint(doomed.length === 1
+      ? `${doomed[0]} deleted — ctrl+Z to undo`
+      : `${doomed.length} blocks deleted — ctrl+Z to undo`);
   }
 
   /* ---------- Help ----------------------------------------------------------
@@ -23236,6 +23713,14 @@ verdict, and DESIGN.md
   }
 
   function closeMenus({ focus = false } = {}) {
+    /* The align popup hangs off the toolbar rather than the menubar, but it is
+       the same furniture and closes for the same reasons -- so one function
+       shuts whichever is open and `onMenu` works for rows in either. */
+    const align = document.getElementById("align-menu");
+    if (align && !align.hidden) {
+      align.hidden = true;
+      document.getElementById("align-btn").setAttribute("aria-expanded", "false");
+    }
     if (!openMenu) return;
     const was = openMenu;
     openMenu = null;
@@ -24028,17 +24513,33 @@ verdict, and DESIGN.md
        leaving the reference plot up looking current. */
     /* Found by kind rather than by block name: whichever block produced a
        histogram is the one that drew it, whatever it happens to be called. */
-    const firstOfKind = (kind) => {
-        for (const ports of Object.values(payload.results)) {
+    /* Every analyser of a kind, with the block it came from, rather than the
+       first one found. A graph with three spectrum analysers on it has three
+       things to say and used to show one of them -- and which one depended on
+       the order the engine happened to return its results in, so adding a block
+       could silently change which trace you were looking at. */
+    const tracesOfKind = (kind) => {
+        const found = [];
+        for (const [label, ports] of Object.entries(payload.results)) {
           for (const value of Object.values(ports)) {
-            if (value.kind === kind) return value;
+            if (value.kind === kind) found.push({ label, value });
           }
         }
-        return null;
+        return found;
       };
-    SESSION.plots.constellation = firstOfKind("constellation");
-    SESSION.plots.eye = firstOfKind("eye");
-    SESSION.plots.spectrum = firstOfKind("spectrum");
+    SESSION.plots.constellation = tracesOfKind("constellation");
+    SESSION.plots.eye = tracesOfKind("eye");
+    SESSION.plots.spectrum = tracesOfKind("spectrum");
+    /* A block that has gone takes its checkbox with it, so hiding a trace and
+       then deleting its analyser does not leave a hidden ghost that would
+       silently hide a *new* block of the same name later. */
+    for (const [kind, traces] of Object.entries(SESSION.plots)) {
+      if (!Array.isArray(traces) || !SESSION.hidden[kind]) continue;
+      const live = new Set(traces.map((t) => t.label));
+      for (const label of [...SESSION.hidden[kind]]) {
+        if (!live.has(label)) SESSION.hidden[kind].delete(label);
+      }
+    }
     /* The OSNR shown beside the trace comes from an OSNR meter if the
        graph has one, and is left empty if it does not. It is not read
        off the displayed curve: that would move with the analyser's

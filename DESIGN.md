@@ -430,6 +430,55 @@ there is still room for it. The first pair of numbers written here were guesses
 of 1180 and 1000, which hid the count on a 1100px window with 300px to spare;
 that is what §8b's rule is for and it caught it within the hour.
 
+## 8d. Selecting, aligning, and more than one of a thing
+
+Three more from use, and the first two turned out to be one thing.
+
+**The hand cursor was telling the truth, and that was the problem.** It sat on
+the grid always, which said the bed could only be pushed around — and it could,
+because a drag there had no other meaning. What was actually missing was
+*selecting more than one block*, and the cursor was the symptom.
+
+So the selection is a set. `selected` stays the one block the inspector shows —
+a parameter form for four blocks at once is a different feature — and `selection`
+is everything picked out, which Delete, a group drag and Align act on. They are
+kept in step by three helpers rather than by hand, because two variables that can
+disagree eventually do. Shift or ctrl adds and removes; a drag on the bed draws a
+band; pressing a member of a group keeps the group so it can be dragged, and
+collapses to that one block if the press turns out to be a click. A group delete
+takes **one** snapshot, so undo reverses "I deleted those four" in one step.
+
+With a drag on the bed now meaning *select*, the toolbar's two dead tool buttons
+became real: Select and Pan, with the cursor naming the tool rather than the
+surface. Space held is a momentary pan whatever the tool is, which is the gesture
+every canvas shares — and it is released on window blur, or alt-tabbing away with
+it down leaves the canvas stuck in pan mode with no key to let go of.
+
+**Align was the third dead button.** Eight operations — six edges and two
+distributes — each one snapshot. Two blocks or more, three for distributing,
+because with two there is nothing between the ends to space out; the menu
+disables what does not apply rather than letting it run and do nothing visible.
+
+**And a pane showed one analyser when the graph had three.** `firstOfKind`
+returned the first match and dropped the rest — and *which* one that was depended
+on the order the engine happened to return its results in, so adding an unrelated
+block could silently change which trace you were looking at. That is the same
+family as §8b's bug: a plot that is not what it appears to be.
+
+Every analyser of a kind is kept now, tiled two to a row, each captioned with the
+block it came from, each with a checkbox above the plot. Tiles rather than one
+overlaid plot: a spectrum would overlay well, but a constellation and an eye are
+2-D histograms and two of them on one axis is mud. The caption is why tiling beats
+a picker — with two spectra side by side, which is which has to be *on screen*,
+not remembered. The bar is rendered from the run's own results every time the pane
+draws, so a block added, renamed or deleted needs no bookkeeping; and a hidden
+trace whose block has gone is forgotten, so it cannot silently hide a later block
+that happens to share its name.
+
+The side panel beside the spectrum follows the first ticked trace, and says which
+by the caption on the tile. It used to be filled from inside the drawing code,
+which with two traces meant the last one drawn won.
+
 ## 9. Decisions worth not re-litigating
 
 - **Paper is the default**, and it is stamped before first paint so a dark host
