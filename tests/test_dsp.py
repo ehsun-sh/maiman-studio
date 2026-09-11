@@ -1102,7 +1102,8 @@ def test_on_the_shipped_link_acquisition_is_what_makes_a_large_offset_survivable
     offset = 20e9
     graph = build_flagship(sequence_length=4096)
     blocks = {c.label: c for c in graph.components}
-    blocks["lo"].wavelength = C_LIGHT / (C_LIGHT / 1550e-9 - offset) * 1e9
+    local_oscillator = cast(Any, blocks["lo"])
+    local_oscillator.wavelength = C_LIGHT / (C_LIGHT / 1550e-9 - offset) * 1e9
 
     results = graph.run(keep=[blocks["rx"], blocks["pil"], blocks["vsa"]])
     assert results[blocks["vsa"]].evm > 1.0, "20 GHz should destroy this link outright"

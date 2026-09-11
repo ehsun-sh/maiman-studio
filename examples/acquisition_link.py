@@ -19,6 +19,7 @@ Run: ``python examples/acquisition_link.py``
 from __future__ import annotations
 
 from maiman import Graph, SimulationContext
+from maiman.component import Component
 from maiman.components import (
     CoarseFrequencyRecovery,
     CoherentReceiver,
@@ -51,7 +52,7 @@ FINE_LIMIT = SYMBOL_RATE / (2.0 * 4.0)
 OFFSETS = [0.2e9, 4.1e9, -4.1e9, 20e9, 100e9]
 
 
-def link(offset: float, *, acquire: bool) -> tuple[Graph, dict[str, object]]:
+def link(offset: float, *, acquire: bool) -> tuple[Graph, dict[str, Component]]:
     """The same link twice, differing only by whether acquisition is in the path."""
     # ``bit_rate`` is the symbol rate -- ``sample_rate`` is this times
     # ``samples_per_symbol``, not times the bits carried in each one. The name is
@@ -93,7 +94,7 @@ def link(offset: float, *, acquire: bool) -> tuple[Graph, dict[str, object]]:
     graph.connect(modulator, receiver["in"])
     graph.connect(lo, receiver["lo"])
 
-    watched: dict[str, object] = {"fine": frequency, "vsa": analyzer}
+    watched: dict[str, Component] = {"fine": frequency, "vsa": analyzer}
     if acquire:
         acquisition = graph.add(CoarseFrequencyRecovery(label="acq"))
         graph.connect(receiver["i"], acquisition["i"])
