@@ -512,3 +512,54 @@ def test_the_coupler_kept_only_the_parameters_that_move_it() -> None:
         nudged._values = {**nudged._values, name: 0.25}
         same = np.allclose(default._matrix_factory()(grid).s, nudged._matrix_factory()(grid).s)
         assert not same, f"{name} does not change the coupler's matrix; it should not be declared"
+
+
+# --------------------------------------------------------------------------
+# The projects the studio ships
+# --------------------------------------------------------------------------
+
+#: Every `.maiman` file in examples/. Discovered rather than listed, so a new
+#: one is covered the moment it is written instead of when somebody remembers
+#: to add it here.
+SHIPPED_PROJECTS = sorted((Path(__file__).resolve().parent.parent / "examples").glob("*.maiman"))
+
+
+def test_there_are_projects_to_ship() -> None:
+    """Guards the guard: a glob that matches nothing passes every test below."""
+    assert len(SHIPPED_PROJECTS) >= 4, [p.name for p in SHIPPED_PROJECTS]
+
+
+@pytest.mark.parametrize("path", SHIPPED_PROJECTS, ids=lambda p: p.name)
+def test_every_shipped_project_still_opens_and_runs(path: Path) -> None:
+    """These are the first thing a new user opens, and nothing checked them.
+
+    A shipped project is a JSON document naming components and parameters. Rename
+    a component, retire a parameter, change a port — and the file silently stops
+    loading, in the File menu, for someone who has just installed the package and
+    has no way to tell whether it is their fault.
+
+    Running it as well as loading it, because a graph that builds and then raises
+    on the first sample is no better from the outside.
+    """
+    graph = load(path)
+    assert graph.components, f"{path.name} loaded with no components"
+    results = graph.run()
+    assert results, f"{path.name} ran and produced nothing"
+
+
+@pytest.mark.parametrize("path", SHIPPED_PROJECTS, ids=lambda p: p.name)
+def test_every_shipped_project_carries_its_layout(path: Path) -> None:
+    """Otherwise it opens as a pile of blocks in the top-left corner.
+
+    Layout is the one thing the engine has no opinion about, so it lives in the
+    document. A project saved without it still runs, which is exactly why this
+    needs asserting separately from the test above.
+    """
+    document = json.loads(path.read_text(encoding="utf-8"))
+    positions = ui_from_dict(document)
+    node_ids = {node["id"] for node in document["nodes"]}
+    assert set(positions) == node_ids, (
+        f"{path.name}: positions without a block "
+        f"{sorted(set(positions) - node_ids)}, blocks with no position "
+        f"{sorted(node_ids - set(positions))}"
+    )

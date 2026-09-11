@@ -281,14 +281,28 @@ Two findings worth keeping:
   canvas: at ~20 blocks the node text stops being readable at this canvas size,
   and a schematic nobody can read is not a better demonstration. At 19 blocks —
   the receiver's two blind front-end corrections arrived after this was written —
-  the current graph is at that ceiling, which is the reason the
-  two instruments that need a link of their own get one instead of a place on
-  it: the eye comes from [`examples/ook_eye.maiman`](examples/ook_eye.maiman)
-  and the spectrum from [`examples/wdm_osa.maiman`](examples/wdm_osa.maiman),
-  both openable from the File menu. Neither could sit here anyway — a coherent
-  receiver has no eye, and a single-carrier link has nothing for an OSA to
-  show — and tests keep both off this canvas rather than trusting that nobody
-  wires one on.
+  the current graph is at that ceiling, which is the reason anything else that
+  needs a link of its own gets one instead of a place on it. Three do, all
+  openable from the File menu: the eye comes from
+  [`examples/ook_eye.maiman`](examples/ook_eye.maiman), the spectrum from
+  [`examples/wdm_osa.maiman`](examples/wdm_osa.maiman), and the soft-decision
+  FEC chain from
+  [`examples/coherent_sdfec.maiman`](examples/coherent_sdfec.maiman).
+
+  The first two could not sit here anyway — a coherent receiver has no eye, and
+  a single-carrier link has nothing for an OSA to show — and tests keep both off
+  this canvas rather than trusting that nobody wires one on.
+
+  The third is a sharper case, and it is not about space. This canvas uses
+  differential *quadrant* encoding, and
+  [`DifferentialDecoder`](src/maiman/components/mapping.py) has to slice to
+  difference the quadrant back out, so what leaves it is ideal constellation
+  points — measured, the distance to the nearest one is exactly zero and a
+  demapper reading it returns log-likelihood ratios of order 1e29. Soft
+  information does not survive a block that emits decisions, and tapping
+  upstream of it means demapping against an alphabet that may be a quarter turn
+  out. **Differential coding and soft-decision FEC are alternatives, not a
+  stack**, so the coded link declares an ideal carrier instead and says so.
 - No motion beyond the run pulse and the control transitions.
 - Progress on a long run is **done**, and done the way this section said it
   would have to be: a real fraction from the engine rather than an animation

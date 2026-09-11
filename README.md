@@ -422,6 +422,37 @@ it. A loop that let each stripe overwrite the previous one's result discarded ha
 braiding exists to produce. And a component decoder fed its own previous extrinsic agreed with
 itself, so its output collapsed to zero and its corrections quietly unwound two passes later.
 
+### A coherent link that runs on soft decisions
+
+`examples/coherent_sdfec.maiman` — open it from the File menu. 32 GBd 16-QAM, the staircase code at
+16.4 % overhead, decoded on log-likelihood ratios from a max-log demapper rather than on bits:
+
+```
+pre-FEC BER   post-FEC BER   blocks
+  7.36e-03         0            4
+```
+
+At −25 dBm the line is running at a few times 1e-3 — past what RS(255,239) can touch — and the
+payload comes out exact.
+
+**It is a separate project, and the reason is not layout.** The flagship coherent link uses
+differential *quadrant* encoding to survive the quarter-turn ambiguity every blind stage leaves,
+and `DifferentialDecoder` has to slice in order to difference the quadrant out. Measured on the
+shipped graph: the distance from its output to the nearest constellation point is **exactly zero**,
+and a demapper reading it returns LLRs of order 1e29. Soft information does not survive a block
+that emits decisions — and tapping upstream of it means demapping against an alphabet that may be a
+quarter turn out. **Differential coding and soft-decision FEC are alternatives, not a stack.**
+
+So the coded link declares an **ideal carrier** — both lasers at 1550 nm, no linewidth — which
+removes the ambiguity rather than resolving it. A real system pairs soft FEC with pilot symbols,
+which this library does not have; that absence is why the idealisation is declared here rather than
+worked around quietly. Carrier recovery is demonstrated on the flagship, where it belongs.
+
+**Four blocks, not two.** Every bit is checked twice — by its own stripe's rows and, transposed, by
+the next stripe's — so the last block of a stream has half its protection missing until the next
+one arrives. At two blocks that is half the payload, and it floors the error rate near 1e-4 for
+reasons that have nothing to do with the channel.
+
 ### What EDFA saturation is for
 
 Until now the EDFA's docstring said, in its own words, that **saturation was a clamp and not a
@@ -1695,6 +1726,7 @@ Every physics block ships with a test against a closed-form result, run in CI
 | Fractional delay is exact | Forward then back returns the input to 1e-12 — a phase ramp, not an interpolation | ✅ |
 | Timing recovery earns its place | 500 µm of waveguide costs 675 symbol errors in 1920; with the stage, none, and it moves by the 7.00 ps the guide actually holds | ✅ |
 | A whole symbol is invisible | Delay by one symbol period and the estimate does not move — the limit is `\|A\|²`, not the code | ✅ |
+| Every shipped project still opens | All six `.maiman` files load, run, and carry their canvas layout — the first thing a new user opens, and nothing checked them before | ✅ |
 | **Soft FEC clears what hard FEC cannot** | −25 dBm, 7.4e-3 on the line: the staircase delivers an exact payload where RS(255,239) returns its input | ✅ |
 | A staircase stripe row is a codeword | Structural, block by block — the braiding asserted rather than inferred from a curve | ✅ |
 | Chase beats its component code | Four errors recovered on a `t=2` code, because they were the least reliable bits | ✅ |

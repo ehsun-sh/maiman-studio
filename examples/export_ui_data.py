@@ -47,6 +47,9 @@ from maiman.components import (
     PowerMeter,
     PRBSGenerator,
     QAMMapper,
+    SoftDemapper,
+    SoftFECDecoder,
+    SoftFECEncoder,
     TimingRecovery,
 )
 from maiman.project import graph_to_dict, save
@@ -124,6 +127,124 @@ def ook_eye() -> Any:
     histogram = graph.run()[eye_block]
     save(graph, OOK_PROJECT, ui=OOK_LAYOUT)
     return histogram
+
+
+#: Where the soft-decision FEC project is written, so the studio has a coded
+#: link to open.
+SDFEC_PROJECT = Path(__file__).parent / "coherent_sdfec.maiman"
+
+#: Blocks per run. The staircase checks every bit twice — once by its own
+#: stripe's rows, once transposed as a column by the stripe after it — so the
+#: *last* block of a stream has only half its protection until the next one
+#: arrives. At two blocks that is half the payload and it floors the error rate
+#: near 1e-4 for reasons that have nothing to do with the channel. Four is where
+#: the demonstration stops being about its own edge effect.
+SDFEC_BLOCKS = 4
+
+SDFEC_LAYOUT = {
+    "tx": {"x": 306.0, "y": 40.0},
+    "lo": {"x": 582.0, "y": 40.0},
+    "pm": {"x": 720.0, "y": 40.0},
+    "fec": {"x": 30.0, "y": 220.0},
+    "map": {"x": 168.0, "y": 220.0},
+    "drv": {"x": 306.0, "y": 220.0},
+    "mod": {"x": 444.0, "y": 220.0},
+    "rx": {"x": 582.0, "y": 220.0},
+    "smp": {"x": 30.0, "y": 400.0},
+    "sd": {"x": 168.0, "y": 400.0},
+    "dec": {"x": 306.0, "y": 400.0},
+    "cd": {"x": 444.0, "y": 400.0},
+}
+
+
+def coherent_sdfec_link() -> Graph:
+    """A coherent link decoded on log-likelihood ratios rather than on bits.
+
+    **Why this is a separate project and not three more blocks on the flagship.**
+
+    Two reasons, and the first is not a layout preference. The shipped coherent
+    link uses differential *quadrant* encoding to survive the quarter-turn
+    ambiguity every blind stage leaves, and
+    :class:`~maiman.components.DifferentialDecoder` has to slice to difference
+    the quadrant out — so what leaves it is ideal constellation points. Measured
+    on the shipped graph: the distance from its output to the nearest
+    constellation point is *exactly* zero and a demapper reading it returns
+    log-likelihood ratios of order 1e29. Soft information cannot survive a block
+    that emits decisions, and tapping upstream of it means demapping against an
+    alphabet that may be a quarter turn out. Differential coding and
+    soft-decision FEC are alternatives, not a stack.
+
+    The second is the canvas. `DESIGN.md` puts the readable ceiling at about
+    twenty blocks and the flagship is at nineteen; this would make it
+    twenty-two. The precedent is already set — the eye and the spectrum get
+    links of their own for the same reason.
+
+    So the carrier here is **ideal, and declared**: both lasers sit at 1550 nm
+    with no linewidth, which removes the ambiguity rather than resolving it. A
+    real system pairs soft FEC with pilot symbols, which this library does not
+    have. Carrier recovery is demonstrated on the flagship, where it belongs;
+    this link is about the code.
+    """
+    ctx = SimulationContext(
+        bit_rate=SYMBOL_RATE,
+        samples_per_symbol=4,
+        sequence_length=SDFEC_BLOCKS * 16384 // BITS_PER_SYMBOL,
+        seed=2026,
+        precision="double",
+    )
+    graph = Graph(ctx)
+    # A source, not a filter: the coder makes more bits than it is given and the
+    # window is a fixed number of symbols *on the line*, so coding shrinks the
+    # payload rather than speeding the line. It emits the uncoded payload on a
+    # second port for the decoder to check against.
+    encoder = graph.add(
+        SoftFECEncoder(order=23.0, bits_per_symbol=float(BITS_PER_SYMBOL), label="fec")
+    )
+    mapper = graph.add(
+        QAMMapper(bits_per_symbol=float(BITS_PER_SYMBOL), differential=False, label="map")
+    )
+    driver = graph.add(IQDriver(v_pi=V_PI, predistort=True, label="drv"))
+    # -25 dBm on purpose. It puts the line at a few times 1e-3, which is past
+    # what RS(255,239) can touch and inside what this code still clears — the
+    # whole point of the link, and a number nobody would pick by accident.
+    laser = graph.add(CWLaser(power=-25.0, wavelength=1550.0, label="tx"))
+    modulator = graph.add(IQModulator(v_pi=V_PI, label="mod"))
+    meter = graph.add(PowerMeter(label="pm"))
+    lo = graph.add(CWLaser(power=10.0, wavelength=1550.0, label="lo"))
+    receiver = graph.add(CoherentReceiver(responsivity=0.8, label="rx"))
+    sampler = graph.add(IQSampler(label="smp"))
+    demapper = graph.add(SoftDemapper(label="sd"))
+    decoder = graph.add(SoftFECDecoder(iterations=8.0, label="dec"))
+    diagram = graph.add(ConstellationDiagram(bins=96.0, extent=1.5, label="cd"))
+
+    graph.connect(encoder["out"], mapper["in"])
+    graph.connect(mapper["out"], driver["in"])
+    graph.connect(laser, modulator["optical_in"])
+    graph.connect(driver["i"], modulator["i"])
+    graph.connect(driver["q"], modulator["q"])
+    graph.connect(modulator, meter["in"])
+    graph.connect(modulator, receiver["in"])
+    graph.connect(lo, receiver["lo"])
+    graph.connect(receiver["i"], sampler["i"])
+    graph.connect(receiver["q"], sampler["q"])
+    graph.connect(mapper["out"], sampler["reference"])
+    graph.connect(sampler["out"], demapper["in"])
+    graph.connect(demapper["out"], decoder["in"])
+    graph.connect(encoder["payload"], decoder["payload"])
+    graph.connect(sampler["out"], diagram["in"])
+    return graph
+
+
+def coherent_sdfec() -> None:
+    """Write the coded project to disk, and report what it delivered."""
+    graph = coherent_sdfec_link()
+    decoder = next(c for c in graph.components if c.label == "dec")
+    report = graph.run(keep=[decoder]).port(decoder, "diagnostics")
+    save(graph, SDFEC_PROJECT, ui=SDFEC_LAYOUT)
+    print(
+        f"soft-decision FEC: pre-FEC {report.pre_fec_ber:.3e} -> "
+        f"post-FEC {report.post_fec_ber:.3e} over {report.blocks} blocks"
+    )
 
 
 #: Where the WDM project is written, so the studio has a link with a spectrum in
@@ -408,6 +529,13 @@ def main() -> None:
     # project written beside it, which is also the one to open to see the OSA's
     # resolution setting move the noise floor and leave the channels alone.
     spectrum = wdm_spectrum()
+
+    # And a third project beside them: the same coherent format, decoded on
+    # log-likelihood ratios instead of on bits. It cannot be this graph with
+    # three blocks added — differential quadrant encoding has to slice to
+    # difference the quadrant out, and soft information does not survive a block
+    # that emits decisions. See `coherent_sdfec_link` for the measurement.
+    coherent_sdfec()
 
     # Required received power per format, from the same graph re-run.
     sensitivity: list[dict[str, Any]] = []

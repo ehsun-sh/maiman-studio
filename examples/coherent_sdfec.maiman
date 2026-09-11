@@ -1,0 +1,297 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.1.0",
+  "context": {
+    "bit_rate": 32000000000.0,
+    "samples_per_symbol": 4,
+    "sequence_length": 16384,
+    "seed": 2026,
+    "precision": "double"
+  },
+  "nodes": [
+    {
+      "id": "fec",
+      "type": "SoftFECEncoder",
+      "params": {
+        "order": 23.0,
+        "bits_per_symbol": 4.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 220.0
+      }
+    },
+    {
+      "id": "map",
+      "type": "QAMMapper",
+      "params": {
+        "bits_per_symbol": 4.0,
+        "differential": false
+      },
+      "ui": {
+        "x": 168.0,
+        "y": 220.0
+      }
+    },
+    {
+      "id": "drv",
+      "type": "IQDriver",
+      "params": {
+        "v_pi": 4.0,
+        "predistort": true
+      },
+      "ui": {
+        "x": 306.0,
+        "y": 220.0
+      }
+    },
+    {
+      "id": "tx",
+      "type": "CWLaser",
+      "params": {
+        "power": -25.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 306.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "mod",
+      "type": "IQModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 444.0,
+        "y": 220.0
+      }
+    },
+    {
+      "id": "pm",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+        "x": 720.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "lo",
+      "type": "CWLaser",
+      "params": {
+        "power": 10.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 582.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "rx",
+      "type": "CoherentReceiver",
+      "params": {
+        "responsivity": 0.8
+      },
+      "ui": {
+        "x": 582.0,
+        "y": 220.0
+      }
+    },
+    {
+      "id": "smp",
+      "type": "IQSampler",
+      "params": {},
+      "ui": {
+        "x": 30.0,
+        "y": 400.0
+      }
+    },
+    {
+      "id": "sd",
+      "type": "SoftDemapper",
+      "params": {},
+      "ui": {
+        "x": 168.0,
+        "y": 400.0
+      }
+    },
+    {
+      "id": "dec",
+      "type": "SoftFECDecoder",
+      "params": {
+        "iterations": 8.0
+      },
+      "ui": {
+        "x": 306.0,
+        "y": 400.0
+      }
+    },
+    {
+      "id": "cd",
+      "type": "ConstellationDiagram",
+      "params": {
+        "bins": 96.0,
+        "extent": 1.5
+      },
+      "ui": {
+        "x": 444.0,
+        "y": 400.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "smp",
+        "out"
+      ],
+      "to": [
+        "cd",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "sd",
+        "out"
+      ],
+      "to": [
+        "dec",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "fec",
+        "payload"
+      ],
+      "to": [
+        "dec",
+        "payload"
+      ]
+    },
+    {
+      "from": [
+        "map",
+        "out"
+      ],
+      "to": [
+        "drv",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "fec",
+        "out"
+      ],
+      "to": [
+        "map",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "i"
+      ],
+      "to": [
+        "mod",
+        "i"
+      ]
+    },
+    {
+      "from": [
+        "tx",
+        "out"
+      ],
+      "to": [
+        "mod",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "q"
+      ],
+      "to": [
+        "mod",
+        "q"
+      ]
+    },
+    {
+      "from": [
+        "mod",
+        "out"
+      ],
+      "to": [
+        "pm",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "mod",
+        "out"
+      ],
+      "to": [
+        "rx",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "lo",
+        "out"
+      ],
+      "to": [
+        "rx",
+        "lo"
+      ]
+    },
+    {
+      "from": [
+        "smp",
+        "out"
+      ],
+      "to": [
+        "sd",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "rx",
+        "i"
+      ],
+      "to": [
+        "smp",
+        "i"
+      ]
+    },
+    {
+      "from": [
+        "rx",
+        "q"
+      ],
+      "to": [
+        "smp",
+        "q"
+      ]
+    },
+    {
+      "from": [
+        "map",
+        "out"
+      ],
+      "to": [
+        "smp",
+        "reference"
+      ]
+    }
+  ]
+}
