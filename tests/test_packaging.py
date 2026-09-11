@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 
 import maiman
-from maiman import server
+from maiman import registered_names, server
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -99,6 +99,56 @@ def test_the_wheel_declares_the_maiman_command(wheel: zipfile.ZipFile) -> None:
 
     assert "[console_scripts]" in text, text
     assert "maiman = maiman.cli:main" in text, text
+
+
+def test_the_component_count_the_readme_states_is_the_number_registered() -> None:
+    """The README's front page says how many components there are. It must be right.
+
+    This one is checkable *exactly*, unlike the test count beside it, because the
+    number has a single source: the registry. So it is asserted exactly rather
+    than as a floor — a component that was deleted matters as much as one that
+    was added, and a floor would notice only one of those.
+
+    It was 48 in a README that shipped while the registry held 51. Nothing caught
+    it, because the only thing holding that sentence was somebody remembering to
+    edit it, and three separate pieces of work had added components since.
+    """
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    match = re.search(r"\*\*(\d+) components,", readme)
+    assert match, "the README no longer states a component count; this guard has nothing to hold"
+
+    claimed = int(match.group(1))
+    actual = len(registered_names())
+    assert claimed == actual, (
+        f"the README says {claimed} components and the registry has {actual}. "
+        f"Update the README rather than this test: the registry is the fact."
+    )
+
+
+def test_the_readme_states_its_test_count_as_a_floor_and_meets_it(
+    request: pytest.FixtureRequest,
+) -> None:
+    """The same lesson PRODUCT.md already learned, applied where people read first.
+
+    PRODUCT.md's count became a floor because an exact one "drifted twice in one
+    afternoon". The README carried an exact one anyway, and it drifted too --
+    1184 against a suite of 1278. So it is phrased the same way here, and held by
+    the same kind of check: only a claim that gets smaller can falsify it.
+    """
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    match = re.search(r"more than ([\d,]+) tests", readme)
+    assert match, (
+        "the README states an exact test count again. Make it 'more than N tests': "
+        "an exact one is wrong the moment anybody adds a test, and nothing notices."
+    )
+    claimed = int(match.group(1).replace(",", ""))
+
+    collected = request.session.testscollected
+    if collected < claimed // 2:
+        pytest.skip(f"partial run ({collected} collected); this needs the whole suite")
+    assert collected > claimed, (
+        f"the README claims more than {claimed} tests and the suite collects {collected}."
+    )
 
 
 def test_the_test_count_the_product_brief_claims_is_a_floor_and_is_met(

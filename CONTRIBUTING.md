@@ -94,6 +94,33 @@ not obstacles; each one has caught a real mistake, most of them more than once.
 | `test_every_block_in_the_project_has_somewhere_to_be_drawn` | A block in the shipped project has no canvas position | Add it to `LAYOUT` in the studio page |
 | `test_the_schematic_on_the_canvas_is_a_graph_that_runs` | The shipped project does not execute | The page is showing a link that cannot exist — fix the project |
 | The test-count floor in `test_packaging.py` | The suite shrank below what the docs claim | Either you deleted tests, or a doc needs updating |
+| `test_the_component_count_the_readme_states_is_the_number_registered` | The README's component count is not the registry's | Update the README; the registry is the fact |
+| `test_the_readme_states_its_test_count_as_a_floor_and_meets_it` | The README states an *exact* test count, or a floor it no longer meets | Phrase it "more than N tests" — an exact one is wrong the moment anybody adds a test |
+
+## A claim about a cost or a limit carries its measurement
+
+Every physics number in this repository comes from the engine. The same rule applies to claims
+*about* the repository, and it took three failures in one afternoon to notice that it was not being
+applied:
+
+* **"at ~20 blocks the node text stops being readable"** — the canvas grid is 7×4, so the layout
+  extent did not move at all between eighteen blocks and twenty. The claim had cost a real
+  capability: soft-decision FEC was kept off that canvas partly on its strength.
+* **"a polarization-resolved scattering matrix is a second index on every device"** — `SMatrix`
+  identifies ports by *name*, so two modes are twice as many ports and the solver needed no change
+  whatsoever.
+* **"PDK import through gdsfactory"** — a gdsfactory `CrossSection` is geometry with
+  `extra="forbid"` and there is no effective index anywhere in the package. There was nothing to
+  import; the join runs the other way.
+
+All three were plausible. None had a number beside it. So: **if you write that something would
+need, cost, or require X, put the measurement in the same sentence** — and if you cannot measure it
+yet, say that instead of estimating. A limit nobody has measured is a guess with a confident voice,
+and this project has now spent real capability on three of them.
+
+The counts on the README's front page are held by tests for the same reason. `PRODUCT.md`'s test
+count became a floor after drifting twice in one afternoon; the README's stayed exact, drifted to
+1184 against a suite of 1278, and nothing noticed for three pieces of work.
 
 ## Documentation
 

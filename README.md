@@ -19,8 +19,8 @@ link in this simulator descends from.*
 
 > ### Project status: 0.1.0 — released, and still moving.
 >
-> `pip install maiman`. Phases 0 through 4 are done: **48 components, 1184 tests, and every
-> physics block checked against a closed-form result in CI.**
+> `pip install maiman`. Phases 0 through 4 are done: **51 components, more than 1250 tests, and
+> every physics block checked against a closed-form result in CI.**
 >
 > **Links run end to end.** Direct detection — PRBS → NRZ → laser → MZM → fiber → PIN → filter →
 > eye/Q/BER. Coherent — Gray-coded M-QAM at every whole number of bits per symbol to 256, RRC
@@ -448,11 +448,18 @@ soft output           LLR ~1e29 (useless)     LLR ~121, real spread
 blocks on the canvas  19                      18
 ```
 
-**It is cheaper in blocks, not just in errors.** Two disappeared with the differential arrangement:
-a second mapper that existed only to hand the error analyser a non-differential copy of the same
-bits, and a second analyser that existed only because an EVM taken after a decision device reads
-zero however bad the link is. Neither has a reason to exist now, so the canvas lost a block while
-gaining a capability.
+**That table is the measurement taken when the change was made, and the canvas has moved since**:
+soft-decision FEC arrived afterwards and took it to twenty. The EVM and BER columns are of that
+link, not of the one the flagship is now — which reads 7.39 % and 5.27e-10, because it carries a
+coder, a demapper and a decoder that the eighteen-block version did not. What the table is
+evidence for is the *comparison*, both halves of which were measured on the same canvas on the same
+day.
+
+**It was cheaper in blocks, not just in errors.** Two disappeared with the differential
+arrangement: a second mapper that existed only to hand the error analyser a non-differential copy
+of the same bits, and a second analyser that existed only because an EVM taken after a decision
+device reads zero however bad the link is. Neither had a reason to exist any more, so the canvas
+lost a block while gaining a capability.
 
 **Pilots replace payload, they do not add to it** — the window is a fixed number of symbols on the
 line, so a pilot costs a data symbol. They are drawn from the alphabet's own **outermost** points,
@@ -463,7 +470,7 @@ because a repeated symbol puts a line in the spectrum at the pilot rate.
 
 The diagnostics report the **residual** — how far the removed angle sat from an exact multiple of
 90°. Everything upstream is supposed to leave only an ambiguity, so a few milliradians says that
-held. On the shipped link it is 10.9 mrad over 64 pilots. A large one would mean the constant
+held. On the shipped link it is 5.4 mrad over 128 pilots. A large one would mean the constant
 removed here was covering for a stage that did not do its job.
 
 ### What the flagship's post-FEC number measures
@@ -1187,9 +1194,13 @@ summed. The test suite checks it against the summation anyway, because that is a
 algorithm: **they agree to 1e-13 over three free spectral ranges.**
 
 **The roadmap said to integrate a solver rather than write one, and that was worth checking before
-believing.** For the *solver* it does not hold — the identity above is thirty lines of numpy. What is
-genuinely large in that ecosystem is the PDK side, and that is still worth integrating. The other
-path was measured rather than argued about: installing SAX resolves to **37 packages**, including jax
+believing.** For the *solver* it does not hold — the identity above is **twelve lines of numpy**,
+inside a `solve` that is forty-six lines once the grid check, the port bookkeeping and the dropping
+of dangling ports are counted. (This used to say "thirty lines", which was neither of those
+numbers and was nobody's measurement.) What is genuinely large in that ecosystem is the PDK side,
+and that is now joined from the other direction — see [the netlist
+section](#what-a-layout-tool-knows-and-what-it-does-not). The other path was measured rather than
+argued about: installing SAX resolves to **37 packages**, including jax
 and a 66 MB jaxlib, plus matplotlib, pandas, scipy, sympy, xarray and pydantic — to perform one
 `numpy.linalg.solve`. And `klujax`, its sparse back-end, is **LGPL-2.0-only**; this project already
 refuses FFTW over exactly that question.
@@ -1204,7 +1215,7 @@ given the same two device models, the same wiring and the same grid:
 
 Thirty-three units in the last place of double precision, across a spectrum containing three
 resonances. The comparison is not in CI — nothing that costs 70 MB and a licence review should be —
-but it is the reason the thirty lines are defensible.
+but it is the reason those twelve lines are defensible.
 
 ### What comes out of it
 
@@ -1905,7 +1916,7 @@ library, and the UI.
 | [OptiCommPy](https://github.com/edsonportosilva/OptiCommPy) | Python: SSFM, coherent DSP, BER | Reference & cross-validation target |
 | [GNPy](https://github.com/Telecominfraproject/oopt-gnpy) | Optical network planning / OSNR budgets | Complementary — network layer, not waveform layer |
 | [QAMPy](https://github.com/ChalmersPhotonicsLab/QAMpy) | Coherent DSP algorithms | Reference for Phase 3 |
-| [SAX](https://github.com/gdsfactory/sax) | S-matrix photonic circuit solver | **Cross-validation reference, not a dependency.** The reduction is thirty lines and SAX resolves to 37 packages including an LGPL sparse back-end; the two agree to 7e-15 |
+| [SAX](https://github.com/gdsfactory/sax) | S-matrix photonic circuit solver | **Cross-validation reference, not a dependency.** The reduction is twelve lines and SAX resolves to 37 packages including an LGPL sparse back-end; the two agree to 7e-15 |
 | [gdsfactory](https://github.com/gdsfactory/gdsfactory) | Photonic layout & PDK ecosystem | **Connected, and still not a dependency.** [`maiman.netlist`](src/maiman/netlist.py) reads the YAML netlists it writes and solves them against a `.pdk`. Nothing imports it: measured, it resolves to **86 packages** and requires `klayout`, which is **GPL-3.0-or-later** — the same ground FFTW and klujax are refused on. Reading a document costs none of that |
 | [Meep](https://github.com/NanoComp/meep) | FDTD / full-wave EM | Feeds component models *in*; not a competitor |
 | [GNU Radio](https://www.gnuradio.org/) | Block-based SDR | Architectural reference for dataflow scheduling |
@@ -2009,7 +2020,7 @@ time window, and results are reproducible.
 | **1 — MVP: linear link** ✅ | ✅ PRBS → NRZ → laser → MZM → fiber (α + CD) → PIN → filter → eye/Q/BER, validated end to end. **Python only, no GUI.** | ~2–3 months |
 | **1.5 — Nonlinear & amplified** ✅ | Adaptive-step SSFM, Kerr, EDFA with ASE and Saleh gain compression, erbium gain dynamics on their own time axis, OSNR, PMD, APD, dispersion slope and its third-order term, cross-polarization Kerr coupling, inter-channel stimulated Raman scattering | ~2 months |
 | **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier frequency and phase recovery, coarse frequency acquisition over the whole sampled band, blind square-law timing recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km with blind estimation of the accumulated value, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
-| **3 — GUI & WDM** | ✅ Wavelength-selective filters, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — the OSA's trace drawn in the dock, and 400G/800G reference designs validated against the OSNR relations, and a back-end indirection the propagation kernels dispatch through — CuPy runs it where a device exists, `maiman devices` cross-checks it against NumPy, and a CI job does the same on any runner labelled `gpu` | ~6 months |
+| **3 — GUI & WDM** ✅ | Wavelength-selective filters, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — the OSA's trace drawn in the dock, and 400G/800G reference designs validated against the OSNR relations, and a back-end indirection the propagation kernels dispatch through — CuPy runs it where a device exists, `maiman devices` cross-checks it against NumPy, and a CI job does the same on any runner labelled `gpu` | ~6 months |
 | **4 — PIC** ✅ | Bidirectional S-matrix circuit solver, waveguide, directional coupler, all-pass and add-drop ring resonators, cross-validated against SAX; N×N MMI couplers on the self-imaging phase relations; a Mach-Zehnder interferometer assembled from them — switch, interleaver, or both; and PDK import, which reads a foundry's fitted numbers out of a JSON kit and refuses to extrapolate them past the window they were fitted in; and birefringence, with each guided polarization carrying its own indices through the same reduction | — |
 
 ¹ One developer, part-time. Estimates, not commitments.

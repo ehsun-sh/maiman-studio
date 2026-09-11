@@ -502,7 +502,7 @@ CuPy back-end for SSFM.
 **The premise was checked and it split in two.** This said to integrate rather than reimplement,
 on the grounds that a bidirectional S-matrix solver is a large project. For the *solver* that is
 not so: eliminating a circuit's internal ports is one linear identity,
-`S = S_ee + S_ei (I - C S_ii)^-1 C S_ie`, and it is thirty lines of numpy in
+`S = S_ee + S_ei (I - C S_ii)^-1 C S_ie`, and it is twelve lines of numpy in
 `maiman/circuit.py`. Taking SAX instead would have cost 37 packages — jax, a 66 MB jaxlib,
 matplotlib, pandas, scipy, sympy, xarray, pydantic — and `klujax`, its sparse back-end, is
 **LGPL-2.0-only**, which is the same question §11 already answers for FFTW. So the reduction is
