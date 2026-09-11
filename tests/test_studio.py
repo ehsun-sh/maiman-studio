@@ -823,3 +823,51 @@ def test_the_menubar_reports_the_engine_version_rather_than_its_own() -> None:
         httpd.shutdown()
 
     assert health["version"] == __version__
+
+
+def test_no_pane_shows_the_bundled_reference_after_a_run() -> None:
+    """The bug a user hit: run a link with a laser on it, get a 16-QAM cloud.
+
+    Two panes fell back to the reference data baked into the page whenever the
+    run produced nothing for them. Before any run that is correct and the dock
+    badge labels it; *after* one it is a result claimed for a link that did not
+    produce it, which reads exactly like the previous project's numbers left on
+    screen. The eye already refused; the constellation and the sensitivity plot
+    did not.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    for guard in (
+        "if (SESSION.hasRun && !SESSION.plots.constellation) {",
+        "if (SESSION.hasRun && !SESSION.plots.eye)",
+        "if (SESSION.hasRun && !SESSION.plots.spectrum)",
+        "if (SESSION.hasRun && !SWEEP.points) {",
+    ):
+        assert guard in text, f"a pane lost its post-run guard: {guard}"
+
+    assert "function drawNothing(" in text, "the shared empty state is gone"
+    # And New repaints, because clearing the data a canvas reads does not clear
+    # the canvas.
+    new_project = text.split("function newProject()", 1)[1].split("\n  }", 1)[0]
+    assert "redrawActivePlot()" in new_project, "New leaves the old plots painted"
+
+
+def test_the_canvas_can_be_dragged_and_says_so() -> None:
+    """A schematic larger than the window was unreachable past its edges.
+
+    The grid carries `cursor: grab` so the affordance is visible before it is
+    tried, the pan offset and the zoom are written into one transform so they
+    cannot disagree, and Reset view puts both back — a reset that fixed the zoom
+    and left the canvas off-screen would not have fixed anything.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    assert "#graph { cursor: grab; }" in text
+    assert "#canvas-wrap.panning" in text
+    assert "const pan = { x: 0, y: 0 };" in text
+    assert "translate(${pan.x}px, ${pan.y}px) scale(${zoom / 100})" in text, (
+        "the pan and the zoom are no longer one transform"
+    )
+    assert "const resetView = () => {" in text
+    # Panning must not eat the selection; a plain click on the bed still clears it.
+    assert "if (!wasDrag && event.target" in text, (
+        "the click-clears-selection path was lost when panning took over the bed"
+    )

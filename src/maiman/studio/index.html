@@ -372,16 +372,37 @@ verdict, and DESIGN.md
   .keys-table td { padding: 3px 0; vertical-align: baseline; }
   .keys-table td:first-child { width: 130px; white-space: nowrap; }
   .keys-table td:last-child { color: var(--ink-2); }
+  /* About's facts are a readout, not prose: smaller, monospaced on the value
+     side, and set at the size the status bar uses for the same kind of thing.
+     At body size `maiman 0.2.0` read as a heading it is not. */
+  .about-table td { font-size: 11px; padding: 2px 0; }
+  .about-table td:first-child { width: 96px; color: var(--ink-3); }
+  .about-table td:last-child { font-family: var(--mono); color: var(--ink-2); }
   .keys-table kbd {
     font-family: var(--mono); font-size: 10.5px; color: var(--ink-3);
     background: var(--panel-2); border: 1px solid var(--rule); border-radius: 3px;
     padding: 1px 5px;
   }
-  .menubar-right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+  /* `min-width: 0` so the row is allowed to shrink at all, and then exactly one
+     thing inside it is allowed to give: the project name. Without this every
+     child shrank equally, the status text overflowed a box narrower than itself
+     and slid under the control beside it -- measured, the two sides of this bar
+     collide below 769px of menubar and the first letter of "engine ready" went
+     behind the theme button. */
+  .menubar-right {
+    margin-left: auto; display: flex; align-items: center; gap: 14px; min-width: 0;
+  }
   .kernel {
-    display: flex; align-items: center; gap: 6px;
+    display: flex; align-items: center; gap: 6px; flex: none; white-space: nowrap;
     font-size: 11.5px; color: var(--ink-3);
   }
+  /* The one thing that yields, because it is the one thing whose length is not
+     ours: a project can be called anything. An ellipsis says it was shortened;
+     an overlap says the page is broken. */
+  #project-name {
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .menu-wrap { flex: none; }
   .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--good); }
   .dot.busy { background: var(--warn); }
 
@@ -528,6 +549,14 @@ verdict, and DESIGN.md
   .node-box { fill: var(--node-fill); stroke: var(--rule); stroke-width: 1; }
   .node-g { cursor: pointer; }
   .node-g:hover .node-box { stroke: var(--node-hover-stroke); }
+  /* The grid says it can be dragged before you try it. A block keeps its own
+     cursor, so the two affordances do not argue: over a block you move the
+     block, over the bed you move the view. */
+  #graph { cursor: grab; }
+  #graph [data-node], #graph [data-port] { cursor: default; }
+  #graph [data-port] { cursor: crosshair; }
+  #canvas-wrap.panning, #canvas-wrap.panning #graph,
+  #canvas-wrap.panning #graph [data-node] { cursor: grabbing; }
   .node-g.selected .node-box { stroke: var(--accent); }
   .node-g.selected .node-halo { opacity: 1; }
   .node-halo {
@@ -876,7 +905,7 @@ verdict, and DESIGN.md
       <div class="menu-pop" id="view-menu" role="menu" data-ticks hidden>
         <button role="menuitem" id="view-zoom-in">Zoom in<span class="menu-key">ctrl+=</span></button>
         <button role="menuitem" id="view-zoom-out">Zoom out<span class="menu-key">ctrl+-</span></button>
-        <button role="menuitem" id="view-zoom-reset">Zoom to 100%<span class="menu-key">ctrl+0</span></button>
+        <button role="menuitem" id="view-zoom-reset">Reset view<span class="menu-key">ctrl+0</span></button>
         <hr class="menu-sep">
         <button role="menuitem" id="view-pane-con"><svg class="menu-tick" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 5"/></svg>Constellation</button>
         <button role="menuitem" id="view-pane-eye"><svg class="menu-tick" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 5"/></svg>Eye diagram</button>
@@ -21695,6 +21724,24 @@ verdict, and DESIGN.md
     };
   }
 
+  /* What a pane says when this run produced nothing for it. Worth one helper
+     rather than three copies: the wording differs, the shape does not.
+
+     It exists because the alternative is worse than a blank panel. Two of these
+     panes used to fall back to the reference data bundled into the page, so a
+     link with a laser and a power meter on it ran and drew a 16-QAM
+     constellation from the demo -- which reads as *your last project's result*
+     and is the one kind of wrong this interface is least allowed to be. */
+  function drawNothing(ctx, w, h, heading, lines) {
+    ctx.fillStyle = tok("--plot-bg"); ctx.fillRect(0, 0, w, h);
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillStyle = tok("--ink-3");
+    ctx.font = "600 13px " + getComputedStyle(document.body).fontFamily;
+    ctx.fillText(heading, w / 2, h / 2 - 10);
+    ctx.fillStyle = tok("--ink-4"); ctx.font = MONO_10;
+    lines.forEach((line, i) => ctx.fillText(line, w / 2, h / 2 + 10 + i * 16));
+  }
+
   function drawNoEye(ctx, w, h) {
     ctx.fillStyle = tok("--plot-bg"); ctx.fillRect(0, 0, w, h);
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
@@ -21803,9 +21850,21 @@ verdict, and DESIGN.md
     const c = $("#con-canvas");
     if (!c.parentElement.offsetWidth) return;
     const { ctx, w, h } = sizeCanvas(c);
-    /* The last run's histogram when there was one, otherwise the reference run
-       bundled into the page. Which of the two is on screen is never left to be
-       inferred — the badge in the dock header says so. */
+    /* The last run's histogram when there was one. Before a run, the reference
+       one bundled into the page — which the badge in the dock header labels, so
+       which of the two is on screen is never left to be inferred.
+
+       *After* a run that produced none, neither: the fallback used to apply
+       here too, so running a link with no constellation analyser on it left the
+       demo's 16-QAM cloud on screen looking exactly like a result. The eye and
+       the spectrum already refused to do that; this is the pane that did not. */
+    if (SESSION.hasRun && !SESSION.plots.constellation) {
+      drawNothing(ctx, w, h, "No constellation in this run", [
+        "This graph has no Constellation Diagram block.",
+        "Add one from the palette and wire it to a symbol port.",
+      ]);
+      return;
+    }
     const source = SESSION.plots.constellation || DATA.constellation;
     const counts = source.counts;
     const rows = counts.length, cols = counts[0].length;
@@ -22065,6 +22124,18 @@ verdict, and DESIGN.md
     if (!c.parentElement.offsetWidth) return;
     const { ctx, w, h } = sizeCanvas(c);
     ctx.fillStyle = tok("--plot-bg"); ctx.fillRect(0, 0, w, h);
+
+    /* The bundled sensitivity curves are a *reference*, shown before anything
+       has been swept. Once this session has run, showing them again would be
+       claiming a result for the link on the canvas, which is not what they are
+       — and a sweep is the thing that fills this pane, so say so. */
+    if (SESSION.hasRun && !SWEEP.points) {
+      drawNothing(ctx, w, h, "No sweep in this session", [
+        "Simulate \u2192 Parameter sweep, or the Sweep button above,",
+        "to plot a metric against a parameter for this link.",
+      ]);
+      return;
+    }
 
     const series = DATA.sensitivity;
     const padL = 46, padB = 32, padT = 10, padR = 12;
@@ -22436,11 +22507,34 @@ verdict, and DESIGN.md
     document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light");
 
   let zoom = 100;
+  /* How far the view has been dragged, in screen pixels. Written into the same
+     transform as the zoom, because two transforms on one element is two things
+     to keep in step. `translate(...) scale(...)` in that order means the offset
+     is *not* multiplied by the zoom, so a drag of forty pixels moves the canvas
+     forty pixels whatever the zoom is -- which is what a hand on a sheet of
+     paper does. */
+  const pan = { x: 0, y: 0 };
+
+  const applyView = () => {
+    $("#zoom-val").textContent = zoom + "%";
+    svg.style.transform = `translate(${pan.x}px, ${pan.y}px) scale(${zoom / 100})`;
+    svg.style.transformOrigin = "center center";
+  };
+
   const setZoom = (z) => {
     zoom = Math.max(40, Math.min(220, z));
-    $("#zoom-val").textContent = zoom + "%";
-    svg.style.transform = `scale(${zoom / 100})`;
-    svg.style.transformOrigin = "center center";
+    applyView();
+  };
+
+  /* Zoom and offset together, because "put it back" is one idea. Reaching for
+     this after losing the schematic off the edge is the common case, and a
+     reset that fixed the zoom and left the canvas somewhere off-screen would
+     not have fixed anything. */
+  const resetView = () => {
+    zoom = 100;
+    pan.x = 0;
+    pan.y = 0;
+    applyView();
   };
   $("#sw-run").addEventListener("click", runSweep);
   /* The toolbar button takes you to the form rather than opening a second one.
@@ -22474,7 +22568,22 @@ verdict, and DESIGN.md
     } catch { /* already gone */ }
   }
 
+  /* An in-progress pan: where the pointer went down, and where the view was
+     then. Held in screen pixels rather than user units because that is what the
+     pointer reports and what the transform consumes -- converting through the
+     CTM in both directions would be arithmetic with nothing to gain. */
+  let panning = null;
+
   svg.addEventListener("pointerdown", (event) => {
+    /* Middle-drag pans from anywhere, including over a block, which is the
+       gesture this audience already has from Blender and every EDA tool. */
+    if (event.button === 1) {
+      panning = { x: event.clientX, y: event.clientY, from: { ...pan }, moved: false };
+      $("#canvas-wrap").classList.add("panning");
+      capture(event);
+      event.preventDefault();
+      return;
+    }
     if (event.button !== 0) return;
     const port = event.target.closest("[data-port]");
     const node = event.target.closest("[data-node]");
@@ -22506,18 +22615,32 @@ verdict, and DESIGN.md
       return;
     }
 
-    /* Empty canvas: clear the selection rather than leaving a block highlighted
-       that the Delete key would then remove. */
+    /* Empty canvas: start a pan, and remember that a *click* here -- a press
+       that never moved -- clears the selection instead. Clearing it on the way
+       down would mean dragging the view also threw away what you had selected,
+       for no reason anyone asked for. */
     const wire = event.target.closest("[data-edge]");
     if (!wire) {
-      selectedEdge = null;
-      selected = null;
-      drawGraph();
-      showEmptyInspector();
+      panning = { x: event.clientX, y: event.clientY, from: { ...pan }, moved: false };
+      $("#canvas-wrap").classList.add("panning");
+      capture(event);
+      event.preventDefault();
     }
   });
 
   svg.addEventListener("pointermove", (event) => {
+    if (panning) {
+      const dx = event.clientX - panning.x;
+      const dy = event.clientY - panning.y;
+      /* Two pixels of slop, the same threshold a block drag uses, so that a
+         click with a shaky hand is still a click. */
+      if (!panning.moved && Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
+      panning.moved = true;
+      pan.x = panning.from.x + dx;
+      pan.y = panning.from.y + dy;
+      applyView();
+      return;
+    }
     if (wiring) {
       const at = svgPoint(event);
       wiring.x = at.x; wiring.y = at.y;
@@ -22559,6 +22682,21 @@ verdict, and DESIGN.md
          computes, so the results on screen are still answers to this graph. */
       if (drag.moved) { markProvenance(); }
       drag = null;
+    }
+    if (panning) {
+      const wasDrag = panning.moved;
+      panning = null;
+      $("#canvas-wrap").classList.remove("panning");
+      /* A press on the bed that never moved is a click, and a click on the bed
+         clears the selection -- which is what it did before panning existed and
+         what stops the Delete key removing a block you had stopped looking at.
+         Panning the view leaves the selection alone. */
+      if (!wasDrag && event.target && !event.target.closest("[data-node]")) {
+        selectedEdge = null;
+        selected = null;
+        drawGraph();
+        showEmptyInspector();
+      }
     }
     release(event);
   }
@@ -22612,7 +22750,7 @@ verdict, and DESIGN.md
       run: () => { if (!SESSION.running) runBtn.click(); } }],
     [`${MOD}+=`, "Zoom in", { mod: true, key: "=", run: () => setZoom(zoom + 20) }],
     [`${MOD}+-`, "Zoom out", { mod: true, key: "-", run: () => setZoom(zoom - 20) }],
-    [`${MOD}+0`, "Zoom to 100%", { mod: true, key: "0", run: () => setZoom(100) }],
+    [`${MOD}+0`, "Reset view (zoom and position)", { mod: true, key: "0", run: resetView }],
     ["?", "Keyboard shortcuts", { key: "?", run: () => showShortcuts() }],
     ["esc", "Close a menu, cancel a wire, or stop a run", { key: "escape", run: onEscape }],
   ];
@@ -22861,6 +22999,10 @@ verdict, and DESIGN.md
     SESSION.plots.osnr = null;
     SWEEP.points = null;
     afterEdit({ record: false });
+    /* The panes are canvases: clearing the data they read does not repaint
+       them, and a New that left the old plots on screen would be describing a
+       link that is no longer open. */
+    redrawActivePlot();
     flashHint("new project — ctrl+Z to bring the last one back");
     logLine("—", "new project: empty canvas, run context kept", "ok");
   }
@@ -22953,7 +23095,7 @@ verdict, and DESIGN.md
     openDialog("About Maiman Studio", `
       <p class="about-lead">An open-source simulator for optical communication links and
       photonic systems.</p>
-      <table class="keys-table">
+      <table class="keys-table about-table">
         <tr><td>Engine</td><td>${version ? escapeHtml(`maiman ${version}`)
           : "not reported — the page is running without a server"}</td></tr>
         <tr><td>Components</td><td>${count} registered</td></tr>
@@ -23102,7 +23244,7 @@ verdict, and DESIGN.md
     } else if (menu.name === "view") {
       setRow("view-zoom-in", { enabled: zoom < 220 });
       setRow("view-zoom-out", { enabled: zoom > 40 });
-      setRow("view-zoom-reset", { enabled: zoom !== 100 });
+      setRow("view-zoom-reset", { enabled: zoom !== 100 || pan.x !== 0 || pan.y !== 0 });
       const pane = $(".tab[aria-selected='true']");
       const current = pane ? pane.dataset.pane : "con";
       for (const key of ["con", "eye", "osa", "sens", "log"]) {
@@ -23140,7 +23282,7 @@ verdict, and DESIGN.md
   /* ---- View ---- */
   onMenu("view-zoom-in", () => setZoom(zoom + 20));
   onMenu("view-zoom-out", () => setZoom(zoom - 20));
-  onMenu("view-zoom-reset", () => setZoom(100));
+  onMenu("view-zoom-reset", resetView);
   for (const key of ["con", "eye", "osa", "sens", "log"]) {
     onMenu(`view-pane-${key}`, () => showTab(key));
   }

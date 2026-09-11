@@ -341,6 +341,48 @@ One bug the build surfaced and fixed: the undo snapshot never carried the
 restored twenty-two blocks under the title `untitled.maiman`, which is a true
 canvas under a false label. The name is part of the state now.
 
+## 8b. Four things a real user found
+
+The menubar shipped and somebody installed it and used it. All four of these came
+back from that, and none of them would have come from reading the code.
+
+**The status text slid under the control beside it.** Nothing in
+`.menubar-right` was `flex: none`, so when the bar got tight every child shrank
+equally, the text overflowed a box narrower than itself and the first letter of
+"engine ready" went behind the theme button. Measured: the two halves of that bar
+collide below **769px**. Exactly one thing is allowed to give now — the project
+name, because a project can be called anything and an ellipsis says it was
+shortened where an overlap says the page is broken.
+
+**A run on a new link showed the old link's plots.** This is the serious one. The
+constellation pane read `SESSION.plots.constellation || DATA.constellation` — the
+reference histogram baked into the page. Before a run that is right and the dock
+badge labels it "reference"; *after* one it is a result claimed for a link that
+never produced it. A laser and a power meter ran and drew a 16-QAM cloud. The eye
+had guarded against this since it was written and the spectrum too; the
+constellation and the sensitivity plot had not. All four now share one
+`drawNothing` empty state, and `File → New` repaints — clearing the data a canvas
+reads does not clear the canvas.
+
+**The canvas could not be moved.** A schematic larger than the window had parts
+you could not reach. Dragging the bed now pans it and the grid carries
+`cursor: grab` so that is visible before it is tried; middle-drag pans from
+anywhere including over a block, which is the gesture this audience has from
+Blender and every EDA tool. Pan and zoom are written into **one** transform, so
+they cannot disagree, and `svgPoint` needed no change at all because
+`getScreenCTM()` already accounted for whatever the element's transform was.
+Panning leaves the selection alone; a press on the bed that never moved is still
+a click and still clears it.
+
+**About set its facts at body size**, so `maiman 0.2.0` read as a heading it is
+not. They are a readout: 11px, monospaced on the value side, the size the status
+bar uses for the same kind of thing.
+
+What did *not* change: the Log keeps its lines across a `New`. It is a session
+journal, every line is timestamped and the load writes one saying what happened,
+so the history is legible rather than stale. That is a judgement rather than an
+oversight, and it is written here so it can be argued with.
+
 ## 9. Decisions worth not re-litigating
 
 - **Paper is the default**, and it is stamped before first paint so a dark host
