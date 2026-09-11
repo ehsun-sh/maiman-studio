@@ -513,6 +513,34 @@ right button as well as the middle one, which costs only a context menu this
 canvas has nothing to put in; it is suppressed on the canvas alone, since the
 palette, the inspector and the log are text and copying from them is reasonable.
 
+## 8f. Align on the toolbar, and a pane that outgrew its box
+
+**Align is eight buttons now**, after the zoom group, as well as the named list
+in `Edit`. The buttons are disabled until there is a selection to act on, which
+is also how somebody finds out they need one — a control that greys out has
+stated its precondition without anybody writing it down. Six want two blocks and
+the two distributes want three; one predicate decides for both the buttons and
+the menu, so they cannot come to disagree about it.
+
+They follow the selection from inside `drawGraph`, which is the one function
+every change to the selection already goes through. Wiring them at each place
+the selection is touched would be eight call sites and one of them eventually
+missed.
+
+**And the plot panes had outgrown the dock.** `.plot-wrap` was a flex item in a
+*row*, where it stretched to the container's height. Putting the trace bar above
+it made it an item in a **column** — and a column flex item defaults to
+`min-height: auto`, which refuses to shrink below its content. The content is a
+canvas at `height: 100%`, which then resolves against the canvas's own attribute
+height, so the wrap grew past the box holding it. Measured: **205px of plot
+inside a 189px column**, on every pane at once.
+
+`min-height: 0` is the fix, and the interesting part is that the same file had
+it on `.plot-col` and on `.dock-body` already. It was missing exactly where the
+element had only ever been a row item and had just become a column one — which
+is the shape of this whole bug and the reason it arrived with a feature that
+looked unrelated to layout.
+
 ## 9. Decisions worth not re-litigating
 
 - **Paper is the default**, and it is stamped before first paint so a dark host

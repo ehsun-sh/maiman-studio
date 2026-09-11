@@ -1047,4 +1047,36 @@ def test_align_is_reachable_from_a_menu_and_not_only_an_icon() -> None:
     assert 'id="edit-align"' in text
     assert 'onMenu("edit-align"' in text
     assert 'setRow("edit-align", { enabled: selection.size >= 2 });' in text
-    assert "tb-caret" in text, "the toolbar button still looks like one that acts"
+
+    # And the eight operations are on the toolbar as well, each with its own
+    # button, disabled until there is a selection to act on — which is how
+    # somebody finds out they need one without it being written down.
+    for how in ("left", "centre", "right", "top", "middle", "bottom", "dist-h", "dist-v"):
+        assert f'id="tb-align-{how}"' in text, f"the toolbar lost its {how} button"
+    assert "const alignAllowed = (how) =>" in text, "two places, two rules for when it applies"
+    assert "refreshAlignButtons();" in text
+    # Kept in step from the one function every selection change goes through.
+    draw = text.split("function drawGraph(", 1)[1].split(chr(10) + "  }", 1)[0]
+    assert "refreshAlignButtons()" in draw, "the buttons can fall out of step with the selection"
+
+
+def test_the_plot_area_fits_the_box_that_holds_it() -> None:
+    """A regression the trace bar caused, and the reason it only appeared then.
+
+    ``.plot-wrap`` was a flex item in a *row*, where it stretched to the
+    container's height. Putting the trace bar above it made it an item in a
+    *column*, and a column flex item defaults to ``min-height: auto`` — it
+    refuses to shrink below its content. The content is a canvas at
+    ``height: 100%``, which then resolves against the canvas's own attribute
+    height, so the wrap grew past the box holding it: measured, 205px of plot
+    inside a 189px column, on every pane at once.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    wrap = text.split(".plot-wrap {", 1)[1].split("}", 1)[0]
+    assert "min-height: 0" in wrap, (
+        "the plot area can grow past its container again; every pane gets taller "
+        "than the dock that holds it"
+    )
+    # The column it sits in needs the same, for the same reason.
+    col = text.split(".plot-col {", 1)[1].split("}", 1)[0]
+    assert "min-height: 0" in col
