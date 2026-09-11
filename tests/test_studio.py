@@ -862,12 +862,58 @@ def test_the_canvas_can_be_dragged_and_says_so() -> None:
     text = STUDIO.read_text(encoding="utf-8")
     assert "#graph { cursor: grab; }" in text
     assert "#canvas-wrap.panning" in text
-    assert "const pan = { x: 0, y: 0 };" in text
-    assert "translate(${pan.x}px, ${pan.y}px) scale(${zoom / 100})" in text, (
-        "the pan and the zoom are no longer one transform"
-    )
+    assert "const view = { x: 0, y: 0 };" in text
     assert "const resetView = () => {" in text
     # Panning must not eat the selection; a plain click on the bed still clears it.
     assert "if (!wasDrag && event.target" in text, (
         "the click-clears-selection path was lost when panning took over the bed"
     )
+
+
+def test_the_canvas_has_no_edges_to_lose_a_block_behind() -> None:
+    """The bug: a block dragged below the viewBox simply stopped being drawn.
+
+    An SVG clips to its viewBox. With that box fixed at 1000x530, a block at
+    y=600 was not rendered — and zooming *out*, which is the one gesture for
+    "show me more", scaled the element down and revealed exactly nothing,
+    because the clip is in user units and moved with it.
+
+    The viewport is the viewBox now: pan and zoom set its origin and its size, so
+    the box is the window rather than the page and there is nothing outside it to
+    clip. This pins that, because reverting to a CSS transform would look right
+    on the shipped project — whose blocks all fit — and lose every block anyone
+    dragged past the edge.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    assert 'svg.setAttribute("viewBox"' in text, "the viewport is no longer the viewBox"
+    assert "${VIEW_W / z} ${VIEW_H / z}" in text, "zooming no longer resizes the window"
+    assert "svg.style.transform" not in text, (
+        "a CSS transform is back on the canvas; it clips at the viewBox and hides "
+        "anything dragged outside it"
+    )
+
+
+def test_the_wheel_zooms_about_the_pointer_and_the_view_is_remembered() -> None:
+    """Two things a user asked for, and the trap in each.
+
+    The wheel must zoom rather than scroll — there is nothing to scroll to — and
+    it must keep what is under the pointer under the pointer, which is done by
+    measuring the same point before and after rather than by arithmetic over the
+    box dimensions, where `preserveAspectRatio` gets a second chance to be wrong.
+
+    The view is kept in sessionStorage, where the ground already is: a refresh
+    should not throw away where you were looking. Restored values are validated
+    because a NaN in a viewBox makes the entire canvas vanish.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    assert 'svg.addEventListener("wheel"' in text
+    assert "{ passive: false }" in text, "a wheel handler that cannot preventDefault scrolls"
+    assert "const before = svgPoint(event);" in text and "const after = svgPoint(event);" in text
+
+    assert 'const VIEW_KEY = "maiman-view";' in text
+    assert "sessionStorage.setItem(VIEW_KEY" in text
+    assert "Number.isFinite(saved.zoom)" in text, "an unvalidated restore can empty the canvas"
+    # A fresh document gets a fresh window onto it.
+    for opener in ("function newProject()", "function loadProject("):
+        body = text.split(opener, 1)[1].split(chr(10) + "  }", 1)[0]
+        assert "resetView()" in body, f"{opener} keeps the previous project's viewport"

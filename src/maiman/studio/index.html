@@ -403,6 +403,18 @@ verdict, and DESIGN.md
     min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .menu-wrap { flex: none; }
+  /* Edge put this back: the fix above stops the status text being *squeezed*,
+     but a window narrow enough still runs the two halves of the bar into each
+     other, and Edge's sidebar makes a maximised window narrower than Chrome's
+     at the same screen size. So the bar sheds, in order of how little it is
+     missed -- the component count first, then the file name, both of which are
+     on screen elsewhere. What never goes is whether the engine is up.
+     Both numbers are measured, not chosen: with everything shown this bar needs
+     773px and the two halves touch below that; without the component count it
+     needs 676. The breakpoints sit just above each, so nothing is dropped while
+     there is still room for it. */
+  @media (max-width: 800px) { .kernel-detail { display: none; } }
+  @media (max-width: 700px) { #project-name { display: none; } }
   .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--good); }
   .dot.busy { background: var(--warn); }
 
@@ -22506,25 +22518,106 @@ verdict, and DESIGN.md
   applyTheme(
     document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light");
 
+
+  /* ---------- The viewport -------------------------------------------------
+     Pan and zoom are the **viewBox**, not a CSS transform on the element.
+
+     They were a transform, and it had a bug worth keeping written down: an SVG
+     clips to its viewBox, so with that box fixed at 1000x530 a block dragged
+     below y=530 was simply not drawn. Scaling the element down then showed the
+     same missing block, smaller -- zooming out revealed nothing, which is the
+     one thing zooming out is for. Moving the viewport into the viewBox makes
+     the box the window rather than the page, so there is nothing outside it to
+     clip and the canvas is as large as anyone needs.
+
+     `svgPoint` needed no change either time: `getScreenCTM()` knows about the
+     viewBox exactly as it knew about the transform. */
+
+  const VIEW_W = 1000, VIEW_H = 530;
+  const ZOOM_MIN = 25, ZOOM_MAX = 400;
+
   let zoom = 100;
-  /* How far the view has been dragged, in screen pixels. Written into the same
-     transform as the zoom, because two transforms on one element is two things
-     to keep in step. `translate(...) scale(...)` in that order means the offset
-     is *not* multiplied by the zoom, so a drag of forty pixels moves the canvas
-     forty pixels whatever the zoom is -- which is what a hand on a sheet of
-     paper does. */
-  const pan = { x: 0, y: 0 };
+  //: Top-left of the window, in the canvas's own units.
+  const view = { x: 0, y: 0 };
+
+  /* Screen pixels per canvas unit. Read off the live matrix rather than derived
+     from the zoom, because `preserveAspectRatio="xMidYMid meet"` letterboxes to
+     whichever axis is tighter and the answer is not zoom/100 whenever the panel
+     is not 1000:530. */
+  const viewScale = () => {
+    const ctm = svg.getScreenCTM();
+    return ctm && ctm.a ? ctm.a : zoom / 100;
+  };
+
+  /* Kept across a refresh, in sessionStorage, which is where the ground is
+     already kept. Per tab and for as long as the tab lives: reloading the page
+     while working on something should not throw away where you were looking,
+     and a new window should not inherit it.
+
+     Wrapped because a page opened straight off disk in a browser told to block
+     site data throws on the *accessor*, not on the value -- and losing the
+     viewport is not a reason to lose the editor. */
+  const VIEW_KEY = "maiman-view";
+
+  function rememberView() {
+    try {
+      sessionStorage.setItem(VIEW_KEY, JSON.stringify({ zoom, x: view.x, y: view.y }));
+    } catch (e) { /* sandboxed, or site data blocked */ }
+  }
+
+  function restoreView() {
+    let saved = null;
+    try { saved = JSON.parse(sessionStorage.getItem(VIEW_KEY) || "null"); } catch (e) { /* ditto */ }
+    if (!saved) return;
+    /* Validated rather than trusted. It is our own value, but it survives a
+       reload of a page whose code may have changed under it, and a NaN here
+       produces a viewBox the whole canvas disappears into. */
+    if (Number.isFinite(saved.zoom)) zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, saved.zoom));
+    if (Number.isFinite(saved.x)) view.x = saved.x;
+    if (Number.isFinite(saved.y)) view.y = saved.y;
+  }
 
   const applyView = () => {
-    $("#zoom-val").textContent = zoom + "%";
-    svg.style.transform = `translate(${pan.x}px, ${pan.y}px) scale(${zoom / 100})`;
-    svg.style.transformOrigin = "center center";
+    const z = zoom / 100;
+    svg.setAttribute("viewBox", `${view.x} ${view.y} ${VIEW_W / z} ${VIEW_H / z}`);
+    $("#zoom-val").textContent = Math.round(zoom) + "%";
+    rememberView();
   };
 
   const setZoom = (z) => {
-    zoom = Math.max(40, Math.min(220, z));
+    zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
     applyView();
   };
+
+  /* Zoom about a point, so the thing under the cursor stays under the cursor.
+     Done by measuring rather than by arithmetic: where the pointer was in canvas
+     units before, where the same pointer is after, and shift the window by the
+     difference. That is exact whatever the aspect ratio and the letterboxing are
+     doing, where working it out from the box dimensions is a second place for
+     `preserveAspectRatio` to be got wrong. */
+  const zoomAbout = (event, z) => {
+    const before = svgPoint(event);
+    zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
+    applyView();
+    const after = svgPoint(event);
+    view.x += before.x - after.x;
+    view.y += before.y - after.y;
+    applyView();
+  };
+
+  /* The wheel zooms; it does not scroll. There is nothing to scroll to -- the
+     canvas has no edges now -- and a schematic editor that scrolled on the wheel
+     while every tool this audience uses zoomed would be wrong in the one way
+     §1 says not to be.
+
+     Geometric steps, so each notch is the same *proportion* rather than the same
+     number of percentage points: twenty points is a third of the way out at 60 %
+     and a twentieth at 400 %. */
+  svg.addEventListener("wheel", (event) => {
+    event.preventDefault();
+    const factor = event.deltaY < 0 ? 1.12 : 1 / 1.12;
+    zoomAbout(event, zoom * factor);
+  }, { passive: false });
 
   /* Zoom and offset together, because "put it back" is one idea. Reaching for
      this after losing the schematic off the edge is the common case, and a
@@ -22532,8 +22625,8 @@ verdict, and DESIGN.md
      not have fixed anything. */
   const resetView = () => {
     zoom = 100;
-    pan.x = 0;
-    pan.y = 0;
+    view.x = 0;
+    view.y = 0;
     applyView();
   };
   $("#sw-run").addEventListener("click", runSweep);
@@ -22578,7 +22671,7 @@ verdict, and DESIGN.md
     /* Middle-drag pans from anywhere, including over a block, which is the
        gesture this audience already has from Blender and every EDA tool. */
     if (event.button === 1) {
-      panning = { x: event.clientX, y: event.clientY, from: { ...pan }, moved: false };
+      panning = { x: event.clientX, y: event.clientY, from: { ...view }, moved: false };
       $("#canvas-wrap").classList.add("panning");
       capture(event);
       event.preventDefault();
@@ -22621,7 +22714,7 @@ verdict, and DESIGN.md
        for no reason anyone asked for. */
     const wire = event.target.closest("[data-edge]");
     if (!wire) {
-      panning = { x: event.clientX, y: event.clientY, from: { ...pan }, moved: false };
+      panning = { x: event.clientX, y: event.clientY, from: { ...view }, moved: false };
       $("#canvas-wrap").classList.add("panning");
       capture(event);
       event.preventDefault();
@@ -22636,8 +22729,12 @@ verdict, and DESIGN.md
          click with a shaky hand is still a click. */
       if (!panning.moved && Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
       panning.moved = true;
-      pan.x = panning.from.x + dx;
-      pan.y = panning.from.y + dy;
+      /* Divided by the scale so the canvas keeps up with the hand: the window
+         moves the other way, by as many canvas units as the pointer crossed
+         screen pixels. */
+      const scale = viewScale();
+      view.x = panning.from.x - dx / scale;
+      view.y = panning.from.y - dy / scale;
       applyView();
       return;
     }
@@ -22945,6 +23042,9 @@ verdict, and DESIGN.md
 
     projectName = name || "untitled";
     $("#project-name").textContent = `${projectName}.maiman`;
+    /* Same reason as New: the positions in the file are its own, and the window
+       that suited the last project need not contain this one. */
+    resetView();
     selected = PROJECT.nodes.length ? PROJECT.nodes[0].id : null;
     selectedEdge = null;
     /* Results on screen belong to the project that was open a moment ago. */
@@ -22998,6 +23098,10 @@ verdict, and DESIGN.md
     SESSION.plots.spectrum = null;
     SESSION.plots.osnr = null;
     SWEEP.points = null;
+    /* A new document gets a new window onto it. Keeping the old pan would open
+       an empty canvas scrolled to wherever the last schematic happened to be,
+       which looks like a canvas that failed to clear. */
+    resetView();
     afterEdit({ record: false });
     /* The panes are canvases: clearing the data they read does not repaint
        them, and a New that left the old plots on screen would be describing a
@@ -23242,9 +23346,9 @@ verdict, and DESIGN.md
       setRow("sim-run", { enabled: !SESSION.running });
       setRow("sim-stop", { enabled: SESSION.running });
     } else if (menu.name === "view") {
-      setRow("view-zoom-in", { enabled: zoom < 220 });
-      setRow("view-zoom-out", { enabled: zoom > 40 });
-      setRow("view-zoom-reset", { enabled: zoom !== 100 || pan.x !== 0 || pan.y !== 0 });
+      setRow("view-zoom-in", { enabled: zoom < ZOOM_MAX });
+      setRow("view-zoom-out", { enabled: zoom > ZOOM_MIN });
+      setRow("view-zoom-reset", { enabled: zoom !== 100 || view.x !== 0 || view.y !== 0 });
       const pane = $(".tab[aria-selected='true']");
       const current = pane ? pane.dataset.pane : "con";
       for (const key of ["con", "eye", "osa", "sens", "log"]) {
@@ -23703,8 +23807,19 @@ verdict, and DESIGN.md
     return payload;
   }
 
+  /* Split at the em dash so the count can be dropped without the state being
+     dropped with it. "engine ready" is the part that has to survive a narrow
+     window; "— 51 components" is a detail that can wait for a wider one. */
   function kernel(text, state) {
-    $("#kernel-text").textContent = text;
+    const parts = String(text).split(" — ");
+    const node = $("#kernel-text");
+    node.textContent = parts[0];
+    if (parts.length > 1) {
+      const detail = document.createElement("span");
+      detail.className = "kernel-detail";
+      detail.textContent = " — " + parts.slice(1).join(" — ");
+      node.appendChild(detail);
+    }
     const dot = $("#kernel-dot");
     dot.classList.toggle("failed", state === "failed");
   }
@@ -23978,6 +24093,10 @@ verdict, and DESIGN.md
   $("#sb-blocks").textContent = `${PROJECT.nodes.length} blocks`;
   $("#sb-links").textContent = `${PROJECT.edges.length} links`;
   buildPalette();
+  /* Before the first draw, so the schematic appears where it was left rather
+     than appearing at the origin and jumping. */
+  restoreView();
+  applyView();
   drawGraph();
   fillSweepForm();
   showNode(NODES.find((n) => n.id === "map"));

@@ -383,6 +383,53 @@ journal, every line is timestamped and the load writes one saying what happened,
 so the history is legible rather than stale. That is a judgement rather than an
 oversight, and it is written here so it can be argued with.
 
+## 8c. The canvas got a viewport
+
+Four more from the same user, and the first is the one that mattered.
+
+**Blocks below the fold were not merely off-screen, they were gone.** An SVG
+clips to its viewBox, and that box was fixed at `0 0 1000 530`. A block dragged
+to y=900 was not drawn — and zooming *out*, which is the one gesture that means
+"show me more", scaled the element down and revealed nothing, because the clip
+is in canvas units and shrank with it.
+
+So pan and zoom are the **viewBox** now, not a CSS transform on the element. The
+box is the window rather than the page: there is nothing outside it to clip, the
+canvas is as large as anyone needs, and zooming out genuinely shows more.
+Measured: a block at y=900, invisible at 100 %, is on screen at 25 % where the
+box is 4000 x 2120. `svgPoint` needed no change either time — `getScreenCTM()`
+knew about the viewBox exactly as it knew about the transform.
+
+**The wheel zooms**, because there is nothing to scroll to and every tool this
+audience uses zooms. It keeps what is under the pointer under the pointer, and
+does it by *measuring* — the same client point converted to canvas units before
+and after, then the window shifted by the difference. Exact whatever
+`preserveAspectRatio` is doing, where deriving it from the box dimensions is a
+second place to get the letterboxing wrong. Steps are geometric (x1.12), so a
+notch is the same proportion at 60 % as at 400 %.
+
+**The view survives a refresh**, in `sessionStorage` beside the ground: per tab,
+for as long as the tab lives. Restored values are range-checked rather than
+trusted, because a NaN in a viewBox makes the whole canvas vanish and it is our
+own value only until the page reloads with different code. `New` and opening a
+file both reset it — a fresh document deserves a fresh window onto it, and an
+empty canvas scrolled to where the last schematic was looks like one that failed
+to clear.
+
+**And the menubar collided again, on Edge only.** The earlier fix stopped the
+status text being *squeezed*; it could not stop the two halves of the bar running
+into each other in a window narrow enough, and Edge's sidebar makes a maximised
+window narrower than Chrome's on the same screen. So the bar sheds, in order of
+how little each part is missed: the component count, then the file name. What
+never goes is whether the engine is up.
+
+Both breakpoints are measured rather than picked — with everything shown the bar
+needs **773px** and the halves touch below that; without the count it needs
+**676**. They sit at 800 and 700, just above each, so nothing is dropped while
+there is still room for it. The first pair of numbers written here were guesses
+of 1180 and 1000, which hid the count on a 1100px window with 300px to spare;
+that is what §8b's rule is for and it caught it within the hour.
+
 ## 9. Decisions worth not re-litigating
 
 - **Paper is the default**, and it is stamped before first paint so a dark host
