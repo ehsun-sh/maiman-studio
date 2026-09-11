@@ -270,7 +270,8 @@ def test_no_metric_port_in_the_library_encodes_as_opaque() -> None:
     covered: set[tuple[str, str]] = set()
     for graph in (
         metric_rich_link(),
-        build_coherent(sequence_length=256),
+        # 4096: the flagship's window is quantised by the block code it carries.
+        build_coherent(sequence_length=4096),
         impaired_coherent_link(),
         coded_ook_link(),
         soft_coded_coherent_link(),
@@ -550,9 +551,19 @@ def test_a_parameter_the_engine_will_not_accept_is_refused_as_malformed() -> Non
     have run.
     """
     doc = coherent_document()
+    # Whichever block drives the link's pattern -- the flagship's source is a
+    # SoftFECEncoder now and its `order` names the same tap table. Matched on the
+    # *parameter* rather than the type, so this keeps testing the refusal rather
+    # than silently corrupting nothing the day the source changes again. It did
+    # exactly that, and passed, because a loop that matches no node raises
+    # nothing and asserts nothing.
+    corrupted = 0
     for node in doc["nodes"]:
-        if node["type"] == "PRBSGenerator":
+        if "order" in node.get("params", {}):
             node["params"]["order"] = 12.0
+            corrupted += 1
+    assert corrupted, "no block in the shipped project carries an `order` to corrupt"
+
     with pytest.raises(RequestError) as caught:
         run_project(doc)
     assert caught.value.status == HTTPStatus.BAD_REQUEST
@@ -737,7 +748,10 @@ def coherent_document() -> dict[str, Any]:
     sys.path.insert(0, str(_Path(__file__).resolve().parent.parent / "examples"))
     from export_ui_data import build
 
-    return graph_to_dict(build(sequence_length=256))
+    # 4096, not 256: the flagship carries a block code now, and a staircase
+    # block is 4096 symbols at four bits each. A shorter window is not a
+    # smaller test of this graph, it is a graph that refuses to run.
+    return graph_to_dict(build(sequence_length=4096))
 
 
 def sweep_request(**overrides: Any) -> dict[str, Any]:
@@ -908,7 +922,7 @@ def test_a_sweep_over_http(session: str) -> None:
     status, body = post(f"{session}/api/sweep", sweep_request())
     assert status == HTTPStatus.OK
     assert len(body["points"]) == 4
-    assert body["context"]["sequence_length"] == 256
+    assert body["context"]["sequence_length"] == 4096
 
 
 def ndjson(url: str, payload: dict[str, Any]) -> list[dict[str, Any]]:

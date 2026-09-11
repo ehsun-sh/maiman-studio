@@ -468,7 +468,15 @@ class SoftFECDecoder(Component):
         # The pre-FEC rate is measured against the transmitted *codeword*, not the
         # payload, so the parity bits the optics also carried are counted.
         transmitted = staircase_encode(SOFT_CODE, payload)
-        pre_errors = int(np.count_nonzero((llr < 0.0).astype(np.uint8) != transmitted))
+        # Counted only where the receiver had information. A bit the demapper
+        # erased -- a pilot overwrote the codeword there -- is not a bit the
+        # channel got wrong, and counting it as one makes the line look far worse
+        # than it is: at a pilot every 64th symbol the erasures alone read as
+        # 7.4e-3, which would swamp a channel running at 6e-4 and make every
+        # pre-FEC number on the link meaningless.
+        known = np.asarray(llr) != 0.0
+        pre_errors = int(np.count_nonzero(((llr < 0.0).astype(np.uint8) != transmitted) & known))
+        counted_bits = int(np.count_nonzero(known))
 
         decoded, corrections = staircase_decode(
             SOFT_CODE,
@@ -483,7 +491,7 @@ class SoftFECDecoder(Component):
             corrections=corrections,
             pre_fec_errors=pre_errors,
             post_fec_errors=post_errors,
-            pre_fec_ber=pre_errors / (blocks * SOFT_BLOCK_BITS),
+            pre_fec_ber=pre_errors / counted_bits if counted_bits else 0.0,
             post_fec_ber=post_errors / payload.size,
         )
         return {

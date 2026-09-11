@@ -276,45 +276,64 @@ Two findings worth keeping:
 
 ## 10. Not done
 
-- The mockup shows a single-carrier link. The dual-polarization link is in
-  [`examples/dualpol_link.py`](examples/dualpol_link.py) and is not on the
-  canvas: at ~20 blocks the node text stops being readable at this canvas size,
-  and a schematic nobody can read is not a better demonstration. At 19 blocks —
-  the receiver's two blind front-end corrections arrived after this was written —
-  the current graph is at that ceiling, which is the reason anything else that
-  needs a link of its own gets one instead of a place on it. Three do, all
-  openable from the File menu: the eye comes from
-  [`examples/ook_eye.maiman`](examples/ook_eye.maiman), the spectrum from
-  [`examples/wdm_osa.maiman`](examples/wdm_osa.maiman), and the soft-decision
-  FEC chain from
-  [`examples/coherent_sdfec.maiman`](examples/coherent_sdfec.maiman).
+- **The block-count ceiling was wrong, and this is what replaced it.** This
+  section used to say that "at ~20 blocks the node text stops being readable at
+  this canvas size". That claim conflated two things and neither of them is a
+  block count.
 
-  The first two could not sit here anyway — a coherent receiver has no eye, and
-  a single-carrier link has nothing for an OSA to show — and tests keep both off
-  this canvas rather than trusting that nobody wires one on.
+  Node text does not depend on how many blocks there are. It depends on the
+  zoom, and the zoom is a control. What *can* force zooming out is the layout's
+  **extent** against the viewport — and extent is set by the grid, not by
+  occupancy. The canvas is a 138 x 190 pitch, seven columns by four rows, which
+  is **28 slots**. The link went from eighteen blocks to twenty and the extent
+  did not move at all: x from 30 to 858, y from 30 to 600, both times, because
+  the new blocks went into slots that were already empty.
 
-  The third is there for space alone, now. It used to be there for a harder
-  reason: this canvas resolved its quarter-turn ambiguity with differential
-  *quadrant* encoding, and
-  [`DifferentialDecoder`](src/maiman/components/mapping.py) has to slice to
-  difference the quadrant back out — so what left it was ideal constellation
-  points, the distance to the nearest one exactly zero, and a demapper reading
-  it returned log-likelihood ratios of order 1e29. Soft information does not
-  survive a block that emits decisions.
+  So the honest constraint is: *keep the layout inside one screen at 100 %, and
+  keep the wires followable.* Twenty blocks in twenty-eight slots does both.
+  Thirty would not, and the number that matters then is rows, not blocks.
 
-  That is fixed rather than worked around. The canvas now carries
-  [`PilotInserter`](src/maiman/components/mapping.py) and `PilotPhaseRecovery`:
-  a known symbol every 64th position, and one constant angle removed from the
-  whole window. It decides nothing, so soft information reaches the end of the
-  chain — and it costs 1.6 % of the rate instead of the factor of two in errors
-  differential coding charges near threshold. The link came out *better*: 7.31 %
-  EVM against 7.34 %, and a counted BER of 3.6e-10 against 4.2e-10.
+  What the old rule got right is that a schematic nobody can read is not a
+  better demonstration. What it got wrong is where the limit comes from — and it
+  cost a real capability, because soft-decision FEC was kept off this canvas
+  partly on the strength of a number that was never measured.
 
-  It also came out **smaller**. Two blocks went — the second mapper existed only
-  to hand the error analyser a non-differential copy of the same bits, and the
-  second analyser existed only because an EVM taken after the decision device
-  read exactly zero. Neither has a reason to exist any more, so nineteen blocks
-  became eighteen while gaining a capability.
+- **Three links still get canvases of their own**, all openable from the File
+  menu, and now for one reason rather than two: they cannot be *this* link. The
+  eye comes from [`examples/ook_eye.maiman`](examples/ook_eye.maiman) — a
+  coherent receiver has no eye. The spectrum comes from
+  [`examples/wdm_osa.maiman`](examples/wdm_osa.maiman) — a single-carrier link
+  has nothing for an OSA to show. Tests keep both off this canvas rather than
+  trusting that nobody wires one on.
+
+  [`examples/coherent_sdfec.maiman`](examples/coherent_sdfec.maiman) is the
+  third, and it stays because it isolates the code from the carrier: it declares
+  an ideal laser and no fiber, so what it measures is the decoder. The flagship
+  now carries soft-decision FEC too, and measures something different — see
+  below.
+
+- **What carrying a block code costs this canvas, which is not nothing.** A
+  staircase block is 16384 coded bits, so at four bits per symbol the window is
+  quantised to 4096 symbols. The shipped project can no longer be run at 256 for
+  a quick look; it refuses, and names a length that works. That is a real
+  reduction in what the sequence-length control can be set to on the link people
+  open first, and it is the honest price of the capability rather than an
+  oversight. It is also not an implementation wart: a block code quantises a
+  frame in hardware too, and nobody runs an OTN link at 256 symbols either.
+
+- **The post-FEC number on this canvas is dominated by the window's edges, and
+  says so.** The link filters circularly — the pulse shaping and the dispersion
+  compensator both wrap — so the first and last few symbols carry a fold from
+  the far end of the sequence. The analyser is allowed to discard them and does,
+  through `ignore_edges`. **A decoder is not**: it has to decode every bit it is
+  given. Measured on the shipped graph, all seven pre-FEC bit errors sat in the
+  first 0.05 % and the last 0.07 % of the window, and the interior was clean.
+
+  That is an artefact of simulating a finite window, not a property of the link —
+  a real stream has no edges. It is left visible rather than hidden behind a
+  larger window, because a post-FEC rate that quietly measures the simulation
+  boundary is exactly the kind of number this project exists not to print.
+
 - No motion beyond the run pulse and the control transitions.
 - Progress on a long run is **done**, and done the way this section said it
   would have to be: a real fraction from the engine rather than an animation

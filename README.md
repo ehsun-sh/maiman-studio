@@ -466,6 +466,43 @@ The diagnostics report the **residual** — how far the removed angle sat from a
 held. On the shipped link it is 10.9 mrad over 64 pilots. A large one would mean the constant
 removed here was covering for a stage that did not do its job.
 
+### What the flagship's post-FEC number measures
+
+The shipped coherent link now runs end to end on soft-decision FEC: a staircase coder as the
+source, pilots for the quadrant, a max-log demapper, and an iterative decoder. Twenty blocks, and
+about a second.
+
+**Its post-FEC error rate is dominated by the window's edges, and that is worth knowing before
+reading it.** This link filters *circularly* — the root-raised-cosine shaping and the dispersion
+compensator both wrap — so the first and last symbols carry a fold from the far end of the
+sequence. The analyser is allowed to discard them and does, through `ignore_edges`. **A decoder is
+not**: it has to decode every bit it is handed.
+
+Measured on the shipped graph: all seven pre-FEC bit errors sat in the first 0.05 % and the last
+0.07 % of the window. The interior was clean. A real stream has no edges, so this is an artefact of
+simulating a finite window rather than anything about the link — and it is left visible rather than
+buried under a longer window, because a post-FEC rate that quietly measures the simulation boundary
+is the kind of number this project exists not to print.
+
+**Pilots are erased, not believed.** A pilot overwrote whatever the coder put in that symbol, so
+those bits say nothing about the codeword — and zero is exactly what that means. Not a confident
+value: the receiver knows the pilot, but it is not the codeword bit, so anything confident is
+confidently false. The difference is not subtle, measured on a 9.9e-3 channel:
+
+```
+pilots treated as       post-FEC BER
+erasures (LLR = 0)        4.9e-04
+ordinary bits             2.8e-02   ← worse than the decoder's own input
+```
+
+A code corrects roughly twice as many erasures as errors, and that is the whole of why.
+
+**Carrying a block code quantises the window.** A staircase block is 16384 coded bits, so at four
+bits per symbol the link runs in multiples of 4096 symbols and refuses anything else, naming a
+length that works. That is a real reduction in what the sequence-length control accepts on the link
+people open first — and it is not an implementation wart: a block code quantises a frame in
+hardware too, and nobody runs an OTN link at 256 symbols either.
+
 ### A coherent link that runs on soft decisions
 
 `examples/coherent_sdfec.maiman` — open it from the File menu. 32 GBd 16-QAM, the staircase code at
@@ -479,12 +516,10 @@ pre-FEC BER   post-FEC BER   blocks
 At −25 dBm the line is running at a few times 1e-3 — past what RS(255,239) can touch — and the
 payload comes out exact.
 
-**It is a separate project because of the canvas, not because of the physics.** It used to be the
-physics: the flagship resolved its quarter turn by differencing, which requires slicing, and soft
-information does not survive a block that emits decisions. That is now fixed — the flagship uses
-pilots and its output is still a measurement — so the remaining reason is size. `DESIGN.md` puts
-the readable ceiling near twenty blocks and the flagship sits at eighteen; the coder, the demapper
-and the decoder would take it to twenty-one.
+**The flagship carries this too, now.** This project stays because it measures a different thing:
+an ideal laser and no fiber, so what it reports is the decoder. The flagship has a real span and
+real carrier recovery, and its post-FEC number is dominated by the simulation window's edges —
+see [What the flagship's post-FEC number measures](#what-the-flagships-post-fec-number-measures).
 
 So the coded link declares an **ideal carrier** — both lasers at 1550 nm, no linewidth — which
 removes the ambiguity rather than resolving it. A real system pairs soft FEC with pilot symbols,
@@ -1770,6 +1805,7 @@ Every physics block ships with a test against a closed-form result, run in CI
 | Timing recovery earns its place | 500 µm of waveguide costs 675 symbol errors in 1920; with the stage, none, and it moves by the 7.00 ps the guide actually holds | ✅ |
 | A whole symbol is invisible | Delay by one symbol period and the estimate does not move — the limit is `\|A\|²`, not the code | ✅ |
 | Every shipped project still opens | All six `.maiman` files load, run, and carry their canvas layout — the first thing a new user opens, and nothing checked them before | ✅ |
+| **A pilot is an erasure, not an error** | LLR set to zero where the coder's bits were overwritten: 4.9e-4 out of a 9.9e-3 channel, against 2.8e-2 if they are believed | ✅ |
 | **Pilots resolve every quarter turn** | All four rotations recovered identically and exactly — resolving three of four would make the link work three times in a row and then not | ✅ |
 | Pilots are legal symbols, and vary | Drawn from the alphabet's outermost ring, so a pilot is not itself an error, and never constant, so it is not a spectral line | ✅ |
 | The estimate reads only the pilots | Every other reference symbol corrupted, and the answer unchanged to 1e-12 — otherwise it is a data-aided estimator in disguise | ✅ |

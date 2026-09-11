@@ -826,7 +826,7 @@ def test_soft_information_survives_the_flagship_now() -> None:
 
     from maiman.modulation import soft_demap
 
-    graph = build(sequence_length=1024)
+    graph = build(sequence_length=4096)
     quadrant = next(c for c in graph.components if c.label == "pqr")
     output = graph.run(keep=[quadrant]).port(quadrant, "out")
 

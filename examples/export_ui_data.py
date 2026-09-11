@@ -57,6 +57,12 @@ from maiman.project import graph_to_dict, save
 from maiman.units import C_LIGHT, wavelength_to_frequency
 
 V_PI = 4.0
+
+#: Symbols between pilots. One number, because three blocks have to agree about
+#: it: the inserter puts them there, the recovery stage looks for them there, and
+#: the demapper erases them there. Three parameters that must match is three
+#: chances to be wrong.
+PILOT_SPACING = 64.0
 SYMBOL_RATE = 32e9
 BITS_PER_SYMBOL = 4
 SPAN_KM = 80.0
@@ -380,7 +386,14 @@ LO_OFFSET_HZ = 200e6
 LO_WAVELENGTH_NM = C_LIGHT / (C_LIGHT / 1550e-9 - LO_OFFSET_HZ) * 1e9
 
 
-def build(sequence_length: int = 4096) -> Graph:
+#: Staircase blocks the flagship carries. A block is 16384 coded bits, which at
+#: four bits per symbol is 4096 symbols, so this *is* the window in units of
+#: blocks. Two, not one: the last block of a stream has no successor stripe and
+#: so only half its protection, and at one block that is the entire payload.
+FLAGSHIP_FEC_BLOCKS = 2
+
+
+def build(sequence_length: int = FLAGSHIP_FEC_BLOCKS * 16384 // BITS_PER_SYMBOL) -> Graph:
     ctx = SimulationContext(
         bit_rate=SYMBOL_RATE,
         samples_per_symbol=16,
@@ -389,8 +402,12 @@ def build(sequence_length: int = 4096) -> Graph:
         precision="double",
     )
     graph = Graph(ctx)
-    prbs = graph.add(
-        PRBSGenerator(order=23.0, bits_per_symbol=float(BITS_PER_SYMBOL), label="prbs")
+    # The coder is the source, for the reason FECEncoder gives in full: it makes
+    # more bits than it is given and the window is a fixed number of symbols on
+    # the line, so coding shrinks the payload rather than speeding the line. It
+    # emits the uncoded payload on a second port for the decoder to check.
+    coder = graph.add(
+        SoftFECEncoder(order=23.0, bits_per_symbol=float(BITS_PER_SYMBOL), label="fec")
     )
     # One mapper, not two. The second used to exist only to give the error
     # analyser a non-differential copy of the same bits; with the quadrant
@@ -403,7 +420,7 @@ def build(sequence_length: int = 4096) -> Graph:
     # number of symbols on the line -- so this costs 1/spacing of the rate, 1.6 %
     # here. What it buys is a quarter turn resolved *without slicing*, which is
     # what lets soft information reach a decoder. See PilotPhaseRecovery.
-    pilots = graph.add(PilotInserter(spacing=64.0, label="pil"))
+    pilots = graph.add(PilotInserter(spacing=PILOT_SPACING, label="pil"))
     # Backed off because a root-raised-cosine waveform overshoots between symbols
     # and a full-swing drive would run the pre-distortion past arcsin(1).
     driver = graph.add(
@@ -461,16 +478,27 @@ def build(sequence_length: int = 4096) -> Graph:
     sampler = graph.add(IQSampler(matched_filter=True, roll_off=0.2, label="smp"))
     frequency = graph.add(FrequencyRecovery(label="fo"))
     recovery = graph.add(CarrierRecovery(window=64.0, test_phases=32.0, label="cr"))
-    quadrant = graph.add(PilotPhaseRecovery(spacing=64.0, label="pqr"))
+    quadrant = graph.add(PilotPhaseRecovery(spacing=PILOT_SPACING, label="pqr"))
     # One analyser now. There used to be two because the differential decoder
     # emitted decisions: an EVM taken after it read exactly zero however bad the
     # link was, so the soft measurement had to happen upstream and the error
     # count downstream. Pilot recovery decides nothing, so both numbers come from
     # the same place and one block reports them.
+    # Soft, not sliced. This is what the pilot stage is for: it removes a
+    # constant angle and decides nothing, so what reaches here is still a
+    # measurement and the decoder has something to work with.
+    #
+    # `pilot_spacing` matters as much as anything else on this canvas. A pilot
+    # overwrote whatever the coder put in that symbol, so those bits say nothing
+    # about the codeword and are **erased** rather than believed. Left as
+    # ordinary bits they are confidently wrong, and measured on a 9.9e-3 channel
+    # that takes the decoder from 4.9e-4 out to 2.8e-2 -- worse than its input.
+    demapper = graph.add(SoftDemapper(pilot_spacing=PILOT_SPACING, label="sd"))
+    decoder = graph.add(SoftFECDecoder(iterations=8.0, label="fdec"))
     analyzer = graph.add(ConstellationAnalyzer(ignore_edges=64.0, label="vsa"))
     diagram = graph.add(ConstellationDiagram(bins=96.0, extent=1.5, label="cd"))
 
-    graph.connect(prbs["out"], mapper["in"])
+    graph.connect(coder["out"], mapper["in"])
     graph.connect(mapper["out"], pilots["in"])
     graph.connect(pilots["out"], driver["in"])
     graph.connect(laser, modulator["optical_in"])
@@ -494,6 +522,9 @@ def build(sequence_length: int = 4096) -> Graph:
     graph.connect(pilots["out"], quadrant["reference"])
     graph.connect(quadrant["out"], analyzer["in"])
     graph.connect(pilots["out"], analyzer["reference"])
+    graph.connect(quadrant["out"], demapper["in"])
+    graph.connect(demapper["out"], decoder["in"])
+    graph.connect(coder["payload"], decoder["payload"])
     graph.connect(quadrant["out"], diagram["in"])
     return graph
 
@@ -549,16 +580,19 @@ def main() -> None:
 
     # Required received power per format, from the same graph re-run.
     sensitivity: list[dict[str, Any]] = []
-    prbs = of_type(graph, PRBSGenerator)
-    # Both mappers, not just the first: the reference arm has to be told the
-    # format too, or it would encode against a different alphabet than the one
-    # being measured.
+    # The coder is the source now, and it carries the format for the same reason
+    # the generator did: it has to emit enough bits to fill the same window.
+    #
+    # Every format in FORMATS still leaves a whole number of staircase blocks in
+    # this window -- 8192 symbols at 2, 4, 6 and 8 bits is 1, 2, 3 and 4 blocks.
+    # The odd orders would not, which is one more reason this table has none.
+    source = of_type(graph, SoftFECEncoder)
     mappers = [c for c in graph.components if isinstance(c, QAMMapper)]
     for bits_per_symbol, name in FORMATS.items():
         points = [float(p) for p in range(-28, 22, 3)]
         overrides: dict[Any, list[float]] = {
             (laser, "power"): points,
-            (prbs, "bits_per_symbol"): [float(bits_per_symbol)],
+            (source, "bits_per_symbol"): [float(bits_per_symbol)],
         }
         for mapper in mappers:
             overrides[(mapper, "bits_per_symbol")] = [float(bits_per_symbol)]
