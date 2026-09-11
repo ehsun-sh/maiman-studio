@@ -16,11 +16,11 @@ own time, and pretending to a response time it cannot meet would be worse than s
 
 | Version | Supported |
 | :--- | :--- |
-| `0.1.x` | Yes |
+| `0.2.x` | Yes |
+| `0.1.x` | No — upgrade; there is no branch to backport to |
 | `main` | Yes |
-| Anything older | There is nothing older |
 
-Fixes land on `main` and go out in the next `0.1.x`. While the version stays below `1.0`, a
+Fixes land on `main` and go out in the next `0.2.x`. While the version stays below `1.0`, a
 security fix may arrive alongside behavioural changes rather than on its own — pinning an exact
 version and never updating is the wrong shape of caution here, because there is no branch to
 backport to and there will not be one until the interface stops moving.
@@ -76,4 +76,11 @@ CDN. It talks to the local server and to nothing else.
 The runtime dependency is NumPy, and that is deliberate: the fewer things in the tree, the fewer
 things to audit. FFTW is deliberately absent — it is GPL-2.0-or-later, and linking it would change
 this project's licence rather than its security, but the effect on the dependency surface is the
-same. Development additionally uses pytest, mypy, ruff, build and hatchling.
+same. Development additionally uses pytest, mypy, ruff, build, hatchling and PyYAML.
+
+PyYAML is dev-only and worth one line about why it is not a runtime dependency. `maiman.netlist`
+reads the YAML netlists a layout tool writes, and reading one must not be able to execute anything
+— so the reader works over a parsed mapping, handles JSON with the standard library, and calls
+`yaml.safe_load` rather than `yaml.load` on the path where a YAML parser is present at all. A
+netlist, a `.maiman` project and a `.pdk` are all documents, and opening one somebody sent you is
+not equivalent to running their code.

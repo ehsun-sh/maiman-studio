@@ -17,7 +17,7 @@ link in this simulator descends from.*
 
 ---
 
-> ### Project status: 0.1.0 — released, and still moving.
+> ### Project status: 0.2.0 — released, and still moving.
 >
 > `pip install maiman`. Phases 0 through 4 are done: **51 components, more than 1250 tests, and
 > every physics block checked against a closed-form result in CI.**
@@ -41,7 +41,16 @@ link in this simulator descends from.*
 >
 > **Photonic circuits solve** as bidirectional S-matrices, cross-validated against SAX to 7e-15,
 > with PDK import that reads a foundry's fitted numbers and refuses to extrapolate past the window
-> they were fitted in.
+> they were fitted in. Each guided polarization carries its own indices through the same
+> reduction, so a ring resonates at **two** sets of wavelengths on two free spectral ranges. And a
+> netlist a layout tool wrote is read as a document and solved against a kit — gdsfactory's own
+> shipped sample included, unmodified, without importing it.
+>
+> **The receiver acquires, and the amplifier has a clock.** Coarse carrier acquisition covers the
+> whole sampled band where the M-th power estimator folds at ±4 GHz and returns a wrong offset at a
+> right-looking confidence. Erbium gain dynamics are solved on their own time axis, because the
+> transient is twenty-five thousand simulation windows long — a channel drop swings a survivor
+> +3.21 dB through one amplifier and +9.94 through a chain of eight.
 >
 > **The interface is a working application**: `maiman serve`, build a link by dragging blocks and
 > wires, press Run, sweep a parameter, save the project. Every number on screen comes from the
