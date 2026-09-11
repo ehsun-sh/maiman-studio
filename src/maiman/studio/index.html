@@ -294,18 +294,89 @@ verdict, and DESIGN.md
   .menu-item:hover { background: var(--raised); color: var(--ink); }
   .menu-wrap { position: relative; }
   .menu-pop {
-    position: absolute; top: 100%; left: 0; z-index: 40; min-width: 190px;
+    /* Wide enough for the longest label and its key hint on one line --
+       `Zoom to 100%  ctrl+0` and `Save as…  ctrl+shift+S` are the two that set
+       it. A wrapped menu row reads as a mistake before it reads as a row. */
+    position: absolute; top: 100%; left: 0; z-index: 40; min-width: 226px;
     background: var(--panel); border: 1px solid var(--rule); border-radius: 4px;
     box-shadow: 0 6px 20px rgba(0,0,0,0.18); padding: 4px; display: flex;
     flex-direction: column;
   }
   .menu-pop button {
-    display: flex; justify-content: space-between; align-items: center; gap: 18px;
+    position: relative;
+    /* Labels flow from the left and the key hint is pushed to the right edge by
+       its own margin. `space-between` did this until a row had no key hint, and
+       then it pushed the *label* over instead -- so the checkable rows sat right
+       of the ones above them in the same menu. */
+    display: flex; justify-content: flex-start; align-items: center; gap: 18px;
     font: inherit; font-size: 12px; color: var(--ink-2); background: none; border: 0;
     padding: 5px 8px; border-radius: 3px; cursor: pointer; text-align: left;
+    white-space: nowrap;
   }
-  .menu-pop button:hover { background: var(--raised); color: var(--ink); }
-  .menu-key { font-family: var(--mono); font-size: 10.5px; color: var(--ink-4); }
+  .menu-pop button:hover:not(:disabled) { background: var(--raised); color: var(--ink); }
+  /* Keyboard focus moves through a menu with the arrow keys, so the focused row
+     has to look like the hovered one or the caret vanishes mid-menu. */
+  .menu-pop button:focus-visible {
+    background: var(--raised); color: var(--ink); outline: none;
+  }
+  /* Disabled rather than hidden. A menu whose contents move around is a menu you
+     have to read every time; one whose unavailable rows are still in place tells
+     you the action exists and why it is not offered right now. */
+  .menu-pop button:disabled { color: var(--ink-4); cursor: default; }
+  .menu-pop button:disabled .menu-key { color: var(--ink-4); opacity: 0.55; }
+  .menu-sep { height: 1px; background: var(--rule); margin: 4px 6px; border: 0; }
+  /* A checkable row marks the state it is already in -- which ground, which
+     result pane. The mark holds a column so labels stay aligned whether or not
+     they are the current one. */
+  /* The mark sits in a gutter rather than in the text flow, and every row in a
+     menu that has any checkable row reserves that gutter -- otherwise the ticked
+     rows indent and the menu develops two left edges. */
+  .menu-pop button .menu-tick {
+    position: absolute; left: 7px; top: 50%; transform: translateY(-50%);
+    color: var(--optical); flex: none;
+  }
+  .menu-pop[data-ticks] button { padding-left: 24px; }
+  .menu-key {
+    margin-left: auto; padding-left: 18px;
+    font-family: var(--mono); font-size: 10.5px; color: var(--ink-4);
+  }
+  /* The one modal in the interface. Help is read once and dismissed, which is
+     the case a dialog is actually for; everything else here stays on screen
+     beside the work. */
+  .help-dialog {
+    border: 1px solid var(--rule); border-radius: 6px; padding: 0;
+    background: var(--panel); color: var(--ink); max-width: 440px; width: calc(100vw - 40px);
+    box-shadow: 0 18px 48px rgba(0,0,0,0.28);
+  }
+  .help-dialog::backdrop { background: rgba(8, 11, 16, 0.44); }
+  .help-dialog-head {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 12px; border-bottom: 1px solid var(--rule); background: var(--panel-2);
+  }
+  .help-dialog-head h2 {
+    margin: 0; font-size: 12.5px; font-weight: 600; letter-spacing: 0.01em;
+  }
+  .help-dialog-close {
+    margin-left: auto; appearance: none; background: none; border: 0; cursor: pointer;
+    color: var(--ink-3); font: inherit; font-size: 15px; line-height: 1;
+    padding: 2px 6px; border-radius: 3px;
+  }
+  .help-dialog-close:hover { background: var(--raised); color: var(--ink); }
+  .help-dialog-body { padding: 12px; font-size: 12px; color: var(--ink-2); }
+  .help-dialog-body p { margin: 0 0 10px; }
+  .help-dialog-body p:last-child { margin-bottom: 0; }
+  .about-lead { color: var(--ink-2); line-height: 1.5; }
+  .about-link { color: var(--optical); text-decoration: none; }
+  .about-link:hover { text-decoration: underline; }
+  .keys-table { width: 100%; border-collapse: collapse; margin: 0 0 10px; }
+  .keys-table td { padding: 3px 0; vertical-align: baseline; }
+  .keys-table td:first-child { width: 130px; white-space: nowrap; }
+  .keys-table td:last-child { color: var(--ink-2); }
+  .keys-table kbd {
+    font-family: var(--mono); font-size: 10.5px; color: var(--ink-3);
+    background: var(--panel-2); border: 1px solid var(--rule); border-radius: 3px;
+    padding: 1px 5px;
+  }
   .menubar-right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
   .kernel {
     display: flex; align-items: center; gap: 6px;
@@ -750,22 +821,85 @@ verdict, and DESIGN.md
       <img class="brand-mark" alt="" aria-hidden="true" src="data:image/png;base64,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">
       <span class="brand-name">Maiman<span>&nbsp;Studio</span></span>
     </div>
+    <!-- Five menus, and every row in them runs something. A menubar with a
+         label that opens nothing is the one thing this interface is not allowed
+         to be: a control it cannot back. Rows that do not apply right now are
+         *disabled* rather than removed, so the menu does not reflow under the
+         cursor and so an unavailable action still tells you it exists. -->
     <div class="menu-wrap">
       <button class="menu-item" id="file-btn" aria-haspopup="true"
               aria-expanded="false">File</button>
       <div class="menu-pop" id="file-menu" role="menu" hidden>
-        <button role="menuitem" id="file-open">Open…<span class="menu-key">.maiman</span></button>
+        <button role="menuitem" id="file-new">New<span class="menu-key">ctrl+N</span></button>
+        <button role="menuitem" id="file-open">Open…<span class="menu-key">ctrl+O</span></button>
+        <hr class="menu-sep">
         <button role="menuitem" id="file-save">Save<span class="menu-key">ctrl+S</span></button>
+        <button role="menuitem" id="file-save-as">Save as…<span class="menu-key">ctrl+shift+S</span></button>
       </div>
     </div>
     <!-- Reading a project is a file the user picks, not a path the server is
          told to open: a server that opens arbitrary paths on request is a
          different and much worse program. -->
     <input type="file" id="file-input" accept=".maiman,.json,application/json" hidden>
-    <button class="menu-item">Edit</button>
-    <button class="menu-item">Simulate</button>
-    <button class="menu-item">View</button>
-    <button class="menu-item">Help</button>
+    <dialog class="help-dialog" id="help-dialog" aria-labelledby="help-dialog-title">
+      <div class="help-dialog-head">
+        <h2 id="help-dialog-title">Keyboard shortcuts</h2>
+        <button class="help-dialog-close" id="help-dialog-close"
+                type="button" aria-label="Close">&times;</button>
+      </div>
+      <div class="help-dialog-body" id="help-dialog-body"></div>
+    </dialog>
+    <div class="menu-wrap">
+      <button class="menu-item" id="edit-btn" aria-haspopup="true"
+              aria-expanded="false">Edit</button>
+      <div class="menu-pop" id="edit-menu" role="menu" hidden>
+        <button role="menuitem" id="edit-undo">Undo<span class="menu-key">ctrl+Z</span></button>
+        <button role="menuitem" id="edit-redo">Redo<span class="menu-key">ctrl+shift+Z</span></button>
+        <hr class="menu-sep">
+        <button role="menuitem" id="edit-duplicate">Duplicate block<span class="menu-key">ctrl+D</span></button>
+        <button role="menuitem" id="edit-delete">Delete<span class="menu-key">del</span></button>
+      </div>
+    </div>
+    <div class="menu-wrap">
+      <button class="menu-item" id="sim-btn" aria-haspopup="true"
+              aria-expanded="false">Simulate</button>
+      <div class="menu-pop" id="sim-menu" role="menu" hidden>
+        <button role="menuitem" id="sim-run">Run<span class="menu-key">ctrl+enter</span></button>
+        <button role="menuitem" id="sim-stop">Stop<span class="menu-key">esc</span></button>
+        <hr class="menu-sep">
+        <button role="menuitem" id="sim-sweep">Parameter sweep…</button>
+      </div>
+    </div>
+    <div class="menu-wrap">
+      <button class="menu-item" id="view-btn" aria-haspopup="true"
+              aria-expanded="false">View</button>
+      <div class="menu-pop" id="view-menu" role="menu" data-ticks hidden>
+        <button role="menuitem" id="view-zoom-in">Zoom in<span class="menu-key">ctrl+=</span></button>
+        <button role="menuitem" id="view-zoom-out">Zoom out<span class="menu-key">ctrl+-</span></button>
+        <button role="menuitem" id="view-zoom-reset">Zoom to 100%<span class="menu-key">ctrl+0</span></button>
+        <hr class="menu-sep">
+        <button role="menuitem" id="view-pane-con"><svg class="menu-tick" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 5"/></svg>Constellation</button>
+        <button role="menuitem" id="view-pane-eye"><svg class="menu-tick" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 5"/></svg>Eye diagram</button>
+        <button role="menuitem" id="view-pane-osa"><svg class="menu-tick" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 5"/></svg>Spectrum</button>
+        <button role="menuitem" id="view-pane-sens"><svg class="menu-tick" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 5"/></svg>Sensitivity</button>
+        <button role="menuitem" id="view-pane-log"><svg class="menu-tick" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 5"/></svg>Log</button>
+        <hr class="menu-sep">
+        <button role="menuitem" id="view-ground-light"><svg class="menu-tick" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 5"/></svg>Paper</button>
+        <button role="menuitem" id="view-ground-dark"><svg class="menu-tick" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 5"/></svg>Graphite</button>
+      </div>
+    </div>
+    <div class="menu-wrap">
+      <button class="menu-item" id="help-btn" aria-haspopup="true"
+              aria-expanded="false">Help</button>
+      <div class="menu-pop" id="help-menu" role="menu" hidden>
+        <button role="menuitem" id="help-keys">Keyboard shortcuts<span class="menu-key">?</span></button>
+        <hr class="menu-sep">
+        <button role="menuitem" id="help-docs">Documentation</button>
+        <button role="menuitem" id="help-issue">Report an issue</button>
+        <hr class="menu-sep">
+        <button role="menuitem" id="help-about">About Maiman Studio</button>
+      </div>
+    </div>
     <div class="menubar-right">
       <button class="theme-btn" id="theme-btn" data-mode="light" type="button"
               title="Switch to graphite" aria-label="Switch to graphite">
@@ -20806,6 +20940,9 @@ verdict, and DESIGN.md
     live: false,      // are the numbers on screen from this session's last run?
     hasRun: false,    // has this session ever run?
     running: false,
+    /* What /api/health said it was. Null when the page was opened off disk with
+       no server behind it, which Help > About says rather than inventing. */
+    engineVersion: null,
     captions: {},      // block id -> caption from the last run, when it has one
     results: null,     // the last run's payload
     /* Plot data from the last run, empty until one produces some. It lives
@@ -21001,15 +21138,35 @@ verdict, and DESIGN.md
   const HISTORY_LIMIT = 100;
 
   function snapshot() {
-    HISTORY.push(JSON.stringify({
-      nodes: PROJECT.nodes, edges: PROJECT.edges, layout: LAYOUT, selected
-    }));
+    HISTORY.push(currentState());
     if (HISTORY.length > HISTORY_LIMIT) HISTORY.shift();
+    /* A fresh edit after an undo discards the redo stack. Keeping it would
+       offer to reapply changes to a document they were never made to. */
+    FUTURE.length = 0;
   }
 
-  function undo() {
-    const state = HISTORY.pop();
-    if (!state) { flashHint("nothing to undo"); return; }
+  /* Undone states, so undo is not a one-way door. A stack rather than a single
+     slot because the edits that need taking back are rarely single: deleting a
+     block takes its wires with it, and walking back three of those and then
+     finding you wanted the second one is the normal shape of the mistake.
+
+     Cleared by the next *new* edit, which is what every editor does and the
+     only consistent answer: once the timeline branches, the old future
+     describes a document that no longer exists. */
+  const FUTURE = [];
+
+  /* The name is part of the state, which New is what made visible: it empties
+     the canvas *and* renames the project, so an undo that restored twenty-two
+     blocks under the title `untitled.maiman` was telling you something untrue
+     about the file you were holding. */
+  function currentState() {
+    return JSON.stringify({
+      nodes: PROJECT.nodes, edges: PROJECT.edges, layout: LAYOUT, selected,
+      name: projectName
+    });
+  }
+
+  function restore(state) {
     const past = JSON.parse(state);
     PROJECT.nodes = past.nodes;
     PROJECT.edges = past.edges;
@@ -21017,7 +21174,25 @@ verdict, and DESIGN.md
     Object.assign(LAYOUT, past.layout);
     selected = past.selected;
     selectedEdge = null;
+    if (past.name !== undefined && past.name !== projectName) {
+      projectName = past.name;
+      $("#project-name").textContent = `${projectName}.maiman`;
+    }
     afterEdit({ record: false });
+  }
+
+  function undo() {
+    const state = HISTORY.pop();
+    if (!state) { flashHint("nothing to undo"); return; }
+    FUTURE.push(currentState());
+    restore(state);
+  }
+
+  function redo() {
+    const state = FUTURE.pop();
+    if (!state) { flashHint("nothing to redo"); return; }
+    HISTORY.push(currentState());
+    restore(state);
   }
 
   /* NODES, EDGES and VALUES are views over PROJECT. They are rebuilt rather
@@ -22408,30 +22583,72 @@ verdict, and DESIGN.md
   }
 
   /* ---------- Keyboard --------------------------------------------------- */
+  /* Every shortcut, once. The handler below dispatches from this table and
+     Help > Keyboard shortcuts prints it, so the list a user reads is the list
+     the page obeys — there is no second copy to go stale, which is what a
+     hand-written shortcut panel always eventually is.
+
+     `mod` renders as ctrl or cmd depending on the platform, and matches either
+     way: a Mac user pressing cmd+S and a Windows user pressing ctrl+S are doing
+     the same thing and neither should have to know which one this page wanted.
+
+     `when` is what the shortcut needs to be true. A shortcut that fires into a
+     state it cannot act on is worse than one that does nothing. */
+  const APPLE = /mac|iphone|ipad/i.test(navigator.platform || navigator.userAgent || "");
+  const MOD = APPLE ? "cmd" : "ctrl";
+
+  const SHORTCUTS = [
+    [`${MOD}+N`, "New project", { mod: true, key: "n", run: () => newProject() }],
+    [`${MOD}+O`, "Open a project", { mod: true, key: "o", run: () => $("#file-input").click() }],
+    [`${MOD}+S`, "Save", { mod: true, key: "s", run: () => saveProject() }],
+    [`${MOD}+shift+S`, "Save as…",
+      { mod: true, shift: true, key: "s", run: () => saveProjectAs() }],
+    [`${MOD}+Z`, "Undo", { mod: true, key: "z", run: () => undo() }],
+    [`${MOD}+shift+Z`, "Redo", { mod: true, shift: true, key: "z", run: () => redo() }],
+    [`${MOD}+D`, "Duplicate the selected block",
+      { mod: true, key: "d", run: () => duplicateSelected() }],
+    ["delete", "Delete the selected block or wire", { key: "delete", run: () => deleteSelection() }],
+    [`${MOD}+enter`, "Run", { mod: true, key: "enter",
+      run: () => { if (!SESSION.running) runBtn.click(); } }],
+    [`${MOD}+=`, "Zoom in", { mod: true, key: "=", run: () => setZoom(zoom + 20) }],
+    [`${MOD}+-`, "Zoom out", { mod: true, key: "-", run: () => setZoom(zoom - 20) }],
+    [`${MOD}+0`, "Zoom to 100%", { mod: true, key: "0", run: () => setZoom(100) }],
+    ["?", "Keyboard shortcuts", { key: "?", run: () => showShortcuts() }],
+    ["esc", "Close a menu, cancel a wire, or stop a run", { key: "escape", run: onEscape }],
+  ];
+
+  function onEscape() {
+    if (helpDialog.open) { helpDialog.close(); return; }
+    if (openMenu) { closeMenus({ focus: true }); return; }
+    if (SESSION.running) { stopBtn.click(); return; }
+    if (wiring) { wiring = null; drawPendingWire(); }
+    selectedEdge = null;
+    drawGraph();
+  }
+
   document.addEventListener("keydown", (event) => {
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
-    if (typing) return;
+    /* Escape still works while typing — it is how you get out of a field — and
+       nothing else does, or ctrl+S in the middle of a parameter would save
+       rather than commit. */
+    if (typing && event.key !== "Escape") return;
+    /* A menu that is open owns its own arrows and Enter. */
+    if (openMenu && event.key !== "Escape" && !(event.ctrlKey || event.metaKey)) return;
 
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+    const pressed = event.key.toLowerCase();
+    const mod = event.ctrlKey || event.metaKey;
+    for (const [, , binding] of SHORTCUTS) {
+      if (Boolean(binding.mod) !== mod) continue;
+      if (Boolean(binding.shift) !== event.shiftKey) continue;
+      /* Backspace deletes too. It is not in the printed list because `delete`
+         is the name of the action and offering two spellings of one row makes
+         the panel longer without making it clearer. */
+      const matches = binding.key === pressed
+        || (binding.key === "delete" && pressed === "backspace");
+      if (!matches) continue;
       event.preventDefault();
-      saveProject();
+      binding.run();
       return;
-    }
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
-      event.preventDefault();
-      undo();
-      return;
-    }
-    if (event.key === "Delete" || event.key === "Backspace") {
-      if (selectedEdge !== null) { event.preventDefault(); removeEdge(selectedEdge); }
-      else if (selected) { event.preventDefault(); removeNode(selected); }
-      return;
-    }
-    if (event.key === "Escape") {
-      if (!fileMenu.hidden) { toggleFileMenu(false); return; }
-      if (wiring) { wiring = null; drawPendingWire(); }
-      selectedEdge = null;
-      drawGraph();
     }
   });
 
@@ -22607,14 +22824,236 @@ verdict, and DESIGN.md
                  `${PROJECT.edges.length} links`, "ok");
   }
 
-  /* ---- Menu ---- */
-  const fileMenu = $("#file-menu"), fileBtn = $("#file-btn");
-  function toggleFileMenu(show) {
-    const open = show === undefined ? fileMenu.hidden : show;
-    fileMenu.hidden = !open;
-    fileBtn.setAttribute("aria-expanded", String(open));
+  /* ---------- What the menu rows do ---------------------------------------- */
+
+  const PROJECT_URL = "https://github.com/ehsun-sh/maiman-studio";
+
+  /* Opened in a new tab with the opener severed. `noopener` is not politeness:
+     without it the page it opens can reach back through window.opener and
+     navigate this one. */
+  function openExternal(url) {
+    window.open(url, "_blank", "noopener,noreferrer");
   }
-  fileBtn.addEventListener("click", () => toggleFileMenu());
+
+  /* New keeps the context — sample rate, sequence length, seed — and empties
+     the canvas. Those are properties of the *run*, not of the link, and a blank
+     project that also forgot the symbol rate you had set is a blank project you
+     have to set up twice.
+
+     It snapshots first, so New is undoable like every other edit. That is the
+     whole reason it does not ask "are you sure": a confirmation dialog protects
+     an action that cannot be taken back, and this one can. */
+  function newProject() {
+    snapshot();
+    PROJECT.nodes = [];
+    PROJECT.edges = [];
+    for (const key of Object.keys(LAYOUT)) delete LAYOUT[key];
+    projectName = "untitled";
+    $("#project-name").textContent = `${projectName}.maiman`;
+    selected = null;
+    selectedEdge = null;
+    SESSION.live = false;
+    SESSION.hasRun = false;
+    SESSION.captions = {};
+    SESSION.plots.constellation = null;
+    SESSION.plots.eye = null;
+    SESSION.plots.spectrum = null;
+    SESSION.plots.osnr = null;
+    SWEEP.points = null;
+    afterEdit({ record: false });
+    flashHint("new project — ctrl+Z to bring the last one back");
+    logLine("—", "new project: empty canvas, run context kept", "ok");
+  }
+
+  /* Save as names the project and then saves it. A browser cannot choose where
+     a download lands — that is the download folder and the user's settings, not
+     ours to set — so what this actually controls is the *name*, which is also
+     what the title bar and every later Save will use. Saying "save as" and
+     silently reusing the old name would be worse than not offering it. */
+  function saveProjectAs() {
+    const chosen = window.prompt("Save the project as", projectName);
+    if (chosen === null) return;
+    /* Whatever a file system would refuse, plus the extension if they typed it:
+       `.maiman` is appended on the way out and two of them helps nobody. */
+    const clean = chosen.trim().replace(/\.maiman$/i, "").replace(/[\\/:*?"<>|]/g, "-");
+    if (!clean) { flashHint("a project needs a name"); return; }
+    projectName = clean;
+    $("#project-name").textContent = `${projectName}.maiman`;
+    saveProject();
+  }
+
+  /* A copy of the selected block, offset so it is visibly a second one, with
+     its parameters carried over and its wires *not*. Copying the wires would
+     mean guessing which of them the copy was meant to inherit, and a duplicate
+     that silently joins the signal path is a worse answer than one that waits
+     to be wired. */
+  function duplicateSelected() {
+    const node = PROJECT.nodes.find((n) => n.id === selected);
+    if (!node) { flashHint("nothing selected to duplicate"); return; }
+    snapshot();
+    const id = freeLabel(node.type);
+    const copy = {
+      id, type: node.type,
+      params: JSON.parse(JSON.stringify(node.params || {})),
+      ...(node.config ? { config: JSON.parse(JSON.stringify(node.config)) } : {})
+    };
+    PROJECT.nodes.push(copy);
+    const at = LAYOUT[node.id] || { x: 30, y: 30 };
+    LAYOUT[id] = { x: at.x + 24, y: at.y + 24 };
+    selected = id;
+    selectedEdge = null;
+    afterEdit();
+    flashHint(`${node.id} duplicated as ${id}`);
+  }
+
+  /* Whichever of the two things can be selected is selected. The keyboard has
+     done this since blocks became deletable; the menu calls the same path so
+     there is one definition of what Delete means. */
+  function deleteSelection() {
+    if (selectedEdge !== null) removeEdge(selectedEdge);
+    else if (selected) removeNode(selected);
+    else flashHint("nothing selected");
+  }
+
+  /* ---------- Help ----------------------------------------------------------
+     One panel, two contents. A dialog rather than a pane because neither of
+     these belongs on screen while you work: they are read once and dismissed,
+     which is exactly the case a modal is for and the only one this interface
+     uses. */
+
+  const helpDialog = $("#help-dialog");
+  $("#help-dialog-close").addEventListener("click", () => helpDialog.close());
+  /* A click on the backdrop lands on the dialog element itself, never on its
+     contents, which is the only way to tell the two apart without measuring. */
+  helpDialog.addEventListener("click", (event) => {
+    if (event.target === helpDialog) helpDialog.close();
+  });
+
+  function openDialog(title, html) {
+    $("#help-dialog-title").textContent = title;
+    $("#help-dialog-body").innerHTML = html;
+    if (!helpDialog.open) helpDialog.showModal();
+  }
+
+  function showShortcuts() {
+    const rows = SHORTCUTS.map(
+      ([keys, what]) =>
+        `<tr><td><kbd>${escapeHtml(keys)}</kbd></td><td>${escapeHtml(what)}</td></tr>`
+    ).join("");
+    openDialog("Keyboard shortcuts", `<table class="keys-table">${rows}</table>`);
+  }
+
+  /* The version comes from /api/health — the engine that is answering, not the
+     one this page was built beside. They are the same in a release and differ
+     the moment somebody runs the studio from a checkout against an installed
+     engine, which is exactly when knowing would matter. */
+  function showAbout() {
+    const version = SESSION.engineVersion;
+    const count = Object.keys(DATA.manifests).length;
+    openDialog("About Maiman Studio", `
+      <p class="about-lead">An open-source simulator for optical communication links and
+      photonic systems.</p>
+      <table class="keys-table">
+        <tr><td>Engine</td><td>${version ? escapeHtml(`maiman ${version}`)
+          : "not reported — the page is running without a server"}</td></tr>
+        <tr><td>Components</td><td>${count} registered</td></tr>
+        <tr><td>Licence</td><td>Apache-2.0</td></tr>
+      </table>
+      <p class="about-lead">Named for Theodore Maiman, who built the first working laser in
+      May 1960.</p>
+      <p><a class="about-link" href="${PROJECT_URL}" target="_blank"
+            rel="noopener noreferrer">${PROJECT_URL}</a></p>
+    `);
+  }
+
+  /* ---------- The menubar ---------------------------------------------------
+     Five menus driven by one controller. They were four dead labels beside a
+     working File menu, which is the failure this interface is least allowed:
+     a control that cannot be backed. Every row below runs something that
+     already existed or that was built to put it there.
+
+     Recognition beats novelty (DESIGN.md §1). This behaves the way a desktop
+     menubar behaves — one menu open at a time, hovering the bar while one is
+     open moves to its neighbour, arrows walk the rows, Escape closes — because
+     the audience has that in their hands already and nothing is gained by
+     teaching them something else. */
+
+  const MENUS = ["file", "edit", "sim", "view", "help"].map((name) => ({
+    name,
+    button: $(`#${name}-btn`),
+    pop: $(`#${name}-menu`),
+  }));
+  let openMenu = null;
+
+  function rowsOf(menu) {
+    return [...menu.pop.querySelectorAll("button:not(:disabled)")];
+  }
+
+  function closeMenus({ focus = false } = {}) {
+    if (!openMenu) return;
+    const was = openMenu;
+    openMenu = null;
+    was.pop.hidden = true;
+    was.button.setAttribute("aria-expanded", "false");
+    if (focus) was.button.focus();
+  }
+
+  function showMenu(menu) {
+    if (openMenu === menu) return;
+    closeMenus();
+    openMenu = menu;
+    /* State is computed as it opens, never kept in sync as things change.
+       There is one moment a menu's contents matter and this is it, so there is
+       no second copy of "can this be undone" to fall out of step. */
+    refreshMenuState(menu);
+    menu.pop.hidden = false;
+    menu.button.setAttribute("aria-expanded", "true");
+  }
+
+  function toggleMenu(menu) {
+    if (openMenu === menu) closeMenus({ focus: true });
+    else showMenu(menu);
+  }
+
+  /* Kept for the callers that predate the controller — Escape's handler, and
+     anything that only ever wanted the File menu shut. */
+  function toggleFileMenu(show) {
+    if (show === false) closeMenus();
+    else toggleMenu(MENUS[0]);
+  }
+
+  for (const menu of MENUS) {
+    menu.button.addEventListener("click", () => toggleMenu(menu));
+    /* Hovering the bar while a menu is open walks to its neighbour without a
+       second click, which is what every desktop menubar does and what a hand
+       already moving along the bar expects. It deliberately does nothing when
+       nothing is open: a menubar that opens on hover is a menubar that opens
+       when you were reaching for the canvas. */
+    menu.button.addEventListener("pointerenter", () => {
+      if (openMenu) showMenu(menu);
+    });
+    menu.pop.addEventListener("keydown", (event) => {
+      const rows = rowsOf(menu);
+      const here = rows.indexOf(document.activeElement);
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        if (!rows.length) return;
+        const step = event.key === "ArrowDown" ? 1 : -1;
+        rows[(here + step + rows.length) % rows.length].focus();
+      } else if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+        event.preventDefault();
+        const at = MENUS.indexOf(menu);
+        const step = event.key === "ArrowRight" ? 1 : -1;
+        const next = MENUS[(at + step + MENUS.length) % MENUS.length];
+        showMenu(next);
+        (rowsOf(next)[0] || next.button).focus();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        closeMenus({ focus: true });
+      }
+    });
+  }
+
   /* Closed on pointerdown, not click.
 
      The canvas calls preventDefault() in its own pointerdown handler so that
@@ -22625,20 +23064,94 @@ verdict, and DESIGN.md
      sat open until something outside the canvas was clicked. pointerdown
      always arrives. */
   document.addEventListener("pointerdown", (event) => {
-    if (fileMenu.hidden) return;
-    if (fileMenu.contains(event.target) || fileBtn.contains(event.target)) return;
-    toggleFileMenu(false);
+    if (!openMenu) return;
+    if (openMenu.pop.contains(event.target) || openMenu.button.contains(event.target)) return;
+    closeMenus();
   });
-  $("#file-save").addEventListener("click", () => { toggleFileMenu(false); saveProject(); });
-  $("#file-open").addEventListener("click", () => {
-    toggleFileMenu(false);
-    $("#file-input").click();
-  });
+
+  /* Every row closes the menu before it acts. Written once here rather than in
+     twenty-five handlers, because the one that forgets is the one that leaves a
+     menu hanging over a dialog. */
+  function onMenu(id, action) {
+    $(`#${id}`).addEventListener("click", () => {
+      closeMenus();
+      action();
+    });
+  }
+
+  function setRow(id, { enabled = true, ticked = null } = {}) {
+    const row = $(`#${id}`);
+    row.disabled = !enabled;
+    if (ticked !== null) {
+      row.setAttribute("role", "menuitemradio");
+      row.setAttribute("aria-checked", String(ticked));
+      const tick = row.querySelector(".menu-tick");
+      if (tick) tick.style.visibility = ticked ? "visible" : "hidden";
+    }
+  }
+
+  function refreshMenuState(menu) {
+    if (menu.name === "edit") {
+      setRow("edit-undo", { enabled: HISTORY.length > 0 });
+      setRow("edit-redo", { enabled: FUTURE.length > 0 });
+      setRow("edit-duplicate", { enabled: Boolean(selected) });
+      setRow("edit-delete", { enabled: Boolean(selected) || selectedEdge !== null });
+    } else if (menu.name === "sim") {
+      setRow("sim-run", { enabled: !SESSION.running });
+      setRow("sim-stop", { enabled: SESSION.running });
+    } else if (menu.name === "view") {
+      setRow("view-zoom-in", { enabled: zoom < 220 });
+      setRow("view-zoom-out", { enabled: zoom > 40 });
+      setRow("view-zoom-reset", { enabled: zoom !== 100 });
+      const pane = $(".tab[aria-selected='true']");
+      const current = pane ? pane.dataset.pane : "con";
+      for (const key of ["con", "eye", "osa", "sens", "log"]) {
+        setRow(`view-pane-${key}`, { ticked: key === current });
+      }
+      const ground = document.documentElement.getAttribute("data-theme") === "dark"
+        ? "dark" : "light";
+      setRow("view-ground-light", { ticked: ground === "light" });
+      setRow("view-ground-dark", { ticked: ground === "dark" });
+    }
+  }
+
+  /* ---- File ---- */
+  onMenu("file-new", newProject);
+  onMenu("file-open", () => $("#file-input").click());
+  onMenu("file-save", saveProject);
+  onMenu("file-save-as", saveProjectAs);
   $("#file-input").addEventListener("change", (event) => {
     const file = event.target.files && event.target.files[0];
     if (file) openProject(file);
     event.target.value = "";   // so the same file can be opened twice running
   });
+
+  /* ---- Edit ---- */
+  onMenu("edit-undo", undo);
+  onMenu("edit-redo", redo);
+  onMenu("edit-duplicate", duplicateSelected);
+  onMenu("edit-delete", deleteSelection);
+
+  /* ---- Simulate ---- */
+  onMenu("sim-run", () => { if (!SESSION.running) runBtn.click(); });
+  onMenu("sim-stop", () => { if (SESSION.running) stopBtn.click(); });
+  onMenu("sim-sweep", () => $("#sweep-btn").click());
+
+  /* ---- View ---- */
+  onMenu("view-zoom-in", () => setZoom(zoom + 20));
+  onMenu("view-zoom-out", () => setZoom(zoom - 20));
+  onMenu("view-zoom-reset", () => setZoom(100));
+  for (const key of ["con", "eye", "osa", "sens", "log"]) {
+    onMenu(`view-pane-${key}`, () => showTab(key));
+  }
+  onMenu("view-ground-light", () => applyTheme("light"));
+  onMenu("view-ground-dark", () => applyTheme("dark"));
+
+  /* ---- Help ---- */
+  onMenu("help-keys", showShortcuts);
+  onMenu("help-docs", () => openExternal(`${PROJECT_URL}#readme`));
+  onMenu("help-issue", () => openExternal(`${PROJECT_URL}/issues/new/choose`));
+  onMenu("help-about", showAbout);
 
   /* ---------- Sweeps --------------------------------------------------------
      A single run answers "what does this link do". A sweep answers "how far can
@@ -23339,6 +23852,9 @@ verdict, and DESIGN.md
   if (SESSION.api) {
     callApi("/api/health")
       .then((health) => {
+        /* Kept for Help > About, which reports the engine that answered rather
+           than the version this page was built beside. */
+        SESSION.engineVersion = health.version || null;
         kernel(`engine ready — ${health.components} components`);
         return callApi("/api/manifests");
       })

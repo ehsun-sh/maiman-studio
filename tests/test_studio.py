@@ -17,6 +17,7 @@ import base64
 import json
 import math
 import re
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -742,3 +743,83 @@ def test_stop_stops_something() -> None:
     assert 'stopBtn.addEventListener("click"' in text, "Stop is still wired to nothing"
     assert "RUN.controller.abort()" in text
     assert 'error.name === "AbortError"' in text, "an abort would be reported as a failure"
+
+
+def test_every_menu_row_runs_something() -> None:
+    """The rule this menubar broke for four of its five labels.
+
+    Edit, Simulate, View and Help were bare buttons with no menu behind them —
+    a control the interface could not back, which is the one thing
+    ``PRODUCT.md`` says a polished result must never be. They have menus now, and
+    this is what stops the next row from being added without one.
+
+    Matching is on the id: every ``role="menuitem"`` in the page must be named by
+    an ``onMenu(...)`` call, which is the single place a row is wired. A row that
+    is bound some other way still fails here, and should — one way to wire a menu
+    row is the point.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    rows = set(re.findall(r'role="menuitem" id="([a-z0-9-]+)"', text))
+    assert len(rows) >= 20, f"only {len(rows)} menu rows found; has the markup changed shape?"
+
+    wired = set(re.findall(r'onMenu\(\s*[`"\']([a-z0-9${}+-]+)', text))
+    # The five result panes and the two grounds are wired in loops, by template.
+    for key in ("con", "eye", "osa", "sens", "log"):
+        if "view-pane-${key}" in text or "view-pane-${key}" in text:
+            wired.add(f"view-pane-{key}")
+
+    unbacked = sorted(rows - wired)
+    assert not unbacked, (
+        f"these menu rows are drawn but nothing runs them: {unbacked}. "
+        f"Wire them with onMenu(), or take them out of the menu."
+    )
+
+
+def test_the_shortcut_panel_is_the_table_the_page_obeys() -> None:
+    """One list, so the keys a user reads are the keys that work.
+
+    A hand-written shortcut panel is a second copy of the key bindings, and a
+    second copy is a copy that goes stale — usually in the direction of promising
+    a shortcut that was renamed. ``showShortcuts`` renders ``SHORTCUTS`` and the
+    keydown handler dispatches from it, so there is nowhere for the two to
+    disagree.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    assert "const SHORTCUTS = [" in text
+    assert "for (const [, , binding] of SHORTCUTS)" in text, (
+        "the keydown handler no longer dispatches from SHORTCUTS; the printed "
+        "panel and the working keys can now drift"
+    )
+    assert "SHORTCUTS.map(" in text, "Help no longer prints the table the handler uses"
+
+
+def test_the_menubar_reports_the_engine_version_rather_than_its_own() -> None:
+    """About must name the engine that answered, not the page's own build.
+
+    They are the same in a release and differ the moment somebody runs a checkout
+    of the studio against an installed engine — which is exactly when being told
+    would matter. The page reads it from ``/api/health``; this pins that the
+    endpoint still sends it.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    assert "SESSION.engineVersion = health.version" in text
+
+    results = run_project(embedded()["project"])
+    assert results is not None
+
+    from maiman import __version__
+    from maiman.server import serve
+
+    httpd = serve("127.0.0.1", 0)
+    try:
+        import json
+        import urllib.request
+
+        port = httpd.server_address[1]
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/health") as response:
+            health = json.load(response)
+    finally:
+        httpd.shutdown()
+
+    assert health["version"] == __version__

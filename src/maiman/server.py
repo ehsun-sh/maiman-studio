@@ -43,7 +43,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from typing import Any
 
-from . import manifests
+from . import __version__, manifests
 from .encoding import EncodingError, encode, encode_results, scalars
 from .graph import Graph, GraphError, Progress, Results
 from .project import ProjectError, graph_from_dict, ui_from_dict
@@ -372,7 +372,18 @@ class StudioHandler(BaseHTTPRequestHandler):
         route = self.path.split("?", 1)[0].rstrip("/") or "/"
         try:
             if route == "/api/health":
-                self._send(HTTPStatus.OK, {"status": "ok", "components": len(manifests())})
+                # The version is here rather than baked into the page because the
+                # page is a file and the engine is what is running. Help > About
+                # reads it from this, so it cannot report the version the studio
+                # was built against instead of the one answering the request.
+                self._send(
+                    HTTPStatus.OK,
+                    {
+                        "status": "ok",
+                        "components": len(manifests()),
+                        "version": __version__,
+                    },
+                )
             elif route == "/api/manifests":
                 self._send(HTTPStatus.OK, {"manifests": manifests()})
             elif route in ("/", "/index.html"):

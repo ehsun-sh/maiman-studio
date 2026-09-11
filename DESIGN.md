@@ -258,6 +258,89 @@ Two findings worth keeping:
 
 ---
 
+## 8a. The menubar
+
+For most of this project's life the bar read **File · Edit · Simulate · View ·
+Help** and only the first of them opened anything. The other four were labels
+over nothing — which is precisely the failure [PRODUCT.md](PRODUCT.md) names as
+the thing a polished result must never be, sitting in the most-read strip of the
+window. A user who had installed it went looking for *Save as* and found the gap.
+
+All five open now, and **every row runs something**. That is held by a test
+rather than by care: each `role="menuitem"` must be named by an `onMenu(...)`
+call, so a row added without a handler fails CI naming itself.
+
+### What is in them, and why those
+
+| | |
+| :--- | :--- |
+| **File** | New, Open, Save, Save as |
+| **Edit** | Undo, Redo, Duplicate block, Delete |
+| **Simulate** | Run, Stop, Parameter sweep |
+| **View** | three zooms, the five result panes, the two grounds |
+| **Help** | Keyboard shortcuts, Documentation, Report an issue, About |
+
+Two of those are new capability rather than a new way to reach an old one.
+**Redo** did not exist — `undo()` popped a stack and the state came off it went
+nowhere, so an undo was a one-way door. There is a `FUTURE` stack beside
+`HISTORY` now, cleared by the next real edit, which is what every editor does
+and the only consistent answer once the timeline branches. **Duplicate** is new
+too, and deliberately does *not* copy the block's wires: which of them a copy
+was meant to inherit is a guess, and a duplicate that silently joins the signal
+path is worse than one that waits to be wired.
+
+### What is deliberately not in them
+
+**Cut, copy and paste.** They would need a clipboard model — what a copied
+subgraph is, what happens to wires that leave the selection, whether a paste
+into another project is allowed — and none of that exists. Duplicate covers the
+case those three are usually reached for. Three rows that looked familiar and
+did nothing would have recreated exactly the problem this section is about.
+
+**Select all.** There is no multiple selection to have, so it would be a row
+that succeeded at nothing.
+
+**Zoom to fit.** The canvas has no measured content extent to fit *to* — the
+number the ceiling review in the last section established is a
+fixed grid, not a bounding box of what is drawn. It can be added when there is
+something real behind it.
+
+### How it behaves
+
+Like a desktop menubar, because §1 says recognition beats novelty and this
+audience has one in their hands already: one menu open at a time, hovering the
+bar while one is open moves to its neighbour without a second click, arrows walk
+the rows, left and right move between menus, Escape closes and returns focus to
+the button it came from.
+
+**Rows that do not apply are disabled, not hidden.** A menu whose contents move
+around is a menu you have to read every time, and an unavailable row still tells
+you the action exists. Undo and Redo are greyed when their stacks are empty,
+Stop when nothing is running, Zoom to 100% when the zoom is already there. The
+state is computed *as the menu opens* — there is no second copy of "can this be
+undone" kept in sync and able to fall out of step.
+
+### The two things worth taking from the build
+
+**One shortcut table.** `SHORTCUTS` is read by both the keydown handler and by
+Help → Keyboard shortcuts, so the list a user reads is the list the page obeys.
+A hand-written shortcut panel is a second copy, and a second copy eventually
+promises a key that was renamed. `mod` renders as ctrl or cmd by platform and
+matches either, because a Mac user pressing cmd+S and a Windows user pressing
+ctrl+S are doing the same thing.
+
+**About reports the engine, not the page.** The version comes from
+`/api/health`, which grew a `version` field for it. The page is a file and the
+engine is what is running; they are the same in a release and differ the moment
+somebody runs a checkout of the studio against an installed engine, which is
+exactly when knowing would matter. With no server behind the page it says so
+rather than inventing a number.
+
+One bug the build surfaced and fixed: the undo snapshot never carried the
+**project name**. Nothing had changed it before — New does, so undoing a New
+restored twenty-two blocks under the title `untitled.maiman`, which is a true
+canvas under a false label. The name is part of the state now.
+
 ## 9. Decisions worth not re-litigating
 
 - **Paper is the default**, and it is stamped before first paint so a dark host
