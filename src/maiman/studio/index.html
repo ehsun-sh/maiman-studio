@@ -23177,7 +23177,7 @@ verdict, and DESIGN.md
     switch (value.kind) {
       case "power":   return `${value.power_dbm.toFixed(3)} dBm` +
                              (value.bands.length > 1 ? ` in ${value.bands.length} bands` : "");
-      case "scalar":  return value.value === null ? "∞" : fmt(Number(value.value.toFixed(4)));
+      case "scalar":  return value.value === null ? "∞" : scalarText(value.value, 4);
       case "constellation_measurement":
         return `EVM ${(value.evm * 100).toFixed(2)} %, ` +
                `${value.symbol_errors}/${value.symbols_evaluated} symbol errors`;
@@ -25033,6 +25033,7 @@ verdict, and DESIGN.md
 
     /* Block captions that a measurement can fill in truthfully. */
     SESSION.captions = {};
+    SESSION.unconverged = [];
     for (const node of PROJECT.nodes) {
       const out = at(node.id, "out");
       if (!out) continue;
@@ -25063,7 +25064,21 @@ verdict, and DESIGN.md
           `peak ${(10 * Math.log10(Math.max(p[peak], 1e-18) * 1e3)).toFixed(1)} dBm`;
       }
       else if (out.kind === "scalar" && out.value !== null)
-        SESSION.captions[node.id] = fmt(Number(out.value.toFixed(2)));
+        SESSION.captions[node.id] = scalarText(out.value, 2);
+    }
+
+    /* A loop control's number is on its `residual` port, not `out`, and ∞ is
+       its honest answer after a single pass, so it is captioned on its own.
+       Anything still moving by more than a part in a thousand per pass is
+       flagged in the log: its answer is not the loop's steady state yet. */
+    for (const node of PROJECT.nodes) {
+      if (node.type !== "Feedback") continue;
+      const residual = at(node.id, "residual");
+      if (!residual || residual.kind !== "scalar") continue;
+      SESSION.captions[node.id] = `Δ ${residual.value === null ? "∞" : scalarText(residual.value, 2)}`;
+      SESSION.unconverged = SESSION.unconverged || [];
+      if (residual.value === null || residual.value > FEEDBACK_CONVERGED)
+        SESSION.unconverged.push(node.id);
     }
     drawGraph();
 
@@ -25196,6 +25211,11 @@ verdict, and DESIGN.md
 
     markProvenance();
     logRun(payload, seconds);
+    for (const id of SESSION.unconverged || []) {
+      logLine("", `${id} has not converged: the loop is still changing by more than ` +
+                  `${FEEDBACK_CONVERGED} per pass. Raise its passes, or check the ` +
+                  `round-trip gain is below one.`, "warn");
+    }
     redrawActivePlot();
   }
 
@@ -25207,6 +25227,16 @@ verdict, and DESIGN.md
   function truncate(s, n) {
     return s.length <= n ? s : s.slice(0, n - 1).trimEnd() + "…";
   }
+  /* A scalar result, rounded for reading but never rounded away. Fixed
+     decimals would print a converged residual of 8e-6 as a flat 0, which is
+     the one thing that number must not say. */
+  function scalarText(v, decimals) {
+    if (v !== 0 && Math.abs(v) < 10 ** -decimals) return v.toExponential(1);
+    return fmt(Number(v.toFixed(decimals)));
+  }
+  /* Relative change per pass below which a Feedback loop is called settled. */
+  const FEEDBACK_CONVERGED = 1e-3;
+
   function fmt(v) {
     if (typeof v === "boolean") return v ? "true" : "false";
     if (typeof v !== "number") return String(v);

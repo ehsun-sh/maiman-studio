@@ -1137,3 +1137,19 @@ def test_the_page_keeps_no_list_of_which_parameters_are_gated() -> None:
             f"the page names both {flag!r} and {gated!r}; if that is a hard-coded "
             f"dependency, delete it and let the manifest say so"
         )
+
+
+def test_a_small_scalar_is_not_rounded_to_zero() -> None:
+    """A converged residual of 8e-6 printed to four decimals reads 0, which it is not."""
+    text = STUDIO.read_text(encoding="utf-8")
+    assert "toFixed(4)))" not in text and "value.toFixed(2)))" not in text
+    assert text.count("scalarText(") >= 3
+
+
+def test_a_loop_control_is_captioned_and_warns_until_it_converges() -> None:
+    """Feedback's number is on ``residual``, not ``out``, and infinity is its first answer."""
+    text = STUDIO.read_text(encoding="utf-8")
+    assert 'node.type !== "Feedback"' in text
+    assert 'at(node.id, "residual")' in text
+    assert "has not converged" in text
+    assert "Feedback" in embedded()["manifests"]

@@ -202,3 +202,14 @@ def test_a_graph_without_a_loop_control_runs_exactly_once() -> None:
     """Every other block reports no passes, so nothing that existed moves."""
     graph, _, _ = drop_graph(return_loss=0.0, passes=None)
     assert all(component.feedback_passes() == 0 for component in graph.components)
+
+
+def test_the_example_prints_the_round_trip_gain(capsys: pytest.CaptureFixture[str]) -> None:
+    """The table in ``examples/fbg_circulator.py`` says what these tests assert."""
+    import fbg_circulator
+
+    fbg_circulator.an_echo()
+    printed = capsys.readouterr().out
+    assert "refused" in printed
+    assert "= 0.0966" in printed
+    assert "-1.751dBm" in printed

@@ -5,7 +5,7 @@ ends and light goes in one port and out another, which is what a dataflow graph
 draws. A Bragg grating sends its channel back out of the fibre it arrived on, and
 in hardware the only way to that channel is a circulator.
 
-Seven things are worth reading off the output.
+Eight things are worth reading off the output.
 
 **The grating is assembled, not written down.** Two hundred per-section transfer
 matrices multiplied together, against Erdogan's closed form for a uniform
@@ -37,6 +37,12 @@ sampled grating — one device reflecting a whole comb — and, with a phase arr
 the phase-shifted grating, whose transmission window here is 87 MHz wide. Neither
 is a new solver.
 
+**A circulator that echoes is a cavity, and the graph runs it.** Return loss
+sends light back out of the port it came in by, straight into the grating again.
+That is a loop, the graph refuses it, and a ``Feedback`` on one wire runs it for a
+declared number of passes. The residual it reports falls by the loop's round-trip
+gain on every pass, which is how you know when to stop.
+
 **And a sign that was wrong, in the fibre rather than here.** Putting a grating
 and a span in one graph is what finally made two of this engine's kernels argue
 about which way dispersion goes. The last section is what that was and what it
@@ -47,12 +53,13 @@ from __future__ import annotations
 
 import numpy as np
 
-from maiman import Graph, SimulationContext
+from maiman import CycleError, Graph, SimulationContext
 from maiman.circuit import SMatrix
 from maiman.components import (
     Circulator,
     Combiner,
     CWLaser,
+    Feedback,
     Fiber,
     FiberBraggGrating,
     GaussianPulse,
@@ -407,9 +414,78 @@ def arbitrary_profiles() -> None:
     print("     this is the DFB laser's cavity, and the filter a laser locks to.\n")
 
 
+ECHO_DB = 20.0
+
+
+def _echoing_drop(passes: int | None) -> tuple[float, float]:
+    """Drop-port power at 1550 nm [dBm] and the loop's residual, with 20 dB of return loss.
+
+    ``passes=None`` wires the grating straight back into the circulator, which is
+    a cycle and is expected to be refused.
+    """
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=8, sequence_length=64)
+    graph = Graph(ctx)
+    laser = graph.add(CWLaser(power=0.0, wavelength=1550.0, label="ch1550"))
+    circ = graph.add(
+        Circulator(insertion_loss=0.7, isolation=40.0, return_loss=ECHO_DB, label="circ")
+    )
+    grating = graph.add(
+        FiberBraggGrating(bragg_wavelength=1550.0, length=10.0, index_modulation=1e-4)
+    )
+    meter = graph.add(PowerMeter(label="drop"))
+    graph.connect(laser, circ["in1"])
+    graph.connect(circ["out2"], grating["in"])
+    graph.connect(circ["out3"], meter["in"])
+    if passes is None:
+        graph.connect(grating["reflected"], circ["in2"])
+        graph.run()
+        raise AssertionError("a loop without a Feedback should have been refused")
+    loop = graph.add(Feedback(passes=float(passes), label="loop"))
+    graph.connect(grating["reflected"], loop["in"])
+    graph.connect(loop["out"], circ["in2"])
+    results = graph.run()
+    reading = results[meter]
+    residual = results[loop]
+    assert isinstance(reading, PowerReading)
+    assert isinstance(residual, float)
+    return reading.power_dbm, residual
+
+
+def an_echo() -> None:
+    """Return loss beside a grating: the one route here that really is a loop."""
+    print("8. An echo, and the loop that runs it")
+    try:
+        _echoing_drop(None)
+    except CycleError:
+        print("     wired straight back, 20 dB of return loss is refused: it is a cycle.")
+    print("     a Feedback on the grating's return wire runs it instead:\n")
+
+    echo = 10.0 ** (-ECHO_DB / 20.0)
+    grating = FiberBraggGrating(bragg_wavelength=1550.0, length=10.0, index_modulation=1e-4)
+    gain = echo * float(np.sqrt(grating.peak_reflectivity()))
+
+    print(f"     {'passes':>6}  {'drop':>10}  {'residual':>9}  {'ratio':>6}")
+    previous = None
+    for passes in (1, 2, 3, 4, 5, 6):
+        power, residual = _echoing_drop(passes)
+        shown = "inf" if np.isinf(residual) else f"{residual:9.1e}"
+        ratio = (
+            f"{residual / previous:6.4f}" if previous is not None and np.isfinite(previous) else ""
+        )
+        print(f"     {passes:6d}  {power:8.3f}dBm  {shown:>9}  {ratio:>6}")
+        previous = residual
+    print(
+        f"     the ratio is the round-trip gain: echo {echo:.2f} times |r| "
+        f"{np.sqrt(grating.peak_reflectivity()):.3f} = {gain:.4f}.\n"
+        "     One pass is the leak alone and two the feed-forward sum. The power\n"
+        "     overshoots on the way in, so watch the residual, not the power. A pass\n"
+        "     is not a lap in time: this is right for a short cavity, not a fibre loop.\n"
+    )
+
+
 def the_sign() -> None:
     """The one result here that was about this engine rather than about gratings."""
-    print("7. A sign that used to be wrong, and which half of it was")
+    print("9. A sign that used to be wrong, and which half of it was")
     print("     A positive chirp puts short wavelengths at the near end, so they")
     print("     turn round first and the long ones arrive later -- dtau/dlambda > 0,")
     print("     which is D > 0, the sign standard fibre has. A compensator is the")
@@ -440,6 +516,7 @@ def main() -> None:
     the_drop()
     a_span_undone()
     arbitrary_profiles()
+    an_echo()
     the_sign()
 
 
