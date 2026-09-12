@@ -164,7 +164,7 @@ def test_the_first_nulls_sit_where_the_bandwidth_formula_says() -> None:
     )
     # The grid is 0.2 pm and the width 198 pm, so a per-mille agreement is the
     # resolution of the measurement rather than of the model.
-    assert width == pytest.approx(predicted, rel=2e-3)
+    assert width == pytest.approx(predicted, rel=2e-3, abs=0.0)
 
 
 def test_apodization_buys_sidelobe_suppression_with_reflectivity() -> None:
@@ -247,7 +247,7 @@ def test_the_group_delay_convention_is_the_one_a_waveguide_sets() -> None:
     )
     phase = np.unwrap(np.angle(guide.transmission("out", "in")))
     delay = -np.gradient(phase, 2.0 * np.pi * frequencies)
-    assert delay.mean() == pytest.approx(SILICA_FIBER_NEFF * 0.10 / C_LIGHT, rel=1e-6)
+    assert delay.mean() == pytest.approx(SILICA_FIBER_NEFF * 0.10 / C_LIGHT, rel=1e-6, abs=0.0)
     assert delay.min() > 0.0
 
 
@@ -781,7 +781,7 @@ def test_a_sampled_grating_combs_at_the_sampling_period() -> None:
     assert len(peaks) == 7
     # The grid is 0.67 pm and the spacing 415 pm, so per-mille is the
     # measurement's resolution rather than the model's.
-    assert float(np.diff(peaks).mean()) == pytest.approx(predicted, rel=1e-3)
+    assert float(np.diff(peaks).mean()) == pytest.approx(predicted, rel=1e-3, abs=0.0)
 
 
 def test_a_sampled_grating_needs_sections_per_sampling_period_not_per_length() -> None:
@@ -801,7 +801,7 @@ def test_a_sampled_grating_needs_sections_per_sampling_period_not_per_length() -
 
     converged = spacing(4000)
     for sections in (100, 200, 1000):
-        assert spacing(sections) == pytest.approx(converged, rel=1e-9)
+        assert spacing(sections) == pytest.approx(converged, rel=1e-9, abs=0.0)
 
 
 def test_a_full_duty_sample_is_not_a_sampled_grating() -> None:
@@ -937,7 +937,7 @@ def test_the_block_reaches_both_new_devices() -> None:
     reflectivity = combed.scattering_matrix(C_LIGHT / wavelengths).power("in", "in")
     predicted = BRAGG**2 / (2.0 * SILICA_FIBER_NEFF * 0.002)
     assert float(np.diff(comb_peaks(wavelengths, reflectivity)).mean()) == pytest.approx(
-        predicted, rel=1e-3
+        predicted, rel=1e-3, abs=0.0
     )
 
     # Sampling raises the section count on its own, because the structure that
@@ -992,12 +992,16 @@ def test_the_two_sensitivities_are_the_numbers_on_a_datasheet() -> None:
     anything: they follow from ``p_e`` and from ``alpha + xi``, and those are the
     two material numbers the model is allowed to have.
     """
-    assert bragg_shift(BRAGG, strain=1e-6) - BRAGG == pytest.approx(1.209e-12, rel=1e-3)
-    assert bragg_shift(BRAGG, temperature_change=1.0) - BRAGG == pytest.approx(11.19e-12, rel=1e-3)
+    # abs=0.0 throughout: approx keeps a 1e-12 floor even when rel is given, a
+    # whole picometre, which would let 1.209 pm/ustrain pass anywhere from 0.2 to 2.2.
+    assert bragg_shift(BRAGG, strain=1e-6) - BRAGG == pytest.approx(1.209e-12, rel=1e-3, abs=0.0)
+    assert bragg_shift(BRAGG, temperature_change=1.0) - BRAGG == pytest.approx(
+        11.19e-12, rel=1e-3, abs=0.0
+    )
 
     grating = FiberBraggGrating(bragg_wavelength=1550.0)
-    assert grating.strain_sensitivity() * 1e-6 == pytest.approx(1.209e-12, rel=1e-3)
-    assert grating.temperature_sensitivity() == pytest.approx(11.19e-12, rel=1e-3)
+    assert grating.strain_sensitivity() * 1e-6 == pytest.approx(1.209e-12, rel=1e-3, abs=0.0)
+    assert grating.temperature_sensitivity() == pytest.approx(11.19e-12, rel=1e-3, abs=0.0)
 
 
 def test_a_kelvin_of_drift_imitates_nine_microstrain() -> None:
@@ -1031,8 +1035,8 @@ def test_the_cross_sensitivity_does_not_depend_on_the_wavelength() -> None:
         FiberBraggGrating(bragg_wavelength=nm).cross_sensitivity()
         for nm in (1530.0, 1550.0, 1565.0)
     ]
-    assert ratios[0] == pytest.approx(ratios[1], rel=1e-12)
-    assert ratios[1] == pytest.approx(ratios[2], rel=1e-12)
+    assert ratios[0] == pytest.approx(ratios[1], rel=1e-12, abs=0.0)
+    assert ratios[1] == pytest.approx(ratios[2], rel=1e-12, abs=0.0)
 
 
 def test_strain_and_temperature_add_and_are_exactly_linear() -> None:
@@ -1048,11 +1052,11 @@ def test_strain_and_temperature_add_and_are_exactly_linear() -> None:
         + (bragg_shift(BRAGG, strain=500e-6) - BRAGG)
         + (bragg_shift(BRAGG, temperature_change=20.0) - BRAGG)
     )
-    assert together == pytest.approx(separately, rel=1e-15)
+    assert together - BRAGG == pytest.approx(separately - BRAGG, rel=1e-9, abs=0.0)
 
     for scale in (0.5, 2.0, 10.0):
         assert bragg_shift(BRAGG, strain=scale * 100e-6) - BRAGG == pytest.approx(
-            scale * (bragg_shift(BRAGG, strain=100e-6) - BRAGG), rel=1e-12
+            scale * (bragg_shift(BRAGG, strain=100e-6) - BRAGG), rel=1e-9, abs=0.0
         )
 
 
@@ -1097,7 +1101,7 @@ def test_a_coating_is_what_changes_the_thermal_number() -> None:
     )
     moved_bare = bare.sensed_bragg_wavelength() - 1550e-9
     moved_coated = coated.sensed_bragg_wavelength() - 1550e-9
-    assert moved_coated == pytest.approx(2.0 * moved_bare, rel=1e-12)
+    assert moved_coated == pytest.approx(2.0 * moved_bare, rel=1e-9, abs=0.0)
     assert coated.strain_sensitivity() == bare.strain_sensitivity()
     assert coated.cross_sensitivity() == pytest.approx(2.0 * bare.cross_sensitivity())
 
@@ -1201,11 +1205,11 @@ def test_sensors_on_one_fibre_are_read_through_one_circulator() -> None:
 
     # Each grating sits where its own strain puts it, and the strained one has
     # moved by very nearly a nanometre while its neighbours have not moved at all.
-    assert gratings[0].sensed_bragg_wavelength() == pytest.approx(1540e-9, rel=1e-15)
+    assert gratings[0].sensed_bragg_wavelength() == pytest.approx(1540e-9, rel=1e-15, abs=0.0)
     assert gratings[1].sensed_bragg_wavelength() - 1550e-9 == pytest.approx(
-        800 * 1.209e-12, rel=1e-3
+        800 * 1.209e-12, rel=1e-3, abs=0.0
     )
-    assert gratings[2].sensed_bragg_wavelength() == pytest.approx(1560e-9, rel=1e-15)
+    assert gratings[2].sensed_bragg_wavelength() == pytest.approx(1560e-9, rel=1e-15, abs=0.0)
 
     # And the array really is read through one fibre: the third grating's
     # reflection reaches the meter having passed through the first two.
