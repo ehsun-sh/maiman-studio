@@ -235,7 +235,9 @@ class Component:
 
     A component is a pure function of its inputs and its parameters: it receives
     read-only signals and returns new ones. Nothing is mutated in place, so the
-    scheduler is free to order, cache, or parallelise execution.
+    scheduler is free to order, cache, or parallelise execution. The single
+    exception is a loop control, which carries one pass's input into the next;
+    see :meth:`feedback_passes`.
     """
 
     #: Human-readable name, shown in the GUI palette.
@@ -433,6 +435,20 @@ class Component:
         return from_si(self.si(name), spec.unit), spec.unit
 
     # -- ports ------------------------------------------------------------
+
+    def feedback_passes(self) -> int:
+        """How many passes a loop closed through this block runs; 0 if it closes none.
+
+        The one exception to a component being a pure function of its inputs. A
+        loop control (see :class:`~maiman.components.Feedback`) returns on each
+        pass what arrived at it on the pass before, which turns a cycle the
+        scheduler cannot order into a sequence of passes it can. Every other block
+        returns 0 and runs exactly once, as it always has.
+        """
+        return 0
+
+    def reset_feedback(self) -> None:
+        """Forget whatever was carried between passes. Called at the start of every run."""
 
     def port_groups(self) -> tuple[PortGroup, ...]:
         """Independent slices of this component, for the scheduler.

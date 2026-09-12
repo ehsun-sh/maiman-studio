@@ -1682,6 +1682,13 @@ verdict, and DESIGN.md
      "unit": "dB",
      "min": 0.0,
      "doc": "Reverse leak on every hop; 0 is an ideal circulator, a real one 40 to 60"
+    },
+    "return_loss": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "dB",
+     "min": 0.0,
+     "doc": "Reflection back out of the port light entered; 0 is none. Makes a cavity"
     }
    },
    "structural": {
@@ -2310,6 +2317,33 @@ verdict, and DESIGN.md
     "outputs": {
      "out": "binary",
      "payload": "binary"
+    }
+   }
+  },
+  "Feedback": {
+   "name": "Feedback",
+   "type": "Feedback",
+   "class": "maiman.components.feedback.Feedback",
+   "category": "Signal Flow",
+   "version": "0.1.0",
+   "parameters": {
+    "passes": {
+     "type": "float",
+     "default": 8.0,
+     "unit": "",
+     "min": 1.0,
+     "max": 10000.0,
+     "doc": "Times the loop is run; the error falls as the loop gain to this power"
+    }
+   },
+   "structural": {},
+   "ports": {
+    "inputs": {
+     "in": "optical"
+    },
+    "outputs": {
+     "out": "optical",
+     "residual": "metric"
     }
    }
   },
@@ -21399,14 +21433,15 @@ verdict, and DESIGN.md
 
   const CATEGORY_ORDER = [
     "Optical Sources", "Electrical Sources", "Modulation", "Modulators", "Fiber",
-    "Amplifiers", "Passive", "Photonic IC", "Receivers", "DSP", "Electrical", "Measurements"
+    "Amplifiers", "Passive", "Photonic IC", "Signal Flow", "Receivers", "DSP", "Electrical",
+    "Measurements"
   ];
   // Which port type a category is coloured by in the palette.
   const CATEGORY_PORT = {
     "Optical Sources": "optical", "Electrical Sources": "binary", "Modulation": "symbol",
     "Modulators": "optical", "Fiber": "optical", "Amplifiers": "optical",
     "Passive": "optical", "Photonic IC": "optical", "Receivers": "electrical", "DSP": "symbol",
-    "Electrical": "electrical", "Measurements": "metric"
+    "Electrical": "electrical", "Measurements": "metric", "Signal Flow": "optical"
   };
 
   /* ---------- The schematic, which is the project document -----------------

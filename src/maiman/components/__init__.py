@@ -40,6 +40,7 @@ from .electrical import (
     SoftFECDecoder,
     SoftFECEncoder,
 )
+from .feedback import Feedback
 from .fiber import Fiber
 from .filters import ElectricalFilter, OpticalFilter, OpticalSpectrumAnalyzer
 from .mapping import (
@@ -93,6 +94,7 @@ __all__ = [
     "EyeDiagram",
     "FECDecoder",
     "FECEncoder",
+    "Feedback",
     "Fiber",
     "FiberBraggGrating",
     "FrequencyRecovery",

@@ -434,6 +434,12 @@ class Circulator(ScatteringDevice):
     nothing more. What changes is only that ``in1`` is read by two groups, which
     :class:`~maiman.component.PortGroup` allows.
 
+    **Return loss is the one route that is a cycle.** Light reflected back out of
+    the port it entered by goes straight back into whatever is on that port. Next
+    to a grating that is a cavity, and the graph refuses it until a
+    :class:`~maiman.components.Feedback` on one wire of the loop runs it for a
+    declared number of passes.
+
     ``driven`` says which physical ports light enters, and the outputs follow
     from the routing: driving 1 and 2 — the reflective configuration this exists
     for — gives inputs ``in1``, ``in2`` and outputs ``out2``, ``out3``. Add 3 to
@@ -448,7 +454,7 @@ class Circulator(ScatteringDevice):
     than being folded into the grating.
 
     See :func:`maiman.photonics.circulator` for the matrix, for why isolation
-    turned out not to be a loop, and for the return loss that would be one.
+    turned out not to be a loop, and for the return loss that is one.
     """
 
     display_name = "Circulator"
@@ -462,6 +468,12 @@ class Circulator(ScatteringDevice):
         unit="dB",
         min=0.0,
         doc="Reverse leak on every hop; 0 is an ideal circulator, a real one 40 to 60",
+    )
+    return_loss = Param(
+        0.0,
+        unit="dB",
+        min=0.0,
+        doc="Reflection back out of the port light entered; 0 is none. Makes a cavity",
     )
 
     def __init__(
@@ -491,51 +503,67 @@ class Circulator(ScatteringDevice):
     def structural_config(self) -> dict[str, Any]:
         return {"driven": list(self.driven)}
 
-    def port_groups(self) -> tuple[PortGroup, ...]:
-        """One group per output: the hop into it, and the leak into it if there is one.
+    def _heard(self) -> dict[str, frozenset[str]]:
+        """Which inputs each output hears: its forward hop, and the leak and echo if set.
 
-        With no isolation each output hears exactly one input and the groups are
-        the hops, which is the whole point of this component. With it, an output
-        also hears the input one port further round -- port 3 hears port 1's leak
-        as well as port 2's forward path -- so an input can be read by two groups
-        while every output is still computed exactly once.
+        With neither, an output hears exactly one input and each is its own route,
+        which is the whole point of this component. Isolation adds the input one
+        port further round -- port 3 hears port 1's leak as well as port 2's
+        forward path. Return loss adds the output's own port -- port 2 hears light
+        coming back into port 2 -- and next to a reflective device that one is a
+        genuine cavity.
         """
-        groups = []
+        heard: dict[str, frozenset[str]] = {}
         for port in self.driven:
             out = self._next(port)
-            heard = {f"in{port}"}
+            names = {f"in{port}"}
             leaker = self._next(out)
             if self.isolation > 0.0 and leaker in self.driven:
-                heard.add(f"in{leaker}")
-            groups.append(PortGroup(frozenset(heard), frozenset({f"out{out}"})))
-        return tuple(groups)
+                names.add(f"in{leaker}")
+            if self.return_loss > 0.0 and out in self.driven:
+                names.add(f"in{out}")
+            heard[f"out{out}"] = frozenset(names)
+        return heard
+
+    def port_groups(self) -> tuple[PortGroup, ...]:
+        """One group per distinct set of inputs heard.
+
+        Outputs hearing exactly the same inputs are one node, since nothing could
+        order them apart. With return loss and isolation both set, ports 2 and 3
+        each hear ports 1 and 2 and share a group -- and next to a grating on port 2
+        that group sits on a real cycle, which only a Feedback can close.
+        """
+        by_inputs: dict[frozenset[str], set[str]] = {}
+        for output, names in self._heard().items():
+            by_inputs.setdefault(names, set()).add(output)
+        return tuple(PortGroup(names, frozenset(outputs)) for names, outputs in by_inputs.items())
 
     def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
-        # The scheduler calls this once per group, and which group is decided by
-        # exactly which inputs arrived -- no two of this block's groups read the
-        # same set. Called directly with everything at once, it answers for every
-        # group those inputs can feed.
+        # The scheduler calls this once per group, identified by exactly which
+        # inputs arrived; port_groups guarantees no two groups read the same set.
+        # Called directly with everything at once, it answers for every group those
+        # inputs can feed.
         arrived = frozenset(inputs)
         groups = self.port_groups()
         chosen = [g for g in groups if g.inputs == arrived] or [
             g for g in groups if g.inputs <= arrived
         ]
+        heard = self._heard()
         matrix_for = self._matrix_factory()
         produced: dict[str, Signal] = {}
         for group in chosen:
-            (output,) = group.outputs
-            destination = output.removeprefix("out")
-            # Forward path and leak both arrive at the same port, so they add as
-            # fields where they share a band -- a reflected channel and the same
-            # channel's direct leak interfere, which is the physics of it.
-            contributions = [
-                apply_response(
-                    inputs[name],
-                    port_response(matrix_for, "p" + destination, "p" + name.removeprefix("in")),
-                )
-                for name in sorted(group.inputs)
-            ]
-            produced[output] = _sum_signals(contributions, where=f"{self.label}.{output}")
+            for output in sorted(group.outputs):
+                destination = output.removeprefix("out")
+                # Everything arriving at one port adds as fields where it shares a
+                # band: a reflected channel, the same channel's leak, and its echo.
+                contributions = [
+                    apply_response(
+                        inputs[name],
+                        port_response(matrix_for, "p" + destination, "p" + name.removeprefix("in")),
+                    )
+                    for name in sorted(heard[output])
+                ]
+                produced[output] = _sum_signals(contributions, where=f"{self.label}.{output}")
         return produced
 
     def _matrix_factory(self, polarization: str = "te") -> Callable[[np.ndarray], SMatrix]:
@@ -545,4 +573,9 @@ class Circulator(ScatteringDevice):
         # is per part rather than per physics.
         loss = self.insertion_loss
         isolation = self.isolation
-        return solve_once(lambda f: circulator(f, insertion_loss_db=loss, isolation_db=isolation))
+        echo = self.return_loss
+        return solve_once(
+            lambda f: circulator(
+                f, insertion_loss_db=loss, isolation_db=isolation, return_loss_db=echo
+            )
+        )

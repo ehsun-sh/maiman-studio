@@ -27,6 +27,7 @@ from maiman.component import PortType
 from maiman.components import (
     EDFA,
     BERAnalyzer,
+    Circulator,
     CoarseFrequencyRecovery,
     CoherentReceiver,
     ConstellationAnalyzer,
@@ -35,7 +36,9 @@ from maiman.components import (
     EyeDiagram,
     FECDecoder,
     FECEncoder,
+    Feedback,
     Fiber,
+    FiberBraggGrating,
     FrequencyRecovery,
     IQDriver,
     IQModulator,
@@ -265,6 +268,24 @@ def soft_coded_coherent_link() -> Graph:
     return graph
 
 
+def cavity_link() -> Graph:
+    """A return-loss cavity closed by a Feedback, which is where its residual comes from."""
+    graph = Graph(SimulationContext(bit_rate=10e9, samples_per_symbol=8, sequence_length=64))
+    laser = graph.add(CWLaser(power=0.0, wavelength=1550.0, label="cw"))
+    circ = graph.add(Circulator(isolation=40.0, return_loss=20.0, label="circ"))
+    grating = graph.add(
+        FiberBraggGrating(bragg_wavelength=1550.0, length=10.0, index_modulation=1e-4, label="fbg")
+    )
+    loop = graph.add(Feedback(passes=4.0, label="loop"))
+    meter = graph.add(PowerMeter(label="drop"))
+    graph.connect(laser, circ["in1"])
+    graph.connect(circ["out2"], grating["in"])
+    graph.connect(grating["reflected"], loop["in"])
+    graph.connect(loop["out"], circ["in2"])
+    graph.connect(circ["out3"], meter["in"])
+    return graph
+
+
 def test_no_metric_port_in_the_library_encodes_as_opaque() -> None:
     """Every measurement the library can produce must be drawable.
 
@@ -290,6 +311,7 @@ def test_no_metric_port_in_the_library_encodes_as_opaque() -> None:
         impaired_coherent_link(),
         coded_ook_link(),
         soft_coded_coherent_link(),
+        cavity_link(),
     ):
         by_label = {c.label: c for c in graph.components}
         encoded = encode_results(graph.run())

@@ -305,12 +305,17 @@ def test_every_optical_block_carries_the_path_history_through() -> None:
     the spectra and the constellations all come out exactly as before.
 
     Sources are exempt — light that has just been emitted has travelled nothing —
-    and so is anything with no optical input to carry it from.
+    and so is anything with no optical input to carry it from, and a loop
+    control, whose output on any one call is what arrived on the call before.
     """
     marker = -1.234e-21
     checked: list[str] = []
     for name in registered_names():
         component = lookup(name)()
+        if component.feedback_passes() > 0:
+            # A loop control hands on the last pass's input, not this call's, so
+            # it carries history across passes rather than through one call.
+            continue
         inputs = optical_ports(component, component.inputs)
         outputs = optical_ports(component, component.outputs)
         if not inputs or not outputs:

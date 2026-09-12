@@ -1055,6 +1055,7 @@ def circulator(
     *,
     insertion_loss_db: float = 0.0,
     isolation_db: float = 0.0,
+    return_loss_db: float = 0.0,
     ports: tuple[str, str, str] = ("p1", "p2", "p3"),
 ) -> SMatrix:
     """Three ports and one direction — 1 to 2, 2 to 3, 3 to 1. The way to a mirror.
@@ -1087,22 +1088,27 @@ def circulator(
     dependencies overlap and are acyclic, which a partition of ports into groups
     could not express and :class:`~maiman.component.PortGroup` now can.
 
-    **Return loss is the real cavity, and it is not modelled.** A reflection back
-    out of the port light entered by bounces into the grating again: at 40 dB of it
+    ``return_loss_db`` is the reflection back out of the port light entered by, and
+    0 means none. **That one is a real cavity.** In the drop configuration it sends
+    reflected light back into the grating, which reflects it again: at 40 dB of it
     the exact solve departs from feed-forward by 7.9e-3 and matches
     ``tau * r * tau / (1 - rho * r) + iota`` to 4e-16, rippling the drop port by
-    about 0.07 dB either way. That is a genuine loop and would need an iteration
-    count.
+    about 0.07 dB either way. In a graph that is a cycle, and it runs only with a
+    :class:`~maiman.components.Feedback` closing it.
     """
     if isolation_db < 0.0:
         raise ValueError(f"isolation_db must be zero (ideal) or positive, got {isolation_db}")
+    if return_loss_db < 0.0:
+        raise ValueError(f"return_loss_db must be zero (none) or positive, got {return_loss_db}")
     frequencies = np.asarray(frequencies, dtype=np.float64)
     amplitude = 10.0 ** (-insertion_loss_db / 20.0)
     leak = 10.0 ** (-isolation_db / 20.0) if isolation_db > 0.0 else 0.0
+    echo = 10.0 ** (-return_loss_db / 20.0) if return_loss_db > 0.0 else 0.0
 
     count = len(ports)
     s = np.zeros((frequencies.shape[0], count, count), dtype=np.complex128)
     for source in range(count):
         s[:, (source + 1) % count, source] = amplitude
         s[:, source, (source + 1) % count] = leak
+        s[:, source, source] = echo
     return SMatrix(ports=ports, frequencies=frequencies, s=s)

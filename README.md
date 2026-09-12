@@ -20,7 +20,7 @@ link in this simulator descends from.*
 > ### Project status: 0.3.0 — released, and still moving.
 >
 > `pip install maiman`, then `maiman serve` — or [start from no Python at
-> all](#installing-and-running-it). Phases 0 through 4 are done: **55 components, more than 1250 tests, and
+> all](#installing-and-running-it). Phases 0 through 4 are done: **56 components, more than 1250 tests, and
 > every physics block checked against a closed-form result in CI.**
 >
 > **Links run end to end.** Direct detection — PRBS → NRZ → laser → MZM → fiber → PIN → filter →
@@ -140,7 +140,7 @@ You will see:
 
 ```
 Maiman Studio session server
-  55 components
+  56 components
   http://127.0.0.1:8765/
 ```
 
@@ -1812,8 +1812,47 @@ micro-decibels at every setting:
 At 40 dB the floor on the drop port is the circulator's leak from port 1, not the grating — which is
 the number a real drop would be specified by. **Return loss is what would be a cavity**: a reflection
 back out of the port light entered by, bouncing into the grating again. At 40 dB of it the exact solve
-leaves feed-forward by 8e-3 and ripples the drop port by about ±0.07 dB. That one is not modelled,
-and would need an iteration count.
+leaves feed-forward by 8e-3 and ripples the drop port by about ±0.07 dB. That one is a real loop, and it has
+its own section.
+
+### A loop the engine will run
+
+The scheduler orders a graph, and a cycle cannot be ordered — which for almost everything here is the
+truth: a link goes one way, and a cycle in its graph is a wiring mistake. Two things that looked like
+cycles turned out not to be, and `PortGroup` handles both without any loop control. Return loss is the
+one that is. Light reflected back out of port 2 goes into the grating again, which reflects it again,
+and the steady state is the geometric series `τ·r·τ / (1 − ρ·r) + ι` that nothing feed-forward can
+sum.
+
+`Feedback` is the explicit, declared way to run it. Put it on any one wire of the loop: its `out` feeds
+the loop and its `in` takes what comes back, so the scheduler sees a source and a sink and the graph
+has an order again. The whole graph then runs `passes` times. On the first pass `out` is dark; on every
+later one it is whatever reached `in` the pass before. Without it, the same wiring is refused with a
+`CycleError` that now names the fix — and a graph with no `Feedback` in it runs exactly once, as it
+always did.
+
+Against `Circuit.solve`, which sums every bounce exactly — 20 dB of return loss, 40 dB of isolation:
+
+```
+   passes   drop, 1550 nm    residual
+        1      -40.000 dB         inf   nothing has been round yet: the leak alone
+        2       -1.701 dB     9.6e-02   one trip to the grating: the feed-forward sum
+        3       -1.671 dB     9.4e-03
+        4       -1.752 dB     9.0e-04
+        5       -1.752 dB     8.7e-05
+        6       -1.751 dB     8.4e-06   the exact cavity, to 4e-7 dB
+```
+
+**The residual falls by 0.0966 every pass, and that number is the physics:** the echo's amplitude 0.1
+times the grating's reflection 0.966, the loop's round-trip gain. The power does not fall so tidily —
+three passes are further off than two, and five than four — because partial sums of a series whose
+ratio carries a phase overshoot and undershoot the limit in turn. Watch the residual, not the power.
+
+**What a pass is not.** It is not a lap in time. Every signal is a whole window in its own retarded
+frame, so a trip round the loop adds no delay and every lap lands on top of the last. That is right for
+a cavity short against the window — a reflection between parts centimetres apart — and wrong for a
+recirculating loop a pulse goes round many times, where the laps should arrive one after another. That
+needs a delay line, and this is not one.
 
 ### The named windows were never the limit
 

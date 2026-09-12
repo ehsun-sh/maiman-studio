@@ -86,7 +86,8 @@ class CycleError(GraphError):
 
     Cycles are not forbidden in principle — recirculating loops and optical
     feedback are real — but they need an explicit component that declares how
-    many times the loop runs. Leaving the semantics implicit would make results
+    many times the loop runs -- :class:`~maiman.components.Feedback`. Leaving the
+    semantics implicit would make results
     depend on scheduler internals.
     """
 
@@ -280,8 +281,8 @@ class Graph:
             )
             raise CycleError(
                 f"the graph contains a feedback loop involving {unresolved}. "
-                f"Break it with an explicit loop-control component that declares "
-                f"an iteration count."
+                f"If it is a real cavity, route one wire of the loop through a Feedback "
+                f"block, which runs the loop a declared number of passes."
             )
         return order
 
@@ -334,6 +335,9 @@ class Graph:
     ) -> Results:
         """Execute every component once, in dependency order.
 
+        A graph with a :class:`~maiman.components.Feedback` in it is run once per
+        pass that block declares, and only the last pass's results are returned.
+
         Intermediate signals are released as soon as their last consumer has run,
         so peak memory is the width of the graph cut rather than the whole graph.
         Metric outputs, outputs of sink components, and anything named in ``keep``
@@ -363,82 +367,99 @@ class Graph:
         self._validate()
         order = self._topological_order()
 
-        # One count per node that reads a signal, not one per wire. An input shared
-        # by two of a component's groups is one wire read twice, and counting it
-        # once would release the signal after its first reader and leave the second
-        # with nothing. For a component with a single group the two counts agree.
-        consumers_remaining: dict[tuple[str, str], int] = defaultdict(int)
-        for component, group in order:
-            for name in group.inputs:
-                src_port = self._edges[(component.label, name)]
-                consumers_remaining[(src_port.component.label, src_port.name)] += 1
+        # A loop control carries one pass into the next, so a graph with one is run
+        # as many times as it asks and a graph without one is run exactly once.
+        # Only the last pass's results are kept.
+        loops = [c for c in self._components if c.feedback_passes() > 0]
+        passes = max((c.feedback_passes() for c in loops), default=1)
+        for component in loops:
+            component.reset_feedback()
 
         keep_labels = {c.label for c in (keep or [])}
-        live: dict[tuple[str, str], Signal] = {}
         retained: dict[tuple[str, str], Signal] = {}
+        total = len(order) * passes
 
-        total = len(order)
-        for index, (component, group) in enumerate(order):
-            inputs = {}
-            for name in group.inputs:
-                src = self._edges[(component.label, name)]
-                inputs[name] = live[(src.component.label, src.name)]
+        for pass_index in range(passes):
+            # Everything is recomputed on every pass. A source emits the same signal
+            # each time -- noise is seeded by label -- so what differs between passes
+            # is only what the loop controls hand back.
+            #
+            # One count per node that reads a signal, not one per wire. An input
+            # shared by two of a component's groups is one wire read twice, and
+            # counting it once would release the signal after its first reader and
+            # leave the second with nothing. For a single-group component the two
+            # counts agree.
+            consumers_remaining: dict[tuple[str, str], int] = defaultdict(int)
+            for component, group in order:
+                for name in group.inputs:
+                    src_port = self._edges[(component.label, name)]
+                    consumers_remaining[(src_port.component.label, src_port.name)] += 1
 
-            if progress is None:
-                produced = component.run(ctx, inputs)
-            else:
-                # Announced before it runs, so the label on screen is the block
-                # currently working rather than the one that has just finished.
-                progress(Progress(component.label, index, total, 0.0))
-                component._reporter = lambda within, _i=index, _c=component: progress(
-                    Progress(_c.label, _i, total, within)
-                )
-                try:
+            live: dict[tuple[str, str], Signal] = {}
+            retained = {}
+
+            for position, (component, group) in enumerate(order):
+                index = pass_index * len(order) + position
+                inputs = {}
+                for name in group.inputs:
+                    src = self._edges[(component.label, name)]
+                    inputs[name] = live[(src.component.label, src.name)]
+
+                if progress is None:
                     produced = component.run(ctx, inputs)
-                finally:
-                    # Off again whatever happened. A reporter left installed
-                    # would outlive the run that owns it and fire into a closure
-                    # holding a graph nobody is using any more.
-                    component._reporter = None
+                else:
+                    # Announced before it runs, so the label on screen is the block
+                    # currently working rather than the one that has just finished.
+                    progress(Progress(component.label, index, total, 0.0))
+                    component._reporter = lambda within, _i=index, _c=component: progress(
+                        Progress(_c.label, _i, total, within)
+                    )
+                    try:
+                        produced = component.run(ctx, inputs)
+                    finally:
+                        # Off again whatever happened. A reporter left installed
+                        # would outlive the run that owns it and fire into a closure
+                        # holding a graph nobody is using any more.
+                        component._reporter = None
 
-            # Exactly this group's outputs, which for a single-group component
-            # -- almost all of them -- is exactly its outputs. A component that
-            # splits itself is called once per group and answers for that group
-            # alone; returning the other group's ports here would overwrite a
-            # result computed from inputs this call was not even given.
-            missing = set(group.outputs) - set(produced)
-            if missing:
-                raise GraphError(
-                    f"{component.label}.run() did not return output(s) {sorted(missing)}"
+                # Exactly this group's outputs, which for a single-group component
+                # -- almost all of them -- is exactly its outputs. A component that
+                # splits itself is called once per group and answers for that group
+                # alone; returning the other group's ports here would overwrite a
+                # result computed from inputs this call was not even given.
+                missing = set(group.outputs) - set(produced)
+                if missing:
+                    raise GraphError(
+                        f"{component.label}.run() did not return output(s) {sorted(missing)}"
+                    )
+                extra = set(produced) - set(group.outputs)
+                if extra:
+                    raise GraphError(
+                        f"{component.label}.run() returned undeclared output(s) {sorted(extra)}"
+                    )
+
+                # No downstream consumer means this is a sink: its results are what
+                # the caller actually asked for, so they are always retained.
+                is_sink = all(
+                    consumers_remaining[(component.label, name)] == 0 for name in group.outputs
                 )
-            extra = set(produced) - set(group.outputs)
-            if extra:
-                raise GraphError(
-                    f"{component.label}.run() returned undeclared output(s) {sorted(extra)}"
-                )
+                for name, value in produced.items():
+                    key = (component.label, name)
+                    live[key] = value
+                    if (
+                        component.outputs[name] is PortType.METRIC
+                        or is_sink
+                        or component.label in keep_labels
+                    ):
+                        retained[key] = value
 
-            # No downstream consumer means this is a sink: its results are what
-            # the caller actually asked for, so they are always retained.
-            is_sink = all(
-                consumers_remaining[(component.label, name)] == 0 for name in group.outputs
-            )
-            for name, value in produced.items():
-                key = (component.label, name)
-                live[key] = value
-                if (
-                    component.outputs[name] is PortType.METRIC
-                    or is_sink
-                    or component.label in keep_labels
-                ):
-                    retained[key] = value
-
-            # Release inputs whose last consumer has now run.
-            for name in group.inputs:
-                src_port = self._edges[(component.label, name)]
-                src_key = (src_port.component.label, src_port.name)
-                consumers_remaining[src_key] -= 1
-                if consumers_remaining[src_key] == 0 and src_key not in retained:
-                    live.pop(src_key, None)
+                # Release inputs whose last consumer on this pass has now run.
+                for name in group.inputs:
+                    src_port = self._edges[(component.label, name)]
+                    src_key = (src_port.component.label, src_port.name)
+                    consumers_remaining[src_key] -= 1
+                    if consumers_remaining[src_key] == 0 and src_key not in retained:
+                        live.pop(src_key, None)
 
         if progress is not None and order:
             # One final call at exactly 1.0. Without it the last thing a caller
