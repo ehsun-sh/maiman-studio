@@ -26,7 +26,7 @@ silicon strip waveguide at 1550 nm.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 import numpy as np
@@ -57,6 +57,15 @@ SILICON_STRIP_NGROUP = 4.20
 #: free spectral ranges as well.
 SILICON_STRIP_NEFF_TM = 1.78
 SILICON_STRIP_NGROUP_TM = 3.80
+
+#: Effective index of the LP01 mode of a standard germanium-doped silica fibre
+#: core at 1550 nm. It is here rather than beside the silicon numbers because it
+#: belongs to a different device entirely: a fibre Bragg grating is written into
+#: a drawn fibre, not patterned on a die, and taking silicon's 2.44 for it would
+#: put the reflection 40 % away in wavelength. The Bragg condition is
+#: ``lambda_B = 2 * n_eff * Lambda``, so this is the number that turns a period
+#: into a wavelength and back.
+SILICA_FIBER_NEFF = 1.4475
 
 #: Separator between a port's name and the polarization it carries. No port name
 #: in this library contains it, so a split is unambiguous and an un-suffixed name
@@ -645,3 +654,237 @@ def ring_resonator(
     circuit.expose("add", "drop_bus", "in1")
     circuit.expose("drop", "drop_bus", "out1")
     return circuit.solve()
+
+
+#: Apodization profiles a written grating can carry, as functions of the
+#: normalised position ``u`` running from -0.5 at the input face to +0.5 at the
+#: far one. Named rather than numbered, because "raised-cosine" is a word that
+#: appears on a datasheet and ``2`` is not.
+APODIZATIONS: dict[str, Callable[[np.ndarray], np.ndarray]] = {
+    # A grating of constant strength. Its spectrum is the transform of a
+    # rectangle, so it has a rectangle's sidelobes -- the first one about 9 dB
+    # below the peak, which is far too much crosstalk for a channel filter and
+    # is the whole reason the other two exist.
+    "uniform": lambda u: np.ones_like(u),
+    # Hann. The standard written apodization: zero strength at both faces, so
+    # there is no abrupt start for the spectrum to ring on.
+    "raised-cosine": lambda u: 0.5 * (1.0 + np.cos(2.0 * np.pi * u)),
+    # A Gaussian truncated at +/- 2.5 sigma. Lower sidelobes still, at the cost
+    # of a wider main lobe for the same length -- the trade every window makes.
+    "gaussian": lambda u: np.exp(-0.5 * (u / 0.2) ** 2),
+}
+
+#: Sections a grating is cut into unless asked otherwise. Measured rather than
+#: guessed: against the geometric dispersion of a linearly chirped grating, 50
+#: sections are 2.4 % out on a 1 m grating chirped over 40 nm and 200 are 0.07 %,
+#: and nothing between 200 and 4000 moves the answer at all. It is a *count*
+#: rather than a length because what has to stay small is the shift in local
+#: Bragg wavelength per section relative to that section's own bandwidth, and
+#: both scale with the section count in the same direction.
+DEFAULT_GRATING_SECTIONS = 200
+
+
+def fiber_bragg_grating(
+    frequencies: np.ndarray,
+    *,
+    length: float,
+    index_modulation: float,
+    bragg_wavelength: float,
+    n_eff: float = SILICA_FIBER_NEFF,
+    chirp: float = 0.0,
+    apodization: str = "uniform",
+    sections: int = DEFAULT_GRATING_SECTIONS,
+    ports: tuple[str, str] = ("in", "out"),
+) -> SMatrix:
+    """A periodic index modulation in a fibre core: the library's first mirror.
+
+    Every other device in this module is matched at its facets and its matrix is
+    off-diagonal. This one is *made* of reflection — a few thousand weak partial
+    reflections that add in phase at one wavelength and cancel at every other —
+    so ``s[in, in]`` is the entry carrying the physics, and ``s[out, out]`` is
+    not the same number once the grating is chirped.
+
+    **Assembled, not written down**, in the sense the ring is. The grating is cut
+    into ``sections`` short enough to be uniform, each gets the closed-form
+    transfer matrix of a uniform grating at its own local period and its own
+    local strength, and the product is taken. Erdogan's formula for a uniform
+    grating is nowhere in this function; it is in ``tests/test_photonics.py`` on
+    the other side of the comparison, and a uniform grating cut into two hundred
+    sections has to reproduce it. That is what buys chirp and apodization for
+    nothing — a linearly chirped grating is the same product with a different
+    local period per section, and it has no closed form at all.
+
+    **The parameters, and what each one is.**
+
+    ``index_modulation`` is the amplitude of the index fringe, the ``delta-n`` a
+    writing process is specified by: 1e-4 is a strong grating and 1e-5 a weak
+    one. It sets the coupling ``kappa = pi * delta-n / lambda``, and ``kappa L``
+    is the single number deciding how much comes back — ``tanh**2(kappa L)``,
+    which is 0.58 at ``kappa L = 1`` and 0.9993 at 4.
+
+    ``bragg_wavelength`` is where it reflects, ``2 * n_eff * Lambda`` for a
+    period ``Lambda``. **The average index is taken as compensated**, which is
+    what a modern writing process aims for and what makes this parameter mean
+    what it says. Writing a grating raises the average index as well, and an
+    uncompensated one reflects at ``lambda_B * (1 + delta-n / n_eff)`` — 0.107 nm
+    high at 1550 nm and ``delta-n = 1e-4``, which is two channels on a 100 GHz
+    grid. Apodizing an uncompensated grating is worse than a shift: the average
+    index then varies along the length, which is a chirp nobody asked for.
+
+    ``chirp`` is the *total* change in local Bragg wavelength from the input face
+    to the far one, so a positive value puts the short wavelengths at the near
+    end where they turn round early and the long ones arrive later. That is
+    ``D > 0``, the sign standard fibre has — so a compensator is a *negative*
+    chirp, or the same grating entered from its other end, which is why
+    ``s[in, in]`` and ``s[out, out]`` are different entries. The slope is
+    ``2 * n_eff * L / (c * chirp)``: 965 ps/nm for a 10 cm grating chirped over
+    1 nm, 57 km of standard fibre undone by a part the length of a finger.
+
+    ``apodization`` shapes ``kappa`` along the length; see :data:`APODIZATIONS`.
+
+    ``sections`` has to be large enough that one section is uniform over its own
+    length; :data:`DEFAULT_GRATING_SECTIONS` says what the default is measured
+    against. A uniform grating needs only one section and is cut into two hundred
+    anyway, because that is what makes the closed-form comparison a test of this
+    function rather than of a transcription.
+
+    **The chirped grating's dispersion is geometric only while the chirp
+    dominates.** ``2 * n_eff * L / (c * chirp)`` assumes a wavelength turns round
+    where the local period says it should, and that stops being true once the
+    grating's own uniform bandwidth approaches the chirp: at eighteen times the
+    bandwidth the slope is within 0.02 % of geometric, at nine times it is 1.5 %
+    high, and at one time there is no chirp left to speak of — the device is a
+    uniform grating wearing a chirp parameter. The model is right in all three
+    cases; it is the pocket formula that stops applying.
+
+    **What is deliberately not here.** Loss, because there is none worth a
+    parameter: a grating is centimetres of fibre and fibre is 0.2 dB/km, so the
+    strongest grating described above absorbs 2e-5 dB. Birefringence, because a
+    fibre grating's is a per-draw number this library will not invent. And loss
+    to cladding modes on the short-wavelength side, which is real and is a
+    coupling to modes this model does not have.
+
+    Erdogan, *Fiber Grating Spectra*, J. Lightwave Technol. 15(8), 1997, for the
+    coupled-mode formulation and the per-section matrix.
+    """
+    if length <= 0.0:
+        raise ValueError(f"length must be positive, got {length}")
+    if bragg_wavelength <= 0.0:
+        raise ValueError(f"bragg_wavelength must be positive, got {bragg_wavelength}")
+    if sections < 1:
+        raise ValueError(f"sections must be at least 1, got {sections}")
+    if apodization not in APODIZATIONS:
+        raise ValueError(f"unknown apodization {apodization!r}; have {sorted(APODIZATIONS)}")
+
+    frequencies = np.asarray(frequencies, dtype=np.float64)
+    if np.any(frequencies <= 0.0):
+        raise ValueError("a grating is described against optical frequency, which is positive")
+    wavelengths = C_LIGHT / frequencies
+
+    # Section centres, from the input face at u = -0.5 to the far one at +0.5.
+    u = (np.arange(sections) + 0.5) / sections - 0.5
+    dz = length / sections
+    local_bragg = bragg_wavelength + chirp * u
+    strength = index_modulation * APODIZATIONS[apodization](u)
+
+    # [R(near); S(near)] = F @ [R(far); S(far)], R the forward amplitude and S
+    # the backward one. The product runs from the input face outward, so a
+    # chirped grating knows which of its two ends the light arrived at.
+    f11 = np.ones_like(wavelengths, dtype=np.complex128)
+    f12 = np.zeros_like(f11)
+    f21 = np.zeros_like(f11)
+    f22 = np.ones_like(f11)
+
+    for index in range(sections):
+        detuning = 2.0 * np.pi * n_eff * (1.0 / wavelengths - 1.0 / local_bragg[index])
+        kappa = np.pi * strength[index] / wavelengths
+        # Complex on purpose. Inside the stop band the coupling exceeds the
+        # detuning and gamma is real, which is the exponential decay that makes a
+        # mirror; outside it gamma is imaginary and cosh/sinh become cos/sin,
+        # which is the ripple. One expression covers both because numpy takes
+        # the branch rather than being told which case this is.
+        gamma = np.sqrt((kappa**2 - detuning**2).astype(np.complex128))
+        # sinh(gamma dz)/gamma is entire in gamma**2 and is dz at gamma = 0 —
+        # an unmodulated section exactly on resonance. Dividing there would put
+        # a nan in the middle of an otherwise ordinary spectrum.
+        safe = np.where(gamma == 0.0, 1.0, gamma)
+        ratio = np.where(gamma == 0.0, dz, np.sinh(gamma * dz) / safe)
+        cosine = np.cosh(gamma * dz)
+
+        # **Conjugated from the form Erdogan writes**, and this is not cosmetic.
+        # The coupled-mode literature carries fields as ``exp(+i beta z)`` and
+        # this library carries them as ``exp(-i beta z)`` -- the convention
+        # ``straight_waveguide`` and ``propagation_constant`` already fix. Left
+        # in Erdogan's sign the magnitudes come out right and every group delay
+        # comes out *negative*: a 10 cm chirped grating returned -1018 ps, which
+        # is the correct 1018 ps of round trip with light leaving before it
+        # arrives. Flipping the explicit ``i`` is the whole of the change, and it
+        # is safe to do termwise because gamma**2 is real -- gamma is real inside
+        # the stop band and imaginary outside it, and cosh and sinh(x)/x are both
+        # even, so those two factors are real either way.
+        s11 = cosine + 1j * detuning * ratio
+        s12 = 1j * kappa * ratio
+        s21 = -1j * kappa * ratio
+        s22 = cosine - 1j * detuning * ratio
+
+        f11, f12, f21, f22 = (
+            f11 * s11 + f12 * s21,
+            f11 * s12 + f12 * s22,
+            f21 * s11 + f22 * s21,
+            f21 * s12 + f22 * s22,
+        )
+
+    # Drive the near face and the far one has nothing coming back into it, so
+    # transmission is 1/F11 and reflection F21/F11. Drive the far face and
+    # reciprocity returns the same transmission — det F is 1 section by section
+    # and therefore overall — while the reflection is -F12/F11, equal to the
+    # first for a uniform grating and not for a chirped one, where the two ends
+    # really are different devices.
+    transmission = 1.0 / f11
+    reflection_near = f21 / f11
+    reflection_far = -f12 / f11
+
+    s = np.empty((frequencies.shape[0], 2, 2), dtype=np.complex128)
+    s[:, 0, 0] = reflection_near
+    s[:, 0, 1] = transmission
+    s[:, 1, 0] = transmission
+    s[:, 1, 1] = reflection_far
+    return SMatrix(ports=ports, frequencies=frequencies, s=s)
+
+
+def circulator(
+    frequencies: np.ndarray,
+    *,
+    insertion_loss_db: float = 0.0,
+    ports: tuple[str, str, str] = ("p1", "p2", "p3"),
+) -> SMatrix:
+    """Three ports and one direction — 1 to 2, 2 to 3, 3 to 1. The way to a mirror.
+
+    The only non-reciprocal device in this library, and it is here because a
+    reflective one is useless without it: a grating sends its channel back out of
+    the fibre it arrived on, and a circulator is what turns that fibre back into
+    a forward path.
+
+    The matrix is a cyclic permutation scaled by one hop's loss, so it is
+    **unitary at 0 dB and never symmetric** — ``s[p2, p1]`` is the transmission
+    and ``s[p1, p2]`` is zero. :meth:`maiman.circuit.Circuit.solve` has always
+    handled that; until now nothing outside a test made it do so.
+
+    **Isolation is not a parameter, and that is a decision rather than an
+    oversight.** A real circulator leaks 40 to 60 dB backwards, and carrying that
+    would make every output a function of two inputs rather than one. In the
+    configuration this part exists for — signal in at port 1, grating on port 2,
+    drop out of port 3 — that leak is a *loop*: light goes back to the grating,
+    reflects again, and comes round once more. It is a real weak cavity, and the
+    engine is right to refuse one without an iteration count (see
+    :class:`~maiman.graph.CycleError`). Offering a number the routing then
+    ignored would be worse than not offering it.
+    """
+    frequencies = np.asarray(frequencies, dtype=np.float64)
+    amplitude = 10.0 ** (-insertion_loss_db / 20.0)
+
+    count = len(ports)
+    s = np.zeros((frequencies.shape[0], count, count), dtype=np.complex128)
+    for source in range(count):
+        s[:, (source + 1) % count, source] = amplitude
+    return SMatrix(ports=ports, frequencies=frequencies, s=s)

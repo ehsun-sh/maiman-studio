@@ -51,6 +51,38 @@ class Port:
         return f"{self.component.label}.{self.name}"
 
 
+@dataclass(frozen=True)
+class PortGroup:
+    """A set of outputs and the inputs they are the only function of.
+
+    **This exists because a three-port circulator is not a cycle.** The
+    scheduler orders whole components, so a reflective device reached through a
+    circulator -- signal into port 1, out of port 2, back into port 2 from the
+    grating, out of port 3 -- reads as ``circulator -> grating -> circulator``
+    and is refused as a feedback loop. At the level of *ports* there is no loop
+    at all: ``out3`` depends on ``in2`` and on nothing else, ``out2`` depends on
+    ``in1`` and on nothing else, and the light goes strictly forward. The
+    dependency is real, the cycle is an artefact of the granularity.
+
+    So a component may declare that its ports fall into independent groups, and
+    the scheduler treats each group as its own node. :meth:`Component.run` is
+    then called once per group with that group's inputs, and must return that
+    group's outputs and no others.
+
+    The default is one group holding everything, which is the honest answer for
+    almost every block -- a fibre's output depends on its input, and an
+    equaliser's diagnostics depend on the same samples its symbols do. Splitting
+    a component whose outputs are *not* independent would let the scheduler run
+    half of it before its other half's input exists.
+    """
+
+    inputs: frozenset[str]
+    outputs: frozenset[str]
+
+    def __repr__(self) -> str:
+        return f"PortGroup({sorted(self.inputs)} -> {sorted(self.outputs)})"
+
+
 class Param:
     """A component parameter, declared once, with its unit and valid values.
 
@@ -393,6 +425,65 @@ class Component:
         return from_si(self.si(name), spec.unit), spec.unit
 
     # -- ports ------------------------------------------------------------
+
+    def port_groups(self) -> tuple[PortGroup, ...]:
+        """Independent slices of this component, for the scheduler.
+
+        One group holding every port, unless a subclass says otherwise, which is
+        the truthful answer for almost everything: a block computes all of its
+        outputs from all of its inputs in one call and there is nothing to
+        separate. Overriding it is how a device whose routes genuinely do not
+        touch -- a circulator's three -- becomes three scheduler nodes instead of
+        one, so that a reflective device hanging off one of them is not mistaken
+        for a feedback loop. See :class:`PortGroup`.
+
+        It is an instance method rather than a class attribute because the port
+        set is per-instance: a circulator built with two of its three ports
+        driven has two groups, not three.
+        """
+        return (PortGroup(frozenset(self.inputs), frozenset(self.outputs)),)
+
+    def check_port_groups(self) -> None:
+        """Refuse groups that are not a partition of this component's ports.
+
+        A port left out of every group never runs and a port in two of them runs
+        twice, and both failures look like a wiring mistake somewhere else
+        entirely -- an output that is mysteriously absent from the results, or a
+        block that reports twice through the progress callback. Checked before
+        the run rather than discovered during it.
+
+        A group with no outputs is refused as well: it can never be scheduled to
+        any purpose, and the inputs inside it would be silently unreachable.
+        """
+        groups = self.port_groups()
+        if not groups:
+            raise ValueError(f"{self.label}: port_groups() returned nothing")
+
+        for group in groups:
+            if not group.outputs:
+                raise ValueError(f"{self.label}: {group!r} produces no output")
+
+        for kind, declared in (("input", self.inputs), ("output", self.outputs)):
+            seen: dict[str, int] = {}
+            for index, group in enumerate(groups):
+                for name in getattr(group, f"{kind}s"):
+                    if name not in declared:
+                        raise ValueError(
+                            f"{self.label}: port_groups() names {kind} {name!r}, which is "
+                            f"not one of its {kind}s {sorted(declared)}"
+                        )
+                    if name in seen:
+                        raise ValueError(
+                            f"{self.label}: {kind} {name!r} is in port group {seen[name]} "
+                            f"and in {index}; a port belongs to exactly one"
+                        )
+                    seen[name] = index
+            missing = sorted(set(declared) - set(seen))
+            if missing:
+                raise ValueError(
+                    f"{self.label}: port_groups() leaves {kind}(s) {missing} out; "
+                    f"every port belongs to exactly one group"
+                )
 
     def __getitem__(self, port_name: str) -> Port:
         if port_name in self.outputs:

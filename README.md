@@ -20,7 +20,7 @@ link in this simulator descends from.*
 > ### Project status: 0.2.1 — released, and still moving.
 >
 > `pip install maiman`, then `maiman serve` — or [start from no Python at
-> all](#installing-and-running-it). Phases 0 through 4 are done: **51 components, more than 1250 tests, and
+> all](#installing-and-running-it). Phases 0 through 4 are done: **53 components, more than 1250 tests, and
 > every physics block checked against a closed-form result in CI.**
 >
 > **Links run end to end.** Direct detection — PRBS → NRZ → laser → MZM → fiber → PIN → filter →
@@ -140,7 +140,7 @@ You will see:
 
 ```
 Maiman Studio session server
-  51 components
+  53 components
   http://127.0.0.1:8765/
 ```
 
@@ -1569,6 +1569,136 @@ grating or an edge coupler with its own alignment and its own extinction.
 The MMI, the Y-junction, the Mach-Zehnder and PDK import are all downstream of this framework
 rather than of new physics — an interferometer is already two couplers and two arms in a `Circuit`,
 and the tests build one.
+
+## A mirror, and a graph that goes one way
+
+Every optical block up to here is matched at both ends: light enters one port and leaves another,
+and a dataflow edge is an arrow that says so. A fibre Bragg grating is the first one that is not.
+Its useful output comes back out of the fibre it arrived on, and on a bench the only way to that
+output is a circulator.
+
+Two things had to be true for that to work, and one of them was not.
+
+**The solver was already fine.** `circuit.py` has said since it was written that "a non-reciprocal
+device (an isolator) and a reflecting one (a facet, a Bragg grating) both solve correctly" — the
+reduction never transposes anything and never drops a term. Until now nothing outside a test made
+it prove it. `FiberBraggGrating` puts its reflection on the diagonal of a 2×2 matrix and
+`Circulator` is a cyclic permutation that is deliberately not symmetric, and both go through
+unchanged.
+
+**The scheduler was not.** The canonical drop is
+
+```
+signal → circ.in1 ; circ.out2 → fbg.in ; fbg.reflected → circ.in2 ; circ.out3 → receiver
+```
+
+which reads as `circ → fbg → circ` and was refused as a feedback loop. **It is not one.** At the
+level of ports, `out3` is a function of `in2` alone and `out2` of `in1` alone; no light in that
+picture travels backwards in time. The cycle was an artefact of scheduling whole components.
+
+So a component may now declare that its ports fall into independent `PortGroup`s, and the
+scheduler makes a node of each. The default is one group holding everything, which is the truthful
+answer for every block that computes all its outputs from all its inputs in one call — that is,
+every other block in the library, and the sort is bit-for-bit what it was. A real loop is still a
+real loop: two attenuators wired to each other are refused, and so is a circulator whose three hops
+are wired into a ring, because splitting a component into independent nodes cannot launder a cycle
+that runs through all of them.
+
+The cost of getting that claim wrong is a port that never runs or one that runs twice, so the
+groups are checked to be a partition before anything executes rather than discovered mid-run.
+
+### The grating is assembled, not written down
+
+Two hundred per-section transfer matrices, multiplied. Erdogan's closed form for a uniform grating
+appears nowhere in the model — it is in `tests/test_grating.py`, on the other side of the
+comparison, and they agree to 2×10⁻¹¹ across two decades of grating strength. That is what buys
+chirp and apodization, neither of which has a closed form:
+
+```
+        δn    κL    tanh²(κL)      model     max error
+     1e-05  0.203    0.039981   0.039981      2.3e-13
+     5e-05  1.013    0.588552   0.588552      3.4e-12
+     1e-04  2.027    0.932915   0.932915      7.9e-12
+     5e-04 10.134    1.000000   1.000000      2.3e-11
+```
+
+The first-null bandwidth lands on `λ²/(π n_eff L)·√((κL)²+π²)` to a per-mille, which is the
+resolution of the measurement rather than of the model, and `R + T = 1` everywhere to 10⁻¹⁰ — a
+transfer-matrix product that drifts off unity is the classic way this method fails, and it fails
+quietly.
+
+### Apodization is not mainly about sidelobes
+
+The textbook reason to shape a grating's strength is crosstalk. The reason that decides whether a
+*compensator* is usable is group-delay ripple, and it is an order of magnitude bigger:
+
+```
+       profile     peak R   sidelobe   GD ripple
+       uniform     0.9329     -7.6 dB     101 ps
+ raised-cosine     0.5886    -31.4 dB     6.5 ps
+      gaussian     0.5823    -41.4 dB     8.1 ps
+```
+
+101 ps is a whole bit at 10 Gb/s. The peak comes down in the same move, because shaping the
+coupling lowers its average — there is no free version of this.
+
+### A compensator that needs no receiver
+
+`DispersionCompensator` is DSP. It inverts the fibre's all-pass filter, which means it needs the
+field, which means it needs coherent detection; a direct-detection receiver squares the field at
+the photodiode and can never do it at all. A chirped grating is glass, and it works in front of a
+photodiode.
+
+10 cm chirped across 0.71 nm is −1360 ps/nm — 80 km of standard fibre — in a part the length of a
+finger. A 30 ps Gaussian pulse, rms width, no amplifier:
+
+```
+     span       bare    + grating
+      0 km    21.21 ps    44.81 ps
+     40 km    29.46 ps    28.52 ps
+     80 km    46.06 ps    21.34 ps
+    120 km    64.89 ps    30.54 ps
+```
+
+Back to the launched width at the span it is matched to, over-compensated below it and
+under-compensated above — which is what a fixed compensator does.
+
+### The circulator charges twice, and says so
+
+Its loss is quoted per hop because that is how a datasheet quotes it, and light reaching a
+reflective device pays it going out and coming back. Dropping 1550 nm out of a pair 2 nm apart:
+
+```
+                1550 nm     1552 nm    accounting
+       drop     -1.702 dB  -47.359 dB  two hops (-1.4) + R (-0.30)
+    express    -12.434 dB   -0.700 dB  one hop (-0.7) + T (-11.73)
+```
+
+Every figure is arithmetic. The neighbour's 45 dB of rejection on the drop port is **the grating's
+own sidelobe floor two nanometres out**, not an isolation figure anybody declared — apodize the
+grating and the number moves.
+
+**Isolation is deliberately not a parameter.** A real circulator leaks 40 to 60 dB backwards, and
+carrying that would make every output a function of two inputs instead of one. In this
+configuration that leak is a *loop* — light returns to the grating, reflects again, comes round
+once more — and it is a real weak cavity that the engine is right to refuse without an iteration
+count. A number in the inspector that the routing then ignored would be worse than not offering it.
+
+### And a sign that is not the grating's fault
+
+The grating's own physics says a positive chirp puts short wavelengths at the near end, so they
+turn round first and the long ones arrive later: `dτ/dλ > 0`, which is `D > 0`, the sign standard
+fibre has. By that reading a compensator is a *negative* chirp.
+
+The table above used a positive one, because that is what actually cancels this engine's `Fiber`.
+The two disagree because `kernels.propagate_dispersion` carries the opposite quadratic sign from
+`photonics.propagation_constant` — which that function's docstring has said in as many words since
+before this device existed. **The grating is simply the first component to put both in one graph
+where it shows.** A test pins the behaviour as it stands, so that the day the kernel is reconciled
+the failure names the compensator as one of the things that moved with it, rather than every
+compensator built on it silently inverting.
+
+`python examples/fbg_circulator.py` prints all six tables.
 
 ## What a layout tool knows, and what it does not
 

@@ -64,6 +64,7 @@ from .photonic import (
     RingResonator,
     Waveguide,
 )
+from .reflective import Circulator, FiberBraggGrating
 from .sources import CWLaser, GaussianPulse, SechPulse
 
 __all__ = [
@@ -75,6 +76,7 @@ __all__ = [
     "ButterflyEqualizer",
     "CWLaser",
     "CarrierRecovery",
+    "Circulator",
     "CoarseFrequencyRecovery",
     "CoherentReceiver",
     "Combiner",
@@ -90,6 +92,7 @@ __all__ = [
     "FECDecoder",
     "FECEncoder",
     "Fiber",
+    "FiberBraggGrating",
     "FrequencyRecovery",
     "GaussianPulse",
     "IQDriver",

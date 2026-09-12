@@ -20,7 +20,7 @@ from dataclasses import dataclass, replace
 from itertools import pairwise
 from typing import TypeVar
 
-from .component import Component, Port, PortType
+from .component import Component, Port, PortGroup, PortType
 from .context import SimulationContext
 from .signals import Signal
 
@@ -56,7 +56,14 @@ class Progress:
     """Its position in the execution order, from 0."""
 
     total: int
-    """How many components the run will execute."""
+    """How many nodes the run will execute.
+
+    Nodes, not components, because a component that declares independent port
+    groups is scheduled once per group — a circulator's routes do not depend on
+    each other and are ordered separately. Such a block reports its own label
+    more than once during a run, at different points in the order. Every other
+    block is one node and the two counts are the same number.
+    """
 
     within: float
     """How far through *this* component, 0 to 1. Zero unless it reports."""
@@ -216,27 +223,57 @@ class Graph:
             # block runs rather than when the offending one is reached.
             component.validate()
 
-    def _topological_order(self) -> list[Component]:
-        by_label = {c.label: c for c in self._components}
-        successors: dict[str, list[str]] = defaultdict(list)
-        in_degree: dict[str, int] = {c.label: 0 for c in self._components}
+    def _topological_order(self) -> list[tuple[Component, PortGroup]]:
+        """The run order, one entry per independent slice of a component.
 
-        for (dst_label, _), src_port in self._edges.items():
-            successors[src_port.component.label].append(dst_label)
-            in_degree[dst_label] += 1
+        **The node is a port group, not a component.** For almost every block
+        those are the same thing — one group holding every port — and this is
+        the ordinary topological sort it has always been. They part company on a
+        device whose routes do not touch: a circulator's ``out3`` is a function
+        of ``in2`` alone, so a grating reflecting light back into port 2 is not
+        a loop even though ``circulator -> grating -> circulator`` is a cycle in
+        the component graph. Sorting groups sees that; sorting components cannot.
 
-        ready = deque(sorted(label for label, deg in in_degree.items() if deg == 0))
-        order: list[Component] = []
+        See :class:`~maiman.component.PortGroup` for why a component is allowed
+        to make that claim and what it costs if it makes it wrongly.
+        """
+        nodes: list[tuple[Component, PortGroup]] = []
+        #: Which node produces a given output port, and which consumes an input.
+        produced_by: dict[tuple[str, str], int] = {}
+        consumed_by: dict[tuple[str, str], int] = {}
+        for component in self._components:
+            component.check_port_groups()
+            for group in component.port_groups():
+                index = len(nodes)
+                nodes.append((component, group))
+                for name in group.outputs:
+                    produced_by[(component.label, name)] = index
+                for name in group.inputs:
+                    consumed_by[(component.label, name)] = index
+
+        successors: dict[int, list[int]] = defaultdict(list)
+        in_degree: dict[int, int] = dict.fromkeys(range(len(nodes)), 0)
+
+        for destination, src_port in self._edges.items():
+            consumer = consumed_by[destination]
+            producer = produced_by[(src_port.component.label, src_port.name)]
+            successors[producer].append(consumer)
+            in_degree[consumer] += 1
+
+        ready = deque(sorted(index for index, deg in in_degree.items() if deg == 0))
+        order: list[tuple[Component, PortGroup]] = []
         while ready:
-            label = ready.popleft()
-            order.append(by_label[label])
-            for successor in successors[label]:
+            index = ready.popleft()
+            order.append(nodes[index])
+            for successor in successors[index]:
                 in_degree[successor] -= 1
                 if in_degree[successor] == 0:
                     ready.append(successor)
 
-        if len(order) != len(self._components):
-            unresolved = sorted(label for label, deg in in_degree.items() if deg > 0)
+        if len(order) != len(nodes):
+            unresolved = sorted(
+                {nodes[index][0].label for index, deg in in_degree.items() if deg > 0}
+            )
             raise CycleError(
                 f"the graph contains a feedback loop involving {unresolved}. "
                 f"Break it with an explicit loop-control component that declares "
@@ -331,9 +368,9 @@ class Graph:
         retained: dict[tuple[str, str], Signal] = {}
 
         total = len(order)
-        for index, component in enumerate(order):
+        for index, (component, group) in enumerate(order):
             inputs = {}
-            for name in component.inputs:
+            for name in group.inputs:
                 src = self._edges[(component.label, name)]
                 inputs[name] = live[(src.component.label, src.name)]
 
@@ -354,12 +391,17 @@ class Graph:
                     # holding a graph nobody is using any more.
                     component._reporter = None
 
-            missing = set(component.outputs) - set(produced)
+            # Exactly this group's outputs, which for a single-group component
+            # -- almost all of them -- is exactly its outputs. A component that
+            # splits itself is called once per group and answers for that group
+            # alone; returning the other group's ports here would overwrite a
+            # result computed from inputs this call was not even given.
+            missing = set(group.outputs) - set(produced)
             if missing:
                 raise GraphError(
                     f"{component.label}.run() did not return output(s) {sorted(missing)}"
                 )
-            extra = set(produced) - set(component.outputs)
+            extra = set(produced) - set(group.outputs)
             if extra:
                 raise GraphError(
                     f"{component.label}.run() returned undeclared output(s) {sorted(extra)}"
@@ -368,7 +410,7 @@ class Graph:
             # No downstream consumer means this is a sink: its results are what
             # the caller actually asked for, so they are always retained.
             is_sink = all(
-                consumers_remaining[(component.label, name)] == 0 for name in component.outputs
+                consumers_remaining[(component.label, name)] == 0 for name in group.outputs
             )
             for name, value in produced.items():
                 key = (component.label, name)
@@ -381,7 +423,7 @@ class Graph:
                     retained[key] = value
 
             # Release inputs whose last consumer has now run.
-            for name in component.inputs:
+            for name in group.inputs:
                 src_port = self._edges[(component.label, name)]
                 src_key = (src_port.component.label, src_port.name)
                 consumers_remaining[src_key] -= 1
@@ -392,7 +434,7 @@ class Graph:
             # One final call at exactly 1.0. Without it the last thing a caller
             # sees is the last component starting, and a bar that stops at 90%
             # on every successful run teaches people to distrust it.
-            progress(Progress(order[-1].label, total, total, 0.0))
+            progress(Progress(order[-1][0].label, total, total, 0.0))
 
         return Results(retained)
 

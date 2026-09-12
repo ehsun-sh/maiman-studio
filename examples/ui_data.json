@@ -274,6 +274,38 @@
     }
    }
   },
+  "Circulator": {
+   "name": "Circulator",
+   "type": "Circulator",
+   "class": "maiman.components.reflective.Circulator",
+   "category": "Passive",
+   "version": "0.1.0",
+   "parameters": {
+    "insertion_loss": {
+     "type": "float",
+     "default": 0.7,
+     "unit": "dB",
+     "min": 0.0,
+     "doc": "Loss of one hop; paid again on the next hop"
+    }
+   },
+   "structural": {
+    "driven": [
+     1,
+     2
+    ]
+   },
+   "ports": {
+    "inputs": {
+     "in1": "optical",
+     "in2": "optical"
+    },
+    "outputs": {
+     "out2": "optical",
+     "out3": "optical"
+    }
+   }
+  },
   "CoarseFrequencyRecovery": {
    "name": "Coarse Frequency Recovery",
    "type": "CoarseFrequencyRecovery",
@@ -932,6 +964,72 @@
     "outputs": {
      "out": "optical",
      "diagnostics": "metric"
+    }
+   }
+  },
+  "FiberBraggGrating": {
+   "name": "Fiber Bragg Grating",
+   "type": "FiberBraggGrating",
+   "class": "maiman.components.reflective.FiberBraggGrating",
+   "category": "Passive",
+   "version": "0.1.0",
+   "parameters": {
+    "length": {
+     "type": "float",
+     "default": 10.0,
+     "unit": "mm",
+     "min": 0.01,
+     "doc": "Physical length of the written region"
+    },
+    "index_modulation": {
+     "type": "float",
+     "default": 0.0001,
+     "unit": "",
+     "min": 0.0,
+     "max": 0.01,
+     "doc": "Amplitude of the index fringe; 1e-4 is strong, 1e-5 weak"
+    },
+    "bragg_wavelength": {
+     "type": "float",
+     "default": 1550.0,
+     "unit": "nm",
+     "min": 1200.0,
+     "max": 1700.0,
+     "doc": "Wavelength it reflects"
+    },
+    "n_eff": {
+     "type": "float",
+     "default": 1.4475,
+     "unit": "",
+     "min": 1.0,
+     "max": 2.0,
+     "doc": "Effective index of the fibre mode"
+    },
+    "chirp": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "nm",
+     "doc": "Total change in Bragg wavelength end to end; what makes it a compensator"
+    },
+    "sections": {
+     "type": "float",
+     "default": 200.0,
+     "unit": "",
+     "min": 1.0,
+     "max": 20000.0,
+     "doc": "Pieces the transfer-matrix model cuts the grating into"
+    }
+   },
+   "structural": {
+    "apodization": "uniform"
+   },
+   "ports": {
+    "inputs": {
+     "in": "optical"
+    },
+    "outputs": {
+     "reflected": "optical",
+     "transmitted": "optical"
     }
    }
   },
@@ -19244,7 +19342,7 @@
  ],
  "project": {
   "schema_version": 1,
-  "maiman_version": "0.2.0",
+  "maiman_version": "0.2.1",
   "context": {
    "bit_rate": 32000000000.0,
    "samples_per_symbol": 16,

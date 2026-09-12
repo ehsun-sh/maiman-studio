@@ -19,7 +19,7 @@ goes through it: if a feature is not reachable from here, it does not exist.
 
 from __future__ import annotations
 
-from .component import BoolParam, Component, Param, Port, PortType
+from .component import BoolParam, Component, Param, Port, PortGroup, PortType
 from .context import SimulationContext
 from .graph import CycleError, Graph, GraphError, Results
 from .netlist import (
@@ -77,6 +77,7 @@ __all__ = [
     "PDKError",
     "Param",
     "Port",
+    "PortGroup",
     "PortType",
     "PowerReading",
     "ProjectError",

@@ -106,6 +106,10 @@ _TO_SI: dict[str, Callable[[float], float]] = {
     # Length
     "m": lambda x: x,
     "km": lambda x: x * 1e3,
+    # Between the kilometres a span is quoted in and the micrometres a die is.
+    # A fibre Bragg grating is the thing that lives here: ten to a hundred
+    # millimetres, which is four zeros away from a waveguide and six from a span.
+    "mm": lambda x: x * 1e-3,
     "um": lambda x: x * 1e-6,
     "nm": lambda x: x * 1e-9,
     # Frequency
@@ -144,6 +148,7 @@ _FROM_SI: dict[str, Callable[[float], float]] = {
     "ps/sqrt(km)": lambda x: x * 1e12 * math.sqrt(1e3),
     "m": lambda x: x,
     "km": lambda x: x * 1e-3,
+    "mm": lambda x: x * 1e3,
     "um": lambda x: x * 1e6,
     "nm": lambda x: x * 1e9,
     "Hz": lambda x: x,
