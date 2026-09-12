@@ -32,11 +32,11 @@ keywords:
   - forward error correction
   - photonic integrated circuits
 license: Apache-2.0
-version: 0.2.0
-date-released: '2026-09-11'
+version: 0.2.1
+date-released: '2026-09-12'
 
 # `date-released` is the date this version was published, not the date it was
-# bumped. 0.1.0 and 0.2.0 both landed on the same day they were cut; that will
+# bumped. 0.1.0, 0.2.0 and 0.2.1 all landed on the same day they were cut; that will
 # not always be so, and the field follows the upload rather than the commit.
 #
 # No ORCID and no affiliation: neither is on hand, and a citation file is
