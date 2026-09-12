@@ -684,6 +684,75 @@ APODIZATIONS: dict[str, Callable[[np.ndarray], np.ndarray]] = {
 DEFAULT_GRATING_SECTIONS = 200
 
 
+def section_positions(sections: int) -> np.ndarray:
+    """Normalised centres of ``sections`` equal pieces, -0.5 at the input face.
+
+    The coordinate every profile below is a function of, named once so that a
+    profile written by hand and one built here cannot disagree about which end
+    is which — which on a chirped grating is the difference between a
+    compensator and something that makes the span worse.
+    """
+    if sections < 1:
+        raise ValueError(f"sections must be at least 1, got {sections}")
+    return (np.arange(sections) + 0.5) / sections - 0.5
+
+
+def sampled_profile(sections: int, *, periods: float, duty: float = 0.5) -> np.ndarray:
+    """A coupling shape switched on and off along the length: the sampled grating.
+
+    Write a grating and then erase it periodically — or, in practice, write it
+    through a periodic amplitude mask — and the single reflection peak becomes a
+    **comb** of them. It is the superstructure grating, and it is how one device
+    addresses a whole WDM band: the tuning element of a sampled-grating DBR
+    laser, a multi-channel dispersion compensator, an interrogator that reads
+    many sensors at once.
+
+    The peaks are spaced by ``lambda**2 / (2 n_eff * sampling_period)``, which is
+    the same Fabry-Perot arithmetic as any other cavity of that length — the
+    sampling period is the cavity. That expression is in
+    ``tests/test_grating.py`` and not here, and the model reproduces it to four
+    digits.
+
+    ``periods`` is how many sampling periods fit in the grating and need not be a
+    whole number; ``duty`` is the written fraction of each. A duty of 1 is not
+    sampled at all and returns a uniform grating, which is the right degenerate
+    answer rather than a special case.
+    """
+    if periods <= 0.0:
+        raise ValueError(f"periods must be positive, got {periods}")
+    if not 0.0 < duty <= 1.0:
+        raise ValueError(f"duty must be in (0, 1], got {duty}")
+    position = section_positions(sections) + 0.5
+    return ((position * periods) % 1.0 < duty).astype(np.float64)
+
+
+def phase_shift_profile(
+    sections: int, *, shift: float = np.pi, position: float = 0.5
+) -> np.ndarray:
+    """A jump in the grating's phase partway along: the phase-shifted grating.
+
+    Break the periodicity once and the stop band acquires a **transmission window
+    in the middle of it** — a resonance between the two halves, which are two
+    mirrors facing each other. At ``pi`` it sits exactly on the Bragg wavelength
+    and is the narrowest feature a grating of that length can produce: this is
+    the distributed-feedback laser's cavity, and the notch filter used to lock a
+    laser to a line.
+
+    ``position`` is where along the length the jump happens, 0 at the input face
+    and 1 at the far one. Off centre the two mirrors are unequal and the
+    resonance stops reaching full transmission, which is a real design
+    sensitivity rather than a modelling artefact.
+
+    The array is the phase *at* each section, so it is a step and not an impulse:
+    every section past the jump carries it. Writing it the other way — a single
+    section with a different phase — is a defect rather than a shift, and the two
+    spectra are not the same.
+    """
+    if not 0.0 <= position <= 1.0:
+        raise ValueError(f"position must be within the grating, got {position}")
+    return np.where(section_positions(sections) + 0.5 >= position, shift, 0.0)
+
+
 def fiber_bragg_grating(
     frequencies: np.ndarray,
     *,
@@ -693,6 +762,9 @@ def fiber_bragg_grating(
     n_eff: float = SILICA_FIBER_NEFF,
     chirp: float = 0.0,
     apodization: str = "uniform",
+    coupling_profile: np.ndarray | None = None,
+    bragg_profile: np.ndarray | None = None,
+    phase_profile: np.ndarray | None = None,
     sections: int = DEFAULT_GRATING_SECTIONS,
     ports: tuple[str, str] = ("in", "out"),
 ) -> SMatrix:
@@ -775,6 +847,32 @@ def fiber_bragg_grating(
         raise ValueError(f"sections must be at least 1, got {sections}")
     if apodization not in APODIZATIONS:
         raise ValueError(f"unknown apodization {apodization!r}; have {sorted(APODIZATIONS)}")
+    if coupling_profile is not None and apodization != "uniform":
+        raise ValueError(
+            f"coupling_profile and apodization={apodization!r} both shape the coupling; "
+            f"pass one. APODIZATIONS[{apodization!r}] is the array the name stands for."
+        )
+    if bragg_profile is not None and chirp != 0.0:
+        raise ValueError(
+            "bragg_profile and chirp both set the local Bragg wavelength; pass one. "
+            "A linear chirp is bragg_wavelength + chirp * section_positions(sections)."
+        )
+
+    # The profiles decide the section count when they are given, because a length
+    # that disagreed with them would have to be resolved by truncating or padding
+    # somebody's design, and neither is a thing to do quietly.
+    given = {
+        "coupling_profile": coupling_profile,
+        "bragg_profile": bragg_profile,
+        "phase_profile": phase_profile,
+    }
+    lengths = {name: len(np.asarray(a)) for name, a in given.items() if a is not None}
+    if lengths:
+        if len(set(lengths.values())) != 1:
+            raise ValueError(f"the profiles have different lengths: {lengths}")
+        sections = next(iter(lengths.values()))
+        if sections < 1:
+            raise ValueError("a profile must have at least one section")
 
     frequencies = np.asarray(frequencies, dtype=np.float64)
     if np.any(frequencies <= 0.0):
@@ -782,10 +880,23 @@ def fiber_bragg_grating(
     wavelengths = C_LIGHT / frequencies
 
     # Section centres, from the input face at u = -0.5 to the far one at +0.5.
-    u = (np.arange(sections) + 0.5) / sections - 0.5
+    u = section_positions(sections)
     dz = length / sections
-    local_bragg = bragg_wavelength + chirp * u
-    strength = index_modulation * APODIZATIONS[apodization](u)
+    local_bragg = (
+        bragg_wavelength + chirp * u
+        if bragg_profile is None
+        else np.asarray(bragg_profile, dtype=np.float64)
+    )
+    strength = index_modulation * (
+        APODIZATIONS[apodization](u)
+        if coupling_profile is None
+        else np.asarray(coupling_profile, dtype=np.float64)
+    )
+    grating_phase = (
+        np.zeros(sections) if phase_profile is None else np.asarray(phase_profile, dtype=np.float64)
+    )
+    if np.any(local_bragg <= 0.0):
+        raise ValueError("every local Bragg wavelength must be positive")
 
     # [R(near); S(near)] = F @ [R(far); S(far)], R the forward amplitude and S
     # the backward one. The product runs from the input face outward, so a
@@ -822,9 +933,17 @@ def fiber_bragg_grating(
         # is safe to do termwise because gamma**2 is real -- gamma is real inside
         # the stop band and imaginary outside it, and cosh and sinh(x)/x are both
         # even, so those two factors are real either way.
+        # The phase rides on the *coupling* and not on the detuning, which is
+        # what makes it a shift in the grating rather than a change of period:
+        # the two off-diagonal terms take it with opposite signs, so the section
+        # stays unimodular and the product stays lossless. A constant phase over
+        # the whole length therefore does nothing at all, and only a jump
+        # partway along is visible -- which is the physically right answer,
+        # since where a grating's fringes start is not observable.
+        turn = np.exp(1j * grating_phase[index])
         s11 = cosine + 1j * detuning * ratio
-        s12 = 1j * kappa * ratio
-        s21 = -1j * kappa * ratio
+        s12 = 1j * kappa * ratio * turn
+        s21 = -1j * kappa * ratio / turn
         s22 = cosine - 1j * detuning * ratio
 
         f11, f12, f21, f22 = (

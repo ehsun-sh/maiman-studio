@@ -1684,6 +1684,63 @@ configuration that leak is a *loop* — light returns to the grating, reflects a
 once more — and it is a real weak cavity that the engine is right to refuse without an iteration
 count. A number in the inspector that the routing then ignored would be worse than not offering it.
 
+### The named windows were never the limit
+
+The section loop has always eaten two arrays — a coupling per section and a local Bragg wavelength
+per section — and the three named windows and the linear chirp were only ever two ways of filling
+them. Handing the arrays over directly costs the loop nothing and turns a grating *model* into
+something closer to a grating *design* model. A named window and its array are checked to be the
+same device bit for bit, not approximately, so the convenient path and the general one cannot
+become two models with one of them tested.
+
+**A sampled grating is one array.** Write the grating and erase it periodically — in practice,
+expose it through an amplitude mask — and the single peak becomes a comb. It is the tuning element
+of a sampled-grating DBR laser, a multi-channel dispersion compensator, an interrogator that reads
+a whole array of sensors at once. Ten sampling periods over 20 mm:
+
+```
+  7 peaks, spacing                       0.41478 nm
+  predicted λ²/(2·n_eff·Λs)              0.41494 nm
+```
+
+Four digits, against the same Fabry–Perot arithmetic as any other cavity of that length — because
+the sampling period *is* the cavity. The model has nothing in it that knows about combs. It has a
+coupling that is switched on and off.
+
+**A phase-shifted grating is one more.** Break the periodicity once and the stop band acquires a
+transmission window in the middle of it: two mirrors facing each other, which is a cavity. At π,
+dead centre, on a 2 cm grating:
+
+```
+  window at            1550.000000 nm
+  width                0.70 pm  =  87 MHz
+  unbroken, the same grating transmits 1.8e-4 there
+```
+
+87 MHz is the narrowest feature anything in this library produces. It is the distributed-feedback
+laser's cavity and the filter a laser locks itself to. Moving the break off centre makes the two
+halves unequal mirrors and the resonance dies — 1.000, 0.705, 0.099 at positions 0.5, 0.45 and
+0.35 — which is a real design sensitivity rather than a modelling artefact.
+
+The phase rides on the **coupling** and not on the detuning, and that is not a detail. It means the
+two off-diagonal terms take it with opposite signs, so a section stays unimodular and the device
+stays lossless; and it means a phase constant along the whole length does nothing at all, which is
+the physically right answer, since where a grating's fringes start is not observable. A phase on
+the detuning instead would shift the entire spectrum and look perfectly plausible doing it.
+
+**Two descriptions of one thing are refused rather than resolved.** `coupling_profile` alongside a
+named `apodization`, or `bragg_profile` alongside `chirp`, is an error that names the array the
+other one stands for. Profiles of different lengths are an error. A component is the exception and
+for a stated reason: a project file and an inspector carry numbers and not arrays, so
+`FiberBraggGrating` declares `sampled` and `phase_shifted` as flags that *build* the arrays — and
+when a grating is both sampled and apodized it multiplies them, because a mask over an apodized
+exposure is what the writing process actually does.
+
+Sampling also raises the section count on its own. What has to be resolved is the mask rather than
+the envelope, so the floor is twenty sections per sampling period — measured: the comb spacing is
+unchanged from ten sections per period all the way to four hundred. Deriving that rather than
+refusing a number it could compute itself is the difference between a component and a form.
+
 ### And a sign that is not the grating's fault
 
 The grating's own physics says a positive chirp puts short wavelengths at the near end, so they
@@ -1698,7 +1755,7 @@ where it shows.** A test pins the behaviour as it stands, so that the day the ke
 the failure names the compensator as one of the things that moved with it, rather than every
 compensator built on it silently inverting.
 
-`python examples/fbg_circulator.py` prints all six tables.
+`python examples/fbg_circulator.py` prints all seven tables.
 
 ## What a layout tool knows, and what it does not
 

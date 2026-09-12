@@ -1018,6 +1018,49 @@
      "min": 1.0,
      "max": 20000.0,
      "doc": "Pieces the transfer-matrix model cuts the grating into"
+    },
+    "phase_shifted": {
+     "type": "bool",
+     "default": false,
+     "doc": "Break the periodicity once, partway along"
+    },
+    "phase_shift": {
+     "type": "float",
+     "default": 3.141592653589793,
+     "unit": "rad",
+     "doc": "Size of the jump; pi puts the window on the Bragg wavelength",
+     "applies_when": "phase_shifted"
+    },
+    "phase_shift_position": {
+     "type": "float",
+     "default": 0.5,
+     "unit": "",
+     "min": 0.0,
+     "max": 1.0,
+     "doc": "Where along the length it happens, 0 at the input face",
+     "applies_when": "phase_shifted"
+    },
+    "sampled": {
+     "type": "bool",
+     "default": false,
+     "doc": "Erase the grating periodically, for a comb of peaks"
+    },
+    "sample_periods": {
+     "type": "float",
+     "default": 10.0,
+     "unit": "",
+     "min": 1.0,
+     "doc": "Sampling periods along the length; sets the comb spacing",
+     "applies_when": "sampled"
+    },
+    "sample_duty": {
+     "type": "float",
+     "default": 0.5,
+     "unit": "",
+     "min": 0.01,
+     "max": 1.0,
+     "doc": "Written fraction of each period; 1 is not sampled at all",
+     "applies_when": "sampled"
     }
    },
    "structural": {

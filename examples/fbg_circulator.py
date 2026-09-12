@@ -5,7 +5,7 @@ ends and light goes in one port and out another, which is what a dataflow graph
 draws. A Bragg grating sends its channel back out of the fibre it arrived on, and
 in hardware the only way to that channel is a circulator.
 
-Five things are worth reading off the output.
+Seven things are worth reading off the output.
 
 **The grating is assembled, not written down.** Two hundred per-section transfer
 matrices multiplied together, against Erdogan's closed form for a uniform
@@ -30,6 +30,13 @@ and would do it in front of a photodiode that destroys the phase.
 twice, and that is the price of reaching a reflective device at all. The drop
 port below is exactly two hops and one reflectivity, and nothing else.
 
+**The named windows were never the limit.** The section loop has always eaten a
+coupling array and a Bragg-wavelength array; the three windows and the linear
+chirp were two ways of filling them. Handing the arrays over directly buys the
+sampled grating — one device reflecting a whole comb — and, with a phase array,
+the phase-shifted grating, whose transmission window here is 87 MHz wide. Neither
+is a new solver.
+
 **And the sign is not what the grating's own physics says it is.** That is a
 disagreement between two kernels in this engine rather than a property of
 gratings, and it is printed rather than hidden — see the last section.
@@ -50,7 +57,13 @@ from maiman.components import (
     GaussianPulse,
     PowerMeter,
 )
-from maiman.photonics import APODIZATIONS, SILICA_FIBER_NEFF, fiber_bragg_grating
+from maiman.photonics import (
+    APODIZATIONS,
+    SILICA_FIBER_NEFF,
+    fiber_bragg_grating,
+    phase_shift_profile,
+    sampled_profile,
+)
 from maiman.signals import OpticalSignal, PowerReading
 from maiman.units import C_LIGHT
 
@@ -286,9 +299,82 @@ def a_span_undone() -> None:
     print("     None of this needs a coherent receiver: it happens in the glass.\n")
 
 
+def arbitrary_profiles() -> None:
+    """The two devices the named windows cannot describe, out of the same kernel.
+
+    Nothing here is a new solver. The section loop has always eaten two arrays --
+    a coupling per section and a local Bragg wavelength per section -- and the
+    named windows and the linear chirp were only ever two ways of filling them.
+    Handing the arrays over directly is what turns a grating model into a grating
+    *design* model, and it costs the loop nothing.
+    """
+    print("6. Arrays instead of names: sampled, and phase-shifted")
+
+    # -- sampled: the coupling switched on and off along the length -----------
+    length, periods = 0.02, 10
+    predicted = BRAGG**2 / (2.0 * SILICA_FIBER_NEFF * (length / periods))
+    wavelengths = np.linspace(BRAGG - 4e-9, BRAGG + 4e-9, 12001)
+    reflectivity = fiber_bragg_grating(
+        C_LIGHT / wavelengths,
+        length=length,
+        index_modulation=6e-5,
+        bragg_wavelength=BRAGG,
+        coupling_profile=sampled_profile(4000, periods=periods, duty=0.5),
+    ).power("in", "in")
+    peaks = [
+        (wavelengths[i], reflectivity[i])
+        for i in range(1, len(reflectivity) - 1)
+        if reflectivity[i] > reflectivity[i - 1]
+        and reflectivity[i] >= reflectivity[i + 1]
+        and reflectivity[i] > 0.05
+    ]
+    spacing = float(np.diff([p[0] for p in peaks]).mean())
+    print(f"   sampled grating, {periods} sample periods over {length * 1e3:.0f} mm")
+    print(f"     {len(peaks)} peaks, spacing {spacing * 1e9:.5f} nm")
+    print(f"     predicted lambda^2 / (2 n Lambda_s) = {predicted * 1e9:.5f} nm")
+    for centre, height in peaks[:3]:
+        print(f"       {centre * 1e9:10.4f} nm  R={height:.4f}")
+    print("     the model knows nothing about combs. Only a coupling turned on and off.")
+
+    # -- phase-shifted: one break in the periodicity --------------------------
+    near = np.linspace(BRAGG - 0.4e-9, BRAGG + 0.4e-9, 32001)
+    core = np.abs(near - BRAGG) < 0.05e-9
+
+    def broken(phase: np.ndarray | None) -> np.ndarray:
+        """Transmission of the same 2 cm grating, with or without a break in it."""
+        return fiber_bragg_grating(
+            C_LIGHT / near,
+            length=0.02,
+            index_modulation=1.5e-4,
+            bragg_wavelength=BRAGG,
+            phase_profile=phase,
+        ).power("out", "in")[core]
+
+    print("\n   phase-shifted grating, pi at the centre")
+    print(f"     {'position':>9}  {'peak T':>8}   what it is")
+    for position, note in (
+        (0.5, "two equal mirrors: a cavity"),
+        (0.45, "unequal: the resonance leaks"),
+        (0.35, "and dies"),
+    ):
+        transmitted = broken(phase_shift_profile(4000, shift=np.pi, position=position))
+        print(f"     {position:9.2f}  {transmitted.max():8.5f}   {note}")
+
+    centred = broken(phase_shift_profile(4000, shift=np.pi))
+    plain = broken(None)
+    peak = int(np.argmax(centred))
+    half = near[core][centred > 0.5 * centred[peak]]
+    width = half.max() - half.min()
+    linewidth = C_LIGHT * width / BRAGG**2
+    print(f"     window at {near[core][peak] * 1e9:.6f} nm, {width * 1e12:.2f} pm wide")
+    print(f"       which is {linewidth / 1e6:.0f} MHz -- the narrowest thing a grating makes")
+    print(f"       unbroken, the same grating transmits {plain.max():.2e} there")
+    print("     this is the DFB laser's cavity, and the filter a laser locks to.\n")
+
+
 def the_sign() -> None:
     """The one result here that is about this engine rather than about gratings."""
-    print("6. A sign worth stating out loud")
+    print("7. A sign worth stating out loud")
     print(
         "     The grating's own physics says a positive chirp puts short wavelengths\n"
         "     at the near end, so they turn round first and the long ones arrive\n"
@@ -313,6 +399,7 @@ def main() -> None:
     the_compensator()
     the_drop()
     a_span_undone()
+    arbitrary_profiles()
     the_sign()
 
 

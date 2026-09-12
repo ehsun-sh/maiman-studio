@@ -20,13 +20,14 @@ come from; this module is what turns them into blocks a link can contain.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from typing import Any
 
 import numpy as np
 
 from ..circuit import SMatrix
-from ..component import Param, PortGroup, PortType
+from ..component import BoolParam, Param, PortGroup, PortType
 from ..context import SimulationContext
 from ..photonics import (
     APODIZATIONS,
@@ -34,6 +35,9 @@ from ..photonics import (
     SILICA_FIBER_NEFF,
     circulator,
     fiber_bragg_grating,
+    phase_shift_profile,
+    sampled_profile,
+    section_positions,
 )
 from ..signals import OpticalSignal, Signal
 from ..units import C_LIGHT, wavelength_to_frequency
@@ -138,6 +142,48 @@ class FiberBraggGrating(ScatteringDevice):
         doc="Pieces the transfer-matrix model cuts the grating into",
     )
 
+    #: A break in the periodicity, which puts a transmission window in the middle
+    #: of the stop band -- the DFB laser's cavity, and the narrowest thing a
+    #: grating of a given length can make. At pi, dead centre, a 2 cm grating's
+    #: window is 0.7 pm wide and reaches full transmission; moving it off centre
+    #: makes the two halves unequal mirrors and the resonance dies, measured at
+    #: 1.000, 0.705 and 0.099 for positions 0.5, 0.45 and 0.35.
+    phase_shifted = BoolParam(False, doc="Break the periodicity once, partway along")
+    phase_shift = Param(
+        math.pi,
+        unit="rad",
+        doc="Size of the jump; pi puts the window on the Bragg wavelength",
+        applies_when="phase_shifted",
+    )
+    phase_shift_position = Param(
+        0.5,
+        unit="",
+        min=0.0,
+        max=1.0,
+        doc="Where along the length it happens, 0 at the input face",
+        applies_when="phase_shifted",
+    )
+
+    #: Writing switched on and off along the length, which turns the one peak
+    #: into a comb of them spaced by ``lambda**2 / (2 n_eff * sampling period)``.
+    #: The superstructure grating: one device addressing a whole band.
+    sampled = BoolParam(False, doc="Erase the grating periodically, for a comb of peaks")
+    sample_periods = Param(
+        10.0,
+        unit="",
+        min=1.0,
+        doc="Sampling periods along the length; sets the comb spacing",
+        applies_when="sampled",
+    )
+    sample_duty = Param(
+        0.5,
+        unit="",
+        min=0.01,
+        max=1.0,
+        doc="Written fraction of each period; 1 is not sampled at all",
+        applies_when="sampled",
+    )
+
     inputs = {"in": PortType.OPTICAL}
     outputs = {"reflected": PortType.OPTICAL, "transmitted": PortType.OPTICAL}
 
@@ -227,8 +273,28 @@ class FiberBraggGrating(ScatteringDevice):
         wavelength = self.si("bragg_wavelength")
         index = self.n_eff
         chirp = self.si("chirp")
-        profile = self.apodization
-        pieces = int(self.sections)
+        pieces = self._sections()
+
+        # Sampling and apodization both shape the coupling, and a grating can
+        # carry both -- a sampled device still wants its skirts quietened. The
+        # physics function refuses to take a named window *and* an array, so the
+        # window is evaluated here and the two are multiplied, which is what a
+        # mask over an apodized exposure physically does.
+        coupling = None
+        if self.sampled:
+            coupling = APODIZATIONS[self.apodization](section_positions(pieces))
+            coupling = coupling * sampled_profile(
+                pieces, periods=self.sample_periods, duty=self.sample_duty
+            )
+        phase = (
+            phase_shift_profile(
+                pieces, shift=self.si("phase_shift"), position=self.phase_shift_position
+            )
+            if self.phase_shifted
+            else None
+        )
+        window = "uniform" if coupling is not None else self.apodization
+
         return solve_once(
             lambda f: fiber_bragg_grating(
                 f,
@@ -237,10 +303,31 @@ class FiberBraggGrating(ScatteringDevice):
                 bragg_wavelength=wavelength,
                 n_eff=index,
                 chirp=chirp,
-                apodization=profile,
+                apodization=window,
+                coupling_profile=coupling,
+                phase_profile=phase,
                 sections=pieces,
             )
         )
+
+    #: Sections per sampling period below which the comb stops being resolved.
+    #: Measured: the peak spacing is unchanged from ten sections per period all
+    #: the way to four hundred, so ten is the floor and twenty is the margin.
+    SECTIONS_PER_SAMPLE = 20
+
+    def _sections(self) -> int:
+        """How finely to cut, which sampling can demand more of than the default.
+
+        A sampled grating's structure is the mask, not the envelope, so the
+        section count has to resolve *that*: at fewer than ten sections per
+        sampling period the comb is no longer the device's. Raised rather than
+        refused, because the number is derivable and a component that declines to
+        run over an arithmetic it could have done itself is a bad component.
+        """
+        declared = int(self.sections)
+        if not self.sampled:
+            return declared
+        return max(declared, int(self.SECTIONS_PER_SAMPLE * self.sample_periods))
 
 
 class Circulator(ScatteringDevice):

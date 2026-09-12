@@ -12,6 +12,7 @@ these check that the scheduler now tells the two apart.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import ClassVar
 
 import numpy as np
@@ -34,6 +35,9 @@ from maiman.photonics import (
     SILICA_FIBER_NEFF,
     circulator,
     fiber_bragg_grating,
+    phase_shift_profile,
+    sampled_profile,
+    section_positions,
 )
 from maiman.signals import Signal
 from maiman.units import C_LIGHT
@@ -697,3 +701,278 @@ def test_the_compensating_chirp_sign_is_pinned() -> None:
     assert restored == pytest.approx(launched, rel=0.02)
     # And the other sign adds what the fibre added, rather than removing it.
     assert worsened > spread
+
+
+# --------------------------------------------------------------------------
+# Arbitrary profiles: the devices the named windows cannot describe
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("profile", sorted(APODIZATIONS))
+def test_a_named_window_and_its_array_are_the_same_device(profile: str) -> None:
+    """Bit for bit, not approximately.
+
+    The names have to *be* the arrays rather than resemble them, or the general
+    path and the convenient one are two models and only one of them is tested.
+    """
+    wavelengths = np.linspace(BRAGG - 2e-9, BRAGG + 2e-9, 3001)
+    settings = {"length": 0.01, "index_modulation": 1e-4, "bragg_wavelength": BRAGG}
+    named = fiber_bragg_grating(C_LIGHT / wavelengths, apodization=profile, **settings)
+    spelled = fiber_bragg_grating(
+        C_LIGHT / wavelengths,
+        coupling_profile=APODIZATIONS[profile](section_positions(200)),
+        **settings,
+    )
+    assert np.array_equal(named.s, spelled.s)
+
+
+def test_a_linear_chirp_and_its_array_are_the_same_device() -> None:
+    """The same claim for the other profile, including which end is which.
+
+    A chirp written as an array has to run the same way round as one written as
+    a number, because on this device that is the difference between a compensator
+    and something that makes the span worse.
+    """
+    wavelengths = np.linspace(BRAGG - 2e-9, BRAGG + 2e-9, 3001)
+    settings = {"length": 0.10, "index_modulation": 2e-4, "bragg_wavelength": BRAGG}
+    named = fiber_bragg_grating(C_LIGHT / wavelengths, chirp=1e-9, **settings)
+    spelled = fiber_bragg_grating(
+        C_LIGHT / wavelengths,
+        bragg_profile=BRAGG + 1e-9 * section_positions(200),
+        **settings,
+    )
+    assert np.array_equal(named.s, spelled.s)
+
+
+def comb_peaks(wavelengths: np.ndarray, reflectivity: np.ndarray) -> list[float]:
+    """Wavelengths of the reflection peaks, the way an instrument would find them."""
+    return [
+        float(wavelengths[i])
+        for i in range(1, len(reflectivity) - 1)
+        if reflectivity[i] > reflectivity[i - 1]
+        and reflectivity[i] >= reflectivity[i + 1]
+        and reflectivity[i] > 0.05
+    ]
+
+
+def test_a_sampled_grating_combs_at_the_sampling_period() -> None:
+    """``lambda**2 / (2 n_eff * Lambda_s)`` -- the sampling period is a cavity.
+
+    The superstructure grating, and the closed form is the same Fabry-Perot
+    arithmetic as any other cavity of that length. It is here rather than in the
+    model, and the model has nothing in it that knows about combs: only a
+    coupling that is switched on and off.
+    """
+    length, periods = 0.02, 10
+    predicted = BRAGG**2 / (2.0 * SILICA_FIBER_NEFF * (length / periods))
+
+    wavelengths = np.linspace(BRAGG - 4e-9, BRAGG + 4e-9, 12001)
+    reflectivity = fiber_bragg_grating(
+        C_LIGHT / wavelengths,
+        length=length,
+        index_modulation=6e-5,
+        bragg_wavelength=BRAGG,
+        coupling_profile=sampled_profile(4000, periods=periods, duty=0.5),
+    ).power("in", "in")
+
+    peaks = comb_peaks(wavelengths, reflectivity)
+    assert len(peaks) == 7
+    # The grid is 0.67 pm and the spacing 415 pm, so per-mille is the
+    # measurement's resolution rather than the model's.
+    assert float(np.diff(peaks).mean()) == pytest.approx(predicted, rel=1e-3)
+
+
+def test_a_sampled_grating_needs_sections_per_sampling_period_not_per_length() -> None:
+    """And has enough by ten, which is where the component's floor comes from."""
+    length, periods = 0.02, 10
+    wavelengths = np.linspace(BRAGG - 4e-9, BRAGG + 4e-9, 12001)
+
+    def spacing(sections: int) -> float:
+        reflectivity = fiber_bragg_grating(
+            C_LIGHT / wavelengths,
+            length=length,
+            index_modulation=6e-5,
+            bragg_wavelength=BRAGG,
+            coupling_profile=sampled_profile(sections, periods=periods, duty=0.5),
+        ).power("in", "in")
+        return float(np.diff(comb_peaks(wavelengths, reflectivity)).mean())
+
+    converged = spacing(4000)
+    for sections in (100, 200, 1000):
+        assert spacing(sections) == pytest.approx(converged, rel=1e-9)
+
+
+def test_a_full_duty_sample_is_not_a_sampled_grating() -> None:
+    """The degenerate case answers as the uniform grating rather than specially."""
+    assert np.array_equal(sampled_profile(200, periods=10, duty=1.0), np.ones(200))
+
+
+def test_a_phase_shift_opens_a_window_in_the_stop_band() -> None:
+    """At pi, dead centre: full transmission at the Bragg wavelength itself.
+
+    Two mirrors facing each other with a broken period between them, which is a
+    cavity -- the distributed-feedback laser's, and the narrowest feature a
+    grating of a given length can produce. 0.7 pm here is 87 MHz.
+    """
+    wavelengths = np.linspace(BRAGG - 0.4e-9, BRAGG + 0.4e-9, 32001)
+    settings = {"length": 0.02, "index_modulation": 1.5e-4, "bragg_wavelength": BRAGG}
+
+    shifted = fiber_bragg_grating(
+        C_LIGHT / wavelengths,
+        phase_profile=phase_shift_profile(4000, shift=np.pi),
+        **settings,
+    )
+    plain = fiber_bragg_grating(C_LIGHT / wavelengths, **settings)
+
+    # Inside the stop band, where an unbroken grating transmits nothing.
+    core = np.abs(wavelengths - BRAGG) < 0.05e-9
+    assert plain.power("out", "in")[core].max() < 1e-3
+
+    transmitted = shifted.power("out", "in")[core]
+    peak = int(np.argmax(transmitted))
+    assert transmitted[peak] == pytest.approx(1.0, abs=1e-4)
+    assert wavelengths[core][peak] == pytest.approx(BRAGG, abs=1e-14)
+
+    width = wavelengths[core][transmitted > 0.5 * transmitted[peak]]
+    assert (width.max() - width.min()) == pytest.approx(0.7e-12, abs=0.2e-12)
+
+    # And it is still lossless, which a phase riding on the coupling must be.
+    total = shifted.power("in", "in") + shifted.power("out", "in")
+    assert total == pytest.approx(np.ones_like(total), abs=1e-9)
+
+
+def test_an_off_centre_phase_shift_loses_the_resonance() -> None:
+    """Because the two halves stop being equal mirrors.
+
+    A real design sensitivity rather than a modelling artefact, and the reason
+    ``position`` is offered at all.
+    """
+    wavelengths = np.linspace(BRAGG - 0.05e-9, BRAGG + 0.05e-9, 8001)
+    peaks = []
+    for position in (0.5, 0.45, 0.35):
+        matrix = fiber_bragg_grating(
+            C_LIGHT / wavelengths,
+            length=0.02,
+            index_modulation=1.5e-4,
+            bragg_wavelength=BRAGG,
+            phase_profile=phase_shift_profile(4000, shift=np.pi, position=position),
+        )
+        peaks.append(float(matrix.power("out", "in").max()))
+
+    assert peaks[0] == pytest.approx(1.00, abs=0.01)
+    assert peaks[1] == pytest.approx(0.71, abs=0.03)
+    assert peaks[2] == pytest.approx(0.10, abs=0.03)
+    assert peaks[0] > peaks[1] > peaks[2]
+
+
+def test_a_phase_constant_along_the_length_is_not_observable() -> None:
+    """Where a grating's fringes start is not a measurable thing, and the model
+    had better agree -- a phase that rode on the detuning instead of the coupling
+    would shift the whole spectrum and look perfectly plausible doing it."""
+    wavelengths = np.linspace(BRAGG - 1e-9, BRAGG + 1e-9, 2001)
+    settings = {"length": 0.02, "index_modulation": 1.5e-4, "bragg_wavelength": BRAGG}
+    plain = fiber_bragg_grating(C_LIGHT / wavelengths, **settings)
+    turned = fiber_bragg_grating(C_LIGHT / wavelengths, phase_profile=np.full(200, 0.7), **settings)
+    assert np.abs(turned.s) == pytest.approx(np.abs(plain.s), abs=1e-12)
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        (
+            {"coupling_profile": np.ones(50), "apodization": "gaussian"},
+            "both shape the coupling",
+        ),
+        ({"bragg_profile": np.full(50, BRAGG), "chirp": 1e-9}, "both set the local Bragg"),
+        (
+            {"coupling_profile": np.ones(50), "phase_profile": np.zeros(40)},
+            "different lengths",
+        ),
+        ({"bragg_profile": np.full(50, -1.0)}, "local Bragg wavelength must be positive"),
+    ],
+)
+def test_profiles_that_contradict_something_else_are_refused(kwargs: dict, message: str) -> None:
+    """Two descriptions of one thing is not a preference to resolve quietly."""
+    with pytest.raises(ValueError, match=message):
+        fiber_bragg_grating(
+            np.array([C_LIGHT / BRAGG]),
+            length=0.01,
+            index_modulation=1e-4,
+            bragg_wavelength=BRAGG,
+            **kwargs,
+        )
+
+
+@pytest.mark.parametrize(
+    ("call", "message"),
+    [
+        (lambda: sampled_profile(100, periods=0.0), "periods must be positive"),
+        (lambda: sampled_profile(100, periods=10, duty=0.0), r"duty must be in \(0, 1\]"),
+        (lambda: sampled_profile(100, periods=10, duty=1.5), r"duty must be in \(0, 1\]"),
+        (lambda: phase_shift_profile(100, position=1.5), "must be within the grating"),
+        (lambda: section_positions(0), "sections must be at least 1"),
+    ],
+)
+def test_the_profile_builders_refuse_what_they_cannot_describe(
+    call: Callable[[], object], message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        call()
+
+
+def test_the_block_reaches_both_new_devices() -> None:
+    """The point of putting them on the component and not only in the engine: a
+    project file and an inspector can carry numbers and not arrays, so the two
+    devices worth having are declared as knobs that build the arrays."""
+    combed = FiberBraggGrating(
+        length=20.0,
+        index_modulation=6e-5,
+        bragg_wavelength=1550.0,
+        sampled=True,
+        sample_periods=10.0,
+    )
+    wavelengths = np.linspace(BRAGG - 4e-9, BRAGG + 4e-9, 12001)
+    reflectivity = combed.scattering_matrix(C_LIGHT / wavelengths).power("in", "in")
+    predicted = BRAGG**2 / (2.0 * SILICA_FIBER_NEFF * 0.002)
+    assert float(np.diff(comb_peaks(wavelengths, reflectivity)).mean()) == pytest.approx(
+        predicted, rel=1e-3
+    )
+
+    # Sampling raises the section count on its own, because the structure that
+    # has to be resolved is the mask rather than the envelope.
+    assert combed._sections() == 200
+    assert FiberBraggGrating(sampled=True, sample_periods=40.0)._sections() == 800
+    assert FiberBraggGrating(sample_periods=40.0)._sections() == 200
+
+    shifted = FiberBraggGrating(
+        length=20.0, index_modulation=1.5e-4, bragg_wavelength=1550.0, phase_shifted=True
+    )
+    near = np.linspace(BRAGG - 0.05e-9, BRAGG + 0.05e-9, 8001)
+    transmitted = shifted.scattering_matrix(C_LIGHT / near).power("out", "in")
+    assert transmitted.max() == pytest.approx(1.0, abs=1e-4)
+    assert near[int(np.argmax(transmitted))] == pytest.approx(BRAGG, abs=1e-14)
+
+
+def test_a_sampled_grating_can_also_be_apodized() -> None:
+    """Both shape the coupling and a real device carries both: a mask over an
+    apodized exposure. The component multiplies them rather than making anyone
+    choose, which is what the writing process does."""
+    settings = {
+        "length": 20.0,
+        "index_modulation": 6e-5,
+        "bragg_wavelength": 1550.0,
+        "sampled": True,
+        "sample_periods": 10.0,
+    }
+    soft = FiberBraggGrating("raised-cosine", **settings)
+    hard = FiberBraggGrating(**settings)
+
+    wavelengths = np.linspace(BRAGG - 4e-9, BRAGG + 4e-9, 8001)
+    quiet = soft.scattering_matrix(C_LIGHT / wavelengths).power("in", "in")
+    loud = hard.scattering_matrix(C_LIGHT / wavelengths).power("in", "in")
+
+    # Apodizing lowers the average coupling, so the whole comb comes down.
+    assert quiet.max() < loud.max()
+    # And it quietens the skirts of each tooth relative to its own peak, which
+    # is the thing apodization is for.
+    assert quiet[:500].max() / quiet.max() < loud[:500].max() / loud.max()
