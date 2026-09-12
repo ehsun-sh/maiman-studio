@@ -1054,6 +1054,7 @@ def circulator(
     frequencies: np.ndarray,
     *,
     insertion_loss_db: float = 0.0,
+    isolation_db: float = 0.0,
     ports: tuple[str, str, str] = ("p1", "p2", "p3"),
 ) -> SMatrix:
     """Three ports and one direction — 1 to 2, 2 to 3, 3 to 1. The way to a mirror.
@@ -1065,24 +1066,43 @@ def circulator(
 
     The matrix is a cyclic permutation scaled by one hop's loss, so it is
     **unitary at 0 dB and never symmetric** — ``s[p2, p1]`` is the transmission
-    and ``s[p1, p2]`` is zero. :meth:`maiman.circuit.Circuit.solve` has always
-    handled that; until now nothing outside a test made it do so.
+    and ``s[p1, p2]`` is zero until an isolation is given.
+    :meth:`maiman.circuit.Circuit.solve` has always handled that; until now
+    nothing outside a test made it do so.
 
-    **Isolation is not a parameter, and that is a decision rather than an
-    oversight.** A real circulator leaks 40 to 60 dB backwards, and carrying that
-    would make every output a function of two inputs rather than one. In the
-    configuration this part exists for — signal in at port 1, grating on port 2,
-    drop out of port 3 — that leak is a *loop*: light goes back to the grating,
-    reflects again, and comes round once more. It is a real weak cavity, and the
-    engine is right to refuse one without an iteration count (see
-    :class:`~maiman.graph.CycleError`). Offering a number the routing then
-    ignored would be worse than not offering it.
+    ``isolation_db`` is the reverse leak on every hop -- 2 to 1, 3 to 2, 1 to 3 --
+    and 0 means an ideal circulator with none. A real one leaks 40 to 60 dB.
+
+    **It used to be refused as a loop, and that was wrong.** The reasoning was
+    that in the configuration this part exists for -- signal in at port 1, a
+    grating on port 2, the drop out of port 3 -- the leak sends light back round to
+    the grating. It does not. Reflected light coming back into port 2 leaves at
+    port 3, forward, or at port 1, back toward the source, and neither returns to
+    the grating. Solved exactly with :meth:`maiman.circuit.Circuit.solve`, which
+    sums every bounce there is, a 40 dB isolated circulator's drop port equals the
+    feed-forward ``tau * r * tau + iota`` with a difference of exactly zero.
+
+    What isolation does break is narrower. Port 3 now hears port 2 *and* the
+    direct leak from port 1, while port 2 still hears port 1 alone; those
+    dependencies overlap and are acyclic, which a partition of ports into groups
+    could not express and :class:`~maiman.component.PortGroup` now can.
+
+    **Return loss is the real cavity, and it is not modelled.** A reflection back
+    out of the port light entered by bounces into the grating again: at 40 dB of it
+    the exact solve departs from feed-forward by 7.9e-3 and matches
+    ``tau * r * tau / (1 - rho * r) + iota`` to 4e-16, rippling the drop port by
+    about 0.07 dB either way. That is a genuine loop and would need an iteration
+    count.
     """
+    if isolation_db < 0.0:
+        raise ValueError(f"isolation_db must be zero (ideal) or positive, got {isolation_db}")
     frequencies = np.asarray(frequencies, dtype=np.float64)
     amplitude = 10.0 ** (-insertion_loss_db / 20.0)
+    leak = 10.0 ** (-isolation_db / 20.0) if isolation_db > 0.0 else 0.0
 
     count = len(ports)
     s = np.zeros((frequencies.shape[0], count, count), dtype=np.complex128)
     for source in range(count):
         s[:, (source + 1) % count, source] = amplitude
+        s[:, source, (source + 1) % count] = leak
     return SMatrix(ports=ports, frequencies=frequencies, s=s)

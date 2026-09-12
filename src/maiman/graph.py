@@ -236,11 +236,15 @@ class Graph:
 
         See :class:`~maiman.component.PortGroup` for why a component is allowed
         to make that claim and what it costs if it makes it wrongly.
+
+        An input read by more than one group is an edge into every node that
+        reads it. That is what a circulator with finite isolation needs, and it
+        adds no cycle: every one of those nodes still waits on the same producer.
         """
         nodes: list[tuple[Component, PortGroup]] = []
         #: Which node produces a given output port, and which consumes an input.
         produced_by: dict[tuple[str, str], int] = {}
-        consumed_by: dict[tuple[str, str], int] = {}
+        consumed_by: dict[tuple[str, str], list[int]] = defaultdict(list)
         for component in self._components:
             component.check_port_groups()
             for group in component.port_groups():
@@ -249,16 +253,16 @@ class Graph:
                 for name in group.outputs:
                     produced_by[(component.label, name)] = index
                 for name in group.inputs:
-                    consumed_by[(component.label, name)] = index
+                    consumed_by[(component.label, name)].append(index)
 
         successors: dict[int, list[int]] = defaultdict(list)
         in_degree: dict[int, int] = dict.fromkeys(range(len(nodes)), 0)
 
         for destination, src_port in self._edges.items():
-            consumer = consumed_by[destination]
             producer = produced_by[(src_port.component.label, src_port.name)]
-            successors[producer].append(consumer)
-            in_degree[consumer] += 1
+            for consumer in consumed_by[destination]:
+                successors[producer].append(consumer)
+                in_degree[consumer] += 1
 
         ready = deque(sorted(index for index, deg in in_degree.items() if deg == 0))
         order: list[tuple[Component, PortGroup]] = []
@@ -359,9 +363,15 @@ class Graph:
         self._validate()
         order = self._topological_order()
 
+        # One count per node that reads a signal, not one per wire. An input shared
+        # by two of a component's groups is one wire read twice, and counting it
+        # once would release the signal after its first reader and leave the second
+        # with nothing. For a component with a single group the two counts agree.
         consumers_remaining: dict[tuple[str, str], int] = defaultdict(int)
-        for src_port in self._edges.values():
-            consumers_remaining[(src_port.component.label, src_port.name)] += 1
+        for component, group in order:
+            for name in group.inputs:
+                src_port = self._edges[(component.label, name)]
+                consumers_remaining[(src_port.component.label, src_port.name)] += 1
 
         keep_labels = {c.label for c in (keep or [])}
         live: dict[tuple[str, str], Signal] = {}

@@ -19,6 +19,7 @@ import numpy as np
 import pytest
 
 from maiman import CycleError, Graph, GraphError, PortGroup, SimulationContext
+from maiman.circuit import Circuit
 from maiman.component import Component, PortType
 from maiman.components import (
     Attenuator,
@@ -590,10 +591,10 @@ class _Split(Component):
         ),
         (
             (
-                PortGroup(frozenset({"a", "b"}), frozenset({"x"})),
-                PortGroup(frozenset({"a"}), frozenset({"y"})),
+                PortGroup(frozenset({"a"}), frozenset({"x", "y"})),
+                PortGroup(frozenset({"b"}), frozenset({"y"})),
             ),
-            "belongs to exactly one",
+            "computed by exactly one group",
         ),
         (
             (PortGroup(frozenset({"a", "b"}), frozenset({"x", "y", "z"})),),
@@ -602,12 +603,28 @@ class _Split(Component):
     ],
 )
 def test_port_groups_must_partition_the_ports(groups: tuple[PortGroup, ...], message: str) -> None:
-    """A port in no group never runs and a port in two runs twice, and both look
-    like a wiring bug somewhere else entirely. Caught before the run."""
+    """An output in no group never runs and an output in two is computed twice, and
+    both look like a wiring bug somewhere else entirely. Caught before the run."""
     block = _Split()
     block.groups = groups
     with pytest.raises(ValueError, match=message):
         block.check_port_groups()
+
+
+def test_an_input_may_feed_more_than_one_group() -> None:
+    """An output is computed once; an input may be read by several groups.
+
+    That is what a circulator with finite isolation needs: its port 3 hears the
+    reflection coming back into port 2 *and* the direct leak from port 1, while
+    port 2 still hears port 1 alone. The dependencies overlap on port 1 and are
+    acyclic, and a partition could not say so.
+    """
+    block = _Split()
+    block.groups = (
+        PortGroup(frozenset({"a"}), frozenset({"x"})),
+        PortGroup(frozenset({"a", "b"}), frozenset({"y"})),
+    )
+    block.check_port_groups()
 
 
 def test_the_default_is_one_group_holding_everything() -> None:
@@ -1218,3 +1235,86 @@ def test_sensors_on_one_fibre_are_read_through_one_circulator() -> None:
     assert band.power_dbm == pytest.approx(
         10.0 * np.log10(gratings[2].peak_reflectivity()), abs=0.05
     )
+
+
+# --------------------------------------------------------------------------
+# Isolation: routes that overlap, and still no loop
+# --------------------------------------------------------------------------
+
+
+def test_isolation_puts_a_leak_on_every_reverse_hop() -> None:
+    """2 to 1, 3 to 2, 1 to 3 -- and none at all until an isolation is given."""
+    matrix = circulator(np.array([C_LIGHT / BRAGG]), insertion_loss_db=0.7, isolation_db=40.0)
+    for source, leaks_to in (("p2", "p1"), ("p3", "p2"), ("p1", "p3")):
+        assert 10.0 * np.log10(matrix.power(leaks_to, source)[0]) == pytest.approx(-40.0, abs=1e-9)
+    assert circulator(np.array([C_LIGHT / BRAGG])).power("p1", "p2")[0] == 0.0
+    with pytest.raises(ValueError, match="isolation_db must be zero"):
+        circulator(np.array([C_LIGHT / BRAGG]), isolation_db=-1.0)
+
+
+def test_an_isolated_circulator_s_port_three_hears_port_one_as_well() -> None:
+    """With isolation the groups overlap on port 1 and are still one per output."""
+    real = {tuple(sorted(g.outputs)): g.inputs for g in Circulator(isolation=40.0).port_groups()}
+    assert real[("out2",)] == frozenset({"in1"})
+    assert real[("out3",)] == frozenset({"in1", "in2"})
+
+    ideal = {tuple(sorted(g.outputs)): g.inputs for g in Circulator().port_groups()}
+    assert ideal[("out3",)] == frozenset({"in2"})
+
+
+def _drop_port(isolation: float) -> dict[float, float]:
+    """Drop-port power per channel through a circulator of this isolation [dBm]."""
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=8, sequence_length=64)
+    graph = Graph(ctx)
+    dropped = graph.add(CWLaser(power=0.0, wavelength=1550.0, label="ch1550"))
+    express = graph.add(CWLaser(power=0.0, wavelength=1552.0, label="ch1552"))
+    mux = graph.add(Combiner(2, label="mux"))
+    circ = graph.add(Circulator(insertion_loss=0.7, isolation=isolation, label="circ"))
+    grating = graph.add(
+        FiberBraggGrating(bragg_wavelength=1550.0, length=10.0, index_modulation=1e-4)
+    )
+    meter = graph.add(PowerMeter(label="drop"))
+    graph.connect(dropped, mux["in0"])
+    graph.connect(express, mux["in1"])
+    graph.connect(mux, circ["in1"])
+    graph.connect(circ["out2"], grating["in"])
+    graph.connect(grating["reflected"], circ["in2"])
+    graph.connect(circ["out3"], meter["in"])
+    reading = graph.run()[meter]
+    return {round(band.wavelength_nm, 2): band.power_dbm for band in reading.bands}
+
+
+@pytest.mark.parametrize("isolation", [0.0, 60.0, 40.0])
+def test_the_drop_port_with_isolation_is_the_exact_circuit_solve(isolation: float) -> None:
+    """The engine against Circuit.solve, which sums every bounce there is.
+
+    If the leak made a loop, the exact solve would carry a bounce term that a
+    feed-forward schedule cannot, and the two would disagree. They agree to
+    micro-decibels at every isolation, because there is no bounce to carry.
+    """
+    engine = _drop_port(isolation)
+    for nm in (1550.0, 1552.0):
+        f = np.array([C_LIGHT / (nm * 1e-9)])
+        circuit = Circuit()
+        circuit.add("c", circulator(f, insertion_loss_db=0.7, isolation_db=isolation))
+        circuit.add(
+            "g",
+            fiber_bragg_grating(f, length=0.01, index_modulation=1e-4, bragg_wavelength=BRAGG),
+        )
+        circuit.link("c", "p2", "g", "in")
+        circuit.expose("input", "c", "p1")
+        circuit.expose("drop", "c", "p3")
+        circuit.expose("through", "g", "out")
+        exact = 10.0 * np.log10(abs(circuit.solve().transmission("drop", "input")[0]) ** 2)
+        assert engine[nm] == pytest.approx(exact, abs=1e-4)
+
+
+def test_at_forty_decibels_the_circulator_not_the_grating_sets_the_drop_floor() -> None:
+    """The neighbour two nanometres out: the grating's sidelobe through an ideal
+    circulator, and the direct leak from port 1 through a real one."""
+    ideal = _drop_port(0.0)
+    real = _drop_port(40.0)
+    assert ideal[1552.0] == pytest.approx(-47.36, abs=0.01)
+    assert real[1552.0] == pytest.approx(-38.71, abs=0.01)
+    # The dropped channel itself barely notices; the leak is 37 dB under it.
+    assert real[1550.0] - ideal[1550.0] == pytest.approx(0.0, abs=0.01)

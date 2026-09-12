@@ -64,10 +64,18 @@ class PortGroup:
     ``in1`` and on nothing else, and the light goes strictly forward. The
     dependency is real, the cycle is an artefact of the granularity.
 
-    So a component may declare that its ports fall into independent groups, and
-    the scheduler treats each group as its own node. :meth:`Component.run` is
-    then called once per group with that group's inputs, and must return that
-    group's outputs and no others.
+    So a component may declare its outputs in groups, each with the inputs it
+    depends on, and the scheduler treats each group as its own node.
+    :meth:`Component.run` is then called once per group with that group's inputs,
+    and must return that group's outputs and no others.
+
+    **Outputs are a partition; inputs need not be.** An output computed by two
+    groups would be overwritten by whichever ran last, so each belongs to exactly
+    one. An input may be read by several: a circulator with finite isolation has
+    port 3 hearing port 2 *and* the leak from port 1, while port 2 hears port 1
+    alone. Those dependencies overlap on port 1 and contain no loop, and forcing
+    them into a partition would merge both routes into one node and bring back the
+    false cycle this class exists to remove.
 
     The default is one group holding everything, which is the honest answer for
     almost every block -- a fibre's output depends on its input, and an
@@ -444,16 +452,17 @@ class Component:
         return (PortGroup(frozenset(self.inputs), frozenset(self.outputs)),)
 
     def check_port_groups(self) -> None:
-        """Refuse groups that are not a partition of this component's ports.
+        """Refuse groups that do not describe this component's ports.
 
-        A port left out of every group never runs and a port in two of them runs
-        twice, and both failures look like a wiring mistake somewhere else
-        entirely -- an output that is mysteriously absent from the results, or a
-        block that reports twice through the progress callback. Checked before
-        the run rather than discovered during it.
+        Every output belongs to exactly one group: one in no group never runs, and
+        one in two is computed twice with the second overwriting the first. Every
+        input is read by at least one group and may be read by more -- see
+        :class:`PortGroup` for why that has to be allowed. An unread input would be
+        wired and then silently ignored. Checked before the run rather than
+        discovered during it.
 
         A group with no outputs is refused as well: it can never be scheduled to
-        any purpose, and the inputs inside it would be silently unreachable.
+        any purpose.
         """
         groups = self.port_groups()
         if not groups:
@@ -463,27 +472,42 @@ class Component:
             if not group.outputs:
                 raise ValueError(f"{self.label}: {group!r} produces no output")
 
-        for kind, declared in (("input", self.inputs), ("output", self.outputs)):
-            seen: dict[str, int] = {}
-            for index, group in enumerate(groups):
-                for name in getattr(group, f"{kind}s"):
-                    if name not in declared:
-                        raise ValueError(
-                            f"{self.label}: port_groups() names {kind} {name!r}, which is "
-                            f"not one of its {kind}s {sorted(declared)}"
-                        )
-                    if name in seen:
-                        raise ValueError(
-                            f"{self.label}: {kind} {name!r} is in port group {seen[name]} "
-                            f"and in {index}; a port belongs to exactly one"
-                        )
-                    seen[name] = index
-            missing = sorted(set(declared) - set(seen))
-            if missing:
-                raise ValueError(
-                    f"{self.label}: port_groups() leaves {kind}(s) {missing} out; "
-                    f"every port belongs to exactly one group"
-                )
+        owner: dict[str, int] = {}
+        for index, group in enumerate(groups):
+            for name in group.outputs:
+                if name not in self.outputs:
+                    raise ValueError(
+                        f"{self.label}: port_groups() names output {name!r}, which is "
+                        f"not one of its outputs {sorted(self.outputs)}"
+                    )
+                if name in owner:
+                    raise ValueError(
+                        f"{self.label}: output {name!r} is in port group {owner[name]} "
+                        f"and in {index}; an output is computed by exactly one group"
+                    )
+                owner[name] = index
+        missing = sorted(set(self.outputs) - set(owner))
+        if missing:
+            raise ValueError(
+                f"{self.label}: port_groups() leaves output(s) {missing} out; "
+                f"every output belongs to exactly one group"
+            )
+
+        read: set[str] = set()
+        for group in groups:
+            for name in group.inputs:
+                if name not in self.inputs:
+                    raise ValueError(
+                        f"{self.label}: port_groups() names input {name!r}, which is "
+                        f"not one of its inputs {sorted(self.inputs)}"
+                    )
+                read.add(name)
+        unread = sorted(set(self.inputs) - read)
+        if unread:
+            raise ValueError(
+                f"{self.label}: port_groups() leaves input(s) {unread} out; "
+                f"every input must be read by at least one group"
+            )
 
     def __getitem__(self, port_name: str) -> Port:
         if port_name in self.outputs:

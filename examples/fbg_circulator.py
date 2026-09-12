@@ -209,6 +209,30 @@ def the_compensator() -> None:
     print(f"     undoes            {abs(geometric) / 17.0:.0f} km of standard fibre\n")
 
 
+def _drop_with(isolation: float) -> tuple[float, float]:
+    """Drop-port power at 1550 and 1552 nm through a circulator of this isolation [dBm]."""
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=8, sequence_length=64)
+    graph = Graph(ctx)
+    dropped = graph.add(CWLaser(power=0.0, wavelength=1550.0, label="ch1550"))
+    express = graph.add(CWLaser(power=0.0, wavelength=1552.0, label="ch1552"))
+    mux = graph.add(Combiner(2, label="mux"))
+    circ = graph.add(Circulator(insertion_loss=0.7, isolation=isolation, label="circ"))
+    grating = graph.add(
+        FiberBraggGrating(bragg_wavelength=1550.0, length=10.0, index_modulation=1e-4)
+    )
+    meter = graph.add(PowerMeter(label="drop"))
+    graph.connect(dropped, mux["in0"])
+    graph.connect(express, mux["in1"])
+    graph.connect(mux, circ["in1"])
+    graph.connect(circ["out2"], grating["in"])
+    graph.connect(grating["reflected"], circ["in2"])
+    graph.connect(circ["out3"], meter["in"])
+    reading = graph.run()[meter]
+    assert isinstance(reading, PowerReading)
+    by_nm = {round(band.wavelength_nm, 2): band.power_dbm for band in reading.bands}
+    return by_nm[1550.0], by_nm[1552.0]
+
+
 def the_drop() -> None:
     """A channel dropped through a circulator, with the budget it costs.
 
@@ -257,9 +281,19 @@ def the_drop() -> None:
         f"({10 * np.log10(1 - reflectivity):.2f})"
     )
     print(
-        "     the neighbour's rejection on the drop port is the grating's own\n"
-        "     sidelobe floor two nanometres out, not an isolation figure declared\n"
-        "     anywhere. Apodize it and the number moves.\n"
+        "     with an ideal circulator the neighbour's rejection on the drop port is\n"
+        "     the grating's own sidelobe floor two nanometres out. A real circulator\n"
+        "     leaks, and the leak from port 1 goes straight to port 3:\n"
+    )
+    print(f"     {'isolation':>10}  {'1550 nm':>10}  {'1552 nm':>10}   rejection")
+    for isolation in (0.0, 60.0, 40.0):
+        kept, neighbour = _drop_with(isolation)
+        label = "ideal" if isolation == 0.0 else f"{isolation:.0f} dB"
+        print(f"     {label:>10}  {kept:9.3f}dB  {neighbour:9.3f}dB   {kept - neighbour:6.2f} dB")
+    print(
+        "     at 40 dB the circulator, not the grating, sets the floor on the drop\n"
+        "     port. And it is still not a loop: that leak never returns to the grating,\n"
+        "     and the exact circuit solve agrees with this to micro-decibels.\n"
     )
 
 

@@ -1784,15 +1784,36 @@ reflective device pays it going out and coming back. Dropping 1550 nm out of a p
     express    -12.434 dB   -0.700 dB  one hop (-0.7) + T (-11.73)
 ```
 
-Every figure is arithmetic. The neighbour's 45 dB of rejection on the drop port is **the grating's
-own sidelobe floor two nanometres out**, not an isolation figure anybody declared — apodize the
-grating and the number moves.
+Every figure is arithmetic. With an ideal circulator the neighbour's 45 dB of rejection on the drop
+port is **the grating's own sidelobe floor two nanometres out**, not an isolation figure anybody
+declared — apodize the grating and the number moves. With a real circulator it is not the grating at
+all; see below.
 
-**Isolation is deliberately not a parameter.** A real circulator leaks 40 to 60 dB backwards, and
-carrying that would make every output a function of two inputs instead of one. In this
-configuration that leak is a *loop* — light returns to the grating, reflects again, comes round
-once more — and it is a real weak cavity that the engine is right to refuse without an iteration
-count. A number in the inspector that the routing then ignored would be worse than not offering it.
+**A real circulator leaks, and this section used to get that wrong.** It said isolation could not be
+a parameter because in this configuration the backward leak is a *loop* — light returning to the
+grating, reflecting again, coming round once more — and a cavity the engine was right to refuse. It
+is not a loop. Reflected light coming back into port 2 leaves at port 3, or back out of port 1
+toward the source, and neither returns to the grating. `Circuit.solve`, which sums every bounce there
+is, gives a drop port equal to the feed-forward `τ·r·τ + ι` with a difference of exactly zero.
+
+What the leak really broke was `PortGroup`. Port 3 now hears port 2 *and* the direct leak from port
+1, while port 2 hears port 1 alone: dependencies that overlap and contain no cycle, which a partition
+of ports could not express. Outputs are still a partition; an input may now be read by more than one
+group, and `Circulator` has an `isolation` parameter. The engine matches the exact solve to a few
+micro-decibels at every setting:
+
+```
+    isolation     1550 nm      1552 nm    neighbour rejection
+        ideal    -1.702 dB   -47.359 dB        45.7 dB
+        60 dB    -1.702 dB   -46.781 dB        45.1 dB
+        40 dB    -1.701 dB   -38.713 dB        37.0 dB
+```
+
+At 40 dB the floor on the drop port is the circulator's leak from port 1, not the grating — which is
+the number a real drop would be specified by. **Return loss is what would be a cavity**: a reflection
+back out of the port light entered by, bouncing into the grating again. At 40 dB of it the exact solve
+leaves feed-forward by 8e-3 and ripples the drop port by about ±0.07 dB. That one is not modelled,
+and would need an iteration count.
 
 ### The named windows were never the limit
 

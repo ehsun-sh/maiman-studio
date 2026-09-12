@@ -44,7 +44,7 @@ from ..photonics import (
 )
 from ..signals import OpticalSignal, Signal
 from ..units import C_LIGHT, wavelength_to_frequency
-from .photonic import ScatteringDevice, apply_response, port_response, solve_once
+from .photonic import ScatteringDevice, _sum_signals, apply_response, port_response, solve_once
 
 
 class FiberBraggGrating(ScatteringDevice):
@@ -427,6 +427,13 @@ class Circulator(ScatteringDevice):
     though no light in it ever travels backwards in time. The cycle is an
     artefact of scheduling whole components; the physics has no loop in it.
 
+    **With isolation the routes overlap, and there is still no loop.** A real
+    circulator leaks backwards on every hop, so ``out3`` hears the direct leak from
+    ``in1`` as well as the reflection coming back into ``in2``. Solved exactly, that
+    leak never returns to the grating; the drop port is the feed-forward sum and
+    nothing more. What changes is only that ``in1`` is read by two groups, which
+    :class:`~maiman.component.PortGroup` allows.
+
     ``driven`` says which physical ports light enters, and the outputs follow
     from the routing: driving 1 and 2 — the reflective configuration this exists
     for — gives inputs ``in1``, ``in2`` and outputs ``out2``, ``out3``. Add 3 to
@@ -440,8 +447,8 @@ class Circulator(ScatteringDevice):
     filter-based one, and it is why the number belongs on the circulator rather
     than being folded into the grating.
 
-    See :func:`maiman.photonics.circulator` for the matrix, and for why isolation
-    is deliberately not a parameter here.
+    See :func:`maiman.photonics.circulator` for the matrix, for why isolation
+    turned out not to be a loop, and for the return loss that would be one.
     """
 
     display_name = "Circulator"
@@ -449,6 +456,12 @@ class Circulator(ScatteringDevice):
 
     insertion_loss = Param(
         0.7, unit="dB", min=0.0, doc="Loss of one hop; paid again on the next hop"
+    )
+    isolation = Param(
+        0.0,
+        unit="dB",
+        min=0.0,
+        doc="Reverse leak on every hop; 0 is an ideal circulator, a real one 40 to 60",
     )
 
     def __init__(
@@ -479,24 +492,50 @@ class Circulator(ScatteringDevice):
         return {"driven": list(self.driven)}
 
     def port_groups(self) -> tuple[PortGroup, ...]:
-        """One group per hop. The whole point of this component."""
-        return tuple(
-            PortGroup(frozenset({f"in{p}"}), frozenset({f"out{self._next(p)}"}))
-            for p in self.driven
-        )
+        """One group per output: the hop into it, and the leak into it if there is one.
+
+        With no isolation each output hears exactly one input and the groups are
+        the hops, which is the whole point of this component. With it, an output
+        also hears the input one port further round -- port 3 hears port 1's leak
+        as well as port 2's forward path -- so an input can be read by two groups
+        while every output is still computed exactly once.
+        """
+        groups = []
+        for port in self.driven:
+            out = self._next(port)
+            heard = {f"in{port}"}
+            leaker = self._next(out)
+            if self.isolation > 0.0 and leaker in self.driven:
+                heard.add(f"in{leaker}")
+            groups.append(PortGroup(frozenset(heard), frozenset({f"out{out}"})))
+        return tuple(groups)
 
     def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
-        # Called once per group, so ``inputs`` holds one port and the answer
-        # holds the one it routes to. Written over whatever arrived rather than
-        # over ``self.driven``, because the group decides what this call is for.
+        # The scheduler calls this once per group, and which group is decided by
+        # exactly which inputs arrived -- no two of this block's groups read the
+        # same set. Called directly with everything at once, it answers for every
+        # group those inputs can feed.
+        arrived = frozenset(inputs)
+        groups = self.port_groups()
+        chosen = [g for g in groups if g.inputs == arrived] or [
+            g for g in groups if g.inputs <= arrived
+        ]
         matrix_for = self._matrix_factory()
         produced: dict[str, Signal] = {}
-        for name in inputs:
-            source = int(name.removeprefix("in"))
-            destination = self._next(source)
-            produced[f"out{destination}"] = apply_response(
-                inputs[name], port_response(matrix_for, f"p{destination}", f"p{source}")
-            )
+        for group in chosen:
+            (output,) = group.outputs
+            destination = output.removeprefix("out")
+            # Forward path and leak both arrive at the same port, so they add as
+            # fields where they share a band -- a reflected channel and the same
+            # channel's direct leak interfere, which is the physics of it.
+            contributions = [
+                apply_response(
+                    inputs[name],
+                    port_response(matrix_for, "p" + destination, "p" + name.removeprefix("in")),
+                )
+                for name in sorted(group.inputs)
+            ]
+            produced[output] = _sum_signals(contributions, where=f"{self.label}.{output}")
         return produced
 
     def _matrix_factory(self, polarization: str = "te") -> Callable[[np.ndarray], SMatrix]:
@@ -505,4 +544,5 @@ class Circulator(ScatteringDevice):
         # circulator's loss *is* slightly polarization dependent, and that number
         # is per part rather than per physics.
         loss = self.insertion_loss
-        return solve_once(lambda f: circulator(f, insertion_loss_db=loss))
+        isolation = self.isolation
+        return solve_once(lambda f: circulator(f, insertion_loss_db=loss, isolation_db=isolation))

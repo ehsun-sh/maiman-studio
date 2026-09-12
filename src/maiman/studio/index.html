@@ -1675,6 +1675,13 @@ verdict, and DESIGN.md
      "unit": "dB",
      "min": 0.0,
      "doc": "Loss of one hop; paid again on the next hop"
+    },
+    "isolation": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "dB",
+     "min": 0.0,
+     "doc": "Reverse leak on every hop; 0 is an ideal circulator, a real one 40 to 60"
     }
    },
    "structural": {
