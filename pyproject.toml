@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "maiman"
-version = "0.3.0"
+version = "0.4.0"
 description = "Open-source simulator for optical communication links and photonic systems"
 readme = "README.md"
 requires-python = ">=3.11"

@@ -32,7 +32,7 @@ keywords:
   - forward error correction
   - photonic integrated circuits
 license: Apache-2.0
-version: 0.3.0
+version: 0.4.0
 date-released: '2026-09-12'
 
 # `date-released` is the date this version was published, not the date it was
