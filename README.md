@@ -1741,6 +1741,105 @@ the envelope, so the floor is twenty sections per sampling period — measured: 
 unchanged from ten sections per period all the way to four hundred. Deriving that rather than
 refusing a number it could compute itself is the difference between a component and a form.
 
+### The same device is a strain gauge and a thermometer
+
+A grating's period is a length. Lengths respond to being stretched and to being warmed, and the
+reflection reports it — so nothing has to be added to the fibre, there is nothing electrical near
+the measurement, and because the reading is a *wavelength* it does not drift when the light gets
+dimmer. That is why these go into boreholes, composite spars and bridge decks.
+
+The whole of it is one line, and both coefficients are a material number times λ_B:
+
+```
+Δλ/λ = (1 − p_e)·ε + (α + ξ)·ΔT
+```
+
+```
+  strain        1.209 pm per microstrain     p_e = 0.22
+  temperature  11.191 pm per kelvin          α + ξ = 7.22e-6 /K
+```
+
+Stretching lengthens the period *and* lowers the index, and the two fight: the index term cancels
+22 % of the geometric one. Warming does two things too, and they are not the same size — thermal
+expansion is 0.55e-6/K and the thermo-optic coefficient 6.67e-6/K, so this is a thermometer made of
+glass rather than one made of geometry. It is also why **coating changes the thermal number a lot**
+and the strain number not at all: a jacket adds its expansion to α and nothing to ξ.
+
+**One grating produces one wavelength and there are two unknowns behind it.** Divide one
+sensitivity by the other:
+
+```
+  9.26 microstrain per kelvin
+
+  +10 K, no load        -> 1550.111910 nm
+  92.6 ustrain, no heat -> 1550.111953 nm
+  difference             43.4 fm
+```
+
+Nothing about the spectrum hints that an interrogator should try to tell those apart. Every real
+installation is arranged around this.
+
+**And a second grating at another wavelength does not fix it**, which is the trap worth seeing
+measured. Both sensitivities scale with λ, so their ratio does not:
+
+```
+   lambda_B   pm/ustrain      pm/K     ratio
+   1530.0nm       1.1934   11.0466     9.256
+   1550.0nm       1.2090   11.1910     9.256
+   1570.0nm       1.2246   11.3354     9.256
+
+   condition number of the 1530/1570 pair: 4.6e+16
+```
+
+Two rows differing only by a scale factor invert into noise. What does work is a grating that
+carries no load — loose in its tube beside the working one, measuring the temperature alone — which
+is a genuinely independent second equation rather than a nearly dependent one.
+
+### Interrogation is a sweep, and it recovers what was applied
+
+The array is one fibre: the probe goes out through a circulator and the gratings sit in series,
+each passing what it does not reflect. Stepping a tunable laser across each peak and taking the
+centroid of the reflected power is what a real interrogator does, and 121 points over 0.6 nm — a
+5 pm grid — recovers a shift to a fraction of a picometre:
+
+```
+     grating      nominal      measured       shift
+     working   1545.0000nm   1545.64936nm     649.36pm
+   reference   1555.0000nm   1555.16841nm     168.41pm
+
+   recovered temperature    15.000 K    (error +0.0000)
+   recovered strain        400.000 ue   (error +0.0001)
+```
+
+And the same array read as though the temperature were known to be zero, which is what an
+uncompensated gauge assumes:
+
+```
+              applied   strain read       error
+   400 ue and + 0.0 K      400.00ue      +0.00ue
+   400 ue and + 1.0 K      409.26ue      +9.26ue
+   400 ue and + 5.0 K      446.28ue     +46.28ue
+   400 ue and +15.0 K      538.85ue    +138.85ue
+```
+
+9.26 microstrain per kelvin, arriving exactly on schedule.
+
+**Why a sweep rather than a broadband source and an analyser.** The conventional interrogator is a
+white-light source and an OSA, and this engine cannot do that one: broadband light is carried as a
+`NoiseBin`, whose power density is *flat* across its range by construction, and a response is
+applied to it as a single averaged scalar. A wavelength-resolved reflection off it would come back
+with no peak in it at all. A tunable laser has no such problem and every sweep point is a real run
+of a real graph — but spectrally-resolved noise is the change that would be needed, and it reaches
+the EDFA, OSNR, and everything else that touches ASE.
+
+One more thing the array turned up, and the engine was right about it. Wiring every grating's
+reflection back onto one return fibre is what the hardware does, and `Combiner` **refuses** it: a
+single-wavelength probe means every grating is reflecting a copy of the *same* band, and co-located
+carriers have to be added as fields on a common grid rather than multiplexed. So each grating is
+metered where it sits, which is the quantity being measured anyway.
+
+`python examples/fbg_sensor.py` prints all five tables.
+
 ### And a sign that is not the grating's fault
 
 The grating's own physics says a positive chirp puts short wavelengths at the near end, so they

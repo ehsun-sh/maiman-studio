@@ -33,6 +33,8 @@ from maiman.components import (
 from maiman.photonics import (
     APODIZATIONS,
     SILICA_FIBER_NEFF,
+    SILICA_THERMAL_SENSITIVITY,
+    bragg_shift,
     circulator,
     fiber_bragg_grating,
     phase_shift_profile,
@@ -976,3 +978,239 @@ def test_a_sampled_grating_can_also_be_apodized() -> None:
     # And it quietens the skirts of each tooth relative to its own peak, which
     # is the thing apodization is for.
     assert quiet[:500].max() / quiet.max() < loud[:500].max() / loud.max()
+
+
+# --------------------------------------------------------------------------
+# The grating as a sensor
+# --------------------------------------------------------------------------
+
+
+def test_the_two_sensitivities_are_the_numbers_on_a_datasheet() -> None:
+    """1.21 pm per microstrain and 11.2 pm per kelvin, at 1550 nm.
+
+    Both are a coefficient times the Bragg wavelength, so neither is fitted to
+    anything: they follow from ``p_e`` and from ``alpha + xi``, and those are the
+    two material numbers the model is allowed to have.
+    """
+    assert bragg_shift(BRAGG, strain=1e-6) - BRAGG == pytest.approx(1.209e-12, rel=1e-3)
+    assert bragg_shift(BRAGG, temperature_change=1.0) - BRAGG == pytest.approx(11.19e-12, rel=1e-3)
+
+    grating = FiberBraggGrating(bragg_wavelength=1550.0)
+    assert grating.strain_sensitivity() * 1e-6 == pytest.approx(1.209e-12, rel=1e-3)
+    assert grating.temperature_sensitivity() == pytest.approx(11.19e-12, rel=1e-3)
+
+
+def test_a_kelvin_of_drift_imitates_nine_microstrain() -> None:
+    """The number the whole field is organised around.
+
+    One grating produces one wavelength and there are two unknowns behind it, so
+    an uncompensated strain reading is a strain reading plus an unknown
+    temperature. 9.26 microstrain per kelvin is what that costs.
+    """
+    grating = FiberBraggGrating(bragg_wavelength=1550.0)
+    assert grating.cross_sensitivity() * 1e6 == pytest.approx(9.26, abs=0.02)
+
+    # A strain and a temperature that produce the *same* wavelength, which is
+    # the failure the number describes.
+    warmed = FiberBraggGrating(bragg_wavelength=1550.0, temperature_change=10.0)
+    pulled = FiberBraggGrating(bragg_wavelength=1550.0, strain=92.6)
+    assert warmed.sensed_bragg_wavelength() == pytest.approx(
+        pulled.sensed_bragg_wavelength(), rel=1e-6
+    )
+
+
+def test_the_cross_sensitivity_does_not_depend_on_the_wavelength() -> None:
+    """Which is why two gratings of one fibre cannot separate the two unknowns.
+
+    Both sensitivities scale with ``lambda_B``, so their ratio does not, and a
+    two-wavelength inversion is a matrix whose rows are nearly identical. The
+    real answers are a strain-free reference grating, or a second fibre with a
+    genuinely different coating.
+    """
+    ratios = [
+        FiberBraggGrating(bragg_wavelength=nm).cross_sensitivity()
+        for nm in (1530.0, 1550.0, 1565.0)
+    ]
+    assert ratios[0] == pytest.approx(ratios[1], rel=1e-12)
+    assert ratios[1] == pytest.approx(ratios[2], rel=1e-12)
+
+
+def test_strain_and_temperature_add_and_are_exactly_linear() -> None:
+    """The linearity every interrogator's inversion relies on.
+
+    Worth asserting rather than assuming: a model that was linear in each
+    separately but not in their sum would let a two-parameter recovery converge
+    to a plausible wrong answer.
+    """
+    together = bragg_shift(BRAGG, strain=500e-6, temperature_change=20.0)
+    separately = (
+        BRAGG
+        + (bragg_shift(BRAGG, strain=500e-6) - BRAGG)
+        + (bragg_shift(BRAGG, temperature_change=20.0) - BRAGG)
+    )
+    assert together == pytest.approx(separately, rel=1e-15)
+
+    for scale in (0.5, 2.0, 10.0):
+        assert bragg_shift(BRAGG, strain=scale * 100e-6) - BRAGG == pytest.approx(
+            scale * (bragg_shift(BRAGG, strain=100e-6) - BRAGG), rel=1e-12
+        )
+
+
+def test_the_spectrum_moves_where_the_sensor_says_it_does() -> None:
+    """The declared reading against the peak an instrument would find.
+
+    This is the one that matters: the shift has to reach the *model*, not only a
+    reported number. A parameter that moved the docstring and not the matrix
+    would pass every test above.
+    """
+    wavelengths = np.linspace(1549.5e-9, 1552.5e-9, 40001)
+    for strain, warming in ((0.0, 0.0), (1000.0, 0.0), (0.0, 50.0), (500.0, 20.0)):
+        grating = FiberBraggGrating(
+            bragg_wavelength=1550.0,
+            length=10.0,
+            index_modulation=1e-4,
+            strain=strain,
+            temperature_change=warming,
+        )
+        reflectivity = grating.scattering_matrix(C_LIGHT / wavelengths).power("in", "in")
+        peak = wavelengths[int(np.argmax(reflectivity))]
+        # The grid is 0.075 pm, which is what the tolerance is.
+        assert peak == pytest.approx(grating.sensed_bragg_wavelength(), abs=1e-13)
+
+
+def test_an_unstrained_grating_at_its_quoted_temperature_has_not_moved() -> None:
+    """The defaults have to be the device the rest of this file tests."""
+    grating = FiberBraggGrating(bragg_wavelength=1550.0)
+    assert grating.sensed_bragg_wavelength() == grating.si("bragg_wavelength")
+    assert grating.bragg_frequency() == pytest.approx(C_LIGHT / 1550e-9, rel=1e-15)
+
+
+def test_a_coating_is_what_changes_the_thermal_number() -> None:
+    """Thermal sensitivity is a parameter because it is a property of the
+    package, not of the glass: a jacket adds its expansion to ``alpha`` and
+    nothing to ``xi``. Doubling it doubles the drift and leaves strain alone."""
+    bare = FiberBraggGrating(bragg_wavelength=1550.0, temperature_change=10.0)
+    coated = FiberBraggGrating(
+        bragg_wavelength=1550.0,
+        temperature_change=10.0,
+        thermal_sensitivity=2.0 * SILICA_THERMAL_SENSITIVITY,
+    )
+    moved_bare = bare.sensed_bragg_wavelength() - 1550e-9
+    moved_coated = coated.sensed_bragg_wavelength() - 1550e-9
+    assert moved_coated == pytest.approx(2.0 * moved_bare, rel=1e-12)
+    assert coated.strain_sensitivity() == bare.strain_sensitivity()
+    assert coated.cross_sensitivity() == pytest.approx(2.0 * bare.cross_sensitivity())
+
+
+def test_a_chirped_sensor_translates_rather_than_stretching_its_band() -> None:
+    """Stretching lengthens the period everywhere, so a chirped grating *moves*
+    rather than becoming a differently chirped one.
+
+    5000 microstrain -- near where a fibre gives up -- shifts a 10 cm grating
+    chirped over 4 nm by 6.045 nm, and both edges of its reflection band go with
+    it to within 6 pm, a part in a thousand of the shift. The band's own width
+    changes by about the same part in a thousand: not zero, because the edges are
+    set by the grating's own bandwidth as well as by the chirp, and that scales
+    too. What matters is that neither number is anywhere near the 3.9e-3
+    fractional stretch, which is what a device that had been *re-chirped* would
+    show.
+    """
+    settings = {
+        "length": 100.0,
+        "index_modulation": 3e-4,
+        "bragg_wavelength": 1550.0,
+        "chirp": 4.0,
+    }
+    plain = FiberBraggGrating("raised-cosine", **settings)
+    pulled = FiberBraggGrating("raised-cosine", strain=5000.0, **settings)
+
+    def band(grating: FiberBraggGrating) -> tuple[float, float]:
+        centre = grating.sensed_bragg_wavelength()
+        wavelengths = np.linspace(centre - 3e-9, centre + 3e-9, 8001)
+        reflectivity = grating.scattering_matrix(C_LIGHT / wavelengths).power("in", "in")
+        inside = wavelengths[reflectivity > 0.5]
+        return float(inside.min()), float(inside.max())
+
+    low, high = band(plain)
+    moved_low, moved_high = band(pulled)
+    shift = pulled.sensed_bragg_wavelength() - plain.sensed_bragg_wavelength()
+
+    assert shift == pytest.approx(6.045e-9, rel=1e-3)
+    # Both edges travel with the centre, to a part in a thousand of the travel.
+    assert moved_low - low == pytest.approx(shift, rel=2e-3)
+    assert moved_high - high == pytest.approx(shift, rel=2e-3)
+    # And the band is still the band: its width moves by parts per thousand,
+    # not by the 3.9e-3 the grating itself was stretched by.
+    assert (moved_high - moved_low) == pytest.approx(high - low, rel=2e-3)
+
+
+def test_a_shift_that_is_not_a_wavelength_is_refused() -> None:
+    """Compression past -1 in fractional terms. Far past where a fibre breaks,
+    and the message says so rather than returning a negative wavelength."""
+    with pytest.raises(ValueError, match="which is not a wavelength"):
+        bragg_shift(BRAGG, strain=-10.0)
+    with pytest.raises(ValueError, match="bragg_wavelength must be positive"):
+        bragg_shift(0.0)
+
+
+def test_sensors_on_one_fibre_are_read_through_one_circulator() -> None:
+    """What the multiplexing is for, and the reason the transmitted port exists.
+
+    Three gratings in series at three wavelengths: each reflects its own and
+    passes the rest, so one fibre and one interrogator read all of them. Strain
+    one and only its peak moves -- which is the whole architecture of a fibre
+    sensing array.
+    """
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=8, sequence_length=64)
+    nominal = (1540.0, 1550.0, 1560.0)
+    applied = (0.0, 800.0, 0.0)
+
+    graph = Graph(ctx)
+    lasers = [
+        graph.add(CWLaser(power=0.0, wavelength=nm, label=f"probe{i}"))
+        for i, nm in enumerate(nominal)
+    ]
+    mux = graph.add(Combiner(len(nominal), label="mux"))
+    circ = graph.add(Circulator(insertion_loss=0.0, label="circ"))
+    gratings = [
+        FiberBraggGrating(
+            bragg_wavelength=nm,
+            length=10.0,
+            index_modulation=2e-4,
+            strain=strain,
+            label=f"fbg{i}",
+        )
+        for i, (nm, strain) in enumerate(zip(nominal, applied, strict=True))
+    ]
+    for grating in gratings:
+        graph.add(grating)
+    meter = graph.add(PowerMeter(label="reflected"))
+
+    for index, laser in enumerate(lasers):
+        graph.connect(laser, mux[f"in{index}"])
+    graph.connect(mux, circ["in1"])
+    graph.connect(circ["out2"], gratings[0]["in"])
+    graph.connect(gratings[0]["transmitted"], gratings[1]["in"])
+    graph.connect(gratings[1]["transmitted"], gratings[2]["in"])
+
+    # Only the last grating's reflection is routed back here; the other two are
+    # sinks, which is enough to show each one picks out its own probe.
+    graph.connect(gratings[2]["reflected"], circ["in2"])
+    graph.connect(circ["out3"], meter["in"])
+    results = graph.run(keep=[g for g in gratings])
+
+    # Each grating sits where its own strain puts it, and the strained one has
+    # moved by very nearly a nanometre while its neighbours have not moved at all.
+    assert gratings[0].sensed_bragg_wavelength() == pytest.approx(1540e-9, rel=1e-15)
+    assert gratings[1].sensed_bragg_wavelength() - 1550e-9 == pytest.approx(
+        800 * 1.209e-12, rel=1e-3
+    )
+    assert gratings[2].sensed_bragg_wavelength() == pytest.approx(1560e-9, rel=1e-15)
+
+    # And the array really is read through one fibre: the third grating's
+    # reflection reaches the meter having passed through the first two.
+    reflected = results[meter]
+    (band,) = [b for b in reflected.bands if round(b.wavelength_nm, 1) == 1560.0]
+    assert band.power_dbm == pytest.approx(
+        10.0 * np.log10(gratings[2].peak_reflectivity()), abs=0.05
+    )

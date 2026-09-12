@@ -123,6 +123,17 @@ _TO_SI: dict[str, Callable[[float], float]] = {
     "ps": lambda x: x * 1e-12,
     # Voltage
     "V": lambda x: x,
+    # Temperature, as a *difference*. A kelvin and a degree Celsius are the same
+    # size, so a shift of 1 K and a shift of 1 degree C are the same shift, and a
+    # component that asks for a change rather than a level never has to say which
+    # scale it meant.
+    "K": lambda x: x,
+    # Per kelvin: the coefficient such a change is multiplied by.
+    "1/K": lambda x: x,
+    # Strain, which is dimensionless -- a fractional elongation -- and is quoted
+    # in millionths because the numbers a fibre survives are small: 1000 ustrain
+    # is 0.1 %, and a silica fibre breaks somewhere past 1 %.
+    "ustrain": lambda x: x * 1e-6,
     # Angle. Declared in degrees because that is how phase and quadrature errors
     # are specified on a datasheet, and converted to radians because that is what
     # every trigonometric call downstream needs.
@@ -159,6 +170,9 @@ _FROM_SI: dict[str, Callable[[float], float]] = {
     "s": lambda x: x,
     "ps": lambda x: x * 1e12,
     "V": lambda x: x,
+    "K": lambda x: x,
+    "1/K": lambda x: x,
+    "ustrain": lambda x: x * 1e6,
     "rad": lambda x: x,
     "deg": lambda x: x * 180.0 / math.pi,
 }

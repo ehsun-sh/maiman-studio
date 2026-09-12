@@ -33,6 +33,9 @@ from ..photonics import (
     APODIZATIONS,
     DEFAULT_GRATING_SECTIONS,
     SILICA_FIBER_NEFF,
+    SILICA_PHOTOELASTIC,
+    SILICA_THERMAL_SENSITIVITY,
+    bragg_shift,
     circulator,
     fiber_bragg_grating,
     phase_shift_profile,
@@ -164,6 +167,31 @@ class FiberBraggGrating(ScatteringDevice):
         applies_when="phase_shifted",
     )
 
+    #: **What makes it a sensor.** A grating's period is a length, a length
+    #: responds to being stretched and to being warmed, and the reflection reports
+    #: it -- so the same device that drops a channel is a strain gauge and a
+    #: thermometer, with nothing added to the fibre. See
+    #: :func:`maiman.photonics.bragg_shift`.
+    strain = Param(
+        0.0, unit="ustrain", doc="Fractional elongation in millionths, positive in tension"
+    )
+    temperature_change = Param(
+        0.0, unit="K", doc="Departure from the temperature bragg_wavelength was quoted at"
+    )
+    photoelastic_constant = Param(
+        SILICA_PHOTOELASTIC,
+        unit="",
+        min=0.0,
+        max=1.0,
+        doc="p_e: how much the index change cancels the stretch",
+    )
+    thermal_sensitivity = Param(
+        SILICA_THERMAL_SENSITIVITY,
+        unit="1/K",
+        min=0.0,
+        doc="alpha + xi; a coating raises it, often two- or threefold",
+    )
+
     #: Writing switched on and off along the length, which turns the one peak
     #: into a comb of them spaced by ``lambda**2 / (2 n_eff * sampling period)``.
     #: The superstructure grating: one device addressing a whole band.
@@ -201,9 +229,55 @@ class FiberBraggGrating(ScatteringDevice):
         # ``use_mmi`` rather than beside a combiner's input count.
         return {"apodization": self.apodization}
 
+    def sensed_bragg_wavelength(self) -> float:
+        """Where it reflects once stretched and warmed [m].
+
+        ``bragg_wavelength`` is the unstrained value at the temperature it was
+        quoted at, and this is what an instrument would actually read. Every
+        other method here reports against this rather than against the declared
+        number, because a sensor that reported its own nameplate would be no use.
+        """
+        return bragg_shift(
+            self.si("bragg_wavelength"),
+            strain=self.si("strain"),
+            temperature_change=self.si("temperature_change"),
+            photoelastic=self.photoelastic_constant,
+            thermal_sensitivity=self.si("thermal_sensitivity"),
+        )
+
+    def strain_sensitivity(self) -> float:
+        """Wavelength shift per unit strain [m], ``(1 - p_e) * lambda_B``.
+
+        SI, so it is metres per unit strain: 1.209e-6 at 1550 nm, which is the
+        **1.21 pm per microstrain** a datasheet quotes.
+        """
+        return (1.0 - self.photoelastic_constant) * self.si("bragg_wavelength")
+
+    def temperature_sensitivity(self) -> float:
+        """Wavelength shift per kelvin [m/K], ``(alpha + xi) * lambda_B``.
+
+        11.2 pm/K at 1550 nm for bare fibre, and the thermo-optic term is twelve
+        thirteenths of it -- so this is a thermometer made of glass rather than
+        one made of geometry, and a coating moves it.
+        """
+        return self.si("thermal_sensitivity") * self.si("bragg_wavelength")
+
+    def cross_sensitivity(self) -> float:
+        """Strain a kelvin of drift imitates, ``(alpha + xi) / (1 - p_e)``.
+
+        **9.26 microstrain per kelvin** for bare silica, and it is the number the
+        whole field is organised around: one grating gives one wavelength and
+        there are two unknowns behind it, so an uncompensated strain reading is
+        a strain reading plus an unknown temperature. Independent of the Bragg
+        wavelength, because both sensitivities scale with it -- which is also why
+        two gratings of the same fibre at different wavelengths make a matrix too
+        close to singular to invert.
+        """
+        return self.si("thermal_sensitivity") / (1.0 - self.photoelastic_constant)
+
     def bragg_frequency(self) -> float:
-        """The frequency it reflects [Hz]."""
-        return wavelength_to_frequency(self.si("bragg_wavelength"))
+        """The frequency it reflects [Hz], as sensed."""
+        return wavelength_to_frequency(self.sensed_bragg_wavelength())
 
     def coupling(self) -> float:
         """Coupling coefficient ``kappa`` [1/m]; ``kappa * L`` decides the strength."""
@@ -270,9 +344,17 @@ class FiberBraggGrating(ScatteringDevice):
         # and per writing setup. See the note in ``_Photonic``.
         length = self.si("length")
         modulation = self.index_modulation
-        wavelength = self.si("bragg_wavelength")
+        # Strain and temperature move the whole profile, not only its centre: a
+        # stretched grating's local period is longer everywhere, so a chirped one
+        # keeps its shape and scales with it. The correction to the chirp is
+        # parts per million of a nanometre and changes nothing anyone measures --
+        # it is here because leaving it out would be a claim that a stretched
+        # grating is chirped differently from an unstretched one, which is not
+        # what stretching does.
+        wavelength = self.sensed_bragg_wavelength()
+        scale = wavelength / self.si("bragg_wavelength")
         index = self.n_eff
-        chirp = self.si("chirp")
+        chirp = self.si("chirp") * scale
         pieces = self._sections()
 
         # Sampling and apodization both shape the coupling, and a grating can

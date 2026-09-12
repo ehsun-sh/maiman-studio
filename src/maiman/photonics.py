@@ -684,6 +684,81 @@ APODIZATIONS: dict[str, Callable[[np.ndarray], np.ndarray]] = {
 DEFAULT_GRATING_SECTIONS = 200
 
 
+#: Effective photoelastic constant of germanium-doped silica, ``p_e``. Stretching
+#: a fibre lengthens the grating's period *and* lowers its index, and the two
+#: fight: the index term cancels 22 % of the geometric one, so a grating stretched
+#: by a part per million moves by 0.78 of a part per million rather than one.
+#: Getting this constant wrong scales every strain reading by the same factor and
+#: nothing about the spectrum looks unusual.
+SILICA_PHOTOELASTIC = 0.22
+
+#: Fractional shift of the Bragg wavelength per kelvin, ``alpha + xi``, for bare
+#: germanium-doped silica.
+#:
+#: Two effects, and **they are not the same size**. Thermal expansion
+#: ``alpha = 0.55e-6 /K`` lengthens the period; the thermo-optic coefficient
+#: ``xi = (1/n) dn/dT = 6.67e-6 /K`` raises the index. The second is twelve times
+#: the first, which is why a fibre grating is a thermometer made of glass rather
+#: than a thermometer made of geometry -- and why **coating changes this number a
+#: lot**: a metal or polymer jacket adds its own expansion to ``alpha`` and
+#: nothing to ``xi``, so a packaged sensor is often two or three times as
+#: sensitive as a bare one. Only the sum is observable, so only the sum is
+#: offered, with both halves written down here.
+SILICA_THERMAL_SENSITIVITY = 7.22e-6
+
+
+def bragg_shift(
+    bragg_wavelength: float,
+    *,
+    strain: float = 0.0,
+    temperature_change: float = 0.0,
+    photoelastic: float = SILICA_PHOTOELASTIC,
+    thermal_sensitivity: float = SILICA_THERMAL_SENSITIVITY,
+) -> float:
+    """Where a grating reflects once it is stretched or warmed [m].
+
+        ``dlambda / lambda = (1 - p_e) * epsilon + (alpha + xi) * dT``
+
+    The whole of fibre Bragg sensing, and it is one line because the grating is
+    the sensor: a period is a length, a length responds to strain and to
+    temperature, and the reflection reports it. Nothing has to be added to the
+    fibre and the reading is absolute -- a grating that loses power and comes back
+    reads the same wavelength, which is why these are used on bridges and in
+    boreholes where an intensity-based sensor drifts.
+
+    At 1550 nm the two coefficients come to **1.21 pm per microstrain** and
+    **11.2 pm per kelvin**, and dividing one by the other gives the number the
+    whole field is organised around: **a kelvin of drift is indistinguishable
+    from 9.2 microstrain.** One grating produces one wavelength and there are two
+    unknowns behind it, so a strain measurement that does not also measure
+    temperature is not a strain measurement. The usual answers are a second
+    grating held strain-free beside the first, or two gratings whose coefficients
+    differ enough to invert -- and the reason the second is harder than it looks
+    is that both sensitivities are nearly proportional to ``lambda``, so two
+    gratings of the same fibre at different wavelengths give a matrix that is
+    very close to singular.
+
+    ``strain`` is the fractional elongation, positive in tension. ``epsilon`` and
+    ``dT`` are independent and add, which is the linearity the inversion above
+    relies on and is why it is worth saying that this model is exactly linear:
+    real fibre is too, to well past where it breaks.
+
+    Hill & Meltz, *Fiber Bragg grating technology fundamentals and overview*,
+    J. Lightwave Technol. 15(8), 1997, for the coefficients and their spread.
+    """
+    if bragg_wavelength <= 0.0:
+        raise ValueError(f"bragg_wavelength must be positive, got {bragg_wavelength}")
+    fractional = (1.0 - photoelastic) * strain + thermal_sensitivity * temperature_change
+    shifted = bragg_wavelength * (1.0 + fractional)
+    if shifted <= 0.0:
+        raise ValueError(
+            f"strain={strain} and temperature_change={temperature_change} move the Bragg "
+            f"wavelength to {shifted} m, which is not a wavelength. A fibre breaks "
+            f"somewhere past 10000 microstrain; this is past -1."
+        )
+    return shifted
+
+
 def section_positions(sections: int) -> np.ndarray:
     """Normalised centres of ``sections`` equal pieces, -0.5 at the input face.
 

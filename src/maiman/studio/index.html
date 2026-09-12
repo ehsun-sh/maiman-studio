@@ -2428,6 +2428,33 @@ verdict, and DESIGN.md
      "doc": "Where along the length it happens, 0 at the input face",
      "applies_when": "phase_shifted"
     },
+    "strain": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "ustrain",
+     "doc": "Fractional elongation in millionths, positive in tension"
+    },
+    "temperature_change": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "K",
+     "doc": "Departure from the temperature bragg_wavelength was quoted at"
+    },
+    "photoelastic_constant": {
+     "type": "float",
+     "default": 0.22,
+     "unit": "",
+     "min": 0.0,
+     "max": 1.0,
+     "doc": "p_e: how much the index change cancels the stretch"
+    },
+    "thermal_sensitivity": {
+     "type": "float",
+     "default": 7.22e-06,
+     "unit": "1/K",
+     "min": 0.0,
+     "doc": "alpha + xi; a coating raises it, often two- or threefold"
+    },
     "sampled": {
      "type": "bool",
      "default": false,
