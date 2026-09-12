@@ -145,12 +145,18 @@ def interrogate(
 ) -> dict[str, float]:
     """Sweep a tunable laser across the array and return each peak by centroid.
 
-    How a real interrogator works, and the reason it is a sweep here rather than
-    a broadband source and an optical spectrum analyser: this engine carries
-    broadband light as a noise bin with a *flat* power density, so a
-    wavelength-resolved reflection off one would come back as a single scalar
-    with no peak in it at all. A tunable laser has no such problem, and every
-    point below is a real run of a real graph.
+    How a tunable-laser interrogator works: step the probe, record the reflected
+    power, take the centroid. It is the more precise of the two standard
+    instruments, and every point below is a real run of a real graph.
+
+    The other instrument -- a broadband source and an optical spectrum analyser --
+    was not possible here when this example was written. Broadband light was a
+    noise bin with a *flat* density, and a grating's reflection off it came back as
+    one averaged number with no peak in it. Noise bins now carry the shape a
+    wavelength-selective device gives them, so that one works too: amplifier ASE
+    reflected off one of these gratings draws its peak on an analyser at the right
+    wavelength and height, and moves 1.209 nm per thousand microstrain exactly as
+    the sweep does. See ``tests/test_noise_shape.py``.
 
     **The array is one fibre.** The probe goes out through a circulator, and the
     gratings are in series because each passes what it does not reflect — which

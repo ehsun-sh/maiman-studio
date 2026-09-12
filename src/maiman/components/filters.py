@@ -83,19 +83,14 @@ def apply_passband(
     noise_bandwidth = super_gaussian_noise_bandwidth(bandwidth, order)
     low = centre - noise_bandwidth / 2.0
     high = centre + noise_bandwidth / 2.0
-    noise = []
+    noise: list[NoiseBin] = []
     for bin_ in signal.noise:
-        start, end = max(bin_.f_start, low), min(bin_.f_end, high)
-        if end <= start:
-            continue  # entirely outside the passband
-        noise.append(
-            NoiseBin(
-                f_start=start,
-                f_end=end,
-                psd_x=bin_.psd_x * transmission,
-                psd_y=bin_.psd_y * transmission,
-            )
-        )
+        # None when the bin lies entirely outside the passband. A shaped bin --
+        # ASE already through a ring or a grating -- keeps its density at every
+        # frequency through the clip; see NoiseBin.clip.
+        clipped = bin_.clip(low, high, factor=transmission)
+        if clipped is not None:
+            noise.append(clipped)
 
     return OpticalSignal(
         bands=tuple(bands),
@@ -299,6 +294,12 @@ class OpticalSpectrumAnalyzer(Component):
     #: like one that was cut off there.
     AUTO_MARGIN = 0.05
 
+    #: Samples per display cell when a noise bin carries a shape. A resonance
+    #: narrower than the display step would otherwise land on a cell centre and
+    #: read high, or fall between two and vanish; averaging across the cell
+    #: deposits the power it carries either way.
+    CELL_SUBSAMPLES = 16
+
     def occupied_range(self, signal: OpticalSignal) -> tuple[float, float] | None:
         """Lowest and highest frequency the signal has anything at [Hz].
 
@@ -355,9 +356,22 @@ class OpticalSpectrumAnalyzer(Component):
             np.add.at(power, index[inside], spectrum[inside])
 
         for bin_ in signal.noise:
-            # A bin is a flat density, so each display cell collects its own share.
             covered = (frequencies >= bin_.f_start) & (frequencies < bin_.f_end)
-            power[covered] += (bin_.psd_x + bin_.psd_y) * step
+            if bin_.shape is None:
+                # A flat density, so each display cell collects its own share.
+                power[covered] += (bin_.psd_x + bin_.psd_y) * step
+                continue
+            # A shaped density is averaged across each cell rather than read at
+            # its centre. This is what lets broadband light through a grating show
+            # the grating: a flat bin could only ever draw a flat floor.
+            centres = frequencies[covered]
+            count = self.CELL_SUBSAMPLES
+            within = (np.arange(count) + 0.5) / count - 0.5
+            grid = centres[:, None] + within[None, :] * step
+            weight_x, weight_y = bin_.shape.on(grid.ravel())
+            mean_x = weight_x.reshape(grid.shape).mean(axis=1)
+            mean_y = weight_y.reshape(grid.shape).mean(axis=1)
+            power[covered] += (bin_.psd_x * mean_x + bin_.psd_y * mean_y) * step
 
         return {
             "out": OpticalSpectrum(

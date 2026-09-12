@@ -119,10 +119,14 @@ class PINPhotodiode(Component):
         approximation but two different receivers averaged together. It put 2.4x
         too much noise in a space.
         """
-        psd_x, psd_y = signal.noise_psd_at(frequency)
-        if psd_x == 0.0 and psd_y == 0.0:
+        psd_x, psd_y, width = signal.flat_noise_at(frequency)
+        shaped = signal.shaped_noise_covering(frequency)
+        if psd_x == 0.0 and psd_y == 0.0 and not shaped:
             return signal.noise_power()
-        return (psd_x + psd_y) * self.optical_noise_bandwidth(signal, frequency)
+        # A shaped bin's density varies across it, so density-at-the-carrier times
+        # width stops being its power. Its own total is exact, because a shape is
+        # normalised to the mean the bin already carries.
+        return (psd_x + psd_y) * width + sum(b.total_power() for b in shaped)
 
     def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
         signal: OpticalSignal = inputs["in"]
@@ -170,15 +174,23 @@ class PINPhotodiode(Component):
 
         if self.ase_beat_noise and signal.noise:
             responsivity = self.si("responsivity")
+            # The density *at the carrier*, shapes included: signal-spontaneous
+            # beating is the carrier against the ASE right beside it.
             psd_x, psd_y = signal.noise_psd_at(reference)
-            optical = self.optical_noise_bandwidth(signal, reference)
+            flat_x, flat_y, flat_width = signal.flat_noise_at(reference)
+            shaped = signal.shaped_noise_covering(reference)
 
             # Signal-spontaneous. Time-varying, because it rides on the
             # instantaneous power: a mark is noisier than a space, which is the
             # whole reason an amplified link's eye closes from the top.
             sig_sp = 4.0 * responsivity**2 * (power_x * psd_x + power_y * psd_y) * bandwidth
-            # Spontaneous-spontaneous. Constant, and present even in a space.
-            sp_sp = 2.0 * responsivity**2 * (psd_x**2 + psd_y**2) * optical * bandwidth
+            # Spontaneous-spontaneous. Constant, and present even in a space. It is
+            # the integral of the density squared, which a flat bin gives as
+            # density squared times width and a shaped one has to integrate.
+            sp_sp = 2.0 * responsivity**2 * (flat_x**2 + flat_y**2) * flat_width * bandwidth
+            if shaped:
+                squared = sum(sum(b.squared_density_integral()) for b in shaped)
+                sp_sp = sp_sp + 2.0 * responsivity**2 * squared * bandwidth
 
             variance = np.maximum(sig_sp + sp_sp, 0.0) * gain**2 * self.excess_noise_factor()
             rng = ctx.rng(type(self).__name__, self.label, "ase-beat")

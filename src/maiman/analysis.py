@@ -110,7 +110,12 @@ def osnr(signal: OpticalSignal, *, reference_bandwidth: float = OSNR_REFERENCE_B
     if signal_power <= 0.0:
         return -math.inf
 
-    noise_power = noise_psd_at(signal, strongest.f0) * reference_bandwidth
+    # Integrated over the reference band, not read at its centre and multiplied.
+    # For a flat bin those are the same number. For noise that has been through a
+    # ring or a grating they are not, and reading at the centre is how a ring on
+    # resonance appeared to improve OSNR by fifteen decibels when it improves it by
+    # one: see OpticalSignal.noise_power_in.
+    noise_power = signal.noise_power_in(strongest.f0, reference_bandwidth)
     if noise_power <= 0.0:
         return math.inf
     return 10.0 * math.log10(signal_power / noise_power)

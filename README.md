@@ -1497,6 +1497,27 @@ On an ordinary ring the numbers come out where they should: a 12.44 GHz linewidt
 period passes **2.40 %** of a flat spectrum, against 2.74 % for a Lorentzian of the same width — the
 14 % the shape approximation costs once integrated rather than merely evaluated at half depth.
 
+**What that 2.40 % is, and what it is not.** It is the fraction of an amplifier's *total* ASE the
+drop port passes, and it is right. For a long time it was also, silently, the density the ring left
+at *every* frequency, because a noise bin was flat and could hold nothing but that average. So an
+OSNR meter on resonance read the ASE beside the carrier as having dropped 16 dB, and a test asserted
+the ring improved OSNR by more than twelve. It does not. This ring's 12.44 GHz linewidth *is* the
+12.5 GHz reference band, so on resonance it passes most of the ASE inside that band along with the
+signal:
+
+| ASE beside the carrier, read as | kept | OSNR change |
+| :--- | ---: | ---: |
+| the flat average over one free spectral range (before) | 2.40 % | +15.6 dB |
+| integrated over the reference band (now) | 68.8 % | **+1.06 dB** |
+
+Noise bins now carry the shape of what they went through, normalised to the mean they already held,
+so every total-power figure in this section is unchanged and a density read at one frequency is
+finally the density at that frequency: about 91 % of the input at a tooth and a few hundredths of a
+percent between two. A detector downstream of a ring or an interferometer now beats against the ASE
+that is really beside its carrier rather than against an average spread over hundreds of gigahertz —
+which, for a ring like this one, had been understating its signal-spontaneous beat noise by some
+16 dB.
+
 Straightened out, the same waveguide is a delay line, and the arithmetic is bleak: 1 mm of silicon
 holds 14.01 ps and costs 0.2 dB; 10 cm holds 1.40 ns and costs 20 dB. Optical buffering is expensive
 and this is why.
@@ -1913,13 +1934,17 @@ uncompensated gauge assumes:
 
 9.26 microstrain per kelvin, arriving exactly on schedule.
 
-**Why a sweep rather than a broadband source and an analyser.** The conventional interrogator is a
-white-light source and an OSA, and this engine cannot do that one: broadband light is carried as a
-`NoiseBin`, whose power density is *flat* across its range by construction, and a response is
-applied to it as a single averaged scalar. A wavelength-resolved reflection off it would come back
-with no peak in it at all. A tunable laser has no such problem and every sweep point is a real run
-of a real graph — but spectrally-resolved noise is the change that would be needed, and it reaches
-the EDFA, OSNR, and everything else that touches ASE.
+**Why a sweep, and why an analyser now works too.** A tunable laser is the more precise
+interrogator, and every sweep point is a real run of a real graph. The other standard instrument — a
+white-light source and an OSA — could not be built here when this section was first written:
+broadband light was a `NoiseBin` whose density was *flat* by construction, a response reached it as
+one averaged number, and the reflection of ASE off a grating came back with no peak in it at all.
+
+Noise bins now carry the shape of what they pass through (see the ring section above), so it can.
+The reflection of flat amplifier ASE off a 10 mm grating draws its peak on an analyser at the Bragg
+wavelength and at exactly the input density times `tanh²(κL)`; a nanometre away it is 25 dB down;
+reflected and transmitted power add back to the input to nine digits; and a thousand microstrain
+moves the drawn peak by 1.209 nm, the same shift the sweep reads.
 
 One more thing the array turned up, and the engine was right about it. Wiring every grating's
 reflection back onto one return fibre is what the hardware does, and `Combiner` **refuses** it: a

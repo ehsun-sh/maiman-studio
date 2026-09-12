@@ -112,18 +112,94 @@ class Band:
         return replace(self, Ex=self.Ex * factor, Ey=self.Ey * factor)
 
 
+#: Most samples any integral over a shaped bin will take. Enough to resolve a
+#: resonance of a few megahertz across a measurement band, and a ceiling rather
+#: than a count that grows without bound with the width being integrated.
+MAX_SHAPE_SAMPLES = 262144
+
+
+@dataclass(frozen=True, eq=False)
+class NoiseShape:
+    """How a noise bin's density varies across it, relative to the bin's mean.
+
+    **Why a bin can have a shape at all.** A bin was flat by construction, and
+    for an amplifier that is the truth: ASE is smooth across terahertz. It stops
+    being true the moment the noise goes through anything wavelength-selective
+    and narrower than the bin -- a ring's comb, a grating's reflection -- and a
+    flat bin could then only carry the *average* of what survived. That average
+    is right for total power and wrong for everything read at one frequency: a
+    ring on resonance passes nearly all of the ASE at its carrier and almost none
+    between its teeth, and the average says it passed two percent everywhere.
+    An OSNR meter and a detector both read at the carrier.
+
+    ``weight_x``/``weight_y`` are the power transmission on ``offsets`` (hertz
+    from ``centre``), divided by their mean, so the bin's ``psd_x``/``psd_y``
+    keep meaning the *mean* density and every total-power figure is unchanged.
+    ``period`` is set when the shape repeats -- a comb sampled over one free
+    spectral range stands for the whole bin -- and evaluation then wraps.
+    """
+
+    centre: float
+    offsets: np.ndarray
+    weight_x: np.ndarray
+    weight_y: np.ndarray
+    period: float | None = None
+
+    def __post_init__(self) -> None:
+        offsets = np.asarray(self.offsets, dtype=np.float64)
+        weight_x = np.asarray(self.weight_x, dtype=np.float64)
+        weight_y = np.asarray(self.weight_y, dtype=np.float64)
+        if offsets.ndim != 1 or offsets.size < 2:
+            raise ValueError("a noise shape needs at least two offsets")
+        if weight_x.shape != offsets.shape or weight_y.shape != offsets.shape:
+            raise ValueError("a noise shape needs one weight per offset, per polarization")
+        if np.any(np.diff(offsets) <= 0.0):
+            raise ValueError("noise shape offsets must be strictly increasing")
+        if np.any(weight_x < 0.0) or np.any(weight_y < 0.0):
+            raise ValueError("noise shape weights are power transmissions and cannot be negative")
+        if self.period is not None and self.period <= 0.0:
+            raise ValueError(f"period must be positive, got {self.period}")
+        object.__setattr__(self, "offsets", offsets)
+        object.__setattr__(self, "weight_x", weight_x)
+        object.__setattr__(self, "weight_y", weight_y)
+
+    @property
+    def step(self) -> float:
+        """Spacing of the samples the shape was built on [Hz]."""
+        return float(self.offsets[1] - self.offsets[0])
+
+    def on(self, frequencies: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Relative weight at each absolute frequency [Hz], per polarization."""
+        relative = np.asarray(frequencies, dtype=np.float64) - self.centre
+        if self.period is not None:
+            weight_x = np.interp(relative, self.offsets, self.weight_x, period=self.period)
+            weight_y = np.interp(relative, self.offsets, self.weight_y, period=self.period)
+        else:
+            weight_x = np.interp(relative, self.offsets, self.weight_x)
+            weight_y = np.interp(relative, self.offsets, self.weight_y)
+        return weight_x, weight_y
+
+    def __repr__(self) -> str:
+        repeat = f", period={self.period:.6g}" if self.period is not None else ""
+        return f"NoiseShape({self.offsets.size} samples about {self.centre:.6g} Hz{repeat})"
+
+
 @dataclass(frozen=True)
 class NoiseBin:
     """Spectrally-resolved noise power, carried outside the sampled bands.
 
     ``psd_x``/``psd_y`` are one-sided power spectral densities per polarization
-    [W/Hz], assumed flat across ``[f_start, f_end)``.
+    [W/Hz]. They are the density across ``[f_start, f_end)`` when the bin is
+    flat, and its *mean* when the bin carries a :class:`NoiseShape` -- which is
+    what noise acquires by passing through a ring, an interferometer or a
+    grating, and what lets a density be read correctly at one frequency.
     """
 
     f_start: float
     f_end: float
     psd_x: float
     psd_y: float
+    shape: NoiseShape | None = field(default=None, compare=False, repr=False)
 
     def __post_init__(self) -> None:
         if self.f_end <= self.f_start:
@@ -136,12 +212,101 @@ class NoiseBin:
         return self.f_end - self.f_start
 
     def total_power(self) -> float:
-        """Integrated noise power in this bin [W], both polarizations."""
+        """Integrated noise power in this bin [W], both polarizations.
+
+        Unchanged by a shape, because a shape is normalised to mean one: the
+        power a ring removes from a bin is already in ``psd_x``.
+        """
         return (self.psd_x + self.psd_y) * self.bandwidth
 
     def scale_power(self, factor: float) -> NoiseBin:
         """Return a copy with the PSD scaled by a *power* factor."""
         return replace(self, psd_x=self.psd_x * factor, psd_y=self.psd_y * factor)
+
+    def density_at(self, frequency: float) -> tuple[float, float]:
+        """Density at one frequency [W/Hz per polarization]; zero outside the bin."""
+        if not self.f_start <= frequency < self.f_end:
+            return 0.0, 0.0
+        if self.shape is None:
+            return self.psd_x, self.psd_y
+        weight_x, weight_y = self.shape.on(np.array([frequency]))
+        return self.psd_x * float(weight_x[0]), self.psd_y * float(weight_y[0])
+
+    def _mean_weights(self, low: float, high: float) -> tuple[float, float]:
+        """Mean shape weight across ``[low, high)``, which must lie inside the bin."""
+        if self.shape is None:
+            return 1.0, 1.0
+        width = high - low
+        count = int(np.clip(np.ceil(4.0 * width / self.shape.step), 64, MAX_SHAPE_SAMPLES))
+        midpoints = low + (np.arange(count) + 0.5) * (width / count)
+        weight_x, weight_y = self.shape.on(midpoints)
+        return float(np.mean(weight_x)), float(np.mean(weight_y))
+
+    def power_between(self, low: float, high: float) -> tuple[float, float]:
+        """Noise power this bin puts into ``[low, high)`` [W per polarization]."""
+        lo, hi = max(low, self.f_start), min(high, self.f_end)
+        if hi <= lo:
+            return 0.0, 0.0
+        width = hi - lo
+        if self.shape is None:
+            return self.psd_x * width, self.psd_y * width
+        mean_x, mean_y = self._mean_weights(lo, hi)
+        return self.psd_x * mean_x * width, self.psd_y * mean_y * width
+
+    def squared_density_integral(self) -> tuple[float, float]:
+        """``integral of psd**2 df`` over the bin [W**2/Hz per polarization].
+
+        What spontaneous-spontaneous beating is made of. For a flat bin it is
+        ``psd**2 * bandwidth``; a shaped one weights by the shape squared, which
+        is larger than the shape's mean squared -- the same noise concentrated in
+        narrower teeth beats with itself harder.
+        """
+        if self.shape is None:
+            return self.psd_x**2 * self.bandwidth, self.psd_y**2 * self.bandwidth
+        period = self.shape.period
+        span = period if period is not None and period < self.bandwidth else self.bandwidth
+        centre = 0.5 * (self.f_start + self.f_end)
+        count = int(np.clip(np.ceil(4.0 * span / self.shape.step), 64, MAX_SHAPE_SAMPLES))
+        midpoints = centre - 0.5 * span + (np.arange(count) + 0.5) * (span / count)
+        weight_x, weight_y = self.shape.on(midpoints)
+        return (
+            self.psd_x**2 * float(np.mean(weight_x**2)) * self.bandwidth,
+            self.psd_y**2 * float(np.mean(weight_y**2)) * self.bandwidth,
+        )
+
+    def clip(self, start: float, end: float, factor: float = 1.0) -> NoiseBin | None:
+        """This bin restricted to ``[start, end)`` and scaled, or ``None`` if nothing is left.
+
+        A flat bin keeps its density. A shaped one keeps its density *at every
+        frequency*: the mean over the narrower range is not the mean over the
+        whole bin, so the mean density is recomputed and the shape renormalised
+        around it, rather than the old mean being carried onto a range it does
+        not describe.
+        """
+        lo, hi = max(start, self.f_start), min(end, self.f_end)
+        if hi <= lo:
+            return None
+        if self.shape is None:
+            return replace(
+                self, f_start=lo, f_end=hi, psd_x=self.psd_x * factor, psd_y=self.psd_y * factor
+            )
+        mean_x, mean_y = self._mean_weights(lo, hi)
+        old = self.shape
+        shape = NoiseShape(
+            centre=old.centre,
+            offsets=old.offsets,
+            weight_x=old.weight_x / mean_x if mean_x > 0.0 else np.ones_like(old.weight_x),
+            weight_y=old.weight_y / mean_y if mean_y > 0.0 else np.ones_like(old.weight_y),
+            period=old.period,
+        )
+        return replace(
+            self,
+            f_start=lo,
+            f_end=hi,
+            psd_x=self.psd_x * factor * mean_x,
+            psd_y=self.psd_y * factor * mean_y,
+            shape=shape,
+        )
 
 
 def joined_accumulated_gvd(signals: Sequence[OpticalSignal], *, where: str) -> float:
@@ -254,9 +419,49 @@ class OpticalSignal:
         by orders of magnitude, and using the first in place of the second is the
         difference between a beat term and a rounding error.
         """
-        psd_x = sum(b.psd_x for b in self.noise if b.f_start <= frequency < b.f_end)
-        psd_y = sum(b.psd_y for b in self.noise if b.f_start <= frequency < b.f_end)
+        psd_x = sum(b.density_at(frequency)[0] for b in self.noise)
+        psd_y = sum(b.density_at(frequency)[1] for b in self.noise)
         return float(psd_x), float(psd_y)
+
+    def flat_noise_at(self, frequency: float) -> tuple[float, float, float]:
+        """Summed density and widest extent of the *flat* bins covering ``frequency``.
+
+        Kept separate from the shaped bins because a flat density is its own
+        integral -- density times width is exact -- and every figure a flat bin
+        has ever produced depends on reading it that way. Shaped bins are
+        integrated instead; see :meth:`noise_power_in`.
+        """
+        covering = [b for b in self.noise if b.shape is None and b.f_start <= frequency < b.f_end]
+        psd_x = sum(b.psd_x for b in covering)
+        psd_y = sum(b.psd_y for b in covering)
+        width = max((b.bandwidth for b in covering), default=0.0)
+        return float(psd_x), float(psd_y), float(width)
+
+    def shaped_noise_covering(self, frequency: float) -> tuple[NoiseBin, ...]:
+        """The shaped bins whose extent includes ``frequency``."""
+        return tuple(
+            b for b in self.noise if b.shape is not None and b.f_start <= frequency < b.f_end
+        )
+
+    def noise_power_in(self, centre: float, bandwidth: float) -> float:
+        """ASE power inside a measurement band [W], both polarizations.
+
+        What an OSNR reference bandwidth actually collects. A flat bin reads its
+        density at the centre times the width, exactly as it always has. A shaped
+        bin is *integrated* over the band, and the difference is not a
+        refinement: a ring whose linewidth is the reference band's own 12.5 GHz
+        passes most of the ASE in that band on resonance, where its average over
+        a free spectral range says a few percent -- the gap between an OSNR
+        improvement of about one decibel and one of fifteen.
+        """
+        psd_x, psd_y, _ = self.flat_noise_at(centre)
+        total = (psd_x + psd_y) * bandwidth
+        low, high = centre - bandwidth / 2.0, centre + bandwidth / 2.0
+        for bin_ in self.noise:
+            if bin_.shape is not None:
+                power_x, power_y = bin_.power_between(low, high)
+                total += power_x + power_y
+        return total
 
 
 @dataclass(frozen=True)

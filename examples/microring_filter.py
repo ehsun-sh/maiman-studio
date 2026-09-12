@@ -27,11 +27,15 @@ by the effective one.** They differ by a factor of 1.7 in silicon, and swapping
 them is the standard way to be wrong about a ring while every plot still looks
 like a ring.
 
-**A ring is an ASE gate, and getting that right needs its linewidth.** An
-amplifier emits across terahertz and the drop port passes roughly one linewidth
-in every free spectral range. Integrating that with a fixed number of points
-misses the resonance entirely on a high-Q device — and misses it high or low
-depending on where the amplifier's band happened to sit.
+**A ring gates ASE in total, not beside its carrier.** An amplifier emits across
+terahertz and the drop port passes roughly one linewidth in every free spectral
+range, so almost all of the ASE is gone -- and integrating that needs the
+linewidth, or a high-Q ring is missed high or low depending on where the
+amplifier's band sat. What it does not do is improve OSNR by anything like the
+ASE it removes: the noise right beside a resonance passes with the signal. For a
+ring whose linewidth fills the 12.5 GHz reference band the OSNR line below moves
+by about a decibel. It used to print fifteen, because noise bins were flat and
+could carry only the average; they now carry the shape.
 """
 
 from __future__ import annotations

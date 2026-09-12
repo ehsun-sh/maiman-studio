@@ -46,7 +46,7 @@ from ..photonics import (
     ring_resonator,
     straight_waveguide,
 )
-from ..signals import Band, NoiseBin, OpticalSignal, Signal, joined_accumulated_gvd
+from ..signals import Band, NoiseBin, NoiseShape, OpticalSignal, Signal, joined_accumulated_gvd
 from ..units import C_LIGHT, frequency_to_wavelength, wavelength_to_frequency
 
 #: Fewest points a noise bin is averaged over. A bin is flat and the response is
@@ -100,8 +100,23 @@ def average_power_response(
     4 THz bin at the same budget returns 4.81e-4, 97 % high. All three are
     measured in ``tests/test_photonics.py``.
     """
+    centre, offsets, _ = _noise_grid(bin_, period=period, resolution=resolution)
+    return float(np.mean(np.abs(response(centre + offsets)) ** 2))
+
+
+def _noise_grid(
+    bin_: NoiseBin, *, period: float | None, resolution: float | None
+) -> tuple[float, np.ndarray, float | None]:
+    """Where a response is sampled across a bin: ``(centre, offsets, repeat)``.
+
+    One grid for the average and for the shape, so that the shape's mean is the
+    average bit for bit and a bin's ``psd_x`` means the same thing whether or not
+    it carries one. ``repeat`` is the period when the grid covers one period
+    standing for many, and ``None`` when it covers the whole bin.
+    """
     span = bin_.f_end - bin_.f_start
-    width = period if (period is not None and 0.0 < period < span) else span
+    periodic = period is not None and 0.0 < period < span
+    width = period if (period is not None and periodic) else span
 
     points = MIN_NOISE_POINTS
     if resolution is not None and resolution > 0.0:
@@ -110,7 +125,66 @@ def average_power_response(
 
     offsets = np.linspace(-0.5, 0.5, points, endpoint=False) * width
     centre = 0.5 * (bin_.f_start + bin_.f_end)
-    return float(np.mean(np.abs(response(centre + offsets)) ** 2))
+    return centre, offsets, (width if periodic else None)
+
+
+#: Relative spread below which a sampled response counts as flat. A waveguide or
+#: a coupler has a constant magnitude and differs from it only in the last digit
+#: of a complex exponential; giving those a shape would store thousands of ones
+#: and change nothing but the memory.
+FLAT_TOLERANCE = 1e-9
+
+
+def _shape_noise(
+    bin_: NoiseBin,
+    response: Callable[[np.ndarray], np.ndarray],
+    response_y: Callable[[np.ndarray], np.ndarray] | None,
+    *,
+    period: float | None,
+    resolution: float | None,
+) -> NoiseBin:
+    """One noise bin after a response: scaled by its mean, and shaped by its variation.
+
+    **The mean is what this used to return, and it is still exactly that.** The
+    shape is the part that was being thrown away: a ring passes its resonance's
+    ASE almost whole and the space between its teeth almost not at all, and a
+    flat bin carrying the average told every reader at the carrier that two
+    percent had survived. See :class:`~maiman.signals.NoiseShape`.
+
+    A shape already carried in from upstream multiplies in. It can stay on a
+    one-period grid only if it repeats on the same period; otherwise the whole
+    bin is sampled, since the product of two combs with different periods is not
+    periodic in either.
+    """
+    incoming = bin_.shape
+    keep = period if (incoming is None or incoming.period == period) else None
+    centre, offsets, repeat = _noise_grid(bin_, period=keep, resolution=resolution)
+    frequencies = centre + offsets
+
+    power_x = np.abs(response(frequencies)) ** 2
+    power_y = power_x if response_y is None else np.abs(response_y(frequencies)) ** 2
+    if incoming is not None:
+        carried_x, carried_y = incoming.on(frequencies)
+        power_x = power_x * carried_x
+        power_y = power_y * carried_y
+
+    factor_x = float(np.mean(power_x))
+    factor_y = factor_x if (response_y is None and incoming is None) else float(np.mean(power_y))
+
+    def varies(power: np.ndarray, mean: float) -> bool:
+        return mean > 0.0 and float(np.ptp(power)) > FLAT_TOLERANCE * mean
+
+    if not (varies(power_x, factor_x) or varies(power_y, factor_y)):
+        return replace(bin_, psd_x=bin_.psd_x * factor_x, psd_y=bin_.psd_y * factor_y, shape=None)
+
+    shape = NoiseShape(
+        centre=centre,
+        offsets=offsets,
+        weight_x=power_x / factor_x if factor_x > 0.0 else np.ones_like(power_x),
+        weight_y=power_y / factor_y if factor_y > 0.0 else np.ones_like(power_y),
+        period=repeat,
+    )
+    return replace(bin_, psd_x=bin_.psd_x * factor_x, psd_y=bin_.psd_y * factor_y, shape=shape)
 
 
 def apply_response(
@@ -122,7 +196,7 @@ def apply_response(
     resolution: float | None = None,
     accumulated_gvd: float | None = None,
 ) -> OpticalSignal:
-    """Multiply every band's spectrum by ``response`` and scale the noise by its mean power.
+    """Multiply every band's spectrum by ``response``, and scale and shape the noise by it.
 
     ``response`` is called with *absolute* optical frequencies, so a device knows
     where in the spectrum it is being asked about — which is what makes a ring
@@ -158,15 +232,10 @@ def apply_response(
             )
         )
 
-    noise: list[NoiseBin] = []
-    for bin_ in signal.noise:
-        factor = average_power_response(bin_, response, period=period, resolution=resolution)
-        factor_y = (
-            factor
-            if response_y is None
-            else average_power_response(bin_, response_y, period=period, resolution=resolution)
-        )
-        noise.append(replace(bin_, psd_x=bin_.psd_x * factor, psd_y=bin_.psd_y * factor_y))
+    noise = [
+        _shape_noise(bin_, response, response_y, period=period, resolution=resolution)
+        for bin_ in signal.noise
+    ]
 
     return OpticalSignal(
         bands=tuple(bands),

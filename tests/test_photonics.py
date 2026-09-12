@@ -448,11 +448,21 @@ def test_the_drop_port_passes_the_channel_and_the_through_port_does_not() -> Non
     assert through < -20.0
 
 
-def test_the_ring_gates_ase_the_way_a_filter_does() -> None:
-    """An amplifier's noise spans terahertz; the ring passes it one linewidth at a time.
+def test_a_ring_barely_improves_osnr_when_its_linewidth_fills_the_reference_band() -> None:
+    """What a ring does to ASE, read the way an OSNR meter reads it.
 
-    This is the second job every filter in this library has, and a resonator that
-    got it wrong would look right on every carrier measurement.
+    **This test used to assert the opposite.** It said the signal lost under a
+    decibel and the noise lost fifteen, and it passed, because noise bins were
+    flat: the drop response averaged over one 714 GHz free spectral range passes
+    2.4 % of a flat spectrum, and a flat bin could only carry that average --
+    everywhere, including beside the carrier the meter reads. This ring's
+    12.44 GHz linewidth is the 12.5 GHz reference band, so on resonance it passes
+    most of the ASE inside that band along with the signal.
+
+    Now the bin carries the drop response's shape and the meter integrates it over
+    the band: the signal loses 0.57 dB, the ASE in the band loses 1.62 dB, and OSNR
+    improves by 1.06 dB. The 2.4 % survives as what it always was -- the fraction
+    of the *total* ASE the ring passes -- which is a different question.
     """
     graph = Graph(context())
     peak = resonance(0.05, 0.05)
@@ -469,10 +479,14 @@ def test_the_ring_gates_ase_the_way_a_filter_does() -> None:
     graph.connect(amp, ring)
     graph.connect(amp, before)
     graph.connect(ring["drop"], after)
-    result = graph.run()
+    result = graph.run(keep=[amp, ring])
 
-    # The signal loses under a decibel; the noise loses fifteen.
-    assert result[after] - result[before] > 12.0
+    assert result[after] - result[before] == pytest.approx(1.06, abs=0.05)
+
+    # And the total: the ring still removes almost all of the ASE, just not the
+    # part beside the carrier.
+    passed = result.port(ring, "drop").noise[0].psd_x / result.port(amp, "out").noise[0].psd_x
+    assert passed == pytest.approx(0.024, abs=0.001)
 
 
 def drop_response(coupling: float, drop: float, loss: float) -> Callable[[np.ndarray], np.ndarray]:
