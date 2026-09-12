@@ -10,6 +10,8 @@ a second implementation of one.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import numpy as np
 import pytest
 
@@ -126,7 +128,7 @@ def test_the_coarse_grid_stops_where_the_standard_stops() -> None:
         (lambda: wavelength_spacing(0.0, 100e9), "frequency must be positive"),
     ],
 )
-def test_the_grid_refuses_what_it_cannot_describe(call, message: str) -> None:
+def test_the_grid_refuses_what_it_cannot_describe(call: Callable[[], object], message: str) -> None:
     with pytest.raises(ValueError, match=message):
         call()
 

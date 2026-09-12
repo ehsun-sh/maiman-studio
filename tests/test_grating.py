@@ -13,13 +13,13 @@ these check that the scheduler now tells the two apart.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import ClassVar
+from typing import Any
 
 import numpy as np
 import pytest
 
 from maiman import CycleError, Graph, GraphError, PortGroup, SimulationContext
-from maiman.circuit import Circuit
+from maiman.circuit import Circuit, SMatrix
 from maiman.component import Component, PortType
 from maiman.components import (
     Attenuator,
@@ -42,7 +42,7 @@ from maiman.photonics import (
     sampled_profile,
     section_positions,
 )
-from maiman.signals import Signal
+from maiman.signals import PowerReading, Signal
 from maiman.units import C_LIGHT
 
 BRAGG = 1550e-9
@@ -67,7 +67,7 @@ def erdogan_uniform(
     return np.abs(numerator / denominator) ** 2
 
 
-def group_delay(matrix, port: str) -> np.ndarray:
+def group_delay(matrix: SMatrix, port: str) -> np.ndarray:
     """Group delay of one reflection [s], from the phase the model returns.
 
     ``tau = -dphi/domega`` is the sign this library's ``exp(-i beta z)``
@@ -371,7 +371,7 @@ def test_an_unmodulated_grating_is_a_piece_of_fibre() -> None:
     ],
 )
 def test_the_model_refuses_what_it_cannot_describe(kwargs: dict, message: str) -> None:
-    settings = {
+    settings: dict[str, Any] = {
         "length": 0.01,
         "index_modulation": 1e-4,
         "bragg_wavelength": BRAGG,
@@ -483,7 +483,7 @@ def test_a_grating_reached_through_a_circulator_is_not_a_cycle() -> None:
     drop = results[drop_meter]
     thru = results[thru_meter]
 
-    def at(reading, wavelength_nm: float) -> float:
+    def at(reading: PowerReading, wavelength_nm: float) -> float:
         (band,) = [b for b in reading.bands if round(b.wavelength_nm, 2) == wavelength_nm]
         return band.power_dbm
 
@@ -559,8 +559,8 @@ class _Split(Component):
     abstract = True
     display_name = "Split"
     category = "Test"
-    inputs: ClassVar[dict[str, PortType]] = {"a": PortType.OPTICAL, "b": PortType.OPTICAL}
-    outputs: ClassVar[dict[str, PortType]] = {"x": PortType.OPTICAL, "y": PortType.OPTICAL}
+    inputs = {"a": PortType.OPTICAL, "b": PortType.OPTICAL}
+    outputs = {"x": PortType.OPTICAL, "y": PortType.OPTICAL}
 
     #: Overridden per instance by the tests below, to produce a bad partition.
     groups: tuple[PortGroup, ...] | None = None
@@ -735,7 +735,7 @@ def test_a_named_window_and_its_array_are_the_same_device(profile: str) -> None:
     path and the convenient one are two models and only one of them is tested.
     """
     wavelengths = np.linspace(BRAGG - 2e-9, BRAGG + 2e-9, 3001)
-    settings = {"length": 0.01, "index_modulation": 1e-4, "bragg_wavelength": BRAGG}
+    settings: dict[str, Any] = {"length": 0.01, "index_modulation": 1e-4, "bragg_wavelength": BRAGG}
     named = fiber_bragg_grating(C_LIGHT / wavelengths, apodization=profile, **settings)
     spelled = fiber_bragg_grating(
         C_LIGHT / wavelengths,
@@ -753,7 +753,7 @@ def test_a_linear_chirp_and_its_array_are_the_same_device() -> None:
     and something that makes the span worse.
     """
     wavelengths = np.linspace(BRAGG - 2e-9, BRAGG + 2e-9, 3001)
-    settings = {"length": 0.10, "index_modulation": 2e-4, "bragg_wavelength": BRAGG}
+    settings: dict[str, Any] = {"length": 0.10, "index_modulation": 2e-4, "bragg_wavelength": BRAGG}
     named = fiber_bragg_grating(C_LIGHT / wavelengths, chirp=1e-9, **settings)
     spelled = fiber_bragg_grating(
         C_LIGHT / wavelengths,
@@ -834,7 +834,11 @@ def test_a_phase_shift_opens_a_window_in_the_stop_band() -> None:
     grating of a given length can produce. 0.7 pm here is 87 MHz.
     """
     wavelengths = np.linspace(BRAGG - 0.4e-9, BRAGG + 0.4e-9, 32001)
-    settings = {"length": 0.02, "index_modulation": 1.5e-4, "bragg_wavelength": BRAGG}
+    settings: dict[str, Any] = {
+        "length": 0.02,
+        "index_modulation": 1.5e-4,
+        "bragg_wavelength": BRAGG,
+    }
 
     shifted = fiber_bragg_grating(
         C_LIGHT / wavelengths,
@@ -889,7 +893,11 @@ def test_a_phase_constant_along_the_length_is_not_observable() -> None:
     had better agree -- a phase that rode on the detuning instead of the coupling
     would shift the whole spectrum and look perfectly plausible doing it."""
     wavelengths = np.linspace(BRAGG - 1e-9, BRAGG + 1e-9, 2001)
-    settings = {"length": 0.02, "index_modulation": 1.5e-4, "bragg_wavelength": BRAGG}
+    settings: dict[str, Any] = {
+        "length": 0.02,
+        "index_modulation": 1.5e-4,
+        "bragg_wavelength": BRAGG,
+    }
     plain = fiber_bragg_grating(C_LIGHT / wavelengths, **settings)
     turned = fiber_bragg_grating(C_LIGHT / wavelengths, phase_profile=np.full(200, 0.7), **settings)
     assert np.abs(turned.s) == pytest.approx(np.abs(plain.s), abs=1e-12)
@@ -976,7 +984,7 @@ def test_a_sampled_grating_can_also_be_apodized() -> None:
     """Both shape the coupling and a real device carries both: a mask over an
     apodized exposure. The component multiplies them rather than making anyone
     choose, which is what the writing process does."""
-    settings = {
+    settings: dict[str, Any] = {
         "length": 20.0,
         "index_modulation": 6e-5,
         "bragg_wavelength": 1550.0,
@@ -1136,7 +1144,7 @@ def test_a_chirped_sensor_translates_rather_than_stretching_its_band() -> None:
     fractional stretch, which is what a device that had been *re-chirped* would
     show.
     """
-    settings = {
+    settings: dict[str, Any] = {
         "length": 100.0,
         "index_modulation": 3e-4,
         "bragg_wavelength": 1550.0,
