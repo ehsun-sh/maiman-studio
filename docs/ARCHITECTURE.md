@@ -494,7 +494,10 @@ Parameter sweep UI.
 
 First real exercise of the multi-band signal model. IQ modulator, M-QAM mapping, local
 oscillator, 90° optical hybrid, balanced photodetectors, coherent DSP chain (CD compensation,
-CMA, carrier phase recovery). DWDM MUX/DEMUX with crosstalk. 400G/800G reference designs.
+CMA, carrier phase recovery). DWDM MUX/DEMUX with crosstalk — which arrived late and as two
+blocks on the ITU grids in `maiman.grid`, sharing one passband with `OpticalFilter` so that a
+demultiplexer port and a filter cannot disagree about what a channel is. 400G/800G reference
+designs.
 CuPy back-end for SSFM.
 
 ### Phase 4 — Photonic integrated circuits

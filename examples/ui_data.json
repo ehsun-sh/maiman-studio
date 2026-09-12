@@ -497,6 +497,73 @@
     }
    }
   },
+  "Demultiplexer": {
+   "name": "Demultiplexer",
+   "type": "Demultiplexer",
+   "class": "maiman.components.wdm.Demultiplexer",
+   "category": "Passive",
+   "version": "0.1.0",
+   "parameters": {
+    "first_wavelength": {
+     "type": "float",
+     "default": 1550.0,
+     "unit": "nm",
+     "min": 1200.0,
+     "max": 1700.0,
+     "doc": "Channel 0. The rest are stepped from it in frequency"
+    },
+    "spacing": {
+     "type": "float",
+     "default": 100.0,
+     "unit": "GHz",
+     "min": 1.0,
+     "doc": "Channel spacing, in frequency because the grid is"
+    },
+    "bandwidth": {
+     "type": "float",
+     "default": 50.0,
+     "unit": "GHz",
+     "min": 0.0,
+     "doc": "3 dB full width of each channel's passband"
+    },
+    "order": {
+     "type": "float",
+     "default": 3.0,
+     "unit": "",
+     "min": 1.0,
+     "max": 10.0,
+     "doc": "Super-Gaussian order; 3 to 5 is an AWG"
+    },
+    "insertion_loss": {
+     "type": "float",
+     "default": 4.0,
+     "unit": "dB",
+     "min": 0.0,
+     "doc": "Loss per channel. An AWG routes, so this does not grow with the count"
+    },
+    "extinction": {
+     "type": "float",
+     "default": 40.0,
+     "unit": "dB",
+     "min": 0.0,
+     "doc": "Out-of-band rejection floor; 0 disables the floor"
+    }
+   },
+   "structural": {
+    "channels": 4
+   },
+   "ports": {
+    "inputs": {
+     "in": "optical"
+    },
+    "outputs": {
+     "out0": "optical",
+     "out1": "optical",
+     "out2": "optical",
+     "out3": "optical"
+    }
+   }
+  },
   "DifferentialDecoder": {
    "name": "Differential Decoder",
    "type": "DifferentialDecoder",
@@ -1530,6 +1597,73 @@
     "inputs": {
      "optical_in": "optical",
      "electrical_in": "electrical"
+    },
+    "outputs": {
+     "out": "optical"
+    }
+   }
+  },
+  "Multiplexer": {
+   "name": "Multiplexer",
+   "type": "Multiplexer",
+   "class": "maiman.components.wdm.Multiplexer",
+   "category": "Passive",
+   "version": "0.1.0",
+   "parameters": {
+    "first_wavelength": {
+     "type": "float",
+     "default": 1550.0,
+     "unit": "nm",
+     "min": 1200.0,
+     "max": 1700.0,
+     "doc": "Channel 0. The rest are stepped from it in frequency"
+    },
+    "spacing": {
+     "type": "float",
+     "default": 100.0,
+     "unit": "GHz",
+     "min": 1.0,
+     "doc": "Channel spacing, in frequency because the grid is"
+    },
+    "bandwidth": {
+     "type": "float",
+     "default": 50.0,
+     "unit": "GHz",
+     "min": 0.0,
+     "doc": "3 dB full width of each channel's passband"
+    },
+    "order": {
+     "type": "float",
+     "default": 3.0,
+     "unit": "",
+     "min": 1.0,
+     "max": 10.0,
+     "doc": "Super-Gaussian order; 3 to 5 is an AWG"
+    },
+    "insertion_loss": {
+     "type": "float",
+     "default": 4.0,
+     "unit": "dB",
+     "min": 0.0,
+     "doc": "Loss per channel. An AWG routes, so this does not grow with the count"
+    },
+    "extinction": {
+     "type": "float",
+     "default": 40.0,
+     "unit": "dB",
+     "min": 0.0,
+     "doc": "Out-of-band rejection floor; 0 disables the floor"
+    }
+   },
+   "structural": {
+    "channels": 4
+   },
+   "ports": {
+    "inputs": {
+     "in0": "optical",
+     "in1": "optical",
+     "in2": "optical",
+     "in3": "optical"
     },
     "outputs": {
      "out": "optical"
@@ -19412,7 +19546,7 @@
  ],
  "project": {
   "schema_version": 1,
-  "maiman_version": "0.2.1",
+  "maiman_version": "0.3.0",
   "context": {
    "bit_rate": 32000000000.0,
    "samples_per_symbol": 16,

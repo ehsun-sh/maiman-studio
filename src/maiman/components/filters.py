@@ -18,6 +18,92 @@ from ..signals import ElectricalSignal, NoiseBin, OpticalSignal, OpticalSpectrum
 from ..units import db_to_linear, wavelength_to_frequency
 
 
+def apply_passband(
+    signal: OpticalSignal,
+    *,
+    centre: float,
+    bandwidth: float,
+    order: int,
+    insertion_loss_db: float = 0.0,
+    extinction_db: float = 0.0,
+) -> OpticalSignal:
+    """One wavelength-selective passband, applied to every band and noise bin.
+
+    Extracted from :class:`OpticalFilter` so that a demultiplexer's ports are
+    *the same filter* rather than a second implementation of one. A multi-port
+    device whose per-channel response drifted away from the single-filter block's
+    would be the worst kind of disagreement: both would look right on their own,
+    and the crosstalk number — the whole reason to model a demux rather than wire
+    up filters by hand — would come from whichever one happened to be used.
+
+    ``centre`` and ``bandwidth`` are in hertz, and the shape is the same
+    super-Gaussian at every order: exactly 1/2 at ``bandwidth/2`` from the
+    centre, so the declared width means one thing whatever ``order`` is.
+
+    **Bands are filtered on their own grids.** Each band carries its own centre
+    frequency and is offset by how far that sits from the passband's, so a
+    channel entirely outside is attenuated by the response rather than
+    special-cased away — which is what makes the rejection a number this produces
+    instead of an assumption it makes.
+
+    **Noise is cut by equivalent noise bandwidth**, not by the shape: what
+    survives keeps the peak transmission as its density and is clipped to ``B_n``
+    wide. That makes both quantities a detector asks for exact — the density at
+    the signal's own frequency, and the integrated power — while treating the
+    passband as flat.
+    """
+    # Raw dB, not si(): the unit machinery already turns a dB parameter into a
+    # linear ratio, so converting again turns a declared 0 dB into 0.79x. It did.
+    transmission = db_to_linear(-insertion_loss_db)
+
+    # A super-Gaussian's skirts fall away without limit, which no real filter
+    # does: a third-order 50 GHz passband is exp(-2838) at 100 GHz off centre, so
+    # a neighbouring channel does not merely become small but underflows to
+    # exactly zero and its rejection reports as infinite. Real hardware specifies
+    # a finite floor -- 30 to 50 dB for a wavelength-selective switch -- and it
+    # matters, because in a long chain the crosstalk that accumulates is the
+    # floor rather than the skirt.
+    floor = db_to_linear(-extinction_db) if extinction_db > 0.0 else 0.0
+
+    bands = []
+    for band in signal.bands:
+        offsets = np.fft.fftfreq(band.Ex.shape[0], d=1.0 / band.fs)
+        shape = super_gaussian_response(offsets + (band.f0 - centre), bandwidth, order) ** 2
+        response = np.sqrt(np.maximum(shape, floor)) * np.sqrt(transmission)
+        filtered_x = np.fft.ifft(np.fft.fft(band.Ex.astype(np.complex128)) * response)
+        filtered_y = np.fft.ifft(np.fft.fft(band.Ey.astype(np.complex128)) * response)
+        bands.append(
+            replace(
+                band,
+                Ex=filtered_x.astype(band.Ex.dtype),
+                Ey=filtered_y.astype(band.Ey.dtype),
+            )
+        )
+
+    noise_bandwidth = super_gaussian_noise_bandwidth(bandwidth, order)
+    low = centre - noise_bandwidth / 2.0
+    high = centre + noise_bandwidth / 2.0
+    noise = []
+    for bin_ in signal.noise:
+        start, end = max(bin_.f_start, low), min(bin_.f_end, high)
+        if end <= start:
+            continue  # entirely outside the passband
+        noise.append(
+            NoiseBin(
+                f_start=start,
+                f_end=end,
+                psd_x=bin_.psd_x * transmission,
+                psd_y=bin_.psd_y * transmission,
+            )
+        )
+
+    return OpticalSignal(
+        bands=tuple(bands),
+        noise=tuple(noise),
+        accumulated_gvd=signal.accumulated_gvd,
+    )
+
+
 class ElectricalFilter(Component):
     """Gaussian low-pass filter for a received waveform.
 
@@ -125,63 +211,14 @@ class OpticalFilter(Component):
 
     def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
         signal: OpticalSignal = inputs["in"]
-        centre = self.center_frequency()
-        width = self.si("bandwidth")
-        order = int(self.order)
-        # Raw dB, not si(): the unit machinery already turns a dB parameter into a
-        # linear ratio, so converting again turns a declared 0 dB into 0.79x. It did.
-        transmission = db_to_linear(-self.insertion_loss)
-
-        # A super-Gaussian's skirts fall away without limit, which no real filter
-        # does: a third-order 50 GHz passband is exp(-2838) at 100 GHz off centre,
-        # so a neighbouring channel does not merely become small but underflows to
-        # exactly zero and its rejection reports as infinite. Real hardware
-        # specifies a finite floor — 30 to 50 dB for a wavelength-selective switch
-        # — and it matters, because in a long chain the crosstalk that accumulates
-        # is the floor rather than the skirt.
-        floor = db_to_linear(-self.extinction) if self.extinction > 0.0 else 0.0
-
-        bands = []
-        for band in signal.bands:
-            # Each band is filtered on its own grid, offset by how far its centre
-            # sits from the filter's, so a band far outside the passband is
-            # attenuated by the same response rather than special-cased away.
-            offsets = np.fft.fftfreq(band.Ex.shape[0], d=1.0 / band.fs)
-            shape = super_gaussian_response(offsets + (band.f0 - centre), width, order) ** 2
-            response = np.sqrt(np.maximum(shape, floor))
-            response = response * np.sqrt(transmission)
-            filtered_x = np.fft.ifft(np.fft.fft(band.Ex.astype(np.complex128)) * response)
-            filtered_y = np.fft.ifft(np.fft.fft(band.Ey.astype(np.complex128)) * response)
-            bands.append(
-                replace(
-                    band,
-                    Ex=filtered_x.astype(band.Ex.dtype),
-                    Ey=filtered_y.astype(band.Ey.dtype),
-                )
-            )
-
-        noise_bandwidth = self.noise_bandwidth()
-        low = centre - noise_bandwidth / 2.0
-        high = centre + noise_bandwidth / 2.0
-        noise = []
-        for bin_ in signal.noise:
-            start, end = max(bin_.f_start, low), min(bin_.f_end, high)
-            if end <= start:
-                continue  # entirely outside the passband
-            noise.append(
-                NoiseBin(
-                    f_start=start,
-                    f_end=end,
-                    psd_x=bin_.psd_x * transmission,
-                    psd_y=bin_.psd_y * transmission,
-                )
-            )
-
         return {
-            "out": OpticalSignal(
-                bands=tuple(bands),
-                noise=tuple(noise),
-                accumulated_gvd=signal.accumulated_gvd,
+            "out": apply_passband(
+                signal,
+                centre=self.center_frequency(),
+                bandwidth=self.si("bandwidth"),
+                order=int(self.order),
+                insertion_loss_db=self.insertion_loss,
+                extinction_db=self.extinction,
             )
         }
 

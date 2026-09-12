@@ -66,6 +66,7 @@ from .photonic import (
 )
 from .reflective import Circulator, FiberBraggGrating
 from .sources import CWLaser, GaussianPulse, SechPulse
+from .wdm import Demultiplexer, Multiplexer
 
 __all__ = [
     "EDFA",
@@ -83,6 +84,7 @@ __all__ = [
     "ConstellationAnalyzer",
     "ConstellationDiagram",
     "DCVoltage",
+    "Demultiplexer",
     "DifferentialDecoder",
     "DirectionalCoupler",
     "DispersionCompensator",
@@ -100,6 +102,7 @@ __all__ = [
     "IQSampler",
     "MachZehnderInterferometer",
     "MachZehnderModulator",
+    "Multiplexer",
     "NRZDriver",
     "OSNRMeter",
     "OpticalFilter",

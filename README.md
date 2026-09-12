@@ -20,7 +20,7 @@ link in this simulator descends from.*
 > ### Project status: 0.3.0 — released, and still moving.
 >
 > `pip install maiman`, then `maiman serve` — or [start from no Python at
-> all](#installing-and-running-it). Phases 0 through 4 are done: **53 components, more than 1250 tests, and
+> all](#installing-and-running-it). Phases 0 through 4 are done: **55 components, more than 1250 tests, and
 > every physics block checked against a closed-form result in CI.**
 >
 > **Links run end to end.** Direct detection — PRBS → NRZ → laser → MZM → fiber → PIN → filter →
@@ -140,7 +140,7 @@ You will see:
 
 ```
 Maiman Studio session server
-  53 components
+  55 components
   http://127.0.0.1:8765/
 ```
 
@@ -1570,6 +1570,95 @@ The MMI, the Y-junction, the Mach-Zehnder and PDK import are all downstream of t
 rather than of new physics — an interferometer is already two couplers and two arms in a `Circuit`,
 and the tests build one.
 
+## A channel plan, and the crosstalk it produces
+
+The roadmap said "DWDM MUX/DEMUX with crosstalk" and Phase 3 shipped without one. That was not
+quite a gap in the physics — `Combiner`'s docstring calls itself a WDM multiplexer and
+`OpticalFilter`'s first line calls itself the demultiplexer, and both are telling the truth. What
+was missing was the *grid*: building an eight-channel demux meant a splitter, eight filters, and
+channel arithmetic each project did for itself.
+
+### The two ITU grids are not the same kind of grid
+
+**G.694.1 is uniform in frequency. G.694.2 is uniform in wavelength.** That is the whole difference,
+and it has a consequence people trip over:
+
+```
+   frequency      wavelength        step
+  192.9000THz    1554.1340nm
+  193.0000THz    1553.3288nm     0.8053nm
+  193.1000THz    1552.5244nm     0.8044nm
+  193.2000THz    1551.7208nm     0.8036nm
+  193.3000THz    1550.9180nm     0.8028nm
+```
+
+The dense grid is anchored at **193.1 THz**, which is 1552.5244 nm, and every channel at every
+spacing is an exact multiple of the spacing from it — that is what makes a 50 GHz plan a *superset*
+of a 100 GHz one rather than something offset by half a channel. But the wavelength steps are not
+equal and cannot be, because `Δλ = λ²Δf/c`: 100 GHz is 0.7808 nm at 1530 and 0.8170 nm at 1565.
+Stepping a flat 0.8 nm to build a "100 GHz grid" loses most of a channel across the C band.
+
+The coarse grid does the opposite — eighteen channels, 1271 to 1611 nm, exactly 20 nm apart — which
+comes out **56 % uneven in frequency**, 3.654 THz at the blue end against 2.339 at the red.
+
+**And the 20 nm is a specification, not a round number.** A CWDM channel is meant for an *uncooled*
+DFB, and an uncooled laser walks about 0.1 nm per kelvin: seventy kelvin of case temperature is
+7 nm of drift before manufacturing spread. 20 nm spacing is what makes a transmitter with no
+thermoelectric cooler, no wavelength locker and no control loop into a legal channel — which is why
+CWDM optics cost a fraction of DWDM optics, and why the grid reaches out to 1611 nm where no
+amplifier will help it.
+
+`dwdm_frequencies` refuses a spacing the standard does not define and names the function that will
+build one anyway. `cwdm_wavelengths` stops at eighteen: 1631 nm is not a CWDM channel, it is past
+the end of the grid, and continuing the arithmetic would invent one.
+
+### The blocks are routers, not splitters
+
+`Multiplexer` and `Demultiplexer` sit on that grid. Eight channels out and back:
+
+```
+  port      channel       kept    worst neighbour
+     0   1550.0000nm    -8.000dB            -40.00dB
+     1   1549.1990nm    -8.000dB            -40.00dB
+     …
+     7   1544.4105nm    -8.000dB            -40.00dB
+```
+
+−8 dB is 4 dB through the mux and 4 through the demux, and **it does not grow with the channel
+count** — at 2, 4, 8, 16 and 32 channels it is −8.000 dB every time. An arrayed-waveguide grating
+*routes*: each channel leaves by its own port. A broadcast-and-select demux really would divide
+power N ways and cost 10·log10(N) — 15 dB at thirty-two channels — and that device is a `Splitter`
+in front of filters, which is exactly what `Splitter` is for.
+
+Every demultiplexer port is **the same function** the single-filter block is. `apply_passband` was
+lifted out of `OpticalFilter` for that reason and a test asserts the two agree sample for sample: a
+multi-port device whose per-channel response drifted from the single-filter block's would be the
+worst kind of disagreement, since both would look right alone and the crosstalk number would depend
+on which one happened to be used.
+
+### Which of two things sets the crosstalk
+
+```
+   spacing   passband    with floor    skirt alone
+      200G        50G       -40.00dB          -infdB
+      100G        50G       -40.00dB          -infdB
+       50G        50G       -40.00dB       -192.66dB
+       40G        50G       -40.00dB        -50.50dB
+       25G        50G        -3.01dB         -3.01dB
+```
+
+Nothing in that table was declared. The right column is the super-Gaussian's own skirt, falling as
+the sixth power of detuning at order 3 — and `-inf` there is not infinite rejection, it is the field
+underflowing `complex64` past about −600 dB, which is a storage limit and not a physical one.
+
+The left column is what a real system sees, and the point of it is that **the skirt is almost never
+what matters**: at any sane plan it is already below the extinction floor, and it is the floor that
+accumulates down a chain of these. At 25 GHz with a 50 GHz passband the neighbour is simply inside
+the channel, and no floor is involved at all — which is a channel plan that does not work rather
+than a model that does not.
+
+`python examples/wdm_grid.py` prints all five tables.
+
 ## A mirror, and a graph that goes one way
 
 Every optical block up to here is matched at both ends: light enters one port and leaves another,
@@ -2532,7 +2621,7 @@ time window, and results are reproducible.
 | **1 — MVP: linear link** ✅ | ✅ PRBS → NRZ → laser → MZM → fiber (α + CD) → PIN → filter → eye/Q/BER, validated end to end. **Python only, no GUI.** | ~2–3 months |
 | **1.5 — Nonlinear & amplified** ✅ | Adaptive-step SSFM, Kerr, EDFA with ASE and Saleh gain compression, erbium gain dynamics on their own time axis, OSNR, PMD, APD, dispersion slope and its third-order term, cross-polarization Kerr coupling, inter-channel stimulated Raman scattering | ~2 months |
 | **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier frequency and phase recovery, coarse frequency acquisition over the whole sampled band, blind square-law timing recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km with blind estimation of the accumulated value, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
-| **3 — GUI & WDM** ✅ | Wavelength-selective filters, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — the OSA's trace drawn in the dock, and 400G/800G reference designs validated against the OSNR relations, and a back-end indirection the propagation kernels dispatch through — CuPy runs it where a device exists, `maiman devices` cross-checks it against NumPy, and a CI job does the same on any runner labelled `gpu` | ~6 months |
+| **3 — GUI & WDM** ✅ | Wavelength-selective filters, the ITU grids and a multiplexer/demultiplexer pair on them with crosstalk that falls out of the channel spacing, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — the OSA's trace drawn in the dock, and 400G/800G reference designs validated against the OSNR relations, and a back-end indirection the propagation kernels dispatch through — CuPy runs it where a device exists, `maiman devices` cross-checks it against NumPy, and a CI job does the same on any runner labelled `gpu` | ~6 months |
 | **4 — PIC** ✅ | Bidirectional S-matrix circuit solver, waveguide, directional coupler, all-pass and add-drop ring resonators, cross-validated against SAX; N×N MMI couplers on the self-imaging phase relations; a Mach-Zehnder interferometer assembled from them — switch, interleaver, or both; and PDK import, which reads a foundry's fitted numbers out of a JSON kit and refuses to extrapolate them past the window they were fitted in; and birefringence, with each guided polarization carrying its own indices through the same reduction | — |
 
 ¹ One developer, part-time. Estimates, not commitments.
