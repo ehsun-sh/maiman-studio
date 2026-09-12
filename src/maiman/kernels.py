@@ -81,25 +81,42 @@ def propagate_dispersion(
 ) -> np.ndarray:
     """Propagate a complex envelope through group-velocity dispersion and its slope.
 
-    Solves the linear part of the NLSE,
-    ``dA/dz = -(i*beta2/2) d2A/dT2 + (beta3/6) d3A/dT3``, which in the frequency
-    domain is an exact all-pass phase rotation::
+    An exact all-pass phase rotation in the frequency domain::
 
-        A(z, w) = A(0, w) * exp(i * (beta2 * w**2 / 2 - beta3 * w**3 / 6) * z)
+        A(z, w) = A(0, w) * exp(-i * (beta2 * w**2 / 2 + beta3 * w**3 / 6) * z)
+
+    which is the expansion of ``beta(omega)`` past its group-delay term, carried
+    with this library's ``exp(-i beta z)`` convention — the same one
+    :func:`maiman.photonics.propagation_constant` and
+    :func:`walkoff_from_dispersion` use.
 
     Because the transfer function has unit magnitude, this conserves energy
     exactly (up to floating-point) and is exactly invertible by propagating
     ``-distance`` — both of which are asserted in the test suite.
 
-    **The two terms have opposite signs, and that is not a typo.** With this
-    module's transform pair, ``x(t) = integral X(w) exp(+i w t) dw``, a time
-    derivative is ``+i w``; the β₂ term carries two of them and the β₃ term
-    three, so ``(i w)**2 = -w**2`` and ``(i w)**3 = -i w**3`` land the two on
-    opposite sides. A β₂-only model is insensitive to the transform's sign
-    convention because ω appears squared — that is exactly what stops being true
-    here, which is why the β₃ term is derived from the same expansion of
-    ``beta(omega)`` as the group-delay term in
-    :func:`propagate_coupled_ssfm` rather than written down.
+    **The β₂ term used to carry the opposite sign, and the story is worth
+    keeping.** It was Agrawal's ``exp(+i beta2 w**2 z / 2)``, which is correct
+    under the ``exp(-i w t)`` convention that book uses and wrong under the
+    ``x(t) = integral X(w) exp(+i w t) dw`` that ``numpy.fft.ifft`` gives this
+    one. A β₂-only model cannot feel the difference — ω appears squared, so every
+    width came out right — and the β₃ term was never affected because it had been
+    derived from the expansion of ``beta(omega)`` rather than transcribed.
+
+    What could feel it was anything built on the other convention. Inside
+    :func:`propagate_coupled_ssfm` the walk-off term and the β₃ term already
+    followed ``exp(-i beta z)`` and the β₂ term beside them did not, so a WDM
+    simulation slid its channels one way and dispersed each of them the other.
+    Measured directly: over 20 km at D = +17 ps/nm/km, a component 200 GHz above
+    the carrier arrived 1089.89 ps **late** where ``D * dlambda * L`` and
+    :func:`walkoff_from_dispersion` both say it arrives 1089.89 ps early.
+
+    Correcting it moved three other things, all of them sign conventions that had
+    been matched to the old one: the Kerr rotation in
+    :func:`propagate_coupled_ssfm` (which has to flip with β₂ or the soliton
+    stops balancing), the chirp parameter of
+    :class:`~maiman.components.GaussianPulse` (so that ``C > 0`` still means an
+    up-chirp), and the trial phase the blind dispersion search builds in
+    :func:`maiman.dsp.clock_tone_strength`.
 
     β₃ is what makes dispersive broadening *asymmetric*: β₂ delays a frequency in
     proportion to its offset, so the two sides of a pulse spread alike, while β₃
@@ -108,9 +125,13 @@ def propagate_dispersion(
     sign error in the cubic term would get wrong while every width still came out
     right.
 
-    The sign of β₂ itself, however, is *not* free — and the unchirped broadening
-    formula cannot detect an error in it, being even in β₂. Only the chirped case
-    can, which is why ``test_chirped_pulse_compresses_before_broadening`` exists.
+    The sign of β₂ is *not* free, and the unchirped broadening formula cannot
+    detect an error in it, being even in β₂. Only the chirped case can, which is
+    why ``test_chirped_pulse_compresses_before_broadening`` exists — though note
+    that it did not catch the error above either, because the pulse it launches
+    was defined in the same convention as the propagator and the two agreed with
+    each other while disagreeing with the rest of the library. What caught it was
+    putting a fibre and a grating in one graph.
 
     The phase argument reaches thousands of radians over a realistic span, so the
     transform runs in double precision regardless of the storage precision and
@@ -122,7 +143,7 @@ def propagate_dispersion(
         return field.astype(xp.complex128, copy=True)
 
     omega = angular_frequency_grid(field.shape[0], sample_rate, like=field)
-    transfer = xp.exp(1j * (0.5 * beta2 * omega**2 - beta3 * omega**3 / 6.0) * distance)
+    transfer = xp.exp(-1j * (0.5 * beta2 * omega**2 + beta3 * omega**3 / 6.0) * distance)
     return xp.fft.ifft(xp.fft.fft(field.astype(xp.complex128)) * transfer)
 
 
@@ -438,7 +459,7 @@ def propagate_coupled_ssfm(
     # and its slope are the first three terms of the same series, which is what
     # fixes their relative signs. See propagate_dispersion.
     operators = [
-        0.5j * b * omega**2 - 1j * w * omega - 1j * b3 * omega**3 / 6.0
+        -1j * (0.5 * b * omega**2 + w * omega + b3 * omega**3 / 6.0)
         for b, w, b3 in zip(beta2, walkoff, slope, strict=True)
     ]
     ceiling = max_step if max_step is not None else distance
@@ -496,7 +517,7 @@ def propagate_coupled_ssfm(
                     effective = effective + ORTHOGONAL_KERR_WEIGHT * other
                 phase = gamma * effective * step
                 peak_phase = max(peak_phase, float(xp.max(xp.abs(phase))))
-                rotated.append(field * xp.exp(1j * phase))
+                rotated.append(field * xp.exp(-1j * phase))
             a = rotated
 
         a = [xp.fft.ifft(xp.fft.fft(f) * h) for f, h in zip(a, half, strict=True)]

@@ -637,21 +637,21 @@ def test_a_group_that_returns_the_wrong_ports_is_reported(
         graph.run()
 
 
-def test_the_compensating_chirp_sign_is_pinned() -> None:
-    """Which sign of chirp undoes a span, measured rather than reasoned about.
+def test_a_negative_chirp_is_what_compensates_a_span() -> None:
+    """The sign, and it is the sign the grating's own physics asks for.
 
-    The grating's own physics says a positive chirp gives ``D > 0`` — short
-    wavelengths at the near end turn round first, so the long ones arrive later,
-    which is the sign standard fibre has. By that reading a compensator is a
-    *negative* chirp. Against this engine's :class:`~maiman.components.Fiber` it
-    is the positive one, because
-    :func:`maiman.kernels.propagate_dispersion` carries the opposite quadratic
-    sign from :func:`maiman.photonics.propagation_constant` — a disagreement that
-    function's docstring has described since before this device existed, and
-    which the grating is merely the first component to make visible in one graph.
+    A positive chirp puts the short wavelengths at the near end, so they turn
+    round first and the long ones arrive later: ``dtau/dlambda > 0``, which is
+    ``D > 0``, the sign standard fibre has. A compensator is therefore the other
+    one.
 
-    This test is a pin, not an endorsement. Reconciling the kernel will invert
-    the answer, and when it does this fails and names what else moved.
+    **This used to assert the opposite, and it was right to.** The fibre
+    disagreed with the grating because ``kernels.propagate_dispersion`` carried
+    the opposite quadratic sign from ``photonics.propagation_constant``, and the
+    grating was the first component to put both in one graph where it showed.
+    The test was written as a pin rather than a claim, so that reconciling the
+    kernel would name the compensator as one of the things that moved. It did
+    exactly that, and this is what it moved to.
     """
     ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=64, sequence_length=256, seed=1)
 
@@ -694,8 +694,8 @@ def test_the_compensating_chirp_sign_is_pinned() -> None:
 
     launched = rms_width(None, 0.0)
     spread = rms_width(None, 80.0)
-    restored = rms_width(+0.71, 80.0)
-    worsened = rms_width(-0.71, 80.0)
+    restored = rms_width(-0.71, 80.0)
+    worsened = rms_width(+0.71, 80.0)
 
     assert launched == pytest.approx(21.2, abs=0.3)
     assert spread == pytest.approx(46.1, abs=0.5)

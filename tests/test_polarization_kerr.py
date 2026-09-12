@@ -81,9 +81,16 @@ def propagated(
 def phase(
     bands: tuple[Band, ...], *, coupled: bool, axis: str = "Ex", channel: int = 0, **settings: float
 ) -> float:
-    """Nonlinear phase in units of ``gamma*P*L``."""
+    """Nonlinear phase in units of ``gamma*P*L``.
+
+    **Negated, and the sign is the point.** With this engine's ``exp(-i beta z)``
+    convention the Kerr index *raises* beta, so a self-phase shift retards the
+    field and the accumulated phase is ``-gamma P L``. The literature quotes the
+    magnitude, ``phi_NL = gamma P L_eff``, and so does every number in this file;
+    negating here is what makes the two agree about a quantity they agree about.
+    """
     field = getattr(propagated(bands, coupled=coupled, **settings).bands[channel], axis)
-    return float(np.angle(field[SAMPLES // 2])) / UNIT
+    return -float(np.angle(field[SAMPLES // 2])) / UNIT
 
 
 # ---------------------------------------------------------------------------
@@ -119,7 +126,7 @@ def test_the_coupling_is_off_unless_asked_for() -> None:
 
     out = default.run(CTX, {"in": OpticalSignal(bands=(band(POWER / 2, POWER / 2),), noise=())})
     assert isinstance(out["out"], OpticalSignal)
-    turned = float(np.angle(out["out"].bands[0].Ex[SAMPLES // 2])) / UNIT
+    turned = -float(np.angle(out["out"].bands[0].Ex[SAMPLES // 2])) / UNIT
     assert turned == pytest.approx(0.5, rel=1e-9)
 
 

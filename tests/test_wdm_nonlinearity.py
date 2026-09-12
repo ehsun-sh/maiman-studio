@@ -48,7 +48,14 @@ def cw(power: float = POWER, samples: int = SAMPLES) -> np.ndarray:
 
 
 def mean_nonlinear_phase(fields: list[np.ndarray], **kwargs: object) -> float:
-    """Mean phase the first field picks up, relative to its launch phase."""
+    """Mean phase the first field picks up, relative to its launch phase.
+
+    **Negated, and the sign is the point.** With this engine's ``exp(-i beta z)``
+    convention the Kerr index *raises* beta, so a self-phase shift retards the
+    field and the accumulated phase is ``-gamma P L``. The literature quotes the
+    magnitude, ``phi_NL = gamma P L_eff``, and so does every number in this file;
+    negating here is what makes the two agree about a quantity they agree about.
+    """
     count = len(fields)
     out, _ = propagate_coupled_ssfm(
         fields,
@@ -60,7 +67,7 @@ def mean_nonlinear_phase(fields: list[np.ndarray], **kwargs: object) -> float:
         distance=SPAN,
         **kwargs,  # type: ignore[arg-type]
     )
-    return float(np.mean(np.angle(out[0] / fields[0])))
+    return -float(np.mean(np.angle(out[0] / fields[0])))
 
 
 # ---------------------------------------------------------------------------
@@ -166,7 +173,7 @@ def probe_beside_pump(
         walkoff=[0.0],
         **options,  # type: ignore[arg-type]
     )
-    return np.unwrap(np.angle(pair[0]) - np.angle(solo[0])), diagnostics
+    return -np.unwrap(np.angle(pair[0]) - np.angle(solo[0])), diagnostics
 
 
 def test_peak_to_peak_xpm_matches_the_closed_form() -> None:
@@ -527,7 +534,7 @@ def test_coupling_can_be_switched_off_and_it_changes_the_answer() -> None:
     a = band_at(coupled["out"], 0.0)  # type: ignore[arg-type]
     b = band_at(independent["out"], 0.0)  # type: ignore[arg-type]
     assert a is not None and b is not None
-    phase_difference = float(np.mean(np.angle(a.Ex / b.Ex)))
+    phase_difference = -float(np.mean(np.angle(a.Ex / b.Ex)))
     # Two equal channels: coupling triples the nonlinear phase, so the gap is
     # twice what one channel accumulates on its own.
     assert phase_difference == pytest.approx(2.0 * GAMMA * POWER * L_EFF, rel=0.05)

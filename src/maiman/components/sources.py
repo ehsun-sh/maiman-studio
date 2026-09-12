@@ -121,7 +121,10 @@ class GaussianPulse(Component):
 
     peak_power = Param(0.0, unit="dBm", doc="Peak power P0 (not average power)")
     width = Param(10.0, unit="ps", min=0.0, doc="T0, the 1/e intensity half-width")
-    chirp = Param(0.0, doc="Linear chirp parameter C; sign matters against beta2")
+    chirp = Param(
+        0.0,
+        doc="Linear chirp parameter C; positive is an up-chirp, and its sign matters against beta2",
+    )
     wavelength = Param(1550.0, unit="nm", min=1200.0, max=1700.0, doc="Vacuum wavelength")
 
     outputs = {"out": PortType.OPTICAL}
@@ -133,7 +136,7 @@ class GaussianPulse(Component):
 
         tau = (ctx.time_axis() - ctx.time_window / 2.0) / t0
         amplitude = np.sqrt(self.si("peak_power"))
-        Ex = amplitude * np.exp(-(1.0 + 1j * self.chirp) * tau**2 / 2.0)
+        Ex = amplitude * np.exp(-(1.0 - 1j * self.chirp) * tau**2 / 2.0)
 
         band = Band(
             Ex=Ex.astype(ctx.complex_dtype),

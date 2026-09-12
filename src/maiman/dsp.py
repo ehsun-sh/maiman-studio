@@ -520,7 +520,7 @@ def scan_clock_tone(
     # growing with the product of a long window and a wide search.
     for start in range(0, len(theta), SCAN_BLOCK):
         block = theta[start : start + SCAN_BLOCK]
-        strength[start : start + SCAN_BLOCK] = np.abs(np.exp(1j * np.outer(block, lever)) @ beat)
+        strength[start : start + SCAN_BLOCK] = np.abs(np.exp(-1j * np.outer(block, lever)) @ beat)
     return strength / n
 
 

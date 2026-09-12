@@ -236,10 +236,14 @@ def propagation_constant(
     ``exp(-1j*beta(omega)*L)`` throughout: one expansion, one convention, with
     the delay term positive so that a longer waveguide arrives later and — for
     D > 0 — the longer wavelength arrives later still. That agrees with
-    :func:`maiman.kernels.walkoff_from_dispersion`, and disagrees with
-    :func:`maiman.kernels.propagate_dispersion`, whose quadratic term carries the
-    opposite sign; the two cannot both be right and reconciling them is its own
-    piece of work.
+    :func:`maiman.kernels.walkoff_from_dispersion`.
+
+    It used to disagree with :func:`maiman.kernels.propagate_dispersion`, whose
+    quadratic term carried the opposite sign, and this docstring said so for
+    some time without the two ever being in one graph to argue about it. A
+    chirped fibre Bragg grating put them there, the kernel turned out to be the
+    one transcribed from a textbook using the other transform convention, and it
+    has been corrected — see that function for what moved with it.
 
     It does not reach a resonator. At the very large D = -1000 ps/nm/km a silicon
     strip waveguide has, the quadratic term over a 100 um ring is 0.049 rad at the

@@ -1929,19 +1929,46 @@ metered where it sits, which is the quantity being measured anyway.
 
 `python examples/fbg_sensor.py` prints all five tables.
 
-### And a sign that is not the grating's fault
+### And a sign that was wrong, in the fibre
 
-The grating's own physics says a positive chirp puts short wavelengths at the near end, so they
+The grating's own physics says a positive chirp puts the short wavelengths at the near end, so they
 turn round first and the long ones arrive later: `dτ/dλ > 0`, which is `D > 0`, the sign standard
-fibre has. By that reading a compensator is a *negative* chirp.
+fibre has. A compensator is therefore the **negative** one, which is what the table above uses.
 
-The table above used a positive one, because that is what actually cancels this engine's `Fiber`.
-The two disagree because `kernels.propagate_dispersion` carries the opposite quadratic sign from
-`photonics.propagation_constant` — which that function's docstring has said in as many words since
-before this device existed. **The grating is simply the first component to put both in one graph
-where it shows.** A test pins the behaviour as it stands, so that the day the kernel is reconciled
-the failure names the compensator as one of the things that moved with it, rather than every
-compensator built on it silently inverting.
+It did not use to be. For a while this device and `Fiber` disagreed about the sign, because
+`kernels.propagate_dispersion` carried the opposite quadratic sign from
+`photonics.propagation_constant` — something the latter's docstring had said in as many words since
+long before the grating existed, with nothing ever putting the two in one graph to argue about it.
+
+**The grating was that thing, and the kernel was the one that was wrong.** Its β₂ term was
+Agrawal's `exp(+iβ₂ω²z/2)`, correct under the `exp(−iωt)` convention that book uses and wrong under
+the `exp(+iωt)` that `numpy.fft.ifft` gives this one. A β₂-only model cannot feel the difference —
+ω appears squared, so every width came out right — which is why nothing caught it for so long. The
+β₃ term was never affected, because it had been *derived* from the expansion of β(ω) rather than
+transcribed, and the docstring says so.
+
+What could feel it was anything built on the other convention. Inside `propagate_coupled_ssfm` the
+walk-off term and the β₃ term already followed `exp(−iβz)` and the β₂ term beside them did not, so
+a WDM simulation slid its channels one way and dispersed each of them the other. Measured directly,
+over 20 km at D = +17 ps/nm/km:
+
+```
+  a component 200 GHz above the carrier arrived   1089.89 ps LATE
+  D · Δλ · L says it should arrive               1089.89 ps EARLY
+  walkoff_from_dispersion agrees with physics
+```
+
+Correcting it moved three more signs that had been matched to the old one, and all three are
+conventions rather than physics: the Kerr rotation in `propagate_coupled_ssfm` — which has to flip
+with β₂ or the soliton stops balancing — `GaussianPulse`'s chirp parameter, so that `C > 0` still
+means an up-chirp, and the trial phase the blind dispersion search builds in
+`dsp.clock_tone_strength`. The flagship coherent link's EVM is unchanged at 7.39 %, which is the
+right outcome: dispersion and its compensation both flipped, so nothing about a link's performance
+moved. What moved is which way things point.
+
+The test that caught it had been written as a *pin* rather than a claim, precisely so that
+reconciling the kernel would fail and name the compensator as one of the things that moved with it.
+It did exactly that.
 
 `python examples/fbg_circulator.py` prints all seven tables.
 

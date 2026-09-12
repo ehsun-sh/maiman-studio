@@ -37,9 +37,10 @@ sampled grating — one device reflecting a whole comb — and, with a phase arr
 the phase-shifted grating, whose transmission window here is 87 MHz wide. Neither
 is a new solver.
 
-**And the sign is not what the grating's own physics says it is.** That is a
-disagreement between two kernels in this engine rather than a property of
-gratings, and it is printed rather than hidden — see the last section.
+**And a sign that was wrong, in the fibre rather than here.** Putting a grating
+and a span in one graph is what finally made two of this engine's kernels argue
+about which way dispersion goes. The last section is what that was and what it
+moved.
 """
 
 from __future__ import annotations
@@ -70,13 +71,13 @@ from maiman.units import C_LIGHT
 BRAGG_NM = 1550.0
 BRAGG = BRAGG_NM * 1e-9
 
-#: 10 cm chirped over 0.71 nm is -1360 ps/nm by the geometric formula, which is
-#: 80 km of standard fibre at 17 ps/nm/km.
+#: 10 cm chirped over -0.71 nm is -1360 ps/nm by the geometric formula, which is
+#: 80 km of standard fibre at 17 ps/nm/km undone.
 COMPENSATOR: dict[str, float] = {
     "length": 100.0,  # mm
     "index_modulation": 2e-4,
     "bragg_wavelength": BRAGG_NM,
-    "chirp": 0.71,  # nm — the sign is discussed at the end
+    "chirp": -0.71,  # nm — negative is what compensates; see the last section
 }
 
 
@@ -373,24 +374,29 @@ def arbitrary_profiles() -> None:
 
 
 def the_sign() -> None:
-    """The one result here that is about this engine rather than about gratings."""
-    print("7. A sign worth stating out loud")
-    print(
-        "     The grating's own physics says a positive chirp puts short wavelengths\n"
-        "     at the near end, so they turn round first and the long ones arrive\n"
-        "     later -- dtau/dlambda > 0, which is D > 0, the sign standard fibre has.\n"
-        "     By that reading a compensator is a NEGATIVE chirp.\n"
-        "\n"
-        "     Section 5 used a positive one, because that is what actually cancels\n"
-        "     this engine's Fiber. The two disagree because kernels.propagate_dispersion\n"
-        "     carries the opposite quadratic sign from photonics.propagation_constant,\n"
-        "     which the latter's docstring has said since before this device existed.\n"
-        "     The grating is simply the first component to put both in one graph.\n"
-        "\n"
-        "     tests/test_grating.py pins the behaviour as it stands, so that the day\n"
-        "     the kernel is reconciled, the failure names the compensator as one of\n"
-        "     the things that moved with it."
-    )
+    """The one result here that was about this engine rather than about gratings."""
+    print("7. A sign that used to be wrong, and which half of it was")
+    print("     A positive chirp puts short wavelengths at the near end, so they")
+    print("     turn round first and the long ones arrive later -- dtau/dlambda > 0,")
+    print("     which is D > 0, the sign standard fibre has. A compensator is the")
+    print("     negative one, and section 5 uses it.")
+    print()
+    print("     It did not use to. This grating and this engine's Fiber disagreed")
+    print("     about the sign, because kernels.propagate_dispersion carried the")
+    print("     opposite quadratic sign from photonics.propagation_constant -- which")
+    print("     the latter's docstring had said in as many words since before this")
+    print("     device existed, with nothing ever putting the two in one graph.")
+    print()
+    print("     The grating was that thing. The kernel turned out to be the one")
+    print("     transcribed from a textbook written in the other transform")
+    print("     convention, and correcting it moved three more signs that had been")
+    print("     matched to it: the Kerr rotation (which has to flip with beta2 or")
+    print("     the soliton stops balancing), GaussianPulse's chirp parameter, and")
+    print("     the trial phase the blind dispersion search builds.")
+    print()
+    print("     Measured, over 20 km at D = +17 ps/nm/km: a component 200 GHz above")
+    print("     the carrier used to arrive 1089.89 ps late, where D*dlambda*L and the")
+    print("     engine's own walkoff_from_dispersion both say it arrives that early.")
 
 
 def main() -> None:

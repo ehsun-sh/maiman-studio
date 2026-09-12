@@ -79,26 +79,20 @@ class FiberBraggGrating(ScatteringDevice):
     and works on a direct-detection link, where there is no recovered field for
     DSP to operate on and never will be.
 
-    **The sign, and a warning about it.** A positive ``chirp`` puts the short
-    wavelengths at the near end where they turn round early, so the long ones
-    arrive later: ``dtau/dlambda > 0``, which is ``D > 0``, the sign standard
-    fibre has. By that reading a compensator is a *negative* chirp, and entering
-    the same grating from its far end gives the other sign — which is why
-    ``reflected`` is computed from the input face rather than from whichever end
-    is convenient.
+    **The sign.** A positive ``chirp`` puts the short wavelengths at the near end
+    where they turn round early, so the long ones arrive later:
+    ``dtau/dlambda > 0``, which is ``D > 0``, the sign standard fibre has. A
+    compensator is therefore a **negative** chirp — or the same grating entered
+    from its far end, which is why ``reflected`` is computed from the input face
+    rather than from whichever end is convenient.
 
-    **Against this engine's** :class:`~maiman.components.Fiber` **it is the other
-    way round, and that is not this block's doing.** A positive chirp is what
-    compensates a span here, measured: a 30 ps pulse broadened from 21.2 ps rms
-    to 46.1 ps over 80 km comes back to 21.3 ps through ``chirp = +0.71`` nm. The
-    two blocks disagree because :func:`maiman.kernels.propagate_dispersion`
-    carries the opposite quadratic sign from
-    :func:`maiman.photonics.propagation_constant`, which that function's docstring
-    has said in as many words since before this device existed — the grating is
-    simply the first component to put the two in one graph where it shows.
-    ``test_the_compensating_chirp_sign_is_pinned`` holds the behaviour as it
-    stands, so that reconciling the kernel reports this as one of the things it
-    changed rather than silently inverting every compensator built on it.
+    For a while this device disagreed with :class:`~maiman.components.Fiber`
+    about that, and it was the fibre that was wrong:
+    :func:`maiman.kernels.propagate_dispersion` carried the opposite quadratic
+    sign from :func:`maiman.photonics.propagation_constant`, which the latter's
+    docstring had said in as many words since before this device existed. The
+    grating was the first component to put both in one graph where it showed, and
+    the kernel has since been corrected.
 
     *A gain-flattening or ASE-blocking element*, since what it reflects it
     removes from the transmitted path exactly.
