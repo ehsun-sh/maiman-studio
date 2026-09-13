@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "maiman_version": "0.3.0",
+  "maiman_version": "0.4.1",
   "context": {
     "bit_rate": 10000000000.0,
     "samples_per_symbol": 16,

@@ -511,6 +511,31 @@
     }
    }
   },
+  "DelayLine": {
+   "name": "Delay Line",
+   "type": "DelayLine",
+   "class": "maiman.components.delay.DelayLine",
+   "category": "Passive",
+   "version": "0.1.0",
+   "parameters": {
+    "delay": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "ps",
+     "min": 0.0,
+     "doc": "Time the field is delayed by, carrier phase included"
+    }
+   },
+   "structural": {},
+   "ports": {
+    "inputs": {
+     "in": "optical"
+    },
+    "outputs": {
+     "out": "optical"
+    }
+   }
+  },
   "Demultiplexer": {
    "name": "Demultiplexer",
    "type": "Demultiplexer",
@@ -19587,7 +19612,7 @@
  ],
  "project": {
   "schema_version": 1,
-  "maiman_version": "0.3.0",
+  "maiman_version": "0.4.1",
   "context": {
    "bit_rate": 32000000000.0,
    "samples_per_symbol": 16,

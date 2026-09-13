@@ -21,6 +21,7 @@ from .coherent import (
     DualPolarizationReceiver,
     IQSampler,
 )
+from .delay import DelayLine
 from .detectors import APDPhotodiode, PINPhotodiode
 from .dsp import (
     ButterflyEqualizer,
@@ -85,6 +86,7 @@ __all__ = [
     "ConstellationAnalyzer",
     "ConstellationDiagram",
     "DCVoltage",
+    "DelayLine",
     "Demultiplexer",
     "DifferentialDecoder",
     "DirectionalCoupler",

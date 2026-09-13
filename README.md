@@ -20,7 +20,7 @@ link in this simulator descends from.*
 > ### Project status: 0.4.1 — released, and still moving.
 >
 > `pip install maiman`, then `maiman serve` — or [start from no Python at
-> all](#installing-and-running-it). Phases 0 through 4 are done: **56 components, more than 1250 tests, and
+> all](#installing-and-running-it). Phases 0 through 4 are done: **57 components, more than 1250 tests, and
 > every physics block checked against a closed-form result in CI.**
 >
 > **Links run end to end.** Direct detection — PRBS → NRZ → laser → MZM → fiber → PIN → filter →
@@ -140,7 +140,7 @@ You will see:
 
 ```
 Maiman Studio session server
-  56 components
+  57 components
   http://127.0.0.1:8765/
 ```
 
@@ -1852,7 +1852,31 @@ ratio carries a phase overshoot and undershoot the limit in turn. Watch the resi
 frame, so a trip round the loop adds no delay and every lap lands on top of the last. That is right for
 a cavity short against the window — a reflection between parts centimetres apart — and wrong for a
 recirculating loop a pulse goes round many times, where the laps should arrive one after another. That
-needs a delay line, and this is not one.
+needs a delay line, and this is not one — `DelayLine` is.
+
+### A recirculating loop
+
+`DelayLine` moves the field later by a fixed time, carrier phase included: the envelope of a band at
+`f0` becomes `A(t − τ)·exp(−2πi f0 τ)`, so two paths of different length interfere the way they do in
+glass. A delay that is a whole number of samples is a shift and exact; any other is a linear phase in
+frequency. It has no loss and no dispersion of its own, and noise passes unchanged.
+
+Put one in a `Feedback` loop and every pass becomes a lap that arrives one loop-time after the last.
+A 10 ps pulse into a 3 dB coupler whose second pair of ports is joined through 800 ps and 1 dB:
+
+```
+   lap   arrives    peak power    accounting
+     0      0 ps     0.500 mW     the straight half
+     1    800 ps     0.199 mW     both crossings, one pass of loss
+     2   1600 ps     0.079 mW     and another straight half and pass of loss
+     3   2400 ps     0.031 mW     and another
+```
+
+Asserted to a part in ten thousand, and with the delay set to zero the same graph puts nothing at
+800 ps at all — every lap lands on the first, which is the difference this block exists to make.
+
+The window is periodic, because sources draw whole periods of their pattern: a lap that leaves the
+end of the window comes back in at the start. Choose a window longer than the laps you want to watch.
 
 ### The named windows were never the limit
 

@@ -51,8 +51,9 @@ class Feedback(Component):
     every lap lands on top of the last. That is right for a cavity short against
     the window -- a reflection between two parts centimetres apart -- and wrong for
     a recirculating loop a pulse goes round many times, where the laps should
-    arrive one after another. Modelling that needs a delay line, and this is not
-    one.
+    arrive one after another. For that, put a
+    :class:`~maiman.components.DelayLine` in the loop as well: each pass is then a
+    lap that arrives one loop-time after the last.
 
     Noise is drawn the same way on every pass, because every block seeds its
     generator from its own label, so the fixed point contains one realisation of
