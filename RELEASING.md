@@ -8,7 +8,7 @@ they are deliberately the only ones.
 
 ## The version
 
-The package declares **`0.4.0`**, which is published. The next release picks the next number;
+The package declares **`0.4.1`**, which is published. The next release picks the next number;
 a `.devN` version is not worth publishing, because pip excludes pre-releases and
 `pip install maiman` would not find it.
 
@@ -65,8 +65,8 @@ in the loop before an upload.
 ## Releasing
 
 ```bash
-git tag v0.4.0
-git push origin v0.4.0
+git tag v0.4.1
+git push origin v0.4.1
 ```
 
 Two lines, not one joined by `&&` — **Windows PowerShell 5.1 has no `&&`**, and a chained command
@@ -98,7 +98,7 @@ suite cannot do:
 Three things go stale the moment an upload lands, and no test can check them without a network
 call in CI:
 
-* `README.md` and this file describe the install. They were updated at 0.4.0.
+* `README.md` and this file describe the install. They were updated at 0.4.1.
 * `CITATION.cff` needs `date-released` set to the date the release was *published*, not the date
   the version was bumped. Its `version` is already checked against the package on every commit.
 * The version in `pyproject.toml`, `src/maiman/__init__.py` and `CITATION.cff` must move together

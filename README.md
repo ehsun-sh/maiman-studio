@@ -17,7 +17,7 @@ link in this simulator descends from.*
 
 ---
 
-> ### Project status: 0.4.0 — released, and still moving.
+> ### Project status: 0.4.1 — released, and still moving.
 >
 > `pip install maiman`, then `maiman serve` — or [start from no Python at
 > all](#installing-and-running-it). Phases 0 through 4 are done: **56 components, more than 1250 tests, and
@@ -124,7 +124,7 @@ python3 -m pip install maiman
 It takes a few seconds and ends with a line like:
 
 ```
-Successfully installed maiman-0.4.0 numpy-2.3.5
+Successfully installed maiman-0.4.1 numpy-2.3.5
 ```
 
 That is the whole installation. NumPy is the only thing it brings with it, and the interface is
