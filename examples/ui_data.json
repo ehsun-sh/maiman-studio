@@ -827,6 +827,112 @@
     }
    }
   },
+  "EdgeCoupler": {
+   "name": "Edge Coupler",
+   "type": "EdgeCoupler",
+   "class": "maiman.components.couplers.EdgeCoupler",
+   "category": "Photonic IC",
+   "version": "0.1.0",
+   "parameters": {
+    "rotation": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "deg",
+     "min": -90.0,
+     "max": 90.0,
+     "doc": "Die's TE axis against the signal's x axis"
+    },
+    "fibre_mfd": {
+     "type": "float",
+     "default": 10.4,
+     "unit": "um",
+     "min": 0.5,
+     "max": 100.0,
+     "doc": "Fibre mode field diameter; SMF-28 at 1550 nm"
+    },
+    "chip_mfd_x": {
+     "type": "float",
+     "default": 3.0,
+     "unit": "um",
+     "min": 0.1,
+     "max": 100.0,
+     "doc": "Chip mode field diameter, in the chip's plane"
+    },
+    "chip_mfd_y": {
+     "type": "float",
+     "default": 3.0,
+     "unit": "um",
+     "min": 0.1,
+     "max": 100.0,
+     "doc": "Chip mode field diameter, across the chip"
+    },
+    "offset_x": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "um",
+     "min": -50.0,
+     "max": 50.0,
+     "doc": "Lateral misalignment, in plane"
+    },
+    "offset_y": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "um",
+     "min": -50.0,
+     "max": 50.0,
+     "doc": "Lateral misalignment, vertical"
+    },
+    "tilt": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "deg",
+     "min": -30.0,
+     "max": 30.0,
+     "doc": "Angle of the fibre in the chip's plane"
+    },
+    "gap": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "um",
+     "min": 0.0,
+     "max": 1000.0,
+     "doc": "Fibre-to-facet distance"
+    },
+    "gap_index": {
+     "type": "float",
+     "default": 1.0,
+     "unit": "",
+     "min": 1.0,
+     "max": 4.0,
+     "doc": "What fills the gap; 1.45 is index-matched"
+    },
+    "fibre_index": {
+     "type": "float",
+     "default": 1.4682,
+     "unit": "",
+     "min": 1.0,
+     "max": 4.0,
+     "doc": "Fibre core index at its facet"
+    },
+    "mode_index": {
+     "type": "float",
+     "default": 1.45,
+     "unit": "",
+     "min": 1.0,
+     "max": 4.0,
+     "doc": "Chip mode's index at the facet; low for a taper"
+    }
+   },
+   "structural": {},
+   "ports": {
+    "inputs": {
+     "in": "optical"
+    },
+    "outputs": {
+     "out": "optical"
+    }
+   }
+  },
   "ElectricalFilter": {
    "name": "Electrical Filter",
    "type": "ElectricalFilter",
@@ -1292,6 +1398,112 @@
    "structural": {},
    "ports": {
     "inputs": {},
+    "outputs": {
+     "out": "optical"
+    }
+   }
+  },
+  "GratingCoupler": {
+   "name": "Grating Coupler",
+   "type": "GratingCoupler",
+   "class": "maiman.components.couplers.GratingCoupler",
+   "category": "Photonic IC",
+   "version": "0.1.0",
+   "parameters": {
+    "rotation": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "deg",
+     "min": -90.0,
+     "max": 90.0,
+     "doc": "Die's TE axis against the signal's x axis"
+    },
+    "period": {
+     "type": "float",
+     "default": 611.0,
+     "unit": "nm",
+     "min": 100.0,
+     "max": 2000.0,
+     "doc": "Grating period"
+    },
+    "effective_index": {
+     "type": "float",
+     "default": 2.71,
+     "unit": "",
+     "min": 1.0,
+     "max": 4.0,
+     "doc": "Guided mode's index in the grating region"
+    },
+    "group_index": {
+     "type": "float",
+     "default": 4.0,
+     "unit": "",
+     "min": 1.0,
+     "max": 6.0,
+     "doc": "Guided mode's group index; sets the angle tuning"
+    },
+    "reference_wavelength": {
+     "type": "float",
+     "default": 1550.0,
+     "unit": "nm",
+     "min": 1200.0,
+     "max": 1700.0,
+     "doc": "Wavelength the two indices are quoted at"
+    },
+    "fibre_angle": {
+     "type": "float",
+     "default": 10.0,
+     "unit": "deg",
+     "min": -40.0,
+     "max": 40.0,
+     "doc": "Fibre's angle from vertical"
+    },
+    "medium_index": {
+     "type": "float",
+     "default": 1.0,
+     "unit": "",
+     "min": 1.0,
+     "max": 2.0,
+     "doc": "What the fibre sits in above the chip"
+    },
+    "peak_loss": {
+     "type": "float",
+     "default": 3.0,
+     "unit": "dB",
+     "min": 0.0,
+     "max": 30.0,
+     "doc": "Loss at the centre wavelength"
+    },
+    "bandwidth_1db": {
+     "type": "float",
+     "default": 35.0,
+     "unit": "nm",
+     "min": 1.0,
+     "max": 200.0,
+     "doc": "Full width at 1 dB below peak"
+    },
+    "back_reflection": {
+     "type": "float",
+     "default": 20.0,
+     "unit": "dB",
+     "min": 0.0,
+     "max": 80.0,
+     "doc": "Reflection below the input"
+    },
+    "tm_extinction": {
+     "type": "float",
+     "default": 25.0,
+     "unit": "dB",
+     "min": 0.0,
+     "max": 80.0,
+     "doc": "How far below TE a TM input couples"
+    }
+   },
+   "structural": {},
+   "ports": {
+    "inputs": {
+     "in": "optical"
+    },
     "outputs": {
      "out": "optical"
     }

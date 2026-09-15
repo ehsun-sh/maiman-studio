@@ -21,6 +21,7 @@ from .coherent import (
     DualPolarizationReceiver,
     IQSampler,
 )
+from .couplers import EdgeCoupler, GratingCoupler
 from .delay import DelayLine
 from .detectors import APDPhotodiode, PINPhotodiode
 from .dsp import (
@@ -93,6 +94,7 @@ __all__ = [
     "DirectionalCoupler",
     "DispersionCompensator",
     "DualPolarizationReceiver",
+    "EdgeCoupler",
     "ElectricalFilter",
     "EyeDiagram",
     "FECDecoder",
@@ -102,6 +104,7 @@ __all__ = [
     "FiberBraggGrating",
     "FrequencyRecovery",
     "GaussianPulse",
+    "GratingCoupler",
     "IQDriver",
     "IQModulator",
     "IQSampler",

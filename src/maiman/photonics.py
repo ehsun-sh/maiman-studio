@@ -1293,3 +1293,220 @@ def long_period_resonances(
                 wavelength -= direct(wavelength, column + 1) / slope
             found.append((column + 1, float(wavelength)))
     return sorted(found, key=lambda pair: pair[1])
+
+
+# --------------------------------------------------------------------------
+# Coupling into the die
+# --------------------------------------------------------------------------
+
+
+def gaussian_overlap(
+    source_radius: float,
+    target_radius: float,
+    *,
+    wavelength: np.ndarray | float,
+    offset: float = 0.0,
+    tilt: float = 0.0,
+    gap: float = 0.0,
+    index: float = 1.0,
+) -> np.ndarray:
+    """Power coupled between two Gaussian beams along one transverse axis.
+
+    The source leaves its facet with a waist of ``source_radius`` (1/e field
+    radius), crosses ``gap`` of a medium of ``index``, and arrives displaced by
+    ``offset`` and tilted by ``tilt`` [rad] onto a target whose waist of
+    ``target_radius`` sits at its own facet. Both beams are written as
+    ``exp(-alpha x^2 + beta x)`` with complex ``alpha`` -- the gap is a complex
+    beam parameter ``q = gap + i z_R``, the tilt a linear phase, the offset a
+    shift -- and the overlap of two such fields is a Gaussian integral in closed
+    form, so every misalignment is handled at once and none is an expansion:
+
+        eta = |int E_s E_t dx|^2 / (int |E_s|^2 dx  int |E_t|^2 dx)
+
+    Offset alone gives the textbook ``exp(-d^2 / w^2)`` for equal waists, and
+    unequal waists alone ``2 w_s w_t / (w_s^2 + w_t^2)``; the tests hold it to
+    both and to brute-force integration. The offset is measured at the target's
+    facet, so a tilted source pivots about the point it lands on.
+
+    Two axes of an elliptical mode are two calls multiplied together, because a
+    Gaussian separates.
+    """
+    lam = np.asarray(wavelength, dtype=float)
+    if source_radius <= 0.0 or target_radius <= 0.0:
+        raise ValueError("beam radii must be positive")
+    if gap < 0.0:
+        raise ValueError(f"the gap must not be negative, got {gap} m")
+    k = 2.0 * np.pi * index / lam
+    rayleigh = np.pi * source_radius**2 * index / lam
+    alpha_s = 1j * k / (2.0 * (gap + 1j * rayleigh))
+    alpha_t = 1.0 / target_radius**2
+    beta = 2.0 * alpha_s * offset - 1j * k * np.sin(tilt)
+    total = alpha_s + alpha_t
+    field = np.exp(-alpha_s * offset**2) * np.sqrt(np.pi / total) * np.exp(beta**2 / (4.0 * total))
+    source_norm = np.sqrt(np.pi / (2.0 * alpha_s.real))
+    target_norm = np.sqrt(np.pi / (2.0 * alpha_t))
+    return np.abs(field) ** 2 / (source_norm * target_norm)
+
+
+def fresnel_reflectance(first_index: float, second_index: float) -> float:
+    """Power reflected at normal incidence between two media, ``((n1 - n2)/(n1 + n2))^2``."""
+    if first_index <= 0.0 or second_index <= 0.0:
+        raise ValueError("refractive indices must be positive")
+    return ((first_index - second_index) / (first_index + second_index)) ** 2
+
+
+def marcuse_mode_field_radius(fibre: StepIndexFibre, wavelength: float) -> float:
+    """The Gaussian that best stands in for a step-index core's LP01 [m, 1/e field radius].
+
+    ``w / a = 0.65 + 1.619 V^-1.5 + 2.879 V^-6`` (Marcuse, *Bell Syst. Tech. J.*
+    56, 1977), good to about a percent for ``1.2 < V < 2.4``. For the default
+    :class:`~maiman.modes.StepIndexFibre` at 1550 nm, V = 2.04, it gives 5.11
+    microns: 0.7 % wider than the best Gaussian fit to the LP01 field the mode
+    solver computes, and matching that field in power to 99.2 %. The tests hold
+    it to both.
+    """
+    v = fibre.v_number(wavelength)
+    return fibre.core_radius * (0.65 + 1.619 * v**-1.5 + 2.879 * v**-6)
+
+
+def edge_coupler(
+    frequencies: np.ndarray,
+    *,
+    fibre_mode_radius: float,
+    chip_mode_radius_x: float,
+    chip_mode_radius_y: float,
+    offset_x: float = 0.0,
+    offset_y: float = 0.0,
+    tilt: float = 0.0,
+    gap: float = 0.0,
+    gap_index: float = 1.0,
+    fibre_index: float = 1.4682,
+    mode_index: float = 1.45,
+    ports: tuple[str, str] = ("in", "out"),
+) -> SMatrix:
+    """A fibre butted against a chip facet: mode overlap, and two facets in the way.
+
+    Transmission is the Gaussian overlap along each axis -- a round fibre mode
+    onto an elliptical chip mode, offset and tilted in the horizontal plane
+    across a gap -- times what each facet lets through, ``1 - R``. Each port
+    reflects its own facet's ``sqrt(R)``. Nothing is lost that is not accounted
+    for, and nothing resonates: the etalon the two facets form across a gap is
+    not modelled, which is right for an index-matched or angled joint and a
+    ripple of a few percent for a bare air gap.
+
+    The mode radii are held fixed across the band, as a spot-size converter's
+    are to first order; the gap's diffraction is not, and is computed at every
+    wavelength.
+    """
+    grid = np.asarray(frequencies, dtype=float)
+    wavelength = C_LIGHT / grid
+    horizontal = gaussian_overlap(
+        fibre_mode_radius,
+        chip_mode_radius_x,
+        wavelength=wavelength,
+        offset=offset_x,
+        tilt=tilt,
+        gap=gap,
+        index=gap_index,
+    )
+    vertical = gaussian_overlap(
+        fibre_mode_radius,
+        chip_mode_radius_y,
+        wavelength=wavelength,
+        offset=offset_y,
+        gap=gap,
+        index=gap_index,
+    )
+    fibre_facet = fresnel_reflectance(fibre_index, gap_index)
+    chip_facet = fresnel_reflectance(mode_index, gap_index)
+    through = np.sqrt(horizontal * vertical * (1.0 - fibre_facet) * (1.0 - chip_facet))
+
+    s = np.zeros((grid.size, 2, 2), dtype=np.complex128)
+    s[:, 1, 0] = through
+    s[:, 0, 1] = through
+    s[:, 0, 0] = np.sqrt(fibre_facet)
+    s[:, 1, 1] = np.sqrt(chip_facet)
+    return SMatrix(ports=ports, frequencies=grid, s=s)
+
+
+def grating_coupler_centre(
+    *,
+    period: float,
+    effective_index: float,
+    group_index: float,
+    reference_wavelength: float,
+    angle: float,
+    medium_index: float = 1.0,
+) -> float:
+    """The wavelength a grating coupler couples best at [m].
+
+    Phase matching along the grating: the fibre's tangential wavenumber plus one
+    grating vector is the guided mode's, ``lambda = period (n_eff(lambda) - n sin theta)``,
+    with ``theta`` the fibre's angle in the medium it sits in. ``n_eff`` moves with
+    wavelength, and linearising it through the group index solves exactly::
+
+        lambda_c = period (n_g - n sin theta) / (1 + period (n_g - n_eff) / lambda_0)
+
+    which is ``period (n_eff - n sin theta)`` when the grating does not disperse.
+    The denominator is why a real grating coupler tunes by several nanometres per
+    degree of fibre angle rather than the ten-plus the dispersionless formula says.
+    """
+    if period <= 0.0:
+        raise ValueError(f"period must be positive, got {period} m")
+    tangential = medium_index * np.sin(angle)
+    return float(
+        period
+        * (group_index - tangential)
+        / (1.0 + period * (group_index - effective_index) / reference_wavelength)
+    )
+
+
+def grating_coupler(
+    frequencies: np.ndarray,
+    *,
+    period: float,
+    effective_index: float,
+    group_index: float,
+    reference_wavelength: float,
+    angle: float,
+    medium_index: float = 1.0,
+    peak_loss_db: float = 3.0,
+    bandwidth_1db: float = 35e-9,
+    back_reflection_db: float = 20.0,
+    ports: tuple[str, str] = ("in", "out"),
+) -> SMatrix:
+    """A grating coupler's passband, centred where its phase matching says.
+
+    The centre is physics, from :func:`grating_coupler_centre`. The shape is a
+    compact model, as a foundry's PDK gives one: a Gaussian in wavelength falling
+    by one decibel ``bandwidth_1db / 2`` either side of the centre, under a peak
+    loss. A grating's real passband is set by its directionality and mode match,
+    which need the full vertical stack to compute; those are what the two
+    numbers stand in for, and they are what a PDK measures. Each port reflects
+    ``back_reflection_db`` below its input.
+    """
+    if bandwidth_1db <= 0.0:
+        raise ValueError(f"the 1 dB bandwidth must be positive, got {bandwidth_1db} m")
+    grid = np.asarray(frequencies, dtype=float)
+    wavelength = C_LIGHT / grid
+    centre = grating_coupler_centre(
+        period=period,
+        effective_index=effective_index,
+        group_index=group_index,
+        reference_wavelength=reference_wavelength,
+        angle=angle,
+        medium_index=medium_index,
+    )
+    # exp(-(dl)^2 / 2 sigma^2) is 10^-0.1 at dl = bandwidth / 2.
+    sigma_squared = (bandwidth_1db / 2.0) ** 2 / (2.0 * 0.1 * np.log(10.0))
+    power = 10.0 ** (-peak_loss_db / 10.0) * np.exp(
+        -((wavelength - centre) ** 2) / (2.0 * sigma_squared)
+    )
+
+    s = np.zeros((grid.size, 2, 2), dtype=np.complex128)
+    s[:, 1, 0] = np.sqrt(power)
+    s[:, 0, 1] = np.sqrt(power)
+    echo = 10.0 ** (-back_reflection_db / 20.0)
+    s[:, 0, 0] = echo
+    s[:, 1, 1] = echo
+    return SMatrix(ports=ports, frequencies=grid, s=s)

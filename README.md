@@ -20,7 +20,7 @@ link in this simulator descends from.*
 > ### Project status: 0.4.1 — released, and still moving.
 >
 > `pip install maiman`, then `maiman serve` — or [start from no Python at
-> all](#installing-and-running-it). Phases 0 through 4 are done: **58 components, more than 1250 tests, and
+> all](#installing-and-running-it). Phases 0 through 4 are done: **60 components, more than 1250 tests, and
 > every physics block checked against a closed-form result in CI.**
 >
 > **Links run end to end.** Direct detection — PRBS → NRZ → laser → MZM → fiber → PIN → filter →
@@ -140,7 +140,7 @@ You will see:
 
 ```
 Maiman Studio session server
-  58 components
+  60 components
   http://127.0.0.1:8765/
 ```
 
@@ -1585,9 +1585,9 @@ in. The same goes for the couplers: a directional coupler's split ratio is polar
 and here it is not, so the two combs come out with the same notch depth where a real pair would
 not.
 
-**Coupling into the die is not modelled either.** `Ex` is taken to be the chip's TE mode and `Ey`
-its TM, which says the die is aligned to the signal's own x axis. A real launch goes through a
-grating or an edge coupler with its own alignment and its own extinction.
+**Coupling into the die is its own step.** Every photonic block takes `Ex` to be the chip's TE mode
+and `Ey` its TM. `EdgeCoupler` and `GratingCoupler` are what put the signal into that frame, with a
+die rotation, a per-polarization response and a loss — see *Getting light onto a chip*.
 
 The MMI, the Y-junction, the Mach-Zehnder and PDK import are all downstream of this framework
 rather than of new physics — an interferometer is already two couplers and two arms in a `Circuit`,
@@ -2142,6 +2142,51 @@ liquid and every notch moves shortward, faster the closer the liquid comes to th
 ```
 
 LP01 moves a tenth as far: the low-order cladding modes barely reach the boundary.
+
+## Getting light onto a chip
+
+Every photonic block here used to assume the die was perfectly aligned to the fibre and that
+reaching it cost nothing. In a real photonic link budget the coupling is often the largest line — a
+few decibels per facet, where a ring filter costs tenths. Two blocks are that step, and both project
+the signal onto the die's axes first: `rotation` decides how much of it is TE.
+
+### An edge coupler is two Gaussian beams and two facets
+
+The fibre's mode and the chip's are each a Gaussian, and their overlap — with a lateral offset, a
+tilt, and a free-space gap the fibre's beam diffracts across — is a Gaussian integral in closed form.
+It is checked against the integral itself, with the beam propagated across the gap by FFT, to 2e-7,
+and against the textbook offset, mismatch and tilt limits exactly. The Gaussian that stands in for a
+fibre's mode (Marcuse's spot size) is checked against the mode: 0.7 % wider than the best fit to the
+solver's own LP01 field, and 99.2 % of it in power.
+
+```
+   standard fibre (10.4 um mode) onto a 3 um spot-size converter
+   mode mismatch                     -5.47 dB
+   two facets in air                 -0.31 dB
+   through the joint                 -5.78 dB
+
+   matched modes, misaligned
+   1 um lateral offset               -0.16 dB
+   2 um                              -0.64 dB
+   10 um air gap                     -0.04 dB
+   50 um air gap                     -0.82 dB
+   bare silicon facet, both facets   -1.75 dB
+```
+
+Not modelled: the etalon the two facets form across a gap, and any difference between a chip mode's
+TE and TM sizes.
+
+### A grating coupler is phase matching, and a compact model
+
+Where a grating coupler couples best is physics: the fibre's tangential wavenumber plus one grating
+vector is the guided mode's, with that mode's dispersion in it. A 611 nm period in 220 nm silicon,
+fibre at 10 degrees in air, centres at 1549.8 nm and tunes by **7.0 nm per degree** of fibre angle.
+The same grating without dispersion would tune by 10.5, which is why the group index is a parameter.
+
+How well and over how wide a band is a compact model — a peak loss and a 1 dB bandwidth, a Gaussian
+passband between them — because computing those needs the grating's full vertical stack, and a
+number a foundry measured is better than one invented here. TM is rejected by `tm_extinction`: an
+x-polarized carrier onto a die rotated by 90 degrees couples 25 dB worse than onto one aligned to it.
 
 ## What a layout tool knows, and what it does not
 
