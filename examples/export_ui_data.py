@@ -17,6 +17,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import dwdm_link
 import numpy as np
 
 from maiman import Graph, SimulationContext, manifests, sweep
@@ -533,6 +534,25 @@ def of_type(graph: Graph, kind: type) -> Any:
     return next(c for c in graph.components if isinstance(c, kind))
 
 
+#: The File menu's starting points: key, the title the row shows, and the project
+#: file a script in this directory writes. Read back from disk rather than rebuilt,
+#: so what the menu opens is byte for byte the file a user can open by hand.
+TEMPLATES: dict[str, tuple[str, Path]] = {
+    "dwdm-link": ("DWDM link, 8 × 10 Gb/s", dwdm_link.PROJECT),  # noqa: RUF001 -- a times sign
+    "wdm-osa": ("WDM spectrum, 4 channels", WDM_PROJECT),
+    "ook-eye": ("Direct detection, eye diagram", OOK_PROJECT),
+    "coherent-sdfec": ("Coherent link, soft-decision FEC", SDFEC_PROJECT),
+}
+
+
+def templates() -> dict[str, Any]:
+    """Every template, as the page reads it. Call after the projects are written."""
+    return {
+        key: {"title": title, "project": json.loads(path.read_text(encoding="utf-8"))}
+        for key, (title, path) in TEMPLATES.items()
+    }
+
+
 def main() -> None:
     graph = build()
     analyzer = next(c for c in graph.components if c.label == "vsa")
@@ -577,6 +597,9 @@ def main() -> None:
     # difference the quadrant out, and soft information does not survive a block
     # that emits decisions. See `coherent_sdfec_link` for the measurement.
     coherent_sdfec()
+
+    # And the DWDM template, which nothing else on the page draws from.
+    dwdm_link.write()
 
     # Required received power per format, from the same graph re-run.
     sensitivity: list[dict[str, Any]] = []
@@ -643,6 +666,7 @@ def main() -> None:
         },
         "spectrum": spectrum,
         "sensitivity": sensitivity,
+        "templates": templates(),
         # The graph itself, in the same `.maiman` document format the session
         # server accepts. The interface draws its schematic from this and posts
         # it back to run it, so the blocks on the canvas, the values in the

@@ -162,8 +162,10 @@ anything to see it work.
 3. **Change one and press Run again.** Set the fiber's length to 200 km and the received power
    drops by exactly the amount its attenuation says it should. Every number on screen is computed,
    not drawn.
-4. **File → Open** has other links to look at: an eye diagram on a direct-detection link, a WDM
-   spectrum on an optical spectrum analyser, a coded link.
+4. **The File menu opens templates** — complete links to start from: an eight-channel DWDM link on
+   the ITU grid with a multiplexer, a span, a demultiplexer and a counted receiver; a WDM spectrum on
+   an optical spectrum analyser; an eye diagram on a direct-detection link; a coherent link decoded
+   with soft-decision FEC. Each is a `.maiman` file in `examples/`, written by the script beside it.
 5. **File → Save** writes a `.maiman` file — a plain text description of your link that you can
    keep, re-open, or send to someone.
 

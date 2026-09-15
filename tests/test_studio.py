@@ -1153,3 +1153,38 @@ def test_a_loop_control_is_captioned_and_warns_until_it_converges() -> None:
     assert 'at(node.id, "residual")' in text
     assert "has not converged" in text
     assert "Feedback" in embedded()["manifests"]
+
+
+#: Each template, and the project file the script beside it writes.
+TEMPLATE_FILES = {
+    "dwdm-link": "dwdm_link.maiman",
+    "wdm-osa": "wdm_osa.maiman",
+    "ook-eye": "ook_eye.maiman",
+    "coherent-sdfec": "coherent_sdfec.maiman",
+}
+
+
+def test_every_template_row_is_a_project_the_page_carries() -> None:
+    """A row with no project behind it is a control the page cannot back."""
+    text = STUDIO.read_text(encoding="utf-8")
+    rows = set(re.findall(r'id="file-template-([a-z0-9-]+)"', text))
+    assert rows == set(embedded()["templates"]) == set(TEMPLATE_FILES)
+
+
+def test_every_template_is_the_file_beside_its_script() -> None:
+    """What the menu opens is the file a user could open by hand, not a copy of it."""
+    for key, name in TEMPLATE_FILES.items():
+        on_disk = json.loads((ROOT / "examples" / name).read_text(encoding="utf-8"))
+        assert embedded()["templates"][key]["project"] == on_disk, key
+
+
+@pytest.mark.parametrize("key", sorted(TEMPLATE_FILES))
+def test_every_template_runs(key: str) -> None:
+    payload = run_project(embedded()["templates"][key]["project"])
+    assert payload["results"], f"the {key} template produced no results"
+
+
+def test_a_template_opens_as_a_copy() -> None:
+    """Editing the canvas must not edit the template it came from."""
+    text = STUDIO.read_text(encoding="utf-8")
+    assert "structuredClone(TEMPLATES[key].project)" in text

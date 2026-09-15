@@ -1,0 +1,736 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.4.1",
+  "context": {
+    "bit_rate": 10000000000.0,
+    "samples_per_symbol": 8,
+    "sequence_length": 512,
+    "seed": 7,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "prbs",
+      "type": "PRBSGenerator",
+      "params": {
+        "order": 11.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 830.0
+      }
+    },
+    {
+      "id": "drv",
+      "type": "NRZDriver",
+      "params": {
+        "v_low": 4.0,
+        "v_high": 0.0
+      },
+      "ui": {
+        "x": 168.0,
+        "y": 830.0
+      }
+    },
+    {
+      "id": "mux",
+      "type": "Multiplexer",
+      "params": {
+        "first_wavelength": 1552.5243811496632,
+        "spacing": 100.0
+      },
+      "config": {
+        "channels": 8
+      },
+      "ui": {
+        "x": 444.0,
+        "y": 380.0
+      }
+    },
+    {
+      "id": "ch0",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1552.5243811496632
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 30.0
+      }
+    },
+    {
+      "id": "mzm0",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 306.0,
+        "y": 30.0
+      }
+    },
+    {
+      "id": "ch1",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1551.7207971014493
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 130.0
+      }
+    },
+    {
+      "id": "mzm1",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 306.0,
+        "y": 130.0
+      }
+    },
+    {
+      "id": "ch2",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1550.9180444904293
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 230.0
+      }
+    },
+    {
+      "id": "mzm2",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 306.0,
+        "y": 230.0
+      }
+    },
+    {
+      "id": "ch3",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1550.116122026887
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 330.0
+      }
+    },
+    {
+      "id": "mzm3",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 306.0,
+        "y": 330.0
+      }
+    },
+    {
+      "id": "ch4",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1549.3150284237724
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 430.0
+      }
+    },
+    {
+      "id": "mzm4",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 306.0,
+        "y": 430.0
+      }
+    },
+    {
+      "id": "ch5",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1548.514762396694
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 530.0
+      }
+    },
+    {
+      "id": "mzm5",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 306.0,
+        "y": 530.0
+      }
+    },
+    {
+      "id": "ch6",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1547.7153226639132
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 630.0
+      }
+    },
+    {
+      "id": "mzm6",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 306.0,
+        "y": 630.0
+      }
+    },
+    {
+      "id": "ch7",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1546.9167079463364
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 730.0
+      }
+    },
+    {
+      "id": "mzm7",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 306.0,
+        "y": 730.0
+      }
+    },
+    {
+      "id": "booster",
+      "type": "EDFA",
+      "params": {
+        "gain": 10.0,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 582.0,
+        "y": 380.0
+      }
+    },
+    {
+      "id": "span",
+      "type": "Fiber",
+      "params": {
+        "length": 80.0,
+        "attenuation": 0.2,
+        "dispersion": 17.0,
+        "nonlinearity": 1.3
+      },
+      "ui": {
+        "x": 720.0,
+        "y": 380.0
+      }
+    },
+    {
+      "id": "dcf",
+      "type": "Fiber",
+      "params": {
+        "length": 13.6,
+        "attenuation": 0.5,
+        "dispersion": -100.0
+      },
+      "ui": {
+        "x": 858.0,
+        "y": 380.0
+      }
+    },
+    {
+      "id": "preamp",
+      "type": "EDFA",
+      "params": {
+        "gain": 23.0,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 996.0,
+        "y": 380.0
+      }
+    },
+    {
+      "id": "osa",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "center_wavelength": 1549.720544548,
+        "span": 1200.0,
+        "points": 1024.0,
+        "resolution_bandwidth": 12.5
+      },
+      "ui": {
+        "x": 1134.0,
+        "y": 200.0
+      }
+    },
+    {
+      "id": "osnr",
+      "type": "OSNRMeter",
+      "params": {},
+      "ui": {
+        "x": 1134.0,
+        "y": 290.0
+      }
+    },
+    {
+      "id": "demux",
+      "type": "Demultiplexer",
+      "params": {
+        "first_wavelength": 1552.5243811496632,
+        "spacing": 100.0
+      },
+      "config": {
+        "channels": 8
+      },
+      "ui": {
+        "x": 1134.0,
+        "y": 470.0
+      }
+    },
+    {
+      "id": "drop_power",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+        "x": 1272.0,
+        "y": 380.0
+      }
+    },
+    {
+      "id": "pin",
+      "type": "PINPhotodiode",
+      "params": {
+        "responsivity": 0.8
+      },
+      "ui": {
+        "x": 1272.0,
+        "y": 560.0
+      }
+    },
+    {
+      "id": "lpf",
+      "type": "ElectricalFilter",
+      "params": {
+        "bandwidth": 7.0
+      },
+      "ui": {
+        "x": 1410.0,
+        "y": 560.0
+      }
+    },
+    {
+      "id": "ber",
+      "type": "BERAnalyzer",
+      "params": {},
+      "ui": {
+        "x": 1548.0,
+        "y": 560.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "lpf",
+        "out"
+      ],
+      "to": [
+        "ber",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "ber",
+        "reference"
+      ]
+    },
+    {
+      "from": [
+        "mux",
+        "out"
+      ],
+      "to": [
+        "booster",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "span",
+        "out"
+      ],
+      "to": [
+        "dcf",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "preamp",
+        "out"
+      ],
+      "to": [
+        "demux",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "demux",
+        "out3"
+      ],
+      "to": [
+        "drop_power",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "drv",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "pin",
+        "out"
+      ],
+      "to": [
+        "lpf",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "mzm0",
+        "out"
+      ],
+      "to": [
+        "mux",
+        "in0"
+      ]
+    },
+    {
+      "from": [
+        "mzm1",
+        "out"
+      ],
+      "to": [
+        "mux",
+        "in1"
+      ]
+    },
+    {
+      "from": [
+        "mzm2",
+        "out"
+      ],
+      "to": [
+        "mux",
+        "in2"
+      ]
+    },
+    {
+      "from": [
+        "mzm3",
+        "out"
+      ],
+      "to": [
+        "mux",
+        "in3"
+      ]
+    },
+    {
+      "from": [
+        "mzm4",
+        "out"
+      ],
+      "to": [
+        "mux",
+        "in4"
+      ]
+    },
+    {
+      "from": [
+        "mzm5",
+        "out"
+      ],
+      "to": [
+        "mux",
+        "in5"
+      ]
+    },
+    {
+      "from": [
+        "mzm6",
+        "out"
+      ],
+      "to": [
+        "mux",
+        "in6"
+      ]
+    },
+    {
+      "from": [
+        "mzm7",
+        "out"
+      ],
+      "to": [
+        "mux",
+        "in7"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "out"
+      ],
+      "to": [
+        "mzm0",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "ch0",
+        "out"
+      ],
+      "to": [
+        "mzm0",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "out"
+      ],
+      "to": [
+        "mzm1",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "ch1",
+        "out"
+      ],
+      "to": [
+        "mzm1",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "out"
+      ],
+      "to": [
+        "mzm2",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "ch2",
+        "out"
+      ],
+      "to": [
+        "mzm2",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "out"
+      ],
+      "to": [
+        "mzm3",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "ch3",
+        "out"
+      ],
+      "to": [
+        "mzm3",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "out"
+      ],
+      "to": [
+        "mzm4",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "ch4",
+        "out"
+      ],
+      "to": [
+        "mzm4",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "out"
+      ],
+      "to": [
+        "mzm5",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "ch5",
+        "out"
+      ],
+      "to": [
+        "mzm5",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "out"
+      ],
+      "to": [
+        "mzm6",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "ch6",
+        "out"
+      ],
+      "to": [
+        "mzm6",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "out"
+      ],
+      "to": [
+        "mzm7",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "ch7",
+        "out"
+      ],
+      "to": [
+        "mzm7",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "preamp",
+        "out"
+      ],
+      "to": [
+        "osa",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "preamp",
+        "out"
+      ],
+      "to": [
+        "osnr",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "demux",
+        "out3"
+      ],
+      "to": [
+        "pin",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "dcf",
+        "out"
+      ],
+      "to": [
+        "preamp",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "booster",
+        "out"
+      ],
+      "to": [
+        "span",
+        "in"
+      ]
+    }
+  ]
+}
