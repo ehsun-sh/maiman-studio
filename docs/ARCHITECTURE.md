@@ -552,6 +552,9 @@ be finished without it, and each is validated against a result it does not share
 * **Loops.** `Feedback` runs a cavity to its fixed point in a declared number of passes, and the
   residual it reports falls by the loop's round-trip gain. `DelayLine` makes each pass a lap in
   time, so the same graph is a recirculating loop.
+* **Gain tilt.** An erbium transient is one average inversion moving, and `ErbiumSpectrum` spreads it
+  across the band from the fibre's Giles parameters: at the centre wavelength the single-reservoir
+  answer exactly, and everywhere else that answer times the dynamic gain tilt.
 * **Nonlinear bookkeeping.** Four-wave mixing products are paid for by the pumps that make them, so
   a lossless span conserves energy; Raman past its 13.2 THz peak is integrated with silica's shape.
 * **Modes.** A scalar LP mode solver for a three-layer step-index fibre, with Bessel functions from
@@ -568,8 +571,9 @@ be finished without it, and each is validated against a result it does not share
 
 Stated in the code where each approximation is made, and collected here:
 
-* **Amplifiers.** Erbium transients tilt the gain spectrum as the inversion moves; the model has one
-  reservoir and one gain. The pump control loop that pushes back on an excursion is absent.
+* **Amplifiers.** The reservoir is driven by total power, where channels at different wavelengths
+  would drain it at their own cross sections; and the pump control loop that pushes back on an
+  excursion is absent.
 * **Fibre.** PMD is applied after dispersion and the Kerr effect rather than interleaved with them;
   the coherent `A_x* A_y²` polarization term is left out; four-wave mixing tracks the linear
   mismatch between spans but not the pumps' own nonlinear phase.

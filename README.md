@@ -867,6 +867,35 @@ control loop pushing back on exactly this excursion, and what is computed here i
 case, which is the one such a loop is sized against. Both are real and both are missing rather than
 approximated.
 
+### A drop tilts the spectrum
+
+One reservoir is one average inversion, and an inversion that moves takes every wavelength's gain with
+it — by a different number of decibels at each. For a homogeneously broadened medium the gain in dB is
+linear in the inversion, `G(λ, n) = n (A + G*) − A`, where `A` and `G*` are the coil's unpumped loss
+and fully inverted gain: the Giles parameters a doped-fibre datasheet publishes. `ErbiumSpectrum`
+takes them as given, or derives the emission curve from the absorption curve by McCumber's relation.
+
+`spectral_gain_transient` integrates the same reservoir `gain_transient` does, reads its gain at the
+amplifier's centre wavelength as the inversion, and spreads that across the spectrum. At the centre
+wavelength it is the single-reservoir answer to 1e-10 dB, and every other channel swings by the tilt
+`(A + G*)(λ) / (A + G*)(λ_ref)` times it, at every instant:
+
+```
+   8 channels at -6 dBm, 7 dropped          (an illustrative spectrum, not a fibre)
+   channel   tilt   excursion
+   1530 nm   1.92    +6.18 dB
+   1540 nm   1.50    +4.81 dB
+   1550 nm   1.00    +3.21 dB    the single-reservoir answer
+   1560 nm   0.84    +2.70 dB
+```
+
+A link designed around the centre wavelength's 3.2 dB under-protects its short-wavelength receivers by
+three decibels. The tilt does not depend on the inversion, which is why it is one curve per amplifier,
+measured once. `examples/edfa_gain_tilt.py` prints the table.
+
+Still not modelled: channels at different wavelengths drain the inversion at their own cross sections,
+where the reservoir here is driven by total power; and the pump control loop that pushes back.
+
 ### What RIN is for
 
 Every noise in this project until now got *quieter*, relative to the signal, as the launch power
@@ -2898,8 +2927,8 @@ time window, and results are reproducible.
 | **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier frequency and phase recovery, coarse frequency acquisition over the whole sampled band, blind square-law timing recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km with blind estimation of the accumulated value, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
 | **3 — GUI & WDM** ✅ | Wavelength-selective filters, the ITU grids and a multiplexer/demultiplexer pair on them with crosstalk that falls out of the channel spacing, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — the OSA's trace drawn in the dock, and 400G/800G reference designs validated against the OSNR relations, and a back-end indirection the propagation kernels dispatch through — CuPy runs it where a device exists, `maiman devices` cross-checks it against NumPy, and a CI job does the same on any runner labelled `gpu` | ~6 months |
 | **4 — PIC** ✅ | Bidirectional S-matrix circuit solver, waveguide, directional coupler, all-pass and add-drop ring resonators, cross-validated against SAX; N×N MMI couplers on the self-imaging phase relations; a Mach-Zehnder interferometer assembled from them — switch, interleaver, or both; and PDK import, which reads a foundry's fitted numbers out of a JSON kit and refuses to extrapolate them past the window they were fitted in; and birefringence, with each guided polarization carrying its own indices through the same reduction | — |
-| **5 — Gratings, sensing, loops and coupling** ✅ | Fibre Bragg gratings assembled from transfer matrices — apodized, chirped, sampled and phase-shifted — a circulator with isolation and return loss, and a grating read as a strain gauge and a thermometer, by a swept laser or by broadband light on an analyser; noise that carries the spectral shape of what it passed through; loop control that runs a cavity to its fixed point, and a delay line that turns the same loop into a recirculating one lap by lap; pump depletion for four-wave mixing and Raman's measured gain shape past its peak; a scalar mode solver for core and cladding modes, and a long-period grating built on it; edge and grating couplers that put a signal into the chip's TE and TM; and templates in the studio's File menu, including an eight-channel DWDM link | — |
-| **Open** | Erbium transients that tilt the gain spectrum, and the pump control loop that pushes back on them; PMD interleaved with the Kerr effect rather than applied after it, and the coherent `A_x* A_y²` polarization term; the pumps' own nonlinear phase in four-wave mixing between spans; vector cladding modes, material dispersion and tilted gratings; the etalon between an edge coupler's facets and a grating coupler's passband computed from its vertical stack; PAM4 with FFE/DFE for short reach, and a directly modulated laser with its chirp; bit-exact oFEC, which needs the OIF document open rather than recalled; a spectral view of a block's scattering matrix in the studio | — |
+| **5 — Gratings, sensing, loops and coupling** ✅ | Fibre Bragg gratings assembled from transfer matrices — apodized, chirped, sampled and phase-shifted — a circulator with isolation and return loss, and a grating read as a strain gauge and a thermometer, by a swept laser or by broadband light on an analyser; noise that carries the spectral shape of what it passed through; loop control that runs a cavity to its fixed point, and a delay line that turns the same loop into a recirculating one lap by lap; pump depletion for four-wave mixing and Raman's measured gain shape past its peak; an erbium transient spread across the spectrum, each channel moving by the fibre's own tilt; a scalar mode solver for core and cladding modes, and a long-period grating built on it; edge and grating couplers that put a signal into the chip's TE and TM; and templates in the studio's File menu, including an eight-channel DWDM link | — |
+| **Open** | The pump control loop that pushes back on an erbium transient, and channels draining the inversion at their own cross sections rather than one rate; PMD interleaved with the Kerr effect rather than applied after it, and the coherent `A_x* A_y²` polarization term; the pumps' own nonlinear phase in four-wave mixing between spans; vector cladding modes, material dispersion and tilted gratings; the etalon between an edge coupler's facets and a grating coupler's passband computed from its vertical stack; PAM4 with FFE/DFE for short reach, and a directly modulated laser with its chirp; bit-exact oFEC, which needs the OIF document open rather than recalled; a spectral view of a block's scattering matrix in the studio | — |
 
 ¹ One developer, part-time. Estimates, not commitments.
 

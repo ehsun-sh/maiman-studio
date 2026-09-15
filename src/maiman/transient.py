@@ -40,10 +40,16 @@ stimulated emission that drains the reservoir is itself proportional to how full
 it is. That closed form is tested too, against a step response measured from the
 integrator, to six figures.
 
-**What this does not model.** One reservoir, so one gain for every wavelength.
-A real erbium transient *tilts* the gain spectrum as the inversion changes, so a
-surviving channel's excursion depends on where in the band it sits, and this
-reports one number for all of them. The pump is implicit in ``G_0`` and does not
+**The spectrum tilts, and** :func:`spectral_gain_transient` **shows by how much.**
+One reservoir means one average inversion, and a real erbium transient moves
+every wavelength's gain with it -- by a different number of decibels at each,
+set by the fibre's own absorption and emission curves (:class:`ErbiumSpectrum`).
+A surviving channel's excursion therefore depends on where in the band it sits,
+and at the amplifier's centre wavelength it is exactly :func:`gain_transient`'s.
+
+**What this does not model.** The reservoir is still driven by total power, so
+channels at different wavelengths drain it at one rate where their cross
+sections would make them differ. And the pump is implicit in ``G_0`` and does not
 respond: a deployed amplifier has a control loop that pushes back on exactly the
 excursion computed here, and what this gives is the uncontrolled case. Both are
 real effects and both are absent rather than approximated.
@@ -65,7 +71,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from .components.amplifiers import EDFA
-from .units import db_to_linear
+from .units import C_LIGHT, H_PLANCK, db_to_linear
 
 #: Metastable (4I13/2) lifetime of Er3+ in silica, in seconds. Reported between
 #: 8 and 12 ms across host compositions; 10 ms is the figure Desurvire and the
@@ -317,4 +323,219 @@ def gain_transient(
         input_power=drive,
         lifetime=lifetime,
         substeps=substeps,
+    )
+
+
+# --------------------------------------------------------------------------
+# The gain spectrum, and how it tilts as the inversion moves
+# --------------------------------------------------------------------------
+
+#: Boltzmann's constant [J/K], for the McCumber relation.
+BOLTZMANN = 1.380649e-23
+
+
+@dataclass(frozen=True)
+class ErbiumSpectrum:
+    """An erbium coil's gain spectrum at every inversion, from two measured curves.
+
+    ``absorption_db`` is ``A(lambda)``, the small-signal loss of the whole coil
+    with no pump [dB]; ``full_inversion_gain_db`` is ``G*(lambda)``, its gain
+    with every ion excited [dB]. These are the Giles parameters, and they are
+    what a doped-fibre datasheet publishes. For a homogeneously broadened medium
+    at average inversion ``n`` the gain in decibels is linear in ``n``::
+
+        G(lambda, n) = n (A + G*) - A
+
+    which is all a gain spectrum can do as channels come and go: one number, the
+    inversion, moves, and every wavelength follows it by its own slope
+    ``A + G*``. The two curves come from a fibre, not from here: the shape of an
+    erbium spectrum depends on the glass it is doped into, and a curve invented
+    to look plausible would be a number nobody can back.
+    """
+
+    wavelengths: np.ndarray
+    """Wavelengths the curves are sampled at [m], strictly increasing."""
+
+    absorption_db: np.ndarray
+    """``A(lambda)``: the unpumped coil's loss [dB], positive."""
+
+    full_inversion_gain_db: np.ndarray
+    """``G*(lambda)``: the fully inverted coil's gain [dB], positive."""
+
+    def __post_init__(self) -> None:
+        grid = np.asarray(self.wavelengths, dtype=np.float64)
+        absorption = np.asarray(self.absorption_db, dtype=np.float64)
+        emission = np.asarray(self.full_inversion_gain_db, dtype=np.float64)
+        if grid.ndim != 1 or grid.size < 2:
+            raise ValueError("a spectrum needs at least two wavelengths on a 1-D grid")
+        if absorption.shape != grid.shape or emission.shape != grid.shape:
+            raise ValueError("absorption and full-inversion gain must match the wavelength grid")
+        if np.any(np.diff(grid) <= 0.0):
+            raise ValueError("wavelengths must be strictly increasing")
+        if np.any(absorption < 0.0) or np.any(emission < 0.0):
+            raise ValueError("absorption and full-inversion gain are magnitudes in dB, not signed")
+        object.__setattr__(self, "wavelengths", grid)
+        object.__setattr__(self, "absorption_db", absorption)
+        object.__setattr__(self, "full_inversion_gain_db", emission)
+
+    @classmethod
+    def from_mccumber(
+        cls,
+        wavelengths: np.ndarray,
+        absorption_db: np.ndarray,
+        *,
+        crossover_wavelength: float,
+        temperature: float = 295.0,
+    ) -> ErbiumSpectrum:
+        """Derive the emission curve from the absorption curve, by McCumber.
+
+        Absorption and emission cross sections of one transition are not
+        independent: ``sigma_e / sigma_a = exp(h c (1/lambda_c - 1/lambda) / k T)``,
+        with ``lambda_c`` the wavelength where they are equal. The coil's two
+        curves are the cross sections times the same length and ion density, so
+        the ratio carries over to them unchanged. Longward of the crossover
+        emission wins, which is why an erbium amplifier's gain sits on the red
+        side of its absorption peak.
+        """
+        grid = np.asarray(wavelengths, dtype=np.float64)
+        absorption = np.asarray(absorption_db, dtype=np.float64)
+        if crossover_wavelength <= 0.0 or temperature <= 0.0:
+            raise ValueError("the crossover wavelength and temperature must be positive")
+        ratio = np.exp(
+            H_PLANCK
+            * C_LIGHT
+            * (1.0 / crossover_wavelength - 1.0 / grid)
+            / (BOLTZMANN * temperature)
+        )
+        return cls(
+            wavelengths=grid, absorption_db=absorption, full_inversion_gain_db=absorption * ratio
+        )
+
+    def _curves(self, wavelength: np.ndarray | float) -> tuple[np.ndarray, np.ndarray]:
+        points = np.atleast_1d(np.asarray(wavelength, dtype=np.float64))
+        low, high = float(self.wavelengths[0]), float(self.wavelengths[-1])
+        if np.any(points < low) or np.any(points > high):
+            raise ValueError(
+                f"the spectrum covers {low * 1e9:.1f} to {high * 1e9:.1f} nm and will not "
+                "extrapolate past what was measured"
+            )
+        return (
+            np.interp(points, self.wavelengths, self.absorption_db),
+            np.interp(points, self.wavelengths, self.full_inversion_gain_db),
+        )
+
+    def gain_db(self, wavelength: np.ndarray | float, inversion: np.ndarray | float) -> np.ndarray:
+        """``n (A + G*) - A`` at each wavelength [dB]."""
+        absorption, emission = self._curves(wavelength)
+        return np.asarray(inversion, dtype=np.float64) * (absorption + emission) - absorption
+
+    def inversion(self, wavelength: float, gain_db: np.ndarray | float) -> np.ndarray:
+        """The average inversion that gives ``gain_db`` at ``wavelength``."""
+        absorption, emission = self._curves(wavelength)
+        return (np.asarray(gain_db, dtype=np.float64) + absorption[0]) / (
+            absorption[0] + emission[0]
+        )
+
+    def tilt(self, wavelengths: np.ndarray | float, reference: float) -> np.ndarray:
+        """Dynamic gain tilt: dB moved at each wavelength per dB moved at ``reference``.
+
+        ``(A + G*)(lambda) / (A + G*)(lambda_ref)``, a ratio that does not depend
+        on the inversion -- which is why a line system can characterise its
+        amplifiers' transients with one curve measured once.
+        """
+        absorption, emission = self._curves(wavelengths)
+        ref_absorption, ref_emission = self._curves(reference)
+        return (absorption + emission) / (ref_absorption[0] + ref_emission[0])
+
+
+@dataclass(frozen=True)
+class SpectralTransient:
+    """A gain transient seen at each of several wavelengths."""
+
+    reference: GainTransient
+    """The reservoir's own transient, at the amplifier's centre wavelength."""
+
+    reference_wavelength: float
+    """Where the reference transient's gain is quoted [m]."""
+
+    wavelengths: np.ndarray
+    """Channel wavelengths [m]."""
+
+    inversion: np.ndarray
+    """Average inversion at each time."""
+
+    gain_db: np.ndarray
+    """Gain [dB], shape ``(times, wavelengths)``."""
+
+    @property
+    def times(self) -> np.ndarray:
+        return self.reference.times
+
+    @property
+    def excursions(self) -> np.ndarray:
+        """Each channel's largest signed departure from its starting gain [dB]."""
+        swing = self.gain_db - self.gain_db[0]
+        peak = np.argmax(np.abs(swing), axis=0)
+        return swing[peak, np.arange(swing.shape[1])]
+
+    def __repr__(self) -> str:
+        spread = ", ".join(
+            f"{w * 1e9:.1f} nm {e:+.2f} dB"
+            for w, e in zip(self.wavelengths, self.excursions, strict=True)
+        )
+        return f"SpectralTransient({spread})"
+
+
+def spectral_gain_transient(
+    amplifier: EDFA,
+    spectrum: ErbiumSpectrum,
+    times: np.ndarray,
+    input_power: np.ndarray,
+    wavelengths: Sequence[float] | np.ndarray,
+    *,
+    lifetime: float = METASTABLE_LIFETIME,
+    initial_gain: float | None = None,
+) -> SpectralTransient:
+    """The same transient as :func:`gain_transient`, spread across the spectrum.
+
+    The reservoir is integrated exactly as :func:`gain_transient` integrates it,
+    and its gain is taken to be the gain at the amplifier's
+    ``center_wavelength``. That fixes the average inversion at every instant,
+    and the inversion fixes the gain everywhere else through ``spectrum``. So at
+    the centre wavelength this *is* the single-reservoir answer, and at any other
+    wavelength the excursion is that answer times the spectrum's tilt there.
+
+    **Still one reservoir, driven by total power.** Channels at different
+    wavelengths drain the inversion at slightly different rates, since they see
+    different cross sections, and this does not distinguish them: the drop that
+    removes a group of channels is felt through their total power, as before.
+    The pump is still implicit and does not respond.
+
+    Refused if the amplifier's small-signal gain at its centre wavelength needs
+    more than full inversion by this spectrum, which would be an amplifier this
+    fibre cannot be.
+    """
+    channels = np.atleast_1d(np.asarray(wavelengths, dtype=np.float64))
+    reference_wavelength = amplifier.si("center_wavelength")
+    _, emission = spectrum._curves(reference_wavelength)
+    if amplifier.gain > float(emission[0]):
+        where = reference_wavelength * 1e9
+        raise ValueError(
+            f"a {amplifier.gain:.1f} dB small-signal gain at {where:.1f} nm "
+            f"needs more than full inversion from a spectrum that reaches "
+            f"{float(emission[0]):.1f} dB there"
+        )
+    spectrum._curves(channels)  # refuse channels outside the measured band before integrating
+
+    reservoir = gain_transient(
+        amplifier, times, input_power, lifetime=lifetime, initial_gain=initial_gain
+    )
+    inversion = spectrum.inversion(reference_wavelength, reservoir.gain_db)
+    gain_db = spectrum.gain_db(channels[None, :], inversion[:, None])
+    return SpectralTransient(
+        reference=reservoir,
+        reference_wavelength=reference_wavelength,
+        wavelengths=channels,
+        inversion=inversion,
+        gain_db=gain_db,
     )

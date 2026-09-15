@@ -47,9 +47,12 @@ from .signals import (
 from .sweep import SweepPoint, SweepResult, sweep
 from .transient import (
     METASTABLE_LIFETIME,
+    ErbiumSpectrum,
     GainTransient,
+    SpectralTransient,
     effective_time_constant,
     gain_transient,
+    spectral_gain_transient,
     step_schedule,
 )
 
@@ -65,6 +68,7 @@ __all__ = [
     "Component",
     "CycleError",
     "ElectricalSignal",
+    "ErbiumSpectrum",
     "EyeHistogram",
     "EyeMeasurement",
     "GainTransient",
@@ -83,6 +87,7 @@ __all__ = [
     "ProjectError",
     "Results",
     "SimulationContext",
+    "SpectralTransient",
     "SweepPoint",
     "SweepResult",
     "UnknownComponentError",
@@ -99,6 +104,7 @@ __all__ = [
     "pdk_from_dict",
     "registered_names",
     "save",
+    "spectral_gain_transient",
     "step_schedule",
     "sweep",
 ]
