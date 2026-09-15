@@ -989,3 +989,34 @@ class ConstellationMeasurement:
 
 #: Anything that may travel along an edge of the graph.
 Signal = Any
+
+
+@dataclass(frozen=True)
+class PAMMeasurement:
+    """A PAM receiver's result: what it decided, what that cost, and how it equalised."""
+
+    levels: int
+    symbols_evaluated: int
+    symbol_errors: int
+    bits_evaluated: int
+    bit_errors: int
+
+    snr_db: float
+    """Mean symbol power over the equalised error's variance [dB]."""
+
+    ser_expected: float
+    """:func:`maiman.modulation.ser_pam` at that SNR: what Gaussian noise alone would cost."""
+
+    sample_offset: int
+    """Samples into the symbol the equaliser took its input at."""
+
+    ffe_taps: tuple[float, ...]
+    dfe_taps: tuple[float, ...]
+
+    @property
+    def ser(self) -> float:
+        return self.symbol_errors / self.symbols_evaluated if self.symbols_evaluated else 0.0
+
+    @property
+    def ber(self) -> float:
+        return self.bit_errors / self.bits_evaluated if self.bits_evaluated else 0.0

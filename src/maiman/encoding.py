@@ -50,6 +50,7 @@ from .signals import (
     EyeMeasurement,
     OpticalSignal,
     OpticalSpectrum,
+    PAMMeasurement,
     PowerReading,
     SymbolSignal,
 )
@@ -243,6 +244,24 @@ def _eye_measurement(eye: EyeMeasurement) -> dict[str, Any]:
     }
 
 
+def _pam_measurement(result: PAMMeasurement) -> dict[str, Any]:
+    return {
+        "kind": "pam_measurement",
+        "levels": result.levels,
+        "ser": number(result.ser),
+        "ber": number(result.ber),
+        "ser_expected": number(result.ser_expected),
+        "snr_db": number(result.snr_db),
+        "symbols_evaluated": result.symbols_evaluated,
+        "symbol_errors": result.symbol_errors,
+        "bits_evaluated": result.bits_evaluated,
+        "bit_errors": result.bit_errors,
+        "sample_offset": result.sample_offset,
+        "ffe_taps": [number(t) for t in result.ffe_taps],
+        "dfe_taps": [number(t) for t in result.dfe_taps],
+    }
+
+
 def _constellation_histogram(diagram: ConstellationHistogram) -> dict[str, Any]:
     return {
         "kind": "constellation",
@@ -408,6 +427,7 @@ _ENCODERS: dict[type, Any] = {
     OpticalSpectrum: _spectrum,
     EyeHistogram: _eye_histogram,
     EyeMeasurement: _eye_measurement,
+    PAMMeasurement: _pam_measurement,
     ConstellationHistogram: _constellation_histogram,
     ConstellationMeasurement: _constellation_measurement,
     PropagationDiagnostics: _diagnostics,

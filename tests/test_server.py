@@ -37,6 +37,7 @@ from maiman.components import (
     FECDecoder,
     FECEncoder,
     Feedback,
+    FFEDFEEqualizer,
     Fiber,
     FiberBraggGrating,
     FrequencyRecovery,
@@ -47,6 +48,7 @@ from maiman.components import (
     NRZDriver,
     OpticalSpectrumAnalyzer,
     OSNRMeter,
+    PAM4Driver,
     PINPhotodiode,
     PowerMeter,
     PRBSGenerator,
@@ -268,6 +270,27 @@ def soft_coded_coherent_link() -> Graph:
     return graph
 
 
+def pam4_link() -> Graph:
+    """A PAM4 lane through a narrow receiver, equalised: where a PAM measurement comes from."""
+    ctx = SimulationContext(bit_rate=26.5625e9, samples_per_symbol=8, sequence_length=512)
+    graph = Graph(ctx)
+    prbs = graph.add(PRBSGenerator(order=15.0, bits_per_symbol=2.0, label="prbs"))
+    driver = graph.add(PAM4Driver(v_low=3.2, v_high=0.8, predistort=True, label="pam4"))
+    laser = graph.add(CWLaser(power=0.0, wavelength=1310.0, label="tx"))
+    modulator = graph.add(MachZehnderModulator(v_pi=4.0, label="mzm"))
+    pin = graph.add(PINPhotodiode(label="pin"))
+    lpf = graph.add(ElectricalFilter(bandwidth=13.0, label="lpf"))
+    equalizer = graph.add(FFEDFEEqualizer(label="eq"))
+    graph.connect(prbs, driver["in"])
+    graph.connect(laser, modulator["optical_in"])
+    graph.connect(driver, modulator["electrical_in"])
+    graph.connect(modulator, pin["in"])
+    graph.connect(pin, lpf["in"])
+    graph.connect(lpf, equalizer["in"])
+    graph.connect(prbs, equalizer["reference"])
+    return graph
+
+
 def cavity_link() -> Graph:
     """A return-loss cavity closed by a Feedback, which is where its residual comes from."""
     graph = Graph(SimulationContext(bit_rate=10e9, samples_per_symbol=8, sequence_length=64))
@@ -312,6 +335,7 @@ def test_no_metric_port_in_the_library_encodes_as_opaque() -> None:
         coded_ook_link(),
         soft_coded_coherent_link(),
         cavity_link(),
+        pam4_link(),
     ):
         by_label = {c.label: c for c in graph.components}
         encoded = encode_results(graph.run())

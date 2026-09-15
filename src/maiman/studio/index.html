@@ -2459,6 +2459,63 @@ verdict, and DESIGN.md
     }
    }
   },
+  "FFEDFEEqualizer": {
+   "name": "FFE/DFE Equalizer",
+   "type": "FFEDFEEqualizer",
+   "class": "maiman.components.pam.FFEDFEEqualizer",
+   "category": "DSP",
+   "version": "0.1.0",
+   "parameters": {
+    "ffe_taps": {
+     "type": "float",
+     "default": 7.0,
+     "unit": "",
+     "min": 1.0,
+     "max": 63.0,
+     "doc": "Feed-forward taps; odd, centred"
+    },
+    "dfe_taps": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "",
+     "min": 0.0,
+     "max": 16.0,
+     "doc": "Decision-feedback taps; 0 disables"
+    },
+    "step": {
+     "type": "float",
+     "default": 0.05,
+     "unit": "",
+     "min": 0.0001,
+     "max": 1.0,
+     "doc": "NLMS adaptation step"
+    },
+    "training_passes": {
+     "type": "float",
+     "default": 4.0,
+     "unit": "",
+     "min": 1.0,
+     "max": 50.0,
+     "doc": "Sweeps of training"
+    },
+    "sample_offset": {
+     "type": "float",
+     "default": -1.0,
+     "unit": "",
+     "doc": "Samples into the symbol to take; negative finds it blind"
+    }
+   },
+   "structural": {},
+   "ports": {
+    "inputs": {
+     "in": "electrical",
+     "reference": "binary"
+    },
+    "outputs": {
+     "out": "metric"
+    }
+   }
+  },
   "Feedback": {
    "name": "Feedback",
    "type": "Feedback",
@@ -3596,6 +3653,49 @@ verdict, and DESIGN.md
     },
     "outputs": {
      "out": "metric"
+    }
+   }
+  },
+  "PAM4Driver": {
+   "name": "PAM4 Driver",
+   "type": "PAM4Driver",
+   "class": "maiman.components.pam.PAM4Driver",
+   "category": "Electrical",
+   "version": "0.1.0",
+   "parameters": {
+    "v_low": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "V",
+     "doc": "Voltage of the lowest level"
+    },
+    "v_high": {
+     "type": "float",
+     "default": 1.0,
+     "unit": "V",
+     "doc": "Voltage of the highest level"
+    },
+    "predistort": {
+     "type": "bool",
+     "default": false,
+     "doc": "Space the modulator's output powers evenly, not the volts"
+    },
+    "v_pi": {
+     "type": "float",
+     "default": 4.0,
+     "unit": "V",
+     "min": 0.0,
+     "doc": "The modulator's V_pi, as the correction believes it",
+     "applies_when": "predistort"
+    }
+   },
+   "structural": {},
+   "ports": {
+    "inputs": {
+     "in": "binary"
+    },
+    "outputs": {
+     "out": "electrical"
     }
    }
   },
@@ -25199,6 +25299,10 @@ verdict, and DESIGN.md
       case "constellation": return `${value.counts.length}×${value.counts[0].length} histogram`;
       case "eye":     return `${value.counts.length}×${value.counts[0].length} histogram`;
       case "eye_measurement": return `Q ${value.q_factor.toFixed(3)}`;
+      case "pam_measurement":
+        return `PAM${value.levels} SNR ${value.snr_db.toFixed(2)} dB, ` +
+               `${value.symbol_errors}/${value.symbols_evaluated} symbol errors, ` +
+               `${value.ffe_taps.length} FFE + ${value.dfe_taps.length} DFE taps`;
       case "spectrum": {
         /* A trace is worth a level and a wavelength in the log, not a
            point count: "1024 points" says the array arrived, not what

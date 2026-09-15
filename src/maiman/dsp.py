@@ -1002,3 +1002,135 @@ def butterfly_equalize(
     out_y[count - centre :] = out_y[count - centre - 1]
 
     return out_x, out_y, weights
+
+
+# --------------------------------------------------------------------------
+# Feed-forward and decision-feedback equalisation, for intensity modulation
+# --------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class EqualizerResult:
+    """What an FFE/DFE did: its output, its decisions, and the taps it settled on."""
+
+    output: np.ndarray
+    """Equalised symbols, in level units: the alphabet is ``levels``."""
+
+    decisions: np.ndarray
+    """Index into ``levels`` of each decided symbol."""
+
+    ffe: np.ndarray
+    """Feed-forward taps, centre tap in the middle."""
+
+    bias: float
+    """The constant the equaliser adds, which absorbs a detector's DC level."""
+
+    dfe: np.ndarray
+    """Feedback taps, most recent decision first."""
+
+    mse: float
+    """Mean squared error of ``output`` against the transmitted levels."""
+
+
+def ffe_dfe_equalize(
+    received: np.ndarray,
+    transmitted: np.ndarray,
+    *,
+    levels: np.ndarray,
+    ffe_taps: int,
+    dfe_taps: int = 0,
+    step: float = 0.05,
+    passes: int = 4,
+) -> EqualizerResult:
+    """Train a symbol-spaced FFE/DFE on the transmitted levels, then run it on its own.
+
+    ``received`` is one real sample per symbol, at whatever gain and offset the
+    detector left it; ``transmitted`` is the level each symbol was sent at. The
+    equaliser's output is ``y_k = w . x_k + c - b . d_k``, with ``x_k`` the
+    ``ffe_taps`` samples centred on symbol ``k``, ``c`` a bias, and ``d_k`` the
+    ``dfe_taps`` previous decisions. The window is circular, as every waveform in
+    this engine is.
+
+    **Training is data-aided and normalised.** ``passes`` sweeps of NLMS over the
+    window against ``transmitted`` -- the reference-receiver arrangement a
+    compliance test uses -- with ``step`` in ``(0, 2)`` and independent of the
+    signal's scale. During training the feedback is fed the transmitted levels.
+
+    **The answer is then taken with the taps frozen and the feedback fed its own
+    decisions**, so an error propagates through the DFE exactly as it would in a
+    receiver. A DFE credited with the reference's decisions would report error
+    rates no receiver achieves.
+    """
+    x = np.asarray(received, dtype=np.float64)
+    target = np.asarray(transmitted, dtype=np.float64)
+    alphabet = np.sort(np.asarray(levels, dtype=np.float64))
+    n = x.shape[0]
+    if target.shape != x.shape:
+        raise ValueError(f"transmitted must match received, got {target.shape} and {x.shape}")
+    if ffe_taps < 1 or ffe_taps % 2 == 0:
+        raise ValueError(f"ffe_taps must be odd and at least 1, got {ffe_taps}")
+    if dfe_taps < 0:
+        raise ValueError(f"dfe_taps must not be negative, got {dfe_taps}")
+    if not 0.0 < step < 2.0:
+        raise ValueError(f"an NLMS step must lie in (0, 2), got {step}")
+    if passes < 1:
+        raise ValueError(f"train for at least one pass, got {passes}")
+    if n <= ffe_taps + dfe_taps:
+        raise ValueError(f"{n} symbols cannot train {ffe_taps + dfe_taps} taps")
+
+    # Standardised before anything adapts. NLMS normalises by the regressor's
+    # length, and a photocurrent of 1e-4 A beside a bias input of 1 and decisions
+    # of +-3 would put nearly all of that length in the bias and the feedback:
+    # the feed-forward taps would barely move, and a 9-tap FFE would equalise no
+    # better than one tap. Taps are mapped back to the input's units at the end.
+    mean = float(np.mean(x))
+    scale = float(np.std(x))
+    if scale <= 0.0:
+        raise ValueError("the received samples are constant; there is nothing to equalise")
+    centre = ffe_taps // 2
+    offsets = np.arange(ffe_taps) - centre
+    windows = ((x - mean) / scale)[(np.arange(n)[:, None] + offsets[None, :]) % n]
+    thresholds = 0.5 * (alphabet[1:] + alphabet[:-1])
+
+    # Start at the least-squares gain and offset, so the adaptation spends its
+    # passes on the ISI and not on finding the detector's scale.
+    theta = np.zeros(ffe_taps + 1 + dfe_taps)
+    theta[centre] = float(np.mean(windows[:, centre] * (target - np.mean(target))))
+    theta[ffe_taps] = float(np.mean(target))
+
+    history = np.zeros(dfe_taps)
+    for _ in range(passes):
+        for k in range(n):
+            if dfe_taps:
+                history = target[(k - 1 - np.arange(dfe_taps)) % n]
+            regressor = np.concatenate((windows[k], (1.0,), -history))
+            error = target[k] - float(theta @ regressor)
+            theta += step * error * regressor / (float(regressor @ regressor) + 1e-12)
+
+    output = np.empty(n)
+    decided = np.empty(n, dtype=np.int64)
+    # The feedback's first few decisions wrap to the window's end, which the
+    # frozen taps decide on a first sweep before the counted one.
+    last = alphabet[np.searchsorted(thresholds, target)]
+    for sweep in range(2):
+        for k in range(n):
+            if dfe_taps:
+                history = last[(k - 1 - np.arange(dfe_taps)) % n]
+            regressor = np.concatenate((windows[k], (1.0,), -history))
+            value = float(theta @ regressor)
+            index = int(np.searchsorted(thresholds, value))
+            output[k] = value
+            decided[k] = index
+            last[k] = alphabet[index]
+        del sweep
+
+    # Back to the input's own units: w . (x - mean) / scale + c.
+    ffe = theta[:ffe_taps] / scale
+    return EqualizerResult(
+        output=output,
+        decisions=decided,
+        ffe=ffe,
+        bias=float(theta[ffe_taps] - np.sum(ffe) * mean),
+        dfe=theta[ffe_taps + 1 :].copy(),
+        mse=float(np.mean((output - target) ** 2)),
+    )

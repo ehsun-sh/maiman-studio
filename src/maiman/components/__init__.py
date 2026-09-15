@@ -54,6 +54,7 @@ from .mapping import (
 )
 from .meters import OSNRMeter, PowerMeter
 from .modulators import IQModulator, MachZehnderModulator
+from .pam import FFEDFEEqualizer, PAM4Driver
 from .passive import (
     Attenuator,
     Combiner,
@@ -99,6 +100,7 @@ __all__ = [
     "EyeDiagram",
     "FECDecoder",
     "FECEncoder",
+    "FFEDFEEqualizer",
     "Feedback",
     "Fiber",
     "FiberBraggGrating",
@@ -116,6 +118,7 @@ __all__ = [
     "OSNRMeter",
     "OpticalFilter",
     "OpticalSpectrumAnalyzer",
+    "PAM4Driver",
     "PINPhotodiode",
     "PRBSGenerator",
     "PilotInserter",

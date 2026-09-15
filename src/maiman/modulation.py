@@ -492,3 +492,32 @@ def ber_qam(snr_symbol: float, bits_per_symbol: int) -> float:
     neighbours and cost more than one bit each.
     """
     return ser_qam(snr_symbol, bits_per_symbol) / bits_per_symbol
+
+
+def ser_pam(snr: float, levels: int) -> float:
+    """Analytical symbol error rate for ``levels``-ary PAM in real Gaussian noise.
+
+    ``SER = 2 (1 - 1/M) Q(sqrt(SNR / E))``, with the levels at the odd integers
+    ``+-1, +-3, ...`` so that the distance to the nearest threshold is 1,
+    ``E = (M**2 - 1)/3`` their mean power, and ``SNR`` the mean symbol power over
+    the noise variance -- one real dimension, because an intensity-modulated
+    signal has one. The inner levels have two neighbours and the outer two have
+    one, which is the ``1 - 1/M``.
+
+    **This is one axis of** :func:`ser_qam`. A square QAM constellation is two
+    such PAMs sharing the symbol power, so ``ser_qam(snr, 2k)`` is
+    ``1 - (1 - ser_pam(snr, 2**k))**2`` exactly -- the tests hold them to it, which
+    makes this a second route to a formula already checked against counted errors
+    rather than a new one.
+    """
+    if levels < 2 or levels & (levels - 1):
+        raise ValueError(f"levels must be a power of two, at least 2, got {levels}")
+    if snr <= 0.0:
+        return 1.0 - 1.0 / levels
+    mean_power = (levels * levels - 1) / 3.0
+    return 2.0 * (1.0 - 1.0 / levels) * _q(math.sqrt(snr / mean_power))
+
+
+def ber_pam(snr: float, levels: int) -> float:
+    """Approximate BER for Gray-coded PAM: ``SER / log2(M)``, as for QAM."""
+    return ser_pam(snr, levels) / int(math.log2(levels))
