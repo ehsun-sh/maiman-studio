@@ -2333,10 +2333,42 @@ part in ten thousand at these separations and is not modelled. That conservation
 a sign error impossible to hide — the two ends have to move in opposite directions or the sum
 cannot come out.
 
-The gain is taken as rising linearly with separation, which it does up to about 13 THz and not past
-it, so a comb spanning the C and L bands together has its far pairs over the peak and the transfer
-between them over-predicted. The `diagnostics` port reports the tilt in dB, so what happened is a
-number rather than an assumption.
+The gain rises linearly with separation up to its 13.2 THz peak, and inside that the closed form is
+exact. The C and L bands together are *not* past it — 1530 to 1610 nm is 9.7 THz, which these notes
+used to get wrong. It takes the S band as well. A comb wider than the peak is integrated instead, with
+silica's measured gain shape and photons rather than watts conserved, and the difference is not small:
+
+```
+   S + C + L, 1460 to 1625 nm, 209 channels at 0 dBm, one 80 km span
+   straight line past the peak       11.19 dB of tilt
+   silica's shape                     6.39 dB
+```
+
+The shape is a coarse trace of the measured spectrum, good to tens of percent past the peak. The
+`diagnostics` port reports the tilt in dB, so what happened is a number rather than an assumption.
+
+## What the pumps pay
+
+Four-wave mixing used to make its products out of nothing: the pumps left a span exactly as bright as
+if they had made no products at all, so a lossless span came out with more power than it was given.
+Each product now takes its photons from the two pumps that made it and gives one to the idler, which
+is parametrically amplified. A lossless span conserves energy to floating point, and
+`diagnostics.fwm_depletion` is the fraction the products hold.
+
+The product itself is still the undepleted-pump formula, and the honest check is the full nonlinear
+Schrödinger equation — two tones in *one* band, where the split-step solves the Kerr term exactly:
+
+```
+   gamma P L    pump loss, model / exact
+       0.065                    1.002
+       0.195                    1.019
+       0.390                    1.079
+```
+
+Within a percent where products are small against the pumps, and drifting high as they are not. At
+link powers — four channels at 0 dBm through 80 km of standard fibre — the pumps give up parts per
+million. Where the formula would ask a pump for more than it holds, the span is refused rather than
+balanced by a fiction.
 
 ## An orthogonal neighbour is not an absent one
 

@@ -18,6 +18,7 @@ import numpy as np
 from ..component import BoolParam, Component, Param, PortType
 from ..context import SimulationContext
 from ..kernels import (
+    RAMAN_TRIANGLE_LIMIT,
     PMDSection,
     PropagationDiagnostics,
     apply_pmd,
@@ -29,10 +30,12 @@ from ..kernels import (
     fwm_accumulated_phase,
     fwm_mixing_integral,
     fwm_phase_mismatch,
+    fwm_power_transfer,
     fwm_product_power,
     propagate_coupled_ssfm,
     propagate_dispersion,
     raman_tilt,
+    raman_transfer,
     random_pmd_sections,
     walkoff_from_dispersion,
 )
@@ -136,11 +139,18 @@ class Fiber(Component):
     Not yet modelled: the coherent polarization term
     ``A_x* A_y**2``, which exchanges power between the axes rather than only
     dephasing them, is left out — it is the part that averages away first under
-    real birefringence. The Raman gain is taken as rising linearly
-    with separation, which it does up to about 13 THz and not past it, so a comb
-    spanning the C and L bands together has its far pairs over the peak and the
-    transfer between them over-predicted. Pump depletion is not modelled, which
-    matters only at powers no link is operated at.
+    real birefringence.
+
+    **The pumps pay for what they make.** Every mixing product takes its photons
+    from the two pumps that made it and gives one to the idler, so a span with no
+    loss comes out with exactly the power it was given. The product's own power
+    is still the undepleted-pump formula, which is right while it is small against
+    the pumps; ``diagnostics.fwm_depletion`` says how small.
+
+    **Raman past the peak.** Up to 13.2 THz the gain rises linearly and the
+    closed form is exact. A wider comb — the S, C and L bands together; C and L
+    alone are 9.7 THz and stay inside — is integrated instead, with silica's
+    measured gain shape and photons rather than watts conserved.
     """
 
     display_name = "Optical Fiber"
@@ -322,8 +332,8 @@ class Fiber(Component):
         diagnostics = replace(diagnostics, raman_tilt=tilt)
 
         if gamma != 0.0 and self.four_wave_mixing:
-            bands, emitted = self._mix(ctx, signal, bands, gamma=gamma, alpha=alpha)
-            diagnostics = replace(diagnostics, mixing_products=emitted)
+            bands, emitted, depleted = self._mix(ctx, signal, bands, gamma=gamma, alpha=alpha)
+            diagnostics = replace(diagnostics, mixing_products=emitted, fwm_depletion=depleted)
 
         return {
             "out": OpticalSignal(
@@ -500,17 +510,26 @@ class Fiber(Component):
         decibels down and a decibel of tilt on them is a hundredth of a decibel
         anywhere it could be measured, but it is an approximation and not an
         oversight.
+
+        A comb no wider than the gain peak uses the closed form, which is exact
+        there and is what every result taken before the integrated model existed
+        was taken with. A wider one is integrated with silica's measured shape,
+        because a straight line past the peak over-predicts the far pairs several
+        times over.
         """
         slope = self.si("raman_gain_slope")
         if slope <= 0.0 or len(bands) < 2 or distance <= 0.0:
             return bands, 0.0
 
-        ratios = raman_tilt(
-            [band.f0 for band in signal.bands],
-            [band.average_power() for band in signal.bands],
-            gain_slope=slope,
-            effective_length=effective_length(alpha, distance),
-        )
+        frequencies = [band.f0 for band in signal.bands]
+        launched = [band.average_power() for band in signal.bands]
+        length = effective_length(alpha, distance)
+        if max(frequencies) - min(frequencies) <= RAMAN_TRIANGLE_LIMIT:
+            ratios = raman_tilt(frequencies, launched, gain_slope=slope, effective_length=length)
+        else:
+            ratios = raman_transfer(
+                frequencies, launched, gain_slope=slope, effective_length=length
+            )
         order = sorted(range(len(ratios)), key=lambda index: signal.bands[index].f0)
         lowest, highest = ratios[order[0]], ratios[order[-1]]
         tilt = 10.0 * math.log10(lowest / highest) if highest > 0.0 else 0.0
@@ -531,7 +550,7 @@ class Fiber(Component):
         *,
         gamma: float,
         alpha: float,
-    ) -> tuple[list[Band], int]:
+    ) -> tuple[list[Band], int, float]:
         """Add the mixing products this span generated to the propagated bands.
 
         Products are accumulated as complex amplitudes rather than as powers, so
@@ -563,15 +582,24 @@ class Fiber(Component):
         the linear mismatch is tracked here. At a tenth of a radian per span it
         moves the interference between spans a little; it does not change which
         regime the link is in.
+
+        **And the pumps are depleted.** Every product's photons are taken from
+        the pumps that made it and one is given to its idler, per
+        :func:`maiman.kernels.fwm_power_transfer`, so a lossless span conserves
+        energy. Should the formula ask a pump for more than it holds, the span is
+        refused: that happens only far outside the regime the formula is valid
+        in, and scaling every transfer down to fit — which was tried — balances
+        the books while emptying the pumps into products, a fiction that looks
+        like a result. The third value returned is the fraction moved.
         """
         sources = signal.bands
         distance = self.si("length")
         if len(sources) < 2 or distance <= 0.0:
-            return bands, 0
+            return bands, 0, 0.0
 
         strongest = max((band.average_power() for band in sources), default=0.0)
         if strongest <= 0.0:
-            return bands, 0
+            return bands, 0, 0.0
         # Raw dB: the unit machinery already turns a dB parameter into a linear
         # ratio, and converting a second time would silently move the floor.
         floor = strongest * db_to_linear(-self.mixing_floor)
@@ -584,6 +612,8 @@ class Fiber(Component):
         ]
 
         found: list[tuple[float, complex, complex]] = []
+        # Power each pump gives up per axis; negative for an idler that gains.
+        drained = np.zeros((len(sources), 2))
         for i in range(len(sources)):
             for j in range(i, len(sources)):
                 for k in range(len(sources)):
@@ -616,6 +646,13 @@ class Fiber(Component):
                     ]
                     if sum(generated) < floor:
                         continue
+                    for axis in (0, 1):
+                        lost_i, lost_j, gained_k = fwm_power_transfer(
+                            sources[i].f0, sources[j].f0, sources[k].f0, generated[axis]
+                        )
+                        drained[i, axis] += lost_i
+                        drained[j, axis] += lost_j
+                        drained[k, axis] -= gained_k
                     offsets = (
                         sources[i].f0 - reference.f0,
                         sources[j].f0 - reference.f0,
@@ -640,7 +677,36 @@ class Fiber(Component):
                     )
 
         if not found:
-            return bands, 0
+            return bands, 0, 0.0
+
+        held = np.array(
+            [
+                (float(np.mean(np.abs(b.Ex) ** 2)), float(np.mean(np.abs(b.Ey) ** 2)))
+                for b in bands[: len(sources)]
+            ]
+        )
+        if np.any(drained > held):
+            raise ValueError(
+                f"{self.label or 'Fiber'}: four-wave mixing here is outside the undepleted-pump "
+                "regime the multi-band model is built on -- a product would take more than its "
+                "pump holds. Lower the launch power or shorten the span."
+            )
+        output = list(bands)
+        for index in range(len(sources)):
+            band = output[index]
+            factors = []
+            for axis in (0, 1):
+                before = held[index, axis]
+                after = before - drained[index, axis]
+                factors.append(math.sqrt(after / before) if before > 0.0 else 1.0)
+            output[index] = replace(
+                band,
+                Ex=(band.Ex * factors[0]).astype(band.Ex.dtype),
+                Ey=(band.Ey * factors[1]).astype(band.Ey.dtype),
+            )
+        made = float(sum(abs(ax) ** 2 + abs(ay) ** 2 for _, ax, ay in found))
+        leaving = float(held.sum())
+        depleted = made / leaving if leaving > 0.0 else 0.0
 
         frequencies: list[float] = []
         amplitudes: list[list[complex]] = []
@@ -654,7 +720,6 @@ class Fiber(Component):
                 frequencies.append(frequency)
                 amplitudes.append([amp_x, amp_y])
 
-        output = list(bands)
         for frequency, (amp_x, amp_y) in zip(frequencies, amplitudes, strict=True):
             for index, band in enumerate(output):
                 if abs(band.f0 - frequency) <= MIXING_MERGE_TOLERANCE:
@@ -674,4 +739,4 @@ class Fiber(Component):
                         fs=reference.fs,
                     )
                 )
-        return output, len(frequencies)
+        return output, len(frequencies), depleted

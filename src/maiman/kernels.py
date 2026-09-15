@@ -219,6 +219,13 @@ class PropagationDiagnostics:
     mixing_products: int = 0
     """Four-wave mixing products emitted at distinct frequencies."""
 
+    fwm_depletion: float = 0.0
+    """Fraction of the power leaving the span that four-wave mixing moved into products.
+
+    The pumps pay for it photon by photon, so this is also what they lost. Tens of
+    parts per million at the powers a link runs at; a percent or more is the
+    regime where an undepleted treatment would have created energy."""
+
     raman_tilt: float = 0.0
     """Power the comb's extreme channels exchanged, in dB [longest minus shortest].
 
@@ -234,6 +241,8 @@ class PropagationDiagnostics:
         )
         walkoff = f", walk-off {self.walkoff_span * 1e12:.1f} ps" if self.walkoff_span else ""
         fwm = f", {self.mixing_products} FWM tones" if self.mixing_products else ""
+        if self.fwm_depletion:
+            fwm += f" ({self.fwm_depletion:.1e} depleted)"
         raman = f", Raman tilt {self.raman_tilt:+.2f} dB" if self.raman_tilt else ""
         return (
             f"PropagationDiagnostics({self.steps} steps over {self.distance / 1e3:.1f} km, "
@@ -584,10 +593,13 @@ def _total_power(fields: Sequence[np.ndarray]) -> np.ndarray:
 #:
 #: Silica's Raman gain rises roughly linearly with frequency separation, peaks
 #: near 13.2 THz and falls away after it. Below this the linear approximation is
-#: the standard one and is what :func:`raman_tilt` assumes; a comb wider than it
-#: — the C and L bands together, say — has its far pairs past the peak, where the
-#: model over-predicts the transfer. The fibre block reports how wide the comb it
-#: was given actually is, so the case is visible rather than silent.
+#: the standard one and is what :func:`raman_tilt` assumes. A comb wider than it
+#: has its far pairs past the peak, where a straight line over-predicts the
+#: transfer several times over, and the fibre block switches to
+#: :func:`raman_transfer` with the measured shape instead.
+#:
+#: The C and L bands together are *not* that case: 1530 to 1610 nm is 9.7 THz. It
+#: takes the S band as well — 1460 to 1625 nm, 20.8 THz — to cross the peak.
 RAMAN_TRIANGLE_LIMIT = 13.2e12
 
 
@@ -649,6 +661,115 @@ def raman_tilt(
     if normaliser <= 0.0:
         return [1.0] * len(frequencies)
     return [float(total * w / normaliser) for w in weights]
+
+
+#: Silica's Raman gain against frequency separation, normalised to its peak.
+#:
+#: A coarse piecewise-linear trace of the measured spectrum (Stolen and Ippen,
+#: *Appl. Phys. Lett.* 22, 1973; Agrawal, *Nonlinear Fiber Optics*, fig. 8.1), not
+#: a fit. Below the peak it is exactly the straight line :func:`raman_tilt`
+#: assumes, so the two models are the same device there. Past it, it follows the
+#: steep fall with the 14.7 THz shoulder folded in, and the weak band near 24 THz.
+#: Good to tens of percent past the peak, which is the region the straight line
+#: gets wrong by several times.
+RAMAN_SILICA_PROFILE: tuple[tuple[float, float], ...] = (
+    (0.0, 0.0),
+    (RAMAN_TRIANGLE_LIMIT, 1.0),
+    (15.0e12, 0.55),
+    (18.0e12, 0.15),
+    (24.0e12, 0.12),
+    (30.0e12, 0.03),
+    (40.0e12, 0.0),
+)
+
+
+def raman_gain(separation: np.ndarray, *, gain_slope: float, profile: str) -> np.ndarray:
+    """Raman gain coefficient over effective area at ``separation`` [Hz], in 1/(W·m).
+
+    ``"triangle"`` is ``gain_slope * separation`` at every separation, which is
+    what the closed form is written in. ``"silica"`` is the same line up to the
+    peak and :data:`RAMAN_SILICA_PROFILE` past it.
+    """
+    offsets = np.abs(np.asarray(separation, dtype=float))
+    if profile == "triangle":
+        return gain_slope * offsets
+    if profile == "silica":
+        xs = [point[0] for point in RAMAN_SILICA_PROFILE]
+        ys = [point[1] for point in RAMAN_SILICA_PROFILE]
+        peak = gain_slope * RAMAN_TRIANGLE_LIMIT
+        return peak * np.interp(offsets, xs, ys, right=0.0)
+    raise ValueError(f"unknown Raman profile {profile!r}; expected 'triangle' or 'silica'")
+
+
+def raman_transfer(
+    frequencies: Sequence[float],
+    powers: Sequence[float],
+    *,
+    gain_slope: float,
+    effective_length: float,
+    profile: str = "silica",
+    photon_conserving: bool = True,
+    steps: int | None = None,
+) -> list[float]:
+    """Power each channel keeps after stimulated Raman scattering, integrated.
+
+    The coupled power equations, solved numerically where :func:`raman_tilt`
+    has a closed form::
+
+        dP_n/dz = -alpha P_n + P_n sum_{f_m > f_n} g(f_m - f_n) P_m
+                              - P_n sum_{f_m < f_n} (f_n / f_m) g(f_n - f_m) P_m
+
+    The loss is common to every channel, so writing ``P = exp(-alpha z) Q`` and
+    measuring distance in effective length removes it exactly, and what is
+    integrated — by fourth-order Runge-Kutta over ``effective_length`` — is the
+    redistribution alone. The return value means what :func:`raman_tilt`'s does.
+
+    Two things the closed form cannot do. **A real gain shape**: with
+    ``profile="silica"`` the gain falls past 13.2 THz instead of rising forever,
+    which is what a comb wider than :data:`RAMAN_TRIANGLE_LIMIT` needs.
+    **Photons rather than watts**: with ``photon_conserving`` the pump loses
+    ``f_n / f_m`` times what the signal gains, and the lattice keeps the
+    difference. Then ``sum(P_n / f_n)`` is what is conserved, and the total power
+    falls by the quantum defect.
+
+    With ``profile="triangle"`` and ``photon_conserving=False`` this *is* the
+    closed form, to the integrator's error, and the tests hold it there.
+    """
+    if len(frequencies) != len(powers):
+        raise ValueError(
+            f"one power per frequency, got {len(powers)} for {len(frequencies)} channels"
+        )
+    count = len(frequencies)
+    launched = np.asarray(powers, dtype=float)
+    total = float(launched.sum())
+    if gain_slope == 0.0 or total <= 0.0 or count < 2 or effective_length <= 0.0:
+        return [1.0] * count
+
+    f = np.asarray(frequencies, dtype=float)
+    separation = f[None, :] - f[:, None]  # [n, m] = f_m - f_n
+    gain = raman_gain(separation, gain_slope=gain_slope, profile=profile)
+    coupling = np.where(separation > 0.0, gain, -gain)
+    if photon_conserving:
+        coupling = np.where(separation < 0.0, coupling * (f[:, None] / f[None, :]), coupling)
+    np.fill_diagonal(coupling, 0.0)
+
+    if steps is None:
+        rate = float(np.abs(coupling).sum(axis=1).max()) * total * effective_length
+        steps = int(min(20000, max(64, math.ceil(40.0 * rate))))
+    h = effective_length / steps
+
+    def slope(q: np.ndarray) -> np.ndarray:
+        return q * (coupling @ q)
+
+    q = launched.copy()
+    for _ in range(steps):
+        k1 = slope(q)
+        k2 = slope(q + 0.5 * h * k1)
+        k3 = slope(q + 0.5 * h * k2)
+        k4 = slope(q + h * k3)
+        q = q + (h / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
+
+    return [float(q[n] / launched[n]) if launched[n] > 0.0 else 1.0 for n in range(count)]
 
 
 def walkoff_from_dispersion(beta2: float, frequency_offset: float) -> float:
@@ -829,8 +950,11 @@ def fwm_product_power(
     power problem before it is anything else: 1 dB more per channel is 3 dB more
     product, and 2 dB less in the ratio that matters.
 
-    Pump depletion is not modelled, so this overestimates once the product
-    approaches the pumps. It never does at any power a link is operated at.
+    This is the undepleted-pump result: it assumes the pumps are unchanged by
+    what they generate. The fibre block takes the power back out of them with
+    :func:`fwm_power_transfer`, so energy is conserved, but the product itself is
+    still this formula — right while it is small against the pumps, which at any
+    power a link runs at it is by forty decibels.
     """
     factor = 1.0 if degenerate else 2.0
     length = effective_length(alpha, distance)
@@ -845,6 +969,28 @@ def fwm_product_power(
         * efficiency
         * math.exp(-alpha * distance)
     )
+
+
+def fwm_power_transfer(
+    frequency_i: float, frequency_j: float, frequency_k: float, product_power: float
+) -> tuple[float, float, float]:
+    """Who pays for a mixing product: ``(lost by i, lost by j, gained by k)`` [W].
+
+    The process destroys one photon from each of ``i`` and ``j`` and creates one
+    at ``k`` and one at the product, ``f_i + f_j - f_k``. So for every photon in
+    the product, ``i`` and ``j`` each lose a photon's worth of their own
+    frequency and ``k`` — the idler — gains one of its own. That is parametric
+    amplification, and it is why ``k`` goes up rather than down.
+
+    Energy is conserved exactly, because the frequencies are:
+    ``lost_i + lost_j == gained_k + product_power``. When ``i`` and ``j`` are the
+    same channel it loses both shares.
+    """
+    product_frequency = frequency_i + frequency_j - frequency_k
+    if product_frequency <= 0.0:
+        raise ValueError(f"the product frequency must be positive, got {product_frequency} Hz")
+    photons = product_power / product_frequency
+    return photons * frequency_i, photons * frequency_j, photons * frequency_k
 
 
 # --------------------------------------------------------------------------

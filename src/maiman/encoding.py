@@ -283,6 +283,7 @@ def _diagnostics(diagnostics: PropagationDiagnostics) -> dict[str, Any]:
         "walkoff_span": number(diagnostics.walkoff_span),
         "peak_walkoff_slip": number(diagnostics.peak_walkoff_slip),
         "mixing_products": diagnostics.mixing_products,
+        "fwm_depletion": number(diagnostics.fwm_depletion),
     }
 
 
