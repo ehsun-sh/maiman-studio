@@ -44,6 +44,7 @@ from .electrical import (
 from .feedback import Feedback
 from .fiber import Fiber
 from .filters import ElectricalFilter, OpticalFilter, OpticalSpectrumAnalyzer
+from .long_period import LongPeriodGrating
 from .mapping import (
     DifferentialDecoder,
     PilotInserter,
@@ -104,6 +105,7 @@ __all__ = [
     "IQDriver",
     "IQModulator",
     "IQSampler",
+    "LongPeriodGrating",
     "MachZehnderInterferometer",
     "MachZehnderModulator",
     "Multiplexer",

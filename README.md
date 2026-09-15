@@ -20,7 +20,7 @@ link in this simulator descends from.*
 > ### Project status: 0.4.1 — released, and still moving.
 >
 > `pip install maiman`, then `maiman serve` — or [start from no Python at
-> all](#installing-and-running-it). Phases 0 through 4 are done: **57 components, more than 1250 tests, and
+> all](#installing-and-running-it). Phases 0 through 4 are done: **58 components, more than 1250 tests, and
 > every physics block checked against a closed-form result in CI.**
 >
 > **Links run end to end.** Direct detection — PRBS → NRZ → laser → MZM → fiber → PIN → filter →
@@ -140,7 +140,7 @@ You will see:
 
 ```
 Maiman Studio session server
-  57 components
+  58 components
   http://127.0.0.1:8765/
 ```
 
@@ -2082,6 +2082,66 @@ reconciling the kernel would fail and name the compensator as one of the things 
 It did exactly that.
 
 `python examples/fbg_circulator.py` prints all seven tables.
+
+## Cladding modes, and a grating that couples to them
+
+A Bragg grating needs one number from its fibre, an effective index. A long-period grating needs a
+mode solver: its period is hundreds of microns, so it couples the core mode *forwards* into modes of
+the cladding — light guided by the glass-air boundary 62.5 µm out — at the wavelengths where
+`(n_core − n_cladding,m) · period` is one wavelength. `maiman.modes` finds those modes, and
+`LongPeriodGrating` is built on them.
+
+### A mode solver with no SciPy in it
+
+Linearly polarised modes of a three-layer step-index fibre: Bessel functions in the core, the
+cladding and the surroundings, matched at both boundaries. The Bessel functions are computed from
+their integral representations, because the package depends on NumPy alone. Nothing in it is taken
+on trust:
+
+```
+   Bessel J, Y, K against tables                     within 4e-12
+   LP11 appears at the zero of J0, V = 2.4048        within 0.1 %
+   core mode against Gloge's approximation           6e-4, inside Gloge's own 1e-3
+   8 cladding modes against finite differences       1e-10 in effective index
+```
+
+The finite-difference reference is built in the test from a tridiagonal matrix and shares no code
+with the solver. **Scalar is an approximation, and it is stated rather than tested**: the
+cladding-air step is not weak, and the vector modes the LP modes stand in for sit up to about 1e-4
+away in effective index — a few nanometres in where a notch lands. Material dispersion is not
+included either.
+
+### Where the notches land
+
+A 500 µm period over 25 mm, with an index modulation of 3e-4, on standard fibre in air:
+
+```
+   cladding mode   notch       depth, one mode alone = cos²(κL)
+   LP01            1354.9 nm   0.826
+   LP02            1388.7 nm   0.479
+   LP03            1455.7 nm   0.163
+   LP04            1584.1 nm   0.011
+```
+
+The coupled equations have constant coefficients for a uniform grating, so they are solved exactly —
+every mode at once, by diagonalising a small matrix at each frequency. With one cladding mode coupled
+the transmission is the textbook closed form to 1e-10. With all of them coupled the neighbours move a
+notch's sides by a few percent, which is why the model couples all of them: with all eight, the
+block cuts a carrier sitting on the LP04 notch by 19.2 dB.
+
+### A refractometer with nothing electronic in the fibre
+
+The cladding modes feel what surrounds the fibre, and the core mode does not. Dip the grating in a
+liquid and every notch moves shortward, faster the closer the liquid comes to the glass:
+
+```
+   surrounding index   LP04 notch   shift
+   1.000 (air)         1584.1 nm
+   1.333 (water)       1581.5 nm     -2.6 nm
+   1.430               1572.0 nm    -12.1 nm
+```
+
+LP01 moves a tenth as far: the low-order cladding modes barely reach the boundary.
 
 ## What a layout tool knows, and what it does not
 

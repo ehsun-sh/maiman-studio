@@ -2861,6 +2861,96 @@ verdict, and DESIGN.md
     }
    }
   },
+  "LongPeriodGrating": {
+   "name": "Long-Period Grating",
+   "type": "LongPeriodGrating",
+   "class": "maiman.components.long_period.LongPeriodGrating",
+   "category": "Passive",
+   "version": "0.1.0",
+   "parameters": {
+    "period": {
+     "type": "float",
+     "default": 500.0,
+     "unit": "um",
+     "min": 50.0,
+     "max": 2000.0,
+     "doc": "Grating period"
+    },
+    "length": {
+     "type": "float",
+     "default": 25.0,
+     "unit": "mm",
+     "min": 0.1,
+     "max": 500.0,
+     "doc": "Written length"
+    },
+    "index_modulation": {
+     "type": "float",
+     "default": 0.0003,
+     "unit": "",
+     "min": 0.0,
+     "max": 0.01,
+     "doc": "Index modulation of the core, as for a Bragg grating"
+    },
+    "core_radius": {
+     "type": "float",
+     "default": 4.1,
+     "unit": "um",
+     "min": 0.5,
+     "max": 50.0,
+     "doc": "Core radius"
+    },
+    "cladding_radius": {
+     "type": "float",
+     "default": 62.5,
+     "unit": "um",
+     "min": 5.0,
+     "max": 500.0,
+     "doc": "Cladding radius"
+    },
+    "core_index": {
+     "type": "float",
+     "default": 1.4492,
+     "unit": "",
+     "min": 1.0,
+     "max": 4.0,
+     "doc": "Core refractive index"
+    },
+    "cladding_index": {
+     "type": "float",
+     "default": 1.444,
+     "unit": "",
+     "min": 1.0,
+     "max": 4.0,
+     "doc": "Cladding refractive index"
+    },
+    "surrounding_index": {
+     "type": "float",
+     "default": 1.0,
+     "unit": "",
+     "min": 1.0,
+     "max": 4.0,
+     "doc": "What the fibre sits in: 1 is air, 1.333 water. Moves every notch"
+    },
+    "cladding_modes": {
+     "type": "float",
+     "default": 8.0,
+     "unit": "",
+     "min": 1.0,
+     "max": 40.0,
+     "doc": "Cladding modes coupled, highest index first"
+    }
+   },
+   "structural": {},
+   "ports": {
+    "inputs": {
+     "in": "optical"
+    },
+    "outputs": {
+     "transmitted": "optical"
+    }
+   }
+  },
   "MMI": {
    "name": "MMI Coupler",
    "type": "MMI",

@@ -33,6 +33,7 @@ import numpy as np
 
 from .circuit import Circuit, SMatrix
 from .kernels import dispersion_to_beta2
+from .modes import StepIndexFibre, cladding_modes, core_modes, lpg_coupling
 from .units import C_LIGHT, frequency_to_wavelength
 
 #: Effective index of a 500 x 220 nm silicon strip waveguide, TE, at 1550 nm.
@@ -1112,3 +1113,183 @@ def circulator(
         s[:, source, (source + 1) % count] = leak
         s[:, source, source] = echo
     return SMatrix(ports=ports, frequencies=frequencies, s=s)
+
+
+# --------------------------------------------------------------------------
+# Long-period gratings
+# --------------------------------------------------------------------------
+
+#: Chebyshev nodes the mode tables are solved at before interpolating across a
+#: band. Effective indices are smooth in wavelength, so a handful reproduce a
+#: direct solve far below anything a notch's position could show.
+LPG_GRID_POINTS = 17
+
+
+def _mode_tables(
+    fibre: StepIndexFibre, wavelengths: np.ndarray, count: int, *, coupling: bool = True
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Core index, cladding indices and per-unit-modulation couplings at each wavelength."""
+    core = np.empty(len(wavelengths))
+    cladding = np.empty((len(wavelengths), count))
+    kappa = np.zeros((len(wavelengths), count))
+    for row, wavelength in enumerate(wavelengths):
+        guided = core_modes(fibre, float(wavelength))
+        if not guided:
+            raise ValueError(f"the fibre guides no core mode at {wavelength * 1e9:.1f} nm")
+        modes = cladding_modes(fibre, float(wavelength), count=count)
+        if len(modes) < count:
+            raise ValueError(
+                f"asked for {count} cladding modes at {wavelength * 1e9:.1f} nm and the fibre "
+                f"has {len(modes)}"
+            )
+        core[row] = guided[0].effective_index
+        for column, mode in enumerate(modes):
+            cladding[row, column] = mode.effective_index
+            if coupling:
+                kappa[row, column] = lpg_coupling(guided[0], mode, 1.0)
+    return core, cladding, kappa
+
+
+def _chebyshev_nodes(lo: float, hi: float, points: int) -> tuple[np.ndarray, np.ndarray]:
+    unit = np.cos(np.pi * (np.arange(points) + 0.5) / points)
+    return unit, 0.5 * (lo + hi) + 0.5 * (hi - lo) * unit
+
+
+def _interpolated_tables(
+    fibre: StepIndexFibre, wavelengths: np.ndarray, count: int, points: int
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    unique, inverse = np.unique(wavelengths, return_inverse=True)
+    if unique.size <= points:
+        core, cladding, kappa = _mode_tables(fibre, unique, count)
+        return core[inverse], cladding[inverse], kappa[inverse]
+
+    lo, hi = float(unique[0]), float(unique[-1])
+    unit, nodes = _chebyshev_nodes(lo, hi, points)
+    core, cladding, kappa = _mode_tables(fibre, nodes, count)
+    x = (wavelengths - 0.5 * (lo + hi)) / (0.5 * (hi - lo))
+    cheb = np.polynomial.chebyshev
+
+    def through(values: np.ndarray) -> np.ndarray:
+        fitted = cheb.chebval(x, cheb.chebfit(unit, values, points - 1))
+        return np.asarray(fitted).T
+
+    return through(core), through(cladding), through(kappa)
+
+
+def long_period_grating(
+    frequencies: np.ndarray,
+    *,
+    fibre: StepIndexFibre,
+    period: float,
+    length: float,
+    index_modulation: float,
+    cladding_modes: int = 8,
+    grid_points: int = LPG_GRID_POINTS,
+    ports: tuple[str, str] = ("in", "out"),
+) -> SMatrix:
+    """A long-period grating's transmission, from coupled modes solved exactly.
+
+    The core mode ``a_0`` and the cladding modes ``a_m`` obey, in a frame
+    rotating with the grating::
+
+        da_0/dz = -i sum_m kappa_m a_m
+        da_m/dz = -i kappa_m a_0 - i Delta_m a_m
+        Delta_m = k (n_m - n_0) + 2 pi / period
+
+    which has constant coefficients for a uniform grating, so its solution is a
+    matrix exponential, taken here by diagonalising the real symmetric matrix at
+    every frequency. ``Delta_m`` vanishes where ``(n_0 - n_m) * period`` is one
+    wavelength, which is the phase matching. For one mode alone this is
+    ``|t|^2 = cos^2(gamma L) + (Delta / 2 gamma)^2 sin^2(gamma L)`` with
+    ``gamma^2 = kappa^2 + Delta^2 / 4``, and the tests hold it to that.
+
+    Nothing is reflected: a long-period grating couples forwards. The cladding's
+    share leaves the model, as it leaves a coated fibre. The phase is reported in
+    the core mode's own retarded frame, so the bulk ``exp(-i beta L)`` of the
+    fibre is not in it.
+
+    Indices and couplings are solved at ``grid_points`` Chebyshev nodes across
+    the band and interpolated, because a mode solve takes tens of milliseconds
+    and a spectrum has thousands of points.
+    """
+    if period <= 0.0:
+        raise ValueError(f"period must be positive, got {period} m")
+    if length < 0.0:
+        raise ValueError(f"length must not be negative, got {length} m")
+    if index_modulation < 0.0:
+        raise ValueError(f"index modulation must not be negative, got {index_modulation}")
+    if cladding_modes < 1:
+        raise ValueError(f"couple at least one cladding mode, got {cladding_modes}")
+    grid = np.asarray(frequencies, dtype=float)
+    wavelengths = C_LIGHT / grid
+    core, cladding, kappa = _interpolated_tables(fibre, wavelengths, cladding_modes, grid_points)
+
+    k = 2.0 * np.pi / wavelengths
+    size = cladding_modes + 1
+    matrix = np.zeros((grid.size, size, size))
+    matrix[:, 0, 1:] = kappa * index_modulation
+    matrix[:, 1:, 0] = kappa * index_modulation
+    diagonal = np.arange(1, size)
+    matrix[:, diagonal, diagonal] = k[:, None] * (cladding - core[:, None]) + 2.0 * np.pi / period
+    values, vectors = np.linalg.eigh(matrix)
+    through = np.sum(vectors[:, 0, :] ** 2 * np.exp(-1j * values * length), axis=1)
+
+    s = np.zeros((grid.size, 2, 2), dtype=np.complex128)
+    s[:, 1, 0] = through
+    s[:, 0, 1] = through
+    return SMatrix(ports=ports, frequencies=grid, s=s)
+
+
+def long_period_resonances(
+    fibre: StepIndexFibre,
+    *,
+    period: float,
+    count: int,
+    band: tuple[float, float] = (1.2e-6, 1.7e-6),
+    grid_points: int = 33,
+) -> list[tuple[int, float]]:
+    """``(cladding mode rank, wavelength [m])`` wherever ``(n_0 - n_m) * period`` is a wavelength.
+
+    Found on a Chebyshev fit of the mismatch across ``band``, then polished with
+    two Newton steps on direct mode solves, so the wavelengths are the solver's
+    own and not the interpolation's. A mode can phase-match twice in one band --
+    either side of the turning point where its group index equals the core's --
+    and both are returned.
+    """
+    lo, hi = band
+    if not 0.0 < lo < hi:
+        raise ValueError(f"band must be an increasing pair of positive wavelengths, got {band}")
+    unit, nodes = _chebyshev_nodes(lo, hi, grid_points)
+    core, cladding, _ = _mode_tables(fibre, nodes, count, coupling=False)
+    mismatch = core[:, None] - cladding - nodes[:, None] / period
+    cheb = np.polynomial.chebyshev
+    coefficients = cheb.chebfit(unit, mismatch, grid_points - 1)
+    slopes = cheb.chebder(coefficients) / (0.5 * (hi - lo))
+    dense = np.linspace(-1.0, 1.0, 4001)
+    sampled = np.asarray(cheb.chebval(dense, coefficients)).T
+
+    def direct(wavelength: float, rank: int) -> float:
+        guided = core_modes(fibre, wavelength)
+        modes = cladding_modes(fibre, wavelength, count=rank)
+        return guided[0].effective_index - modes[rank - 1].effective_index - wavelength / period
+
+    found: list[tuple[int, float]] = []
+    for column in range(count):
+        values = sampled[:, column]
+        crossings = np.flatnonzero(np.sign(values[:-1]) * np.sign(values[1:]) < 0)
+        for index in crossings:
+            left, right = float(dense[index]), float(dense[index + 1])
+            reference = np.sign(values[index])
+            for _ in range(60):
+                middle = 0.5 * (left + right)
+                if np.sign(cheb.chebval(middle, coefficients[:, column])) == reference:
+                    left = middle
+                else:
+                    right = middle
+            wavelength = 0.5 * (lo + hi) + 0.5 * (hi - lo) * 0.5 * (left + right)
+            for _ in range(2):
+                x = (wavelength - 0.5 * (lo + hi)) / (0.5 * (hi - lo))
+                slope = float(cheb.chebval(x, slopes[:, column]))
+                wavelength -= direct(wavelength, column + 1) / slope
+            found.append((column + 1, float(wavelength)))
+    return sorted(found, key=lambda pair: pair[1])
