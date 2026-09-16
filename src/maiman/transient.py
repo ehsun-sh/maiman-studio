@@ -47,12 +47,21 @@ set by the fibre's own absorption and emission curves (:class:`ErbiumSpectrum`).
 A surviving channel's excursion therefore depends on where in the band it sits,
 and at the amplifier's centre wavelength it is exactly :func:`gain_transient`'s.
 
-**What this does not model.** The reservoir is still driven by total power, so
-channels at different wavelengths drain it at one rate where their cross
-sections would make them differ. And the pump is implicit in ``G_0`` and does not
-respond: a deployed amplifier has a control loop that pushes back on exactly the
-excursion computed here, and what this gives is the uncontrolled case. Both are
-real effects and both are absent rather than approximated.
+**Channels drain it at their own rate.** Stimulated emission empties the
+reservoir once per photon, so a watt at one wavelength is not a watt at another:
+:func:`saturating_power` weights each channel by its cross section and its photon
+energy, and a comb sitting at the reference wavelength weighs exactly one, which
+is the total :func:`gain_transient` was always driven with.
+
+**And the pump answers back.** :func:`controlled_gain_transient` makes ``G_0`` a
+state rather than a constant and integrates an integral control loop beside the
+inversion, holding either the gain or the output power. That is what a deployed
+amplifier does about the excursion the uncontrolled model computes -- and what it
+cannot do past its pump's ceiling, which is reported rather than smoothed over.
+
+**What this does not model.** Amplified spontaneous emission does not saturate
+the reservoir here, though in a lightly loaded amplifier it does; and the loop is
+the ideal integral one, with no detector noise, no delay and no dither.
 
 Model references: A. A. M. Saleh, R. M. Jopson, J. D. Evankow and J. Aspell,
 "Modeling of gain in erbium-doped fiber amplifiers", IEEE Photon. Technol. Lett.
@@ -495,6 +504,7 @@ def spectral_gain_transient(
     *,
     lifetime: float = METASTABLE_LIFETIME,
     initial_gain: float | None = None,
+    channel_powers: np.ndarray | None = None,
 ) -> SpectralTransient:
     """The same transient as :func:`gain_transient`, spread across the spectrum.
 
@@ -505,11 +515,12 @@ def spectral_gain_transient(
     the centre wavelength this *is* the single-reservoir answer, and at any other
     wavelength the excursion is that answer times the spectrum's tilt there.
 
-    **Still one reservoir, driven by total power.** Channels at different
-    wavelengths drain the inversion at slightly different rates, since they see
-    different cross sections, and this does not distinguish them: the drop that
-    removes a group of channels is felt through their total power, as before.
-    The pump is still implicit and does not respond.
+    **Driving it per channel.** Pass ``channel_powers`` -- ``(times, channels)``
+    in watts -- and the reservoir is driven by :func:`saturating_power` instead of
+    the total, so a channel drains the inversion by its own cross section and
+    photon energy. Dropping the short-wavelength half of a comb then costs more
+    than dropping the long-wavelength half of equal power, which a single total
+    cannot express. Without it the total is used, exactly as before.
 
     Refused if the amplifier's small-signal gain at its centre wavelength needs
     more than full inversion by this spectrum, which would be an amplifier this
@@ -527,8 +538,16 @@ def spectral_gain_transient(
         )
     spectrum._curves(channels)  # refuse channels outside the measured band before integrating
 
+    drive = np.asarray(input_power, dtype=np.float64)
+    if channel_powers is not None:
+        drive = saturating_power(spectrum, channels, channel_powers, reference_wavelength)
+        if drive.shape != np.asarray(times, dtype=np.float64).shape:
+            raise ValueError(
+                f"channel_powers must carry one row per time, got {drive.shape[0]} rows for "
+                f"{np.asarray(times).shape[0]} times"
+            )
     reservoir = gain_transient(
-        amplifier, times, input_power, lifetime=lifetime, initial_gain=initial_gain
+        amplifier, times, drive, lifetime=lifetime, initial_gain=initial_gain
     )
     inversion = spectrum.inversion(reference_wavelength, reservoir.gain_db)
     gain_db = spectrum.gain_db(channels[None, :], inversion[:, None])
@@ -538,4 +557,290 @@ def spectral_gain_transient(
         wavelengths=channels,
         inversion=inversion,
         gain_db=gain_db,
+    )
+
+
+# --------------------------------------------------------------------------
+# Which channels drain the reservoir, and how hard
+# --------------------------------------------------------------------------
+
+
+def saturating_weights(
+    spectrum: ErbiumSpectrum, wavelengths: np.ndarray, reference: float
+) -> np.ndarray:
+    """How hard a watt at each wavelength drains the inversion, against the reference.
+
+    Stimulated emission empties the reservoir once per photon, so the rate a
+    channel drains it at is its *photon* flux times the cross section it sees:
+    ``(P / h nu) * sigma``. Relative to a watt at the reference wavelength that
+    is ``tilt(lambda) * (lambda / lambda_ref)`` -- the same ``A + G*`` slope the
+    gain tilt is built from, times the photon energy ratio.
+
+    A channel at the reference wavelength weighs exactly one, so a comb that sits
+    there reduces to the single number :func:`gain_transient` was always driven
+    with, and nothing that was measured before this existed moves.
+    """
+    channels = np.atleast_1d(np.asarray(wavelengths, dtype=np.float64))
+    return spectrum.tilt(channels, reference) * (channels / reference)
+
+
+def saturating_power(
+    spectrum: ErbiumSpectrum,
+    wavelengths: np.ndarray,
+    channel_powers: np.ndarray,
+    reference: float,
+) -> np.ndarray:
+    """The weighted power the reservoir actually feels [W].
+
+    ``channel_powers`` is ``(times, channels)`` in watts. Dropping a short
+    wavelength therefore matters more than dropping the same power at a long one,
+    which is what the single total could not express.
+    """
+    powers = np.atleast_2d(np.asarray(channel_powers, dtype=np.float64))
+    weights = saturating_weights(spectrum, wavelengths, reference)
+    if powers.shape[1] != weights.size:
+        raise ValueError(
+            f"channel_powers has {powers.shape[1]} channels and {weights.size} wavelengths "
+            "were given"
+        )
+    return powers @ weights
+
+
+# --------------------------------------------------------------------------
+# The pump, and the loop that holds it
+# --------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class PumpControl:
+    """A transient control loop: what it holds, how fast, and how far it can push.
+
+    A deployed amplifier does not let its surviving channels rise by three
+    decibels when a fibre is cut. It measures, and it moves the pump. This is
+    that loop, as the integral controller it is in practice::
+
+        d(ln G_0)/dt = (1 / tau_c) * (setpoint - measured)
+
+    in nepers, with ``tau_c = 1 / (2 pi bandwidth)``. Integral action is not a
+    detail: it is what makes the steady-state error exactly zero, so the gain
+    comes back to where it was rather than near it.
+
+    ``mode`` is ``"gain"`` -- hold the gain, which is what a line amplifier in a
+    reconfigurable network does so that surviving channels do not move -- or
+    ``"power"``, hold the total output power, which is what a booster does.
+    ``setpoint`` is dB for gain and dBm for power; leave it ``None`` and the loop
+    holds whatever the amplifier was settled at when the run started.
+
+    ``max_pump_gain`` is the small-signal gain the pump can reach [dB]. A loop
+    that runs into it stops correcting, which is a real failure of a real
+    amplifier and is reported rather than smoothed over.
+    """
+
+    mode: str = "gain"
+    bandwidth: float = 1e3
+    setpoint: float | None = None
+    max_pump_gain: float = 40.0
+    min_pump_gain: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.mode not in ("gain", "power"):
+            raise ValueError(f"mode must be 'gain' or 'power', got {self.mode!r}")
+        if self.bandwidth <= 0.0:
+            raise ValueError(f"the loop bandwidth must be positive, got {self.bandwidth}")
+        if self.max_pump_gain <= self.min_pump_gain:
+            raise ValueError("the pump's ceiling must sit above its floor")
+
+    @property
+    def time_constant(self) -> float:
+        """``1 / (2 pi bandwidth)`` [s]."""
+        return 1.0 / (2.0 * math.pi * self.bandwidth)
+
+
+@dataclass(frozen=True)
+class ControlledTransient:
+    """A transient with a pump loop acting on it, and what the pump had to do."""
+
+    transient: GainTransient
+    """The gain, power and timing, as :func:`gain_transient` reports them."""
+
+    pump_gain_db: np.ndarray
+    """The small-signal gain the loop called for at each time [dB]."""
+
+    control: PumpControl
+    setpoint: float
+    """What the loop was holding: dB of gain, or dBm of output power."""
+
+    @property
+    def times(self) -> np.ndarray:
+        return self.transient.times
+
+    @property
+    def gain_db(self) -> np.ndarray:
+        return self.transient.gain_db
+
+    @property
+    def excursion(self) -> float:
+        """The gain's largest signed departure [dB] -- what the loop is there to shrink."""
+        return self.transient.excursion
+
+    def _at_a_limit(self, pump: np.ndarray) -> np.ndarray:
+        return (pump >= self.control.max_pump_gain - 1e-9) | (
+            pump <= self.control.min_pump_gain + 1e-9
+        )
+
+    @property
+    def pump_limited(self) -> bool:
+        """Whether the run *ends* with the pump against a limit, still not correcting.
+
+        This is the failure that matters: the loop has stopped and the setpoint is
+        not being held. Separate from :attr:`pump_saturated`, because an integral
+        loop slams its pump into the ceiling on any large step and then comes back
+        -- reporting that as a limited amplifier would call a loop that worked a
+        loop that failed.
+        """
+        return bool(self._at_a_limit(self.pump_gain_db)[-1])
+
+    @property
+    def pump_saturated(self) -> bool:
+        """Whether the pump reached a limit at any point, transiently or not."""
+        return bool(np.any(self._at_a_limit(self.pump_gain_db)))
+
+    def __repr__(self) -> str:
+        limited = (
+            ", pump limited"
+            if self.pump_limited
+            else (", pump saturated on the way" if self.pump_saturated else "")
+        )
+        return (
+            f"ControlledTransient({self.control.mode} at {self.setpoint:.2f}, "
+            f"excursion {self.excursion:+.3f} dB, "
+            f"pump {self.pump_gain_db.min():.2f} to {self.pump_gain_db.max():.2f} dB{limited})"
+        )
+
+
+def controlled_gain_transient(
+    amplifier: EDFA,
+    times: np.ndarray,
+    input_power: np.ndarray,
+    control: PumpControl,
+    *,
+    lifetime: float = METASTABLE_LIFETIME,
+) -> ControlledTransient:
+    """The same reservoir as :func:`gain_transient`, with a loop moving the pump.
+
+    The pump enters the rate equation exactly where it always did, as the
+    small-signal gain ``G_0``; the difference is that it is now a state rather
+    than a constant, integrated alongside the inversion. Two timescales set what
+    happens: the erbium's own ``tau / (1 + P_out / P_sat)``, and the loop's
+    ``1 / (2 pi bandwidth)``. A loop faster than the erbium suppresses the
+    excursion almost entirely; one slower than it watches it happen and cleans up
+    afterwards.
+
+    What the loop cannot do is exceed its pump. ``max_pump_gain`` is a real
+    limit, and :attr:`ControlledTransient.pump_limited` says when it was reached.
+    """
+    grid = np.asarray(times, dtype=np.float64)
+    drive = np.asarray(input_power, dtype=np.float64)
+    if drive.shape != grid.shape:
+        raise ValueError(f"input_power must match times, got {drive.shape} against {grid.shape}")
+    if grid.size < 2:
+        raise ValueError("a transient needs at least two times")
+    if np.any(np.diff(grid) <= 0.0):
+        raise ValueError("times must be strictly increasing")
+
+    small_signal = db_to_linear(amplifier.gain)
+    if not amplifier.saturate or small_signal <= 2.0:
+        raise ValueError(
+            "a control loop needs an amplifier that compresses; set saturate on the EDFA, "
+            "since an unsaturated one holds its gain by construction and has nothing to correct"
+        )
+
+    if control.max_pump_gain < amplifier.gain:
+        raise ValueError(
+            f"the pump ceiling is {control.max_pump_gain:.1f} dB and the amplifier's own "
+            f"small-signal gain is {amplifier.gain:.1f} dB, so the loop would start against "
+            "its limit; raise max_pump_gain or lower the amplifier's gain"
+        )
+    saturation = amplifier.intrinsic_saturation_power(small_signal)
+    settled_gain = amplifier.effective_gain(float(drive[0]))
+    if control.setpoint is None:
+        setpoint = (
+            10.0 * math.log10(settled_gain)
+            if control.mode == "gain"
+            else 10.0 * math.log10(settled_gain * float(drive[0]) * 1e3)
+        )
+    else:
+        setpoint = float(control.setpoint)
+
+    # One substep count for the run, from the faster of the two timescales.
+    fastest = min(
+        effective_time_constant(amplifier, float(power), lifetime=lifetime)
+        for power in (float(drive.max()), float(drive.min()))
+    )
+    fastest = min(fastest, control.time_constant)
+    coarsest = float(np.diff(grid).max())
+    substeps = max(1, math.ceil(coarsest / (fastest / SUBSTEPS_PER_CONSTANT)))
+
+    log_ceiling = math.log(db_to_linear(control.max_pump_gain))
+    log_floor = math.log(db_to_linear(control.min_pump_gain))
+    nepers = math.log(10.0) / 10.0  # one decibel, in the units the loop integrates
+
+    def reservoir_slope(log_gain: float, log_pump: float, power: float) -> float:
+        return (log_pump - log_gain - (math.exp(log_gain) - 1.0) * power / saturation) / lifetime
+
+    def loop_slope(log_gain: float, power: float) -> float:
+        if control.mode == "gain":
+            measured = 10.0 * math.log10(math.exp(log_gain))
+        else:
+            output = math.exp(log_gain) * power
+            measured = -math.inf if output <= 0.0 else 10.0 * math.log10(output * 1e3)
+        error = setpoint - measured
+        return nepers * error / control.time_constant
+
+    gains = np.empty(grid.shape)
+    pumps = np.empty(grid.shape)
+    log_gain = math.log(settled_gain)
+    log_pump = math.log(small_signal)
+    gains[0], pumps[0] = settled_gain, amplifier.gain
+    for index in range(1, grid.size):
+        span = float(grid[index] - grid[index - 1])
+        step = span / substeps
+        power = float(drive[index - 1])
+        for _ in range(substeps):
+            # Two states, one Runge-Kutta: the inversion and the pump move
+            # together, which is the whole point of a loop fast enough to matter.
+            k1 = (reservoir_slope(log_gain, log_pump, power), loop_slope(log_gain, power))
+            k2 = (
+                reservoir_slope(
+                    log_gain + 0.5 * step * k1[0], log_pump + 0.5 * step * k1[1], power
+                ),
+                loop_slope(log_gain + 0.5 * step * k1[0], power),
+            )
+            k3 = (
+                reservoir_slope(
+                    log_gain + 0.5 * step * k2[0], log_pump + 0.5 * step * k2[1], power
+                ),
+                loop_slope(log_gain + 0.5 * step * k2[0], power),
+            )
+            k4 = (
+                reservoir_slope(log_gain + step * k3[0], log_pump + step * k3[1], power),
+                loop_slope(log_gain + step * k3[0], power),
+            )
+            log_gain += step * (k1[0] + 2 * k2[0] + 2 * k3[0] + k4[0]) / 6.0
+            log_pump += step * (k1[1] + 2 * k2[1] + 2 * k3[1] + k4[1]) / 6.0
+            log_pump = min(max(log_pump, log_floor), log_ceiling)
+        gains[index] = math.exp(log_gain)
+        pumps[index] = 10.0 * math.log10(math.exp(log_pump))
+
+    return ControlledTransient(
+        transient=GainTransient(
+            times=grid,
+            gain=gains,
+            input_power=drive,
+            lifetime=lifetime,
+            substeps=substeps,
+        ),
+        pump_gain_db=pumps,
+        control=control,
+        setpoint=setpoint,
     )
