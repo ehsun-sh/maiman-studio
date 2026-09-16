@@ -22,6 +22,7 @@ from __future__ import annotations
 from .component import BoolParam, Component, Param, Port, PortGroup, PortType
 from .context import SimulationContext
 from .graph import CycleError, Graph, GraphError, Results
+from .laser import LaserParameters, LaserWaveform, integrate_rate_equations
 from .netlist import (
     Netlist,
     NetlistError,
@@ -74,6 +75,8 @@ __all__ = [
     "GainTransient",
     "Graph",
     "GraphError",
+    "LaserParameters",
+    "LaserWaveform",
     "Netlist",
     "NetlistError",
     "NoiseBin",
@@ -95,6 +98,7 @@ __all__ = [
     "circuit_from_netlist",
     "effective_time_constant",
     "gain_transient",
+    "integrate_rate_equations",
     "load",
     "load_netlist",
     "load_pdk",

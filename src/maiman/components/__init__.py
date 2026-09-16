@@ -24,6 +24,7 @@ from .coherent import (
 from .couplers import EdgeCoupler, GratingCoupler
 from .delay import DelayLine
 from .detectors import APDPhotodiode, PINPhotodiode
+from .dml import DirectlyModulatedLaser
 from .dsp import (
     ButterflyEqualizer,
     CoarseFrequencyRecovery,
@@ -93,6 +94,7 @@ __all__ = [
     "Demultiplexer",
     "DifferentialDecoder",
     "DirectionalCoupler",
+    "DirectlyModulatedLaser",
     "DispersionCompensator",
     "DualPolarizationReceiver",
     "EdgeCoupler",

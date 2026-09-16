@@ -20,7 +20,7 @@ link in this simulator descends from.*
 > ### Project status: 0.6.0 — released, and still moving.
 >
 > `pip install maiman`, then `maiman serve` — or [start from no Python at
-> all](#installing-and-running-it). Phases 0 through 4 are done: **62 components, more than 1250 tests, and
+> all](#installing-and-running-it). Phases 0 through 4 are done: **63 components, more than 1250 tests, and
 > every physics block checked against a closed-form result in CI.**
 >
 > **Links run end to end.** Direct detection — PRBS → NRZ → laser → MZM → fiber → PIN → filter →
@@ -140,7 +140,7 @@ You will see:
 
 ```
 Maiman Studio session server
-  62 components
+  63 components
   http://127.0.0.1:8765/
 ```
 
@@ -2172,6 +2172,45 @@ liquid and every notch moves shortward, faster the closer the liquid comes to th
 
 LP01 moves a tenth as far: the low-order cladding modes barely reach the boundary.
 
+## A laser that chirps because it is being modulated
+
+Every other transmitter here leaves the laser alone. A directly modulated laser is the current itself
+— one chip instead of two, a fraction of the power — and what it gives up is in its output: the
+carrier density has to move for the power to move, the index moves with the carriers, and the optical
+frequency moves with the index. `DirectlyModulatedLaser` integrates the single-mode rate equations,
+so the chirp is a consequence rather than a parameter.
+
+```
+   threshold current        23.57 mA      q V N_th / tau_n
+   slope efficiency          0.160 W/A    eta h nu / q, measured to 1 %
+   relaxation frequency      8.54 GHz     sqrt(g0 S0 / tau_p) / 2 pi, at 90 mA
+   adiabatic chirp, ones   +12.96 GHz     kappa P, to 0.5 %
+   transient peak          +20.58 GHz
+```
+
+The chirp is **measured from the field's own phase** and compared against
+`alpha/4pi · d(lnP)/dt + kappa·P`, which correlates at 0.99997 across a step — neither term appears
+anywhere in the integration. The ringing is checked against a spectrum of the step response, and the
+confinement factor is *not* in that formula: it cancels between the two equations, and leaving one in
+underestimates a 1310 nm laser's ringing by nearly a factor of two, which the measured step caught.
+
+What it costs, at 10 Gb/s and 1550 nm against a Mach-Zehnder carrying the same power and extinction:
+
+```
+   span      DML Q   external Q
+     0 km    15.57       283.09
+     5 km    31.70       192.85
+    10 km     8.85        98.12
+    20 km     2.73        39.68
+    40 km     1.35        29.86
+```
+
+**The penalty is not monotone**, and that is the interesting part: the eye at 5 km is better than back
+to back. Dispersion acts on a signal whose instantaneous frequency moves with its power, and over a
+short span that partly undoes the laser's own ringing before it starts spreading the pulses. Past
+10 km there is nothing left to undo, which is the reach limit a DML is specified with.
+`examples/dml_reach.py` prints all three tables.
+
 ## A PAM4 lane, and the equaliser that makes it work
 
 Data-centre optics carry a lane on PAM4: two bits a symbol, four intensities, one photodiode. It halves
@@ -2956,8 +2995,8 @@ time window, and results are reproducible.
 | **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier frequency and phase recovery, coarse frequency acquisition over the whole sampled band, blind square-law timing recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km with blind estimation of the accumulated value, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
 | **3 — GUI & WDM** ✅ | Wavelength-selective filters, the ITU grids and a multiplexer/demultiplexer pair on them with crosstalk that falls out of the channel spacing, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — the OSA's trace drawn in the dock, and 400G/800G reference designs validated against the OSNR relations, and a back-end indirection the propagation kernels dispatch through — CuPy runs it where a device exists, `maiman devices` cross-checks it against NumPy, and a CI job does the same on any runner labelled `gpu` | ~6 months |
 | **4 — PIC** ✅ | Bidirectional S-matrix circuit solver, waveguide, directional coupler, all-pass and add-drop ring resonators, cross-validated against SAX; N×N MMI couplers on the self-imaging phase relations; a Mach-Zehnder interferometer assembled from them — switch, interleaver, or both; and PDK import, which reads a foundry's fitted numbers out of a JSON kit and refuses to extrapolate them past the window they were fitted in; and birefringence, with each guided polarization carrying its own indices through the same reduction | — |
-| **5 — Gratings, sensing, loops and coupling** ✅ | Fibre Bragg gratings assembled from transfer matrices — apodized, chirped, sampled and phase-shifted — a circulator with isolation and return loss, and a grating read as a strain gauge and a thermometer, by a swept laser or by broadband light on an analyser; noise that carries the spectral shape of what it passed through; loop control that runs a cavity to its fixed point, and a delay line that turns the same loop into a recirculating one lap by lap; pump depletion for four-wave mixing and Raman's measured gain shape past its peak; an erbium transient spread across the spectrum, each channel moving by the fibre's own tilt; a scalar mode solver for core and cladding modes, and a long-period grating built on it; edge and grating couplers that put a signal into the chip's TE and TM; a PAM4 driver with its modulator's linearity corrected, and a feed-forward and decision-feedback equaliser; and templates in the studio's File menu, including an eight-channel DWDM link | — |
-| **Open** | The pump control loop that pushes back on an erbium transient, and channels draining the inversion at their own cross sections rather than one rate; PMD interleaved with the Kerr effect rather than applied after it, and the coherent `A_x* A_y²` polarization term; the pumps' own nonlinear phase in four-wave mixing between spans; vector cladding modes, material dispersion and tilted gratings; the etalon between an edge coupler's facets and a grating coupler's passband computed from its vertical stack; a directly modulated laser with its chirp; bit-exact oFEC, which needs the OIF document open rather than recalled; a spectral view of a block's scattering matrix in the studio | — |
+| **5 — Gratings, sensing, loops and coupling** ✅ | Fibre Bragg gratings assembled from transfer matrices — apodized, chirped, sampled and phase-shifted — a circulator with isolation and return loss, and a grating read as a strain gauge and a thermometer, by a swept laser or by broadband light on an analyser; noise that carries the spectral shape of what it passed through; loop control that runs a cavity to its fixed point, and a delay line that turns the same loop into a recirculating one lap by lap; pump depletion for four-wave mixing and Raman's measured gain shape past its peak; an erbium transient spread across the spectrum, each channel moving by the fibre's own tilt; a scalar mode solver for core and cladding modes, and a long-period grating built on it; edge and grating couplers that put a signal into the chip's TE and TM; a PAM4 driver with its modulator's linearity corrected, and a feed-forward and decision-feedback equaliser; a directly modulated laser whose chirp comes out of its own rate equations; and templates in the studio's File menu, including an eight-channel DWDM link | — |
+| **Open** | The pump control loop that pushes back on an erbium transient, and channels draining the inversion at their own cross sections rather than one rate; PMD interleaved with the Kerr effect rather than applied after it, and the coherent `A_x* A_y²` polarization term; the pumps' own nonlinear phase in four-wave mixing between spans; vector cladding modes, material dispersion and tilted gratings; the etalon between an edge coupler's facets and a grating coupler's passband computed from its vertical stack; bit-exact oFEC, which needs the OIF document open rather than recalled; a spectral view of a block's scattering matrix in the studio | — |
 
 ¹ One developer, part-time. Estimates, not commitments.
 

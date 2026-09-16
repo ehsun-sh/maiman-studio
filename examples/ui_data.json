@@ -656,6 +656,134 @@
     }
    }
   },
+  "DirectlyModulatedLaser": {
+   "name": "Directly Modulated Laser",
+   "type": "DirectlyModulatedLaser",
+   "class": "maiman.components.dml.DirectlyModulatedLaser",
+   "category": "Optical Sources",
+   "version": "0.1.0",
+   "parameters": {
+    "bias_current": {
+     "type": "float",
+     "default": 35.0,
+     "unit": "mA",
+     "min": 0.0,
+     "doc": "Current with no drive applied"
+    },
+    "transconductance": {
+     "type": "float",
+     "default": 25.0,
+     "unit": "mA/V",
+     "min": 0.0,
+     "doc": "Drive current per volt of input waveform"
+    },
+    "wavelength": {
+     "type": "float",
+     "default": 1310.0,
+     "unit": "nm",
+     "min": 1200.0,
+     "max": 1700.0,
+     "doc": "Emission wavelength"
+    },
+    "linewidth_enhancement": {
+     "type": "float",
+     "default": 4.0,
+     "unit": "",
+     "min": 0.0,
+     "max": 10.0,
+     "doc": "alpha: how far the index moves with the gain"
+    },
+    "confinement": {
+     "type": "float",
+     "default": 0.3,
+     "unit": "",
+     "min": 0.01,
+     "max": 1.0,
+     "doc": "Mode overlap with the active region"
+    },
+    "gain_slope": {
+     "type": "float",
+     "default": 2.1e-12,
+     "unit": "",
+     "min": 1e-14,
+     "max": 1e-10,
+     "doc": "g0 = v_g dg/dN [m^3/s]"
+    },
+    "transparency_density": {
+     "type": "float",
+     "default": 1e+24,
+     "unit": "",
+     "min": 1e+22,
+     "max": 1e+26,
+     "doc": "N_t [1/m^3]: where absorption stops"
+    },
+    "carrier_lifetime": {
+     "type": "float",
+     "default": 1.0,
+     "unit": "ns",
+     "min": 0.01,
+     "max": 100.0,
+     "doc": "tau_n"
+    },
+    "photon_lifetime": {
+     "type": "float",
+     "default": 2.5,
+     "unit": "ps",
+     "min": 0.1,
+     "max": 100.0,
+     "doc": "tau_p: the cavity's loss"
+    },
+    "gain_compression": {
+     "type": "float",
+     "default": 1.5e-23,
+     "unit": "",
+     "min": 0.0,
+     "max": 1e-20,
+     "doc": "epsilon [m^3]: damps the ringing"
+    },
+    "spontaneous_coupling": {
+     "type": "float",
+     "default": 0.0001,
+     "unit": "",
+     "min": 0.0,
+     "max": 0.01,
+     "doc": "beta: spontaneous emission into the mode"
+    },
+    "active_volume": {
+     "type": "float",
+     "default": 9e-17,
+     "unit": "",
+     "min": 1e-19,
+     "max": 1e-14,
+     "doc": "V [m^3]"
+    },
+    "output_coupling": {
+     "type": "float",
+     "default": 0.2,
+     "unit": "",
+     "min": 0.001,
+     "max": 1.0,
+     "doc": "Photons out of the facet that reach the fibre"
+    },
+    "substeps": {
+     "type": "float",
+     "default": 16.0,
+     "unit": "",
+     "min": 1.0,
+     "max": 1024.0,
+     "doc": "Integration steps per sample; the ringing needs them"
+    }
+   },
+   "structural": {},
+   "ports": {
+    "inputs": {
+     "in": "electrical"
+    },
+    "outputs": {
+     "out": "optical"
+    }
+   }
+  },
   "DispersionCompensator": {
    "name": "CD Compensator",
    "type": "DispersionCompensator",

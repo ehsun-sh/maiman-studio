@@ -103,6 +103,10 @@ _TO_SI: dict[str, Callable[[float], float]] = {
     "1/W/km/THz": lambda x: x * 1e-15,
     # PMD coefficient: ps/sqrt(km) -> s/sqrt(m)
     "ps/sqrt(km)": lambda x: x * 1e-12 / math.sqrt(1e3),
+    # Current, and the transconductance a laser driver is specified by.
+    "A": lambda x: x,
+    "mA": lambda x: x * 1e-3,
+    "mA/V": lambda x: x * 1e-3,
     # Length
     "m": lambda x: x,
     "km": lambda x: x * 1e3,
@@ -120,6 +124,7 @@ _TO_SI: dict[str, Callable[[float], float]] = {
     "THz": lambda x: x * 1e12,
     # Time
     "s": lambda x: x,
+    "ns": lambda x: x * 1e-9,
     "ps": lambda x: x * 1e-12,
     # Voltage
     "V": lambda x: x,
@@ -157,6 +162,9 @@ _FROM_SI: dict[str, Callable[[float], float]] = {
     "1/W/km": lambda x: x * 1e3,
     "1/W/km/THz": lambda x: x * 1e15,
     "ps/sqrt(km)": lambda x: x * 1e12 * math.sqrt(1e3),
+    "A": lambda x: x,
+    "mA": lambda x: x * 1e3,
+    "mA/V": lambda x: x * 1e3,
     "m": lambda x: x,
     "km": lambda x: x * 1e-3,
     "mm": lambda x: x * 1e3,
@@ -168,6 +176,7 @@ _FROM_SI: dict[str, Callable[[float], float]] = {
     "GHz": lambda x: x * 1e-9,
     "THz": lambda x: x * 1e-12,
     "s": lambda x: x,
+    "ns": lambda x: x * 1e9,
     "ps": lambda x: x * 1e12,
     "V": lambda x: x,
     "K": lambda x: x,
