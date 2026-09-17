@@ -2625,13 +2625,31 @@ accumulating the same phase, rotate the state of polarization as the power moves
 birefringence, which falls by a factor of three, and cross-polarization modulation, which is that
 rotation being driven by a *different* channel's power.
 
-The value is the fixed-axis one, from the χ⁽³⁾ tensor rather than from any averaging. A fibre whose
-birefringence scrambles faster than the nonlinearity acts is the Manakov regime instead, where the
-distinction washes into a single 8/9 on the total power; this block applies PMD as a separate
-element rather than interleaving it, so the fixed-axis form is the one consistent with the rest of
-it. The coherent `A_x* A_y²` term, which would exchange power between the axes rather than only
-dephase them, is left out — it is the part that averages away first — and the tests assert the
-axes' powers are unchanged to twelve digits, so that omission is a number rather than a sentence.
+The value is the fixed-axis one, from the χ⁽³⁾ tensor rather than from any averaging. Two further
+settings finish the picture, both off by default so no earlier result moves.
+
+**`coherent_polarization`** keeps the `A_x* A_y²` term, which moves power between the axes rather
+than only dephasing them. It is not a phase in the x/y basis, but in the circular basis the self and
+cross terms become pure phases again, so the step stays exact — checked against a direct Runge-Kutta
+integration of the x/y equations to 1e-12. What it changes is measured, not asserted:
+
+```
+   circular light, nonlinear phase over gamma P L    2/3 with it, 5/6 without
+   linear light                                      exactly 1 either way
+   an ellipse                                        its axes turn at (2/3) gamma S3 per metre,
+                                                     with its power and ellipticity unchanged
+```
+
+**`interleave_pmd`** applies the PMD waveplates along the span, between Kerr steps, rather than all
+after it — so the Kerr effect acts on a state of polarization that is still rotating. With the Kerr
+effect off the two arrangements are the same operator, and agree to 2e-16.
+
+**What neither changes is the Manakov average**, and the tests say so rather than pretending
+otherwise. Scramble the state fast enough — 800 waveplates across the span — and the averaged
+nonlinearity lands on 8/9 of `gamma P` *with or without* the coherent term. Averaged over every
+polarization state the two forms have the same invariant part, `(4/9) S0²`; the coherent term decides
+how the state evolves on the way, not that average. An earlier draft of this note claimed the
+phase-only form could not reach 8/9. The measurement said otherwise, and the algebra agrees.
 
 Off by default, and with all the light on one axis it changes nothing at all — on the samples,
 which is what makes it safe to leave on for a dual-polarization link and pointless for a
@@ -3026,8 +3044,8 @@ time window, and results are reproducible.
 | **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier frequency and phase recovery, coarse frequency acquisition over the whole sampled band, blind square-law timing recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km with blind estimation of the accumulated value, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
 | **3 — GUI & WDM** ✅ | Wavelength-selective filters, the ITU grids and a multiplexer/demultiplexer pair on them with crosstalk that falls out of the channel spacing, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — the OSA's trace drawn in the dock, and 400G/800G reference designs validated against the OSNR relations, and a back-end indirection the propagation kernels dispatch through — CuPy runs it where a device exists, `maiman devices` cross-checks it against NumPy, and a CI job does the same on any runner labelled `gpu` | ~6 months |
 | **4 — PIC** ✅ | Bidirectional S-matrix circuit solver, waveguide, directional coupler, all-pass and add-drop ring resonators, cross-validated against SAX; N×N MMI couplers on the self-imaging phase relations; a Mach-Zehnder interferometer assembled from them — switch, interleaver, or both; and PDK import, which reads a foundry's fitted numbers out of a JSON kit and refuses to extrapolate them past the window they were fitted in; and birefringence, with each guided polarization carrying its own indices through the same reduction | — |
-| **5 — Gratings, sensing, loops and coupling** ✅ | Fibre Bragg gratings assembled from transfer matrices — apodized, chirped, sampled and phase-shifted — a circulator with isolation and return loss, and a grating read as a strain gauge and a thermometer, by a swept laser or by broadband light on an analyser; noise that carries the spectral shape of what it passed through; loop control that runs a cavity to its fixed point, and a delay line that turns the same loop into a recirculating one lap by lap; pump depletion for four-wave mixing and Raman's measured gain shape past its peak; an erbium transient spread across the spectrum, each channel moving by the fibre's own tilt, drained per channel by its own cross section, and answered by a pump control loop with a bandwidth and a ceiling; a scalar mode solver for core and cladding modes, and a long-period grating built on it; edge and grating couplers that put a signal into the chip's TE and TM; a PAM4 driver with its modulator's linearity corrected, and a feed-forward and decision-feedback equaliser; a directly modulated laser whose chirp comes out of its own rate equations; and templates in the studio's File menu, including an eight-channel DWDM link | — |
-| **Open** | Amplified spontaneous emission saturating the reservoir, which in a lightly loaded amplifier it does; PMD interleaved with the Kerr effect rather than applied after it, and the coherent `A_x* A_y²` polarization term; the pumps' own nonlinear phase in four-wave mixing between spans; vector cladding modes, material dispersion and tilted gratings; the etalon between an edge coupler's facets and a grating coupler's passband computed from its vertical stack; bit-exact oFEC, which needs the OIF document open rather than recalled; a spectral view of a block's scattering matrix in the studio | — |
+| **5 — Gratings, sensing, loops and coupling** ✅ | Fibre Bragg gratings assembled from transfer matrices — apodized, chirped, sampled and phase-shifted — a circulator with isolation and return loss, and a grating read as a strain gauge and a thermometer, by a swept laser or by broadband light on an analyser; noise that carries the spectral shape of what it passed through; loop control that runs a cavity to its fixed point, and a delay line that turns the same loop into a recirculating one lap by lap; pump depletion for four-wave mixing and Raman's measured gain shape past its peak; an erbium transient spread across the spectrum, each channel moving by the fibre's own tilt, drained per channel by its own cross section, and answered by a pump control loop with a bandwidth and a ceiling; PMD applied along the span between Kerr steps, and the coherent polarization term that moves power between the axes; a scalar mode solver for core and cladding modes, and a long-period grating built on it; edge and grating couplers that put a signal into the chip's TE and TM; a PAM4 driver with its modulator's linearity corrected, and a feed-forward and decision-feedback equaliser; a directly modulated laser whose chirp comes out of its own rate equations; and templates in the studio's File menu, including an eight-channel DWDM link | — |
+| **Open** | Amplified spontaneous emission saturating the reservoir, which in a lightly loaded amplifier it does; the pumps' own nonlinear phase in four-wave mixing between spans; vector cladding modes, material dispersion and tilted gratings; the etalon between an edge coupler's facets and a grating coupler's passband computed from its vertical stack; bit-exact oFEC, which needs the OIF document open rather than recalled; a spectral view of a block's scattering matrix in the studio | — |
 
 ¹ One developer, part-time. Estimates, not commitments.
 

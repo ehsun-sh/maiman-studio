@@ -330,6 +330,9 @@ def propagate_coupled_ssfm(
     gamma: float,
     beta3: Sequence[float] | None = None,
     polarization: Sequence[int] | None = None,
+    pairs: Sequence[tuple[int, int]] | None = None,
+    coherent_polarization: bool = False,
+    pmd: Sequence[PMDSection] | None = None,
     alpha: float,
     distance: float,
     max_nonlinear_phase: float = 0.005,
@@ -419,6 +422,24 @@ def propagate_coupled_ssfm(
     channel no longer accumulate the same phase — the state of polarization
     rotates with the power, which is cross-polarization modulation.
 
+    **The coherent term, when asked for.** ``pairs`` names the two axes of each
+    band as ``(x field, y field)``. With ``coherent_polarization`` those two are
+    stepped together, including the ``(1/3) A_y**2 A_x*`` term that the
+    phase-only form leaves out -- the one that moves power *between* the axes
+    rather than only dephasing them. It is not a phase in the x/y basis, but in
+    the circular basis ``A_{+-} = (A_x -+ i A_y) / sqrt(2)`` the self and
+    cross-polarization terms become ``(2/3)(|A_{+-}|**2 + 2 |A_{-+}|**2)``, pure
+    phases again, so the step stays exact. Other bands still enter as a phase at
+    their co- and cross-polarized weights: their coherent cross terms oscillate
+    at the channel spacing and average away over a step.
+
+    **PMD along the span, when asked for.** ``pmd`` sections are placed at the
+    midpoints of equal lengths of the span and each is applied, to every pair,
+    exactly where it sits -- the step is shortened to land on it. Between them the
+    Kerr effect acts on a state of polarization that is still rotating, which is
+    what applying the whole chain afterwards cannot represent. Applied in the order
+    :func:`apply_pmd` applies them, so with ``gamma = 0`` the two agree exactly.
+
     Returns the propagated fields, in input order, and
     :class:`PropagationDiagnostics`.
     """
@@ -445,6 +466,21 @@ def propagate_coupled_ssfm(
         )
     if any(value not in (0, 1) for value in axis):
         raise ValueError(f"polarization entries must be 0 or 1, got {sorted(set(axis))}")
+    couples = [] if pairs is None else [(int(x), int(y)) for x, y in pairs]
+    for x_index, y_index in couples:
+        if not (0 <= x_index < len(fields) and 0 <= y_index < len(fields)):
+            raise ValueError(f"pair {(x_index, y_index)} indexes past the {len(fields)} fields")
+        if axis[x_index] != 0 or axis[y_index] != 1:
+            raise ValueError("each pair is (x field, y field): label the first 0 and the second 1")
+    if (coherent_polarization or pmd) and not couples:
+        raise ValueError(
+            "the coherent polarization term and PMD along the span act on the two axes of a "
+            "band together; name them with pairs"
+        )
+    partner: dict[int, int] = {}
+    for x_index, y_index in couples:
+        partner[x_index] = y_index
+        partner[y_index] = x_index
 
     xp = array_module(*fields)
     a = [f.astype(xp.complex128, copy=True) for f in fields]
@@ -472,6 +508,9 @@ def propagate_coupled_ssfm(
         for b, w, b3 in zip(beta2, walkoff, slope, strict=True)
     ]
     ceiling = max_step if max_step is not None else distance
+    sections = list(pmd or ())
+    positions = [(index + 0.5) * distance / len(sections) for index in range(len(sections))]
+    next_section = 0
 
     travelled = 0.0
     steps = 0
@@ -508,6 +547,11 @@ def propagate_coupled_ssfm(
         # A step can only be shortened to the point where it still advances;
         # without this an extreme peak power would stall the loop.
         step = max(min(step, remaining), remaining * 1e-9)
+        if next_section < len(positions):
+            # Land exactly on the next waveplate, so it acts where it sits.
+            to_section = positions[next_section] - travelled
+            if to_section > 0.0:
+                step = min(step, to_section)
 
         half = [xp.exp(-alpha * step / 4.0 + op * (step / 2.0)) for op in operators]
         a = [xp.fft.ifft(xp.fft.fft(f) * h) for f, h in zip(a, half, strict=True)]
@@ -518,15 +562,29 @@ def propagate_coupled_ssfm(
             # axis in use the second sum is zero and this is the scalar model
             # term for term.
             per_axis = _power_per_axis(a, axis)
-            rotated = []
-            for field, ax in zip(a, axis, strict=True):
+            rotated = list(a)
+            for index, (field, ax) in enumerate(zip(a, axis, strict=True)):
                 effective = 2.0 * per_axis[ax] - xp.abs(field) ** 2
                 other = per_axis.get(1 - ax)
                 if other is not None:
                     effective = effective + ORTHOGONAL_KERR_WEIGHT * other
+                if coherent_polarization and index in partner:
+                    # Only the other bands enter as a phase here. This band's own
+                    # two axes are stepped together, exactly, just below.
+                    effective = (
+                        effective
+                        - xp.abs(field) ** 2
+                        - ORTHOGONAL_KERR_WEIGHT * xp.abs(a[partner[index]]) ** 2
+                    )
                 phase = gamma * effective * step
                 peak_phase = max(peak_phase, float(xp.max(xp.abs(phase))))
-                rotated.append(field * xp.exp(-1j * phase))
+                rotated[index] = field * xp.exp(-1j * phase)
+            if coherent_polarization:
+                for x_index, y_index in couples:
+                    rotated[x_index], rotated[y_index], turned = _coherent_kerr_step(
+                        rotated[x_index], rotated[y_index], gamma * step
+                    )
+                    peak_phase = max(peak_phase, turned)
             a = rotated
 
         a = [xp.fft.ifft(xp.fft.fft(f) * h) for f, h in zip(a, half, strict=True)]
@@ -536,6 +594,11 @@ def propagate_coupled_ssfm(
         shortest = min(shortest, step)
         longest = max(longest, step)
         peak_slip = max(peak_slip, spread * step * sample_rate)
+        while next_section < len(positions) and positions[next_section] <= travelled * (
+            1.0 + 1e-12
+        ):
+            a = _apply_pmd_section(a, couples, sections[next_section], omega)
+            next_section += 1
         if on_progress is not None:
             # Distance, not step count. The step count is not known in advance —
             # the size is chosen each time from the peak power the fields
@@ -561,6 +624,49 @@ def propagate_coupled_ssfm(
         walkoff_span=spread * distance,
         peak_walkoff_slip=peak_slip,
     )
+
+
+def _coherent_kerr_step(
+    ex: np.ndarray, ey: np.ndarray, scale: float
+) -> tuple[np.ndarray, np.ndarray, float]:
+    """One band's own Kerr step with the coherent term, exact: ``(ex, ey, peak phase)``.
+
+    In the circular basis the self and cross-polarization terms are phases,
+    ``(2/3) scale (|A_{+-}|**2 + 2 |A_{-+}|**2)``, and the powers they depend on do
+    not change during the step -- so rotating there and back is the solution,
+    not an approximation of it. ``scale`` is ``gamma * step``.
+    """
+    xp = array_module(ex, ey)
+    root = math.sqrt(2.0)
+    plus = (ex - 1j * ey) / root
+    minus = (ex + 1j * ey) / root
+    power_plus = xp.abs(plus) ** 2
+    power_minus = xp.abs(minus) ** 2
+    turn_plus = (2.0 / 3.0) * scale * (power_plus + 2.0 * power_minus)
+    turn_minus = (2.0 / 3.0) * scale * (power_minus + 2.0 * power_plus)
+    plus = plus * xp.exp(-1j * turn_plus)
+    minus = minus * xp.exp(-1j * turn_minus)
+    peak = float(max(xp.max(xp.abs(turn_plus)), xp.max(xp.abs(turn_minus))))
+    return (plus + minus) / root, 1j * (plus - minus) / root, peak
+
+
+def _apply_pmd_section(
+    fields: Sequence[np.ndarray],
+    couples: Sequence[tuple[int, int]],
+    section: PMDSection,
+    omega: np.ndarray,
+) -> list[np.ndarray]:
+    """One waveplate on every ``(x, y)`` pair, in :func:`apply_pmd`'s own order."""
+    xp = array_module(*fields)
+    out = list(fields)
+    phase = xp.exp(0.5j * omega * section.dgd)
+    u = section.unitary
+    for x_index, y_index in couples:
+        delayed_x = xp.fft.fft(out[x_index]) * phase
+        delayed_y = xp.fft.fft(out[y_index]) * xp.conj(phase)
+        out[x_index] = xp.fft.ifft(u[0, 0] * delayed_x + u[0, 1] * delayed_y)
+        out[y_index] = xp.fft.ifft(u[1, 0] * delayed_x + u[1, 1] * delayed_y)
+    return out
 
 
 def _power_per_axis(fields: Sequence[np.ndarray], axis: Sequence[int]) -> dict[int, np.ndarray]:

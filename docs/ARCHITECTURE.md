@@ -552,6 +552,9 @@ be finished without it, and each is validated against a result it does not share
 * **Loops.** `Feedback` runs a cavity to its fixed point in a declared number of passes, and the
   residual it reports falls by the loop's round-trip gain. `DelayLine` makes each pass a lap in
   time, so the same graph is a recirculating loop.
+* **Polarization.** The coherent `A_x* A_y²` term, stepped exactly in the circular basis, and PMD
+  waveplates applied along the span between Kerr steps; both reach the Manakov 8/9 under fast
+  scrambling, and the tests say the coherent term does not change that average.
 * **Pump control.** The pump is a state integrated beside the inversion, driven by an integral
   loop holding gain or output power, with a bandwidth and a ceiling it can saturate against;
   and each channel drains the reservoir by its own cross section and photon energy.
@@ -582,9 +585,8 @@ Stated in the code where each approximation is made, and collected here:
 * **Amplifiers.** Amplified spontaneous emission does not saturate the reservoir, though in a
   lightly loaded amplifier it does; and the control loop is the ideal integral one, with no detector
   noise, no delay and no dither.
-* **Fibre.** PMD is applied after dispersion and the Kerr effect rather than interleaved with them;
-  the coherent `A_x* A_y²` polarization term is left out; four-wave mixing tracks the linear
-  mismatch between spans but not the pumps' own nonlinear phase.
+* **Fibre.** Four-wave mixing tracks the linear mismatch between spans but not the pumps' own
+  nonlinear phase.
 * **Gratings and modes.** Cladding modes are scalar, which places a long-period notch to within a few
   nanometres; material dispersion is not included; tilted gratings and recoupling at a second
   grating are not modelled.

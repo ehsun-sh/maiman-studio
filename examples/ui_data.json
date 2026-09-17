@@ -1339,6 +1339,16 @@
      "default": false,
      "doc": "Couple the two polarizations: orthogonal power modulates at two thirds"
     },
+    "coherent_polarization": {
+     "type": "bool",
+     "default": false,
+     "doc": "Keep the coherent A_x* A_y^2 term, which moves power between the axes"
+    },
+    "interleave_pmd": {
+     "type": "bool",
+     "default": false,
+     "doc": "Apply PMD along the span between Kerr steps, rather than after it"
+    },
     "max_walkoff_slip": {
      "type": "float",
      "default": 0.5,

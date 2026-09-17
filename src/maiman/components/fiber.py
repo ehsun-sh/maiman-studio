@@ -136,10 +136,22 @@ class Fiber(Component):
     is the pumps' own nonlinear phase, so the interference between spans is
     computed from the linear mismatch alone.
 
-    Not yet modelled: the coherent polarization term
-    ``A_x* A_y**2``, which exchanges power between the axes rather than only
-    dephasing them, is left out — it is the part that averages away first under
-    real birefringence.
+    **The coherent polarization term, and PMD along the span.** With
+    ``cross_polarization`` on, ``coherent_polarization`` adds the ``A_x* A_y**2``
+    term that moves power between the axes rather than only dephasing them:
+    circularly polarized light then picks up two thirds of the nonlinear phase a
+    linearly polarized beam does, where the phase-only form gives it five sixths,
+    and an elliptical state's axes rotate at ``(2/3) gamma S3`` per metre.
+    ``interleave_pmd`` applies the PMD waveplates along the span, between Kerr
+    steps, instead of all after it.
+
+    **What neither changes is the Manakov average**, and that is worth knowing
+    before expecting it to. With enough waveplates to scramble the state quickly
+    the averaged nonlinearity lands on 8/9 of ``gamma P`` with or without the
+    coherent term: averaged over every polarization state, the two forms have the
+    same invariant part, and the coherent term's contribution is only to how the
+    state evolves along the way. Both are off by default, so no earlier result
+    moves.
 
     **The pumps pay for what they make.** Every mixing product takes its photons
     from the two pumps that made it and gives one to the idler, so a span with no
@@ -183,6 +195,12 @@ class Fiber(Component):
     )
     cross_polarization = BoolParam(
         False, doc="Couple the two polarizations: orthogonal power modulates at two thirds"
+    )
+    coherent_polarization = BoolParam(
+        False, doc="Keep the coherent A_x* A_y^2 term, which moves power between the axes"
+    )
+    interleave_pmd = BoolParam(
+        False, doc="Apply PMD along the span between Kerr steps, rather than after it"
     )
     max_walkoff_slip = Param(
         0.5,
@@ -306,17 +324,20 @@ class Fiber(Component):
             )
             realised_dgd = differential_group_delay(sections)
 
+        # Along the span only where it can make a difference: a linear span's
+        # operators commute, so there the chain is applied afterwards, identically.
+        interleaved = bool(sections) and gamma != 0.0 and self.interleave_pmd
         if gamma == 0.0:
             fields, diagnostics = self._propagate_linear(signal, distance, power_factor)
         else:
-            fields, diagnostics = self._propagate_kerr(signal, distance, gamma, alpha)
+            fields, diagnostics = self._propagate_kerr(
+                signal, distance, gamma, alpha, sections if interleaved else ()
+            )
 
-        if sections:
-            # PMD is applied after dispersion and the Kerr effect rather than
-            # interleaved with them. That neglects the interaction between
-            # nonlinearity and a rotating polarization state, which matters at
-            # high power over long spans and does not at the powers and
-            # distances this is usually pointed at.
+        if sections and not interleaved:
+            # Applied after dispersion and the Kerr effect. That neglects the Kerr
+            # effect acting on a state of polarization that is still rotating;
+            # set interleave_pmd to apply the waveplates along the span instead.
             fields = [
                 apply_pmd(ex, ey, band.fs, sections)
                 for (ex, ey), band in zip(fields, signal.bands, strict=True)
@@ -384,7 +405,12 @@ class Fiber(Component):
         return fields, PropagationDiagnostics(0, distance, 0.0, 0.0, 0.0)
 
     def _propagate_kerr(
-        self, signal: OpticalSignal, distance: float, gamma: float, alpha: float
+        self,
+        signal: OpticalSignal,
+        distance: float,
+        gamma: float,
+        alpha: float,
+        pmd: tuple[PMDSection, ...] = (),
     ) -> tuple[list[tuple[np.ndarray, np.ndarray]], PropagationDiagnostics]:
         """Split-step propagation, with the bands coupled unless told otherwise.
 
@@ -400,6 +426,12 @@ class Fiber(Component):
         coupling adds is entirely in the nonlinear step.
         """
         bands = signal.bands
+        if (self.coherent_polarization or pmd) and not self.cross_polarization:
+            raise ValueError(
+                f"{self.label or 'Fiber'}: the coherent polarization term and PMD along the "
+                "span both act on the two axes together, so they need cross_polarization on; "
+                "with the axes propagated as independent problems neither has anything to act on"
+            )
         coupled = self.cross_phase_modulation and len(bands) > 1
         if coupled:
             grids = {(band.fs, band.num_samples) for band in bands}
@@ -431,6 +463,9 @@ class Fiber(Component):
                     beta3=beta3 * 2,
                     walkoff=walkoff * 2,
                     polarization=[0] * len(group) + [1] * len(group),
+                    pairs=[(index, index + len(group)) for index in range(len(group))],
+                    coherent_polarization=self.coherent_polarization,
+                    pmd=pmd,
                     gamma=gamma,
                     alpha=alpha,
                     distance=distance,
@@ -470,6 +505,9 @@ class Fiber(Component):
         alpha: float,
         distance: float,
         best: PropagationDiagnostics,
+        pairs: list[tuple[int, int]] | None = None,
+        coherent_polarization: bool = False,
+        pmd: tuple[PMDSection, ...] = (),
     ) -> tuple[list[np.ndarray], PropagationDiagnostics]:
         """One call into the solver, keeping whichever diagnostics took more steps."""
         out, diag = propagate_coupled_ssfm(
@@ -481,6 +519,9 @@ class Fiber(Component):
             gamma=gamma,
             beta3=beta3,
             polarization=polarization,
+            pairs=pairs,
+            coherent_polarization=coherent_polarization,
+            pmd=pmd or None,
             alpha=alpha,
             distance=distance,
             max_nonlinear_phase=self.max_nonlinear_phase,
