@@ -11,11 +11,13 @@ These two blocks are that step, with its alignment and its extinction.
 - :class:`EdgeCoupler` butts a fibre against a polished facet. What it loses is
   mode mismatch and misalignment, computed as the overlap of two Gaussian beams,
   and the two facets' Fresnel reflections. It is broadband and treats both
-  polarizations alike.
+  polarizations alike. With ``etalon`` set, its two facets are a cavity.
 - :class:`GratingCoupler` diffracts light up out of the chip surface into a fibre
   held above it at an angle. Where it couples best is phase matching and is
-  computed; its passband shape is a compact model, as a PDK gives one. It couples
-  TE and rejects TM, which is the reason polarization-diverse receivers exist.
+  computed; its passband is a compact model, as a PDK gives one, or -- with
+  ``from_stack`` -- computed from the silicon, the buried oxide and the substrate
+  beneath it. It couples TE and rejects TM, which is the reason
+  polarization-diverse receivers exist.
 
 Both output the signal in the **chip's** frame. ``rotation`` is the angle of the
 die's TE axis from the signal's x axis: the fields are projected onto the die's
@@ -29,11 +31,12 @@ from __future__ import annotations
 import math
 from collections.abc import Callable
 from dataclasses import replace
+from typing import Any
 
 import numpy as np
 
 from ..circuit import SMatrix
-from ..component import Param, PortType
+from ..component import BoolParam, Param, PortType
 from ..context import SimulationContext
 from ..photonics import (
     edge_coupler,
@@ -41,6 +44,8 @@ from ..photonics import (
     gaussian_overlap,
     grating_coupler,
     grating_coupler_centre,
+    grating_coupler_stack,
+    grating_directionality,
 )
 from ..signals import OpticalSignal, Signal
 from ..units import C_LIGHT
@@ -101,10 +106,18 @@ class EdgeCoupler(_ChipCoupler):
     alone and 5.78 dB with the facets. A lensed fibre or a larger spot-size
     converter buys the mismatch back; an index-matched gap removes the facets.
 
-    **What it does not.** The etalon the two facets make across a gap -- a few
-    percent of ripple for a bare air gap, nothing for an index-matched one -- and
-    any difference between the chip mode's TE and TM sizes. Both polarizations
-    see the same coupling.
+    **The etalon.** By default the facets are two independent losses, which is
+    the average over a fringe. Set ``etalon`` and they are a Fabry-Perot cavity,
+    summed bounce by bounce with every beam diffracting over its own path:
+    fifty microns of air between a standard fibre and a 3 micron mode ripples by
+    0.49 dB peak to peak, with fringes ``c / (2 g)`` = 3.0 THz apart. Tilting
+    the fibre tilts one mirror against the other and walks each bounce off the
+    chip mode, which is why fibre arrays are polished at an angle -- 0.04 dB at
+    eight degrees. An index-matched gap has nothing to reflect and does not
+    ripple.
+
+    **What it does not.** Any difference between the chip mode's TE and TM
+    sizes: both polarizations see the same coupling.
     """
 
     display_name = "Edge Coupler"
@@ -128,6 +141,9 @@ class EdgeCoupler(_ChipCoupler):
     fibre_index = Param(1.4682, unit="", min=1.0, max=4.0, doc="Fibre core index at its facet")
     mode_index = Param(
         1.45, unit="", min=1.0, max=4.0, doc="Chip mode's index at the facet; low for a taper"
+    )
+    etalon = BoolParam(
+        False, doc="Treat the two facets as a cavity, so the gap ripples with wavelength"
     )
 
     def coupled_fraction(self, wavelength: float = 1550e-9) -> float:
@@ -170,6 +186,7 @@ class EdgeCoupler(_ChipCoupler):
         offset_x, offset_y = self.si("offset_x"), self.si("offset_y")
         tilt, gap = self.si("tilt"), self.si("gap")
         gap_index, fibre_index, mode_index = self.gap_index, self.fibre_index, self.mode_index
+        etalon = self.etalon
         return solve_once(
             lambda f: edge_coupler(
                 f,
@@ -183,6 +200,7 @@ class EdgeCoupler(_ChipCoupler):
                 gap_index=gap_index,
                 fibre_index=fibre_index,
                 mode_index=mode_index,
+                etalon=etalon,
             )
         )
 
@@ -197,12 +215,19 @@ class GratingCoupler(_ChipCoupler):
     tunes by 7.0 nm per degree of fibre angle, where the same grating without
     dispersion would tune by 10.5. That is computed, not declared.
 
-    **How well, and over how wide a band** is a compact model: a peak loss and a
-    1 dB bandwidth, with a Gaussian passband between them, which is what a
-    foundry's PDK measures and publishes. Computing those needs the grating's
-    full vertical stack -- its directionality into the substrate and its mode
-    match to the fibre -- and a number taken from a wafer is better than one
-    invented here.
+    **How well, and over how wide a band** is by default a compact model: a peak
+    loss and a 1 dB bandwidth, with a Gaussian passband between them, which is
+    what a foundry's PDK measures and publishes.
+
+    **Or computed from the stack.** Set ``from_stack`` and the passband is what
+    the layers make it (see :func:`maiman.photonics.grating_coupler_stack`): the
+    share of light the grating sends up rather than into the substrate, from
+    the silicon, the buried oxide and the substrate as a thin-film stack; and
+    the overlap of the grating's exponential beam with the fibre's Gaussian one,
+    as the emission angle turns with wavelength and the fibre's does not. The
+    default stack -- 220 nm silicon on 2 microns of oxide, air above -- comes to
+    3.19 dB at the peak and 35.7 nm at 1 dB, from nothing but its geometry.
+    ``peak_loss`` and ``bandwidth_1db`` are then unused.
 
     **TM is rejected** by ``tm_extinction``: the grating is phase-matched for TE
     only, which is why a receiver that must accept any polarization uses a
@@ -231,6 +256,21 @@ class GratingCoupler(_ChipCoupler):
     tm_extinction = Param(
         25.0, unit="dB", min=0.0, max=80.0, doc="How far below TE a TM input couples"
     )
+    from_stack = BoolParam(
+        False, doc="Compute the passband from the vertical stack instead of the two PDK numbers"
+    )
+    silicon_thickness = Param(220.0, unit="nm", min=50.0, max=2000.0, doc="Silicon layer")
+    box_thickness = Param(2.0, unit="um", min=0.0, max=10.0, doc="Buried oxide under it")
+    silicon_index = Param(3.476, unit="", min=1.0, max=4.5, doc="Silicon layer and substrate")
+    box_index = Param(1.444, unit="", min=1.0, max=3.0, doc="Buried oxide")
+    grating_strength = Param(
+        0.14, unit="1/um", min=0.001, max=5.0, doc="Field decay rate along the grating; the etch"
+    )
+    grating_length = Param(20.0, unit="um", min=1.0, max=500.0, doc="Length of the grating")
+    fibre_mfd = Param(10.4, unit="um", min=0.5, max=100.0, doc="Fibre mode field diameter")
+    grating_width = Param(
+        10.4, unit="um", min=0.5, max=100.0, doc="Mode field diameter across the grating"
+    )
 
     def centre_wavelength(self) -> float:
         """Where it couples best [m]."""
@@ -258,7 +298,43 @@ class GratingCoupler(_ChipCoupler):
             )
         )
 
+    def directionality(self, wavelength: float | None = None) -> float:
+        """Share of the grating's light that leaves upward, at ``wavelength`` (default: centre)."""
+        lam = self.centre_wavelength() if wavelength is None else wavelength
+        n_eff = self.effective_index + (self.effective_index - self.group_index) * (
+            lam - self.si("reference_wavelength")
+        ) / self.si("reference_wavelength")
+        return float(
+            grating_directionality(
+                lam,
+                emission_sine=(n_eff - lam / self.si("period")) / self.medium_index,
+                top_index=self.medium_index,
+                silicon_index=self.silicon_index,
+                silicon_thickness=self.si("silicon_thickness"),
+                box_index=self.box_index,
+                box_thickness=self.si("box_thickness"),
+                substrate_index=self.silicon_index,
+            )
+        )
+
+    def passband(
+        self, band: tuple[float, float] = (1.45e-6, 1.65e-6)
+    ) -> tuple[float, float, float]:
+        """``(peak loss [dB], peak wavelength [m], 1 dB bandwidth [m])``, from either model."""
+        wavelengths = np.linspace(band[0], band[1], 4001)
+        matrix = self.scattering_matrix(C_LIGHT / wavelengths)
+        power = np.abs(matrix.s[:, 1, 0]) ** 2
+        best = int(power.argmax())
+        inside = wavelengths[power >= power[best] * 10.0 ** (-0.1)]
+        return (
+            float(-10.0 * np.log10(power[best])),
+            float(wavelengths[best]),
+            float(inside.max() - inside.min()),
+        )
+
     def _matrix_factory(self, polarization: str = "te") -> Callable[[np.ndarray], SMatrix]:
+        if self.from_stack:
+            return self._stack_factory(polarization)
         # Raw dB throughout: si() on a dB parameter hands back a linear ratio.
         peak = self.peak_loss + (self.tm_extinction if polarization == "tm" else 0.0)
         period, angle = self.si("period"), self.si("fibre_angle")
@@ -279,3 +355,26 @@ class GratingCoupler(_ChipCoupler):
                 back_reflection_db=echo,
             )
         )
+
+    def _stack_factory(self, polarization: str) -> Callable[[np.ndarray], SMatrix]:
+        settings: dict[str, Any] = {
+            "period": self.si("period"),
+            "effective_index": self.effective_index,
+            "group_index": self.group_index,
+            "reference_wavelength": self.si("reference_wavelength"),
+            "angle": self.si("fibre_angle"),
+            "top_index": self.medium_index,
+            "silicon_index": self.silicon_index,
+            "silicon_thickness": self.si("silicon_thickness"),
+            "box_index": self.box_index,
+            "box_thickness": self.si("box_thickness"),
+            "substrate_index": self.silicon_index,
+            "strength": self.si("grating_strength"),
+            "length": self.si("grating_length"),
+            "fibre_radius": self.si("fibre_mfd") / 2.0,
+            "grating_radius_y": self.si("grating_width") / 2.0,
+            # Raw dB, as above.
+            "back_reflection_db": self.back_reflection,
+            "extinction_db": self.tm_extinction if polarization == "tm" else 0.0,
+        }
+        return solve_once(lambda f: grating_coupler_stack(f, **settings))

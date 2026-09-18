@@ -1049,6 +1049,11 @@
      "min": 1.0,
      "max": 4.0,
      "doc": "Chip mode's index at the facet; low for a taper"
+    },
+    "etalon": {
+     "type": "bool",
+     "default": false,
+     "doc": "Treat the two facets as a cavity, so the gap ripples with wavelength"
     }
    },
    "structural": {},
@@ -1692,6 +1697,75 @@
      "min": 0.0,
      "max": 80.0,
      "doc": "How far below TE a TM input couples"
+    },
+    "from_stack": {
+     "type": "bool",
+     "default": false,
+     "doc": "Compute the passband from the vertical stack instead of the two PDK numbers"
+    },
+    "silicon_thickness": {
+     "type": "float",
+     "default": 220.0,
+     "unit": "nm",
+     "min": 50.0,
+     "max": 2000.0,
+     "doc": "Silicon layer"
+    },
+    "box_thickness": {
+     "type": "float",
+     "default": 2.0,
+     "unit": "um",
+     "min": 0.0,
+     "max": 10.0,
+     "doc": "Buried oxide under it"
+    },
+    "silicon_index": {
+     "type": "float",
+     "default": 3.476,
+     "unit": "",
+     "min": 1.0,
+     "max": 4.5,
+     "doc": "Silicon layer and substrate"
+    },
+    "box_index": {
+     "type": "float",
+     "default": 1.444,
+     "unit": "",
+     "min": 1.0,
+     "max": 3.0,
+     "doc": "Buried oxide"
+    },
+    "grating_strength": {
+     "type": "float",
+     "default": 0.14,
+     "unit": "1/um",
+     "min": 0.001,
+     "max": 5.0,
+     "doc": "Field decay rate along the grating; the etch"
+    },
+    "grating_length": {
+     "type": "float",
+     "default": 20.0,
+     "unit": "um",
+     "min": 1.0,
+     "max": 500.0,
+     "doc": "Length of the grating"
+    },
+    "fibre_mfd": {
+     "type": "float",
+     "default": 10.4,
+     "unit": "um",
+     "min": 0.5,
+     "max": 100.0,
+     "doc": "Fibre mode field diameter"
+    },
+    "grating_width": {
+     "type": "float",
+     "default": 10.4,
+     "unit": "um",
+     "min": 0.5,
+     "max": 100.0,
+     "doc": "Mode field diameter across the grating"
     }
    },
    "structural": {},

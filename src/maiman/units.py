@@ -116,6 +116,8 @@ _TO_SI: dict[str, Callable[[float], float]] = {
     "mm": lambda x: x * 1e-3,
     "um": lambda x: x * 1e-6,
     "nm": lambda x: x * 1e-9,
+    # Per micrometre: how fast a field decays along a grating on a die.
+    "1/um": lambda x: x * 1e6,
     # Frequency
     "Hz": lambda x: x,
     "kHz": lambda x: x * 1e3,
@@ -170,6 +172,7 @@ _FROM_SI: dict[str, Callable[[float], float]] = {
     "mm": lambda x: x * 1e3,
     "um": lambda x: x * 1e6,
     "nm": lambda x: x * 1e9,
+    "1/um": lambda x: x * 1e-6,
     "Hz": lambda x: x,
     "kHz": lambda x: x * 1e-3,
     "MHz": lambda x: x * 1e-6,

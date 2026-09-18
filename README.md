@@ -2378,20 +2378,61 @@ solver's own LP01 field, and 99.2 % of it in power.
    bare silicon facet, both facets   -1.75 dB
 ```
 
-Not modelled: the etalon the two facets form across a gap, and any difference between a chip mode's
-TE and TM sizes.
+By default the two facets are independent losses — the average over an etalon fringe. Set
+`etalon` and they are a cavity: the chip mode receives a sum of beams, the `n`-th having crossed the
+gap `2n + 1` times and diffracted over all of it, each projected with its own overlap and its own
+Gouy phase. With modes too wide to diffract that is the Airy function of a thin film, to 5e-5; at
+zero gap it is the fibre touching the chip, one interface. Against a brute-force propagation of the
+same cavity — an angular-spectrum FFT, twelve bounces summed by hand — it agrees to 2e-4.
 
-### A grating coupler is phase matching, and a compact model
+**Tilting the fibre walks the cavity off.** The fibre's facet is square to the fibre, so a tilt turns
+one mirror against the other; unfolded, each round trip turns the beam by `2θ` and carries it
+sideways, and each bounce overlaps the chip mode less:
+
+```
+   standard fibre onto a 3 um mode, 50 um of air
+   square on           0.49 dB ripple, fringes 3.0 THz apart = c / 2g
+   fibre at 8 degrees  0.04 dB
+   index-matched       none — nothing to reflect
+```
+
+Which is why fibre arrays are polished at an angle. Not modelled: any difference between a chip
+mode's TE and TM sizes.
+
+### A grating coupler is phase matching, and its stack
 
 Where a grating coupler couples best is physics: the fibre's tangential wavenumber plus one grating
 vector is the guided mode's, with that mode's dispersion in it. A 611 nm period in 220 nm silicon,
 fibre at 10 degrees in air, centres at 1549.8 nm and tunes by **7.0 nm per degree** of fibre angle.
 The same grating without dispersion would tune by 10.5, which is why the group index is a parameter.
 
-How well and over how wide a band is a compact model — a peak loss and a 1 dB bandwidth, a Gaussian
-passband between them — because computing those needs the grating's full vertical stack, and a
-number a foundry measured is better than one invented here. TM is rejected by `tm_extinction`: an
-x-polarized carrier onto a die rotated by 90 degrees couples 25 dB worse than onto one aligned to it.
+How well and over how wide a band is by default a compact model — a peak loss and a 1 dB
+bandwidth, a Gaussian passband between them — which is what a foundry's PDK publishes. Set
+`from_stack` and it is computed instead, from three things that multiply:
+
+* **What goes up rather than into the substrate.** The grating is a sheet source in the middle of
+  the silicon; the silicon, the buried oxide and the substrate beneath are a thin-film stack, and the
+  share leaving upward follows from the reflection each half presents. Checked against a direct solve
+  of every layer's boundary conditions to 1e-12. The oxide is a cavity: the share swings between 0.39
+  and 0.77 as it goes from one micron to three, and the standard 2 microns sits at 0.59.
+* **What the fibre accepts.** The grating's beam is exponential and the fibre's Gaussian; the best
+  they can do is 80.1 %, the ceiling every uniform grating coupler lives under.
+* **How fast the beam turns.** The emission angle moves with wavelength by phase matching and the
+  fibre's does not, so away from the centre the two beams meet at an angle. That is the passband.
+
+```
+   220 nm silicon, 2 um oxide, air above, fibre at 10 degrees
+   peak                          -3.19 dB at 1545.9 nm
+   1 dB bandwidth                35.7 nm
+   2.2 um oxide instead          -2.08 dB
+   20 um fibre mode              24.6 nm     accepts fewer angles
+   group index 3.6               39.5 nm     turns more slowly
+```
+
+The compact model's defaults were 3 dB and 35 nm; the stack arrives at 3.19 and 35.7 from nothing
+but its geometry. It peaks 4 nm short of the phase-matched centre, because the share going up is
+still rising there. TM is rejected by `tm_extinction`: an x-polarized carrier onto a die rotated by
+90 degrees couples 25 dB worse than onto one aligned to it.
 
 ## What a layout tool knows, and what it does not
 
@@ -3121,8 +3162,8 @@ time window, and results are reproducible.
 | **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier frequency and phase recovery, coarse frequency acquisition over the whole sampled band, blind square-law timing recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km with blind estimation of the accumulated value, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
 | **3 — GUI & WDM** ✅ | Wavelength-selective filters, the ITU grids and a multiplexer/demultiplexer pair on them with crosstalk that falls out of the channel spacing, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — the OSA's trace drawn in the dock, and 400G/800G reference designs validated against the OSNR relations, and a back-end indirection the propagation kernels dispatch through — CuPy runs it where a device exists, `maiman devices` cross-checks it against NumPy, and a CI job does the same on any runner labelled `gpu` | ~6 months |
 | **4 — PIC** ✅ | Bidirectional S-matrix circuit solver, waveguide, directional coupler, all-pass and add-drop ring resonators, cross-validated against SAX; N×N MMI couplers on the self-imaging phase relations; a Mach-Zehnder interferometer assembled from them — switch, interleaver, or both; and PDK import, which reads a foundry's fitted numbers out of a JSON kit and refuses to extrapolate them past the window they were fitted in; and birefringence, with each guided polarization carrying its own indices through the same reduction | — |
-| **5 — Gratings, sensing, loops and coupling** ✅ | Fibre Bragg gratings assembled from transfer matrices — apodized, chirped, sampled and phase-shifted — a circulator with isolation and return loss, and a grating read as a strain gauge and a thermometer, by a swept laser or by broadband light on an analyser; noise that carries the spectral shape of what it passed through; loop control that runs a cavity to its fixed point, and a delay line that turns the same loop into a recirculating one lap by lap; pump depletion for four-wave mixing and Raman's measured gain shape past its peak; an erbium transient spread across the spectrum, each channel moving by the fibre's own tilt, drained per channel by its own cross section, and answered by a pump control loop with a bandwidth and a ceiling; PMD applied along the span between Kerr steps, and the coherent polarization term that moves power between the axes; a scalar mode solver for core and cladding modes, and the vector HE, EH, TE and TM modes the glass-air boundary splits them into, checked against the exact characteristic equation; a long-period grating built on either, and a tilted grating whose comb of cladding resonances reads what the fibre is dipped in; edge and grating couplers that put a signal into the chip's TE and TM; a PAM4 driver with its modulator's linearity corrected, and a feed-forward and decision-feedback equaliser; a directly modulated laser whose chirp comes out of its own rate equations; and templates in the studio's File menu, including an eight-channel DWDM link | — |
-| **Open** | Amplified spontaneous emission saturating the reservoir, which in a lightly loaded amplifier it does; the pumps' own nonlinear phase in four-wave mixing between spans; material dispersion, the polarization dependence of a tilted grating's comb, and recoupling at a second long-period grating; the etalon between an edge coupler's facets and a grating coupler's passband computed from its vertical stack; bit-exact oFEC, which needs the OIF document open rather than recalled; a spectral view of a block's scattering matrix in the studio | — |
+| **5 — Gratings, sensing, loops and coupling** ✅ | Fibre Bragg gratings assembled from transfer matrices — apodized, chirped, sampled and phase-shifted — a circulator with isolation and return loss, and a grating read as a strain gauge and a thermometer, by a swept laser or by broadband light on an analyser; noise that carries the spectral shape of what it passed through; loop control that runs a cavity to its fixed point, and a delay line that turns the same loop into a recirculating one lap by lap; pump depletion for four-wave mixing and Raman's measured gain shape past its peak; an erbium transient spread across the spectrum, each channel moving by the fibre's own tilt, drained per channel by its own cross section, and answered by a pump control loop with a bandwidth and a ceiling; PMD applied along the span between Kerr steps, and the coherent polarization term that moves power between the axes; a scalar mode solver for core and cladding modes, and the vector HE, EH, TE and TM modes the glass-air boundary splits them into, checked against the exact characteristic equation; a long-period grating built on either, and a tilted grating whose comb of cladding resonances reads what the fibre is dipped in; edge and grating couplers that put a signal into the chip's TE and TM, the edge coupler's two facets a cavity summed bounce by bounce and the grating coupler's passband computed from its vertical stack; a PAM4 driver with its modulator's linearity corrected, and a feed-forward and decision-feedback equaliser; a directly modulated laser whose chirp comes out of its own rate equations; and templates in the studio's File menu, including an eight-channel DWDM link | — |
+| **Open** | Amplified spontaneous emission saturating the reservoir, which in a lightly loaded amplifier it does; the pumps' own nonlinear phase in four-wave mixing between spans; material dispersion, the polarization dependence of a tilted grating's comb, and recoupling at a second long-period grating; the grating's own back-reflection from its teeth, and the fibre's height above it; bit-exact oFEC, which needs the OIF document open rather than recalled; a spectral view of a block's scattering matrix in the studio | — |
 
 ¹ One developer, part-time. Estimates, not commitments.
 

@@ -575,8 +575,12 @@ be finished without it, and each is validated against a result it does not share
   are solved for the modes nearest phase matching, with the rest entering as the shift they leave on
   the core. The comb that comes out reads the fibre's surroundings against a Bragg line that cannot.
 * **Getting onto a chip.** An edge coupler as the closed-form overlap of two Gaussian beams across a
-  gap, and a grating coupler centred by phase matching with the grating's dispersion. Both project
-  the signal onto the die's axes, which is where the photonic blocks' TE and TM come from.
+  gap, its two facets optionally a cavity summed bounce by bounce, each beam with its own
+  diffraction and Gouy phase. A grating coupler centred by phase matching with the grating's
+  dispersion, its passband either a PDK's two numbers or computed from the vertical stack: the
+  directionality of a sheet source in the silicon, and the overlap of its exponential beam with the
+  fibre's as the emission angle turns. Both project the signal onto the die's axes, which is where
+  the photonic blocks' TE and TM come from.
 * **Directly modulated lasers.** Single-mode rate equations whose transient and adiabatic chirp
   are measured from the field's phase rather than declared, with the threshold current, slope
   efficiency and relaxation frequency they imply.
@@ -597,8 +601,9 @@ Stated in the code where each approximation is made, and collected here:
 * **Gratings and modes.** Material dispersion is not included in either mode solver, and neither is
   the average index a writing process raises. A tilted grating is solved with scalar modes, so its
   comb has no polarization dependence; recoupling at a second long-period grating is not modelled.
-* **Coupling.** The etalon between an edge coupler's two facets; a grating coupler's passband
-  computed from its vertical stack rather than taken from a PDK.
+* **Coupling.** A grating's back-reflection is still a number, because it comes from its teeth
+  rather than its stack; the fibre's height above a grating and any bottom mirror or apodization are
+  not modelled; and the etalon sum is paraxial, good to 7e-3 at six degrees of fibre tilt.
 * **Transceivers.** A fractionally spaced or blind (decision-directed) PAM equaliser; mode
   partition noise and the Schawlow-Townes linewidth, neither of which the single-mode rate equations
   carry; a laser's thermal wavelength drift with bias; bit-exact oFEC, which needs the OIF Implementation Agreement open rather than
