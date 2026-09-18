@@ -72,6 +72,7 @@ from .photonic import (
 )
 from .reflective import Circulator, FiberBraggGrating
 from .sources import CWLaser, GaussianPulse, SechPulse
+from .tilted import TiltedFiberBraggGrating
 from .wdm import Demultiplexer, Multiplexer
 
 __all__ = [
@@ -136,6 +137,7 @@ __all__ = [
     "SoftFECDecoder",
     "SoftFECEncoder",
     "Splitter",
+    "TiltedFiberBraggGrating",
     "TimingRecovery",
     "Waveguide",
 ]

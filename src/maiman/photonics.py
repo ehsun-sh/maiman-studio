@@ -26,6 +26,7 @@ silicon strip waveguide at 1550 nm.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
@@ -33,8 +34,17 @@ import numpy as np
 
 from .circuit import Circuit, SMatrix
 from .kernels import dispersion_to_beta2
-from .modes import StepIndexFibre, cladding_modes, core_modes, lpg_coupling
+from .modes import (
+    Mode,
+    StepIndexFibre,
+    _legendre,
+    bessel_j,
+    cladding_modes,
+    core_modes,
+    lpg_coupling,
+)
 from .units import C_LIGHT, frequency_to_wavelength
+from .vector_modes import vector_cladding_modes, vector_core_modes, vector_coupling
 
 #: Effective index of a 500 x 220 nm silicon strip waveguide, TE, at 1550 nm.
 SILICON_STRIP_NEFF = 2.44
@@ -1125,18 +1135,44 @@ def circulator(
 LPG_GRID_POINTS = 17
 
 
+def _lpg_modes(
+    fibre: StepIndexFibre, wavelength: float, count: int, vector: bool
+) -> tuple[list[Any], list[Any], Callable[..., float]]:
+    """The core mode and the cladding modes a long-period grating couples it to.
+
+    Scalar: LP01 and the LP0m. Vector: HE11 and every cladding mode of order one,
+    HE1m and EH1m interleaved, which is what the scalar LP0m stand in for plus
+    what they leave out.
+    """
+    if vector:
+        return (
+            vector_core_modes(fibre, wavelength, order=1),
+            vector_cladding_modes(fibre, wavelength, order=1, count=count),
+            vector_coupling,
+        )
+    return (
+        core_modes(fibre, wavelength),
+        cladding_modes(fibre, wavelength, count=count),
+        lpg_coupling,
+    )
+
+
 def _mode_tables(
-    fibre: StepIndexFibre, wavelengths: np.ndarray, count: int, *, coupling: bool = True
+    fibre: StepIndexFibre,
+    wavelengths: np.ndarray,
+    count: int,
+    *,
+    coupling: bool = True,
+    vector: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Core index, cladding indices and per-unit-modulation couplings at each wavelength."""
     core = np.empty(len(wavelengths))
     cladding = np.empty((len(wavelengths), count))
     kappa = np.zeros((len(wavelengths), count))
     for row, wavelength in enumerate(wavelengths):
-        guided = core_modes(fibre, float(wavelength))
+        guided, modes, couple = _lpg_modes(fibre, float(wavelength), count, vector)
         if not guided:
             raise ValueError(f"the fibre guides no core mode at {wavelength * 1e9:.1f} nm")
-        modes = cladding_modes(fibre, float(wavelength), count=count)
         if len(modes) < count:
             raise ValueError(
                 f"asked for {count} cladding modes at {wavelength * 1e9:.1f} nm and the fibre "
@@ -1146,7 +1182,7 @@ def _mode_tables(
         for column, mode in enumerate(modes):
             cladding[row, column] = mode.effective_index
             if coupling:
-                kappa[row, column] = lpg_coupling(guided[0], mode, 1.0)
+                kappa[row, column] = couple(guided[0], mode, 1.0)
     return core, cladding, kappa
 
 
@@ -1156,16 +1192,16 @@ def _chebyshev_nodes(lo: float, hi: float, points: int) -> tuple[np.ndarray, np.
 
 
 def _interpolated_tables(
-    fibre: StepIndexFibre, wavelengths: np.ndarray, count: int, points: int
+    fibre: StepIndexFibre, wavelengths: np.ndarray, count: int, points: int, vector: bool = False
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     unique, inverse = np.unique(wavelengths, return_inverse=True)
     if unique.size <= points:
-        core, cladding, kappa = _mode_tables(fibre, unique, count)
+        core, cladding, kappa = _mode_tables(fibre, unique, count, vector=vector)
         return core[inverse], cladding[inverse], kappa[inverse]
 
     lo, hi = float(unique[0]), float(unique[-1])
     unit, nodes = _chebyshev_nodes(lo, hi, points)
-    core, cladding, kappa = _mode_tables(fibre, nodes, count)
+    core, cladding, kappa = _mode_tables(fibre, nodes, count, vector=vector)
     x = (wavelengths - 0.5 * (lo + hi)) / (0.5 * (hi - lo))
     cheb = np.polynomial.chebyshev
 
@@ -1185,6 +1221,7 @@ def long_period_grating(
     index_modulation: float,
     cladding_modes: int = 8,
     grid_points: int = LPG_GRID_POINTS,
+    vector: bool = False,
     ports: tuple[str, str] = ("in", "out"),
 ) -> SMatrix:
     """A long-period grating's transmission, from coupled modes solved exactly.
@@ -1211,6 +1248,13 @@ def long_period_grating(
     Indices and couplings are solved at ``grid_points`` Chebyshev nodes across
     the band and interpolated, because a mode solve takes tens of milliseconds
     and a spectrum has thousands of points.
+
+    ``vector`` swaps the LP modes for the true ones of :mod:`maiman.vector_modes`:
+    HE11 in the core, and the first ``cladding_modes`` cladding modes of order
+    one -- HE1m and EH1m alternating, so twice as many reach as deep as the
+    scalar LP0m do. The EH1m are the modes the scalar model has no counterpart
+    for at this order; they couple, weakly, because the glass-air step mixes
+    them. The equations are otherwise the same.
     """
     if period <= 0.0:
         raise ValueError(f"period must be positive, got {period} m")
@@ -1222,7 +1266,9 @@ def long_period_grating(
         raise ValueError(f"couple at least one cladding mode, got {cladding_modes}")
     grid = np.asarray(frequencies, dtype=float)
     wavelengths = C_LIGHT / grid
-    core, cladding, kappa = _interpolated_tables(fibre, wavelengths, cladding_modes, grid_points)
+    core, cladding, kappa = _interpolated_tables(
+        fibre, wavelengths, cladding_modes, grid_points, vector
+    )
 
     k = 2.0 * np.pi / wavelengths
     size = cladding_modes + 1
@@ -1247,6 +1293,7 @@ def long_period_resonances(
     count: int,
     band: tuple[float, float] = (1.2e-6, 1.7e-6),
     grid_points: int = 33,
+    vector: bool = False,
 ) -> list[tuple[int, float]]:
     """``(cladding mode rank, wavelength [m])`` wherever ``(n_0 - n_m) * period`` is a wavelength.
 
@@ -1255,12 +1302,15 @@ def long_period_resonances(
     own and not the interpolation's. A mode can phase-match twice in one band --
     either side of the turning point where its group index equals the core's --
     and both are returned.
+
+    With ``vector`` the rank counts order-one cladding modes of both families
+    together, in the order :func:`long_period_grating` couples them.
     """
     lo, hi = band
     if not 0.0 < lo < hi:
         raise ValueError(f"band must be an increasing pair of positive wavelengths, got {band}")
     unit, nodes = _chebyshev_nodes(lo, hi, grid_points)
-    core, cladding, _ = _mode_tables(fibre, nodes, count, coupling=False)
+    core, cladding, _ = _mode_tables(fibre, nodes, count, coupling=False, vector=vector)
     mismatch = core[:, None] - cladding - nodes[:, None] / period
     cheb = np.polynomial.chebyshev
     coefficients = cheb.chebfit(unit, mismatch, grid_points - 1)
@@ -1269,8 +1319,7 @@ def long_period_resonances(
     sampled = np.asarray(cheb.chebval(dense, coefficients)).T
 
     def direct(wavelength: float, rank: int) -> float:
-        guided = core_modes(fibre, wavelength)
-        modes = cladding_modes(fibre, wavelength, count=rank)
+        guided, modes, _ = _lpg_modes(fibre, wavelength, rank, vector)
         return guided[0].effective_index - modes[rank - 1].effective_index - wavelength / period
 
     found: list[tuple[int, float]] = []
@@ -1293,6 +1342,377 @@ def long_period_resonances(
                 wavelength -= direct(wavelength, column + 1) / slope
             found.append((column + 1, float(wavelength)))
     return sorted(found, key=lambda pair: pair[1])
+
+
+# --------------------------------------------------------------------------
+# Tilted fibre Bragg gratings
+# --------------------------------------------------------------------------
+
+#: Chebyshev nodes a tilted grating's mode table is solved at. Fewer than a
+#: long-period grating's, because its band is a tenth as wide and each node
+#: solves every azimuthal order.
+TILTED_GRID_POINTS = 9
+
+#: Modes solved together at each frequency, nearest to phase matching first. At
+#: thirty-two the transmission is within 0.002 of a solve with every mode in --
+#: measured, on a comb of thirty -- while the matrix stays small enough that the
+#: mode solve, not the exponential, is what a spectrum costs.
+TILTED_NEAREST = 32
+
+
+def _expm(matrices: np.ndarray) -> np.ndarray:
+    """``exp`` of a stack of small matrices, by scaling, a Taylor series, and squaring.
+
+    Scaled per matrix until its one-norm is below a quarter, where sixteen terms
+    leave an error below ``1e-25``, then squared back up.
+    """
+    norm = np.abs(matrices).sum(axis=-2).max(axis=-1)
+    squarings = np.maximum(0, np.ceil(np.log2(np.maximum(norm, 1e-300) / 0.25))).astype(int)
+    scaled = matrices / (2.0**squarings)[..., None, None]
+    identity = np.broadcast_to(np.eye(matrices.shape[-1], dtype=matrices.dtype), matrices.shape)
+    out = identity.copy()
+    for term in range(16, 0, -1):
+        out = identity + scaled @ out / term
+    for step in range(int(squarings.max(initial=0))):
+        out = np.where((step < squarings)[..., None, None], out @ out, out)
+    return out
+
+
+def tilted_grating_coupling(
+    core: Mode, cladding: Mode, *, period: float, tilt: float, index_modulation: float
+) -> float:
+    """Contra-directional coupling from the core's LP01 to one LP mode, under tilted fringes [1/m].
+
+    The fringes are ``dn cos(K (z cos(theta) + x sin(theta)))`` with ``K = 2 pi /
+    period``, the period measured normal to them. Across the core the transverse
+    part expands by Jacobi-Anger, ``exp(i K_t r cos(phi)) = sum_l i^l J_l(K_t r)
+    exp(i l phi)``, so an ``LP_lm`` mode oriented along the tilt is reached through
+
+        ``O = 2 pi int_core psi_0 psi_lm J_l(K_t r) r dr / sqrt(N_0 N_lm)``
+
+    with ``N`` each mode's power over the whole cross-section, ``2 pi`` or ``pi``
+    times its radial integral. Then ``kappa = k n1 dn |O| / (2 sqrt(n_0 n_lm))``,
+    the long-period grating's coupling with the fringe's phase across the core
+    put in. Untilted, ``J_l(0)`` is 1 for ``l = 0`` and 0 otherwise: the core
+    reflects into itself and into nothing else, which is a Bragg grating. The
+    mode oriented the other way, ``sin(l phi)``, has no overlap with a tilt in
+    ``x`` and is not coupled.
+    """
+    if core.wavelength != cladding.wavelength or core.fibre != cladding.fibre:
+        raise ValueError("a coupling is between two modes of one fibre at one wavelength")
+    if core.order != 0:
+        raise ValueError("the grating is driven by the core's LP01")
+    k = 2.0 * math.pi / core.wavelength
+    transverse = 2.0 * math.pi / period * math.sin(tilt)
+    order = cladding.order
+    a = core.fibre.core_radius
+    x, w = _legendre(256)
+    r = 0.5 * a * (x + 1.0)
+    if transverse == 0.0:
+        if order:
+            return 0.0
+        phase = np.ones_like(r)
+    else:
+        phase = bessel_j(order, abs(transverse) * r)
+    shared = float(np.sum(0.5 * a * w * core.field(r) * cladding.field(r) * phase * r))
+    angular = 2.0 * math.pi if order == 0 else math.pi
+    overlap = (
+        2.0
+        * math.pi
+        * shared
+        / math.sqrt(2.0 * math.pi * core.power() * angular * cladding.power())
+    )
+    return (
+        k
+        * core.fibre.core_index
+        * index_modulation
+        * abs(overlap)
+        / (2.0 * math.sqrt(core.effective_index * cladding.effective_index))
+    )
+
+
+def _tilted_tables(
+    fibre: StepIndexFibre,
+    wavelengths: np.ndarray,
+    *,
+    period: float,
+    tilt: float,
+    max_order: int,
+    lowest_index: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[tuple[int, int]]]:
+    """Core index, every coupled mode's index and coupling per unit ``dn``, at each wavelength.
+
+    Column 0 is the core mode reflected into itself. The rest are cladding modes
+    of each order down to ``lowest_index``, as many as every wavelength has.
+    """
+    k_top = 2.0 * math.pi / float(wavelengths.min())
+    n2, n3 = fibre.cladding_index, fibre.surrounding_index
+    floor = max(lowest_index, n3 + 1e-6)
+    per_order: list[list[list[Mode]]] = []
+    cores = []
+    for wavelength in wavelengths:
+        guided = core_modes(fibre, float(wavelength))
+        if not guided:
+            raise ValueError(f"the fibre guides no core mode at {wavelength * 1e9:.1f} nm")
+        cores.append(guided[0])
+        rows: list[list[Mode]] = []
+        for order in range(max_order + 1):
+            if floor >= n2:
+                rows.append([])
+                continue
+            q = k_top * math.sqrt(n2**2 - floor**2)
+            count = max(1, math.ceil(q * fibre.cladding_radius / math.pi - order / 2) + 3)
+            rows.append(cladding_modes(fibre, float(wavelength), order=order, count=count))
+        per_order.append(rows)
+
+    columns: list[tuple[int, int]] = [(0, 0)]
+    for order in range(max_order + 1):
+        common = min(len(rows[order]) for rows in per_order)
+        # Keep a rank only if it is above the floor somewhere in the band.
+        kept = [
+            rank
+            for rank in range(common)
+            if max(rows[order][rank].effective_index for rows in per_order) >= floor
+        ]
+        columns.extend((order, rank + 1) for rank in kept)
+
+    core_index = np.array([mode.effective_index for mode in cores])
+    index = np.empty((len(wavelengths), len(columns)))
+    coupling = np.empty((len(wavelengths), len(columns)))
+    for row, (core, rows) in enumerate(zip(cores, per_order, strict=True)):
+        for column, (order, rank) in enumerate(columns):
+            partner = core if rank == 0 else rows[order][rank - 1]
+            index[row, column] = partner.effective_index
+            coupling[row, column] = tilted_grating_coupling(
+                core, partner, period=period, tilt=tilt, index_modulation=1.0
+            )
+    return core_index, index, coupling, columns
+
+
+def _tilted_interpolated(
+    fibre: StepIndexFibre,
+    wavelengths: np.ndarray,
+    points: int,
+    **settings: Any,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[tuple[int, int]]]:
+    unique, inverse = np.unique(wavelengths, return_inverse=True)
+    if unique.size <= points:
+        core, index, coupling, columns = _tilted_tables(fibre, unique, **settings)
+        return core[inverse], index[inverse], coupling[inverse], columns
+    lo, hi = float(unique[0]), float(unique[-1])
+    unit, nodes = _chebyshev_nodes(lo, hi, points)
+    core, index, coupling, columns = _tilted_tables(fibre, nodes, **settings)
+    x = (wavelengths - 0.5 * (lo + hi)) / (0.5 * (hi - lo))
+    cheb = np.polynomial.chebyshev
+
+    def through(values: np.ndarray) -> np.ndarray:
+        return np.asarray(cheb.chebval(x, cheb.chebfit(unit, values, points - 1))).T
+
+    return through(core), through(index), through(coupling), columns
+
+
+def _tilted_setup(
+    period: float, tilt: float, length: float, index_modulation: float, max_order: int
+) -> None:
+    if period <= 0.0:
+        raise ValueError(f"period must be positive, got {period} m")
+    if not 0.0 <= tilt < math.pi / 2:
+        raise ValueError(f"tilt must be between 0 and 90 degrees, got {math.degrees(tilt)}")
+    if length < 0.0:
+        raise ValueError(f"length must not be negative, got {length} m")
+    if index_modulation < 0.0:
+        raise ValueError(f"index modulation must not be negative, got {index_modulation}")
+    if max_order < 0:
+        raise ValueError(f"max_order must not be negative, got {max_order}")
+
+
+def tilted_grating_spectrum(
+    frequencies: np.ndarray,
+    *,
+    fibre: StepIndexFibre,
+    period: float,
+    tilt: float,
+    length: float,
+    index_modulation: float,
+    max_order: int = 6,
+    nearest: int | None = TILTED_NEAREST,
+    grid_points: int = TILTED_GRID_POINTS,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Transmission, the core's own reflection, and the power sent back into the cladding.
+
+    The forward core mode ``a`` and the backward modes ``b_m`` -- the core mode
+    itself and every LP cladding mode of order up to ``max_order`` -- obey, in a
+    frame rotating with the fringes::
+
+        da/dz   = -i sum_m kappa_m b_m
+        db_m/dz = +i kappa_m a + i Delta_m b_m
+        Delta_m = k (n_0 + n_m) - 2 pi cos(theta) / period
+
+    With ``b_m(L) = 0`` and ``a(0) = 1``, the transfer from the far end is ``E =
+    exp(-M L)`` and ``t = 1 / E_00``, ``r_m = E_m0 t``. For one mode that is
+    ``t = 1 / cosh(kappa L)`` on resonance, which the tests hold it to, and
+    ``|t|^2 + sum |r_m|^2 = 1`` holds exactly because the equations conserve it.
+
+    Every mode is coupled to every other only through the core, so at each
+    frequency the ``nearest`` modes to phase matching are solved together and
+    the rest enter as the shift they leave on the core, ``sum kappa^2 / Delta``
+    -- what eliminating a mode that follows the core rather than taking power
+    from it leaves behind. ``nearest=None`` solves them all, at a cost that grows
+    as the cube of the comb's length. At the default the transmission of a ten
+    millimetre grating is within 0.002 of that solve, which the tests measure;
+    the power it accounts for is exact either way, because a truncated system
+    conserves its own.
+
+    Returns ``(t, r_core, cladding_power)`` on the grid; ``t`` and ``r_core`` are
+    amplitudes in the rotating frame, ``cladding_power`` the sum of ``|r_m|^2``
+    over cladding modes, which a coated fibre strips.
+    """
+    _tilted_setup(period, tilt, length, index_modulation, max_order)
+    if nearest is not None and nearest < 1:
+        raise ValueError(f"solve at least one mode together, got {nearest}")
+    grid = np.asarray(frequencies, dtype=float)
+    wavelengths = C_LIGHT / grid
+    axial = 2.0 * math.pi * math.cos(tilt) / period
+    # Only modes that can phase match somewhere in the band, with a margin of a
+    # few resonance widths either side, are worth solving for.
+    # The lowest cladding index phase matches at the shortest wavelength.
+    k_top = 2.0 * math.pi / float(wavelengths.min())
+    lowest = axial / k_top - fibre.core_index - 2e-3
+    core, index, coupling, _ = _tilted_interpolated(
+        fibre,
+        wavelengths,
+        grid_points,
+        period=period,
+        tilt=tilt,
+        max_order=max_order,
+        lowest_index=lowest,
+    )
+    k = 2.0 * math.pi / wavelengths
+    delta = k[:, None] * (core[:, None] + index) - axial
+    kappa = coupling * index_modulation
+
+    size = delta.shape[1] if nearest is None else min(nearest, delta.shape[1])
+    chosen = np.argsort(np.abs(delta), axis=1)[:, :size]
+    d = np.take_along_axis(delta, chosen, axis=1)
+    c = np.take_along_axis(kappa, chosen, axis=1)
+    # A mode far from phase matching follows the core rather than taking power
+    # from it -- ``b = -kappa a / Delta`` -- and what it leaves behind is a shift
+    # of the core's own propagation constant, ``sum kappa^2 / Delta``. Dropped
+    # modes are put back that way, which is exact to their first order and costs
+    # one sum; without it their absence moves every resonance slightly.
+    shift = (kappa**2 / delta).sum(axis=1) - (c**2 / d).sum(axis=1)
+    m = np.zeros((grid.size, size + 1, size + 1), dtype=np.complex128)
+    m[:, 0, 0] = 1j * shift
+    m[:, 0, 1:] = -1j * c
+    m[:, 1:, 0] = 1j * c
+    m[:, np.arange(1, size + 1), np.arange(1, size + 1)] = 1j * d
+    transfer = _expm(-m * length)
+    t = 1.0 / transfer[:, 0, 0]
+    r = transfer[:, 1:, 0] * t[:, None]
+    is_core = chosen == 0
+    r_core = np.sum(np.where(is_core, r, 0.0), axis=1)
+    cladding_power = np.sum(np.where(is_core, 0.0, np.abs(r) ** 2), axis=1)
+    return t, r_core, cladding_power
+
+
+def tilted_fiber_bragg_grating(
+    frequencies: np.ndarray,
+    *,
+    fibre: StepIndexFibre,
+    period: float,
+    tilt: float,
+    length: float,
+    index_modulation: float,
+    max_order: int = 6,
+    nearest: int | None = TILTED_NEAREST,
+    grid_points: int = TILTED_GRID_POINTS,
+    ports: tuple[str, str] = ("in", "out"),
+) -> SMatrix:
+    """A tilted fibre Bragg grating as a two-port: its comb of cladding notches, and its mirror.
+
+    Tilting the fringes lets a short-period grating reflect the core mode into
+    cladding modes travelling backwards, every one at its own wavelength
+    ``(n_0 + n_m) period / cos(theta)`` -- a comb of narrow notches a few
+    nanometres apart, shortward of the Bragg reflection the tilt weakens. The
+    cladding modes feel what surrounds the fibre and the core mode does not,
+    which is why the comb is a refractometer that carries its own temperature
+    reference. See :func:`tilted_grating_spectrum` for the equations.
+
+    ``s[out, in]`` is the transmission and ``s[in, in]`` the core's reflection;
+    what went into the cladding is stripped. The grating is uniform, so both ends
+    see the same. Scalar LP modes: the vector splitting that makes a real tilted
+    grating's comb depend on polarization is not in it.
+    """
+    t, r_core, _ = tilted_grating_spectrum(
+        frequencies,
+        fibre=fibre,
+        period=period,
+        tilt=tilt,
+        length=length,
+        index_modulation=index_modulation,
+        max_order=max_order,
+        nearest=nearest,
+        grid_points=grid_points,
+    )
+    grid = np.asarray(frequencies, dtype=float)
+    s = np.zeros((grid.size, 2, 2), dtype=np.complex128)
+    s[:, 1, 0] = s[:, 0, 1] = t
+    s[:, 0, 0] = s[:, 1, 1] = r_core
+    return SMatrix(ports=ports, frequencies=grid, s=s)
+
+
+def tilted_grating_resonances(
+    fibre: StepIndexFibre,
+    *,
+    period: float,
+    tilt: float,
+    band: tuple[float, float],
+    max_order: int = 6,
+    grid_points: int = TILTED_GRID_POINTS,
+) -> list[tuple[int, int, float, float]]:
+    """``(order, rank, wavelength, coupling per unit dn)`` for every resonance in ``band``.
+
+    ``rank`` 0 is the core's own Bragg reflection, at ``2 n_0 period / cos(theta)``.
+    Found where ``k (n_0 + n_m) = 2 pi cos(theta) / period`` on the Chebyshev
+    interpolant of the mode table, so the wavelengths carry its accuracy, which
+    the tests measure against direct solves.
+    """
+    lo, hi = band
+    if not 0.0 < lo < hi:
+        raise ValueError(f"band must be an increasing pair of positive wavelengths, got {band}")
+    _tilted_setup(period, tilt, 0.0, 0.0, max_order)
+    axial = 2.0 * math.pi * math.cos(tilt) / period
+    unit, nodes = _chebyshev_nodes(lo, hi, grid_points)
+    core, index, coupling, columns = _tilted_tables(
+        fibre,
+        nodes,
+        period=period,
+        tilt=tilt,
+        max_order=max_order,
+        lowest_index=axial * lo / (2.0 * math.pi) - fibre.core_index - 2e-3,
+    )
+    cheb = np.polynomial.chebyshev
+    mismatch = core[:, None] + index - nodes[:, None] * axial / (2.0 * math.pi)
+    fit = cheb.chebfit(unit, mismatch, grid_points - 1)
+    fit_coupling = cheb.chebfit(unit, coupling, grid_points - 1)
+    dense = np.linspace(-1.0, 1.0, 4001)
+    sampled = np.asarray(cheb.chebval(dense, fit)).T
+    found = []
+    for column, (order, rank) in enumerate(columns):
+        values = sampled[:, column]
+        for i in np.flatnonzero(np.sign(values[:-1]) * np.sign(values[1:]) < 0):
+            left, right = float(dense[i]), float(dense[i + 1])
+            reference = np.sign(values[i])
+            for _ in range(60):
+                middle = 0.5 * (left + right)
+                if np.sign(cheb.chebval(middle, fit[:, column])) == reference:
+                    left = middle
+                else:
+                    right = middle
+            x = 0.5 * (left + right)
+            wavelength = 0.5 * (lo + hi) + 0.5 * (hi - lo) * x
+            found.append((order, rank, wavelength, float(cheb.chebval(x, fit_coupling[:, column]))))
+    return sorted(found, key=lambda item: item[2])
 
 
 # --------------------------------------------------------------------------

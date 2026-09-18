@@ -3346,6 +3346,11 @@ verdict, and DESIGN.md
      "min": 1.0,
      "max": 40.0,
      "doc": "Cladding modes coupled, highest index first"
+    },
+    "vector": {
+     "type": "bool",
+     "default": false,
+     "doc": "Solve the true HE and EH modes instead of the scalar LP ones. Slower"
     }
    },
    "structural": {},
@@ -4412,6 +4417,105 @@ verdict, and DESIGN.md
     "outputs": {
      "out0": "optical",
      "out1": "optical"
+    }
+   }
+  },
+  "TiltedFiberBraggGrating": {
+   "name": "Tilted FBG",
+   "type": "TiltedFiberBraggGrating",
+   "class": "maiman.components.tilted.TiltedFiberBraggGrating",
+   "category": "Passive",
+   "version": "0.1.0",
+   "parameters": {
+    "period": {
+     "type": "float",
+     "default": 535.0,
+     "unit": "nm",
+     "min": 100.0,
+     "max": 2000.0,
+     "doc": "Period, measured normal to the fringes"
+    },
+    "tilt": {
+     "type": "float",
+     "default": 4.0,
+     "unit": "deg",
+     "min": 0.0,
+     "max": 45.0,
+     "doc": "Fringe tilt from square to the axis"
+    },
+    "length": {
+     "type": "float",
+     "default": 10.0,
+     "unit": "mm",
+     "min": 0.1,
+     "max": 500.0,
+     "doc": "Written length"
+    },
+    "index_modulation": {
+     "type": "float",
+     "default": 0.0005,
+     "unit": "",
+     "min": 0.0,
+     "max": 0.01,
+     "doc": "Index modulation of the core, as for a Bragg grating"
+    },
+    "core_radius": {
+     "type": "float",
+     "default": 4.1,
+     "unit": "um",
+     "min": 0.5,
+     "max": 50.0,
+     "doc": "Core radius"
+    },
+    "cladding_radius": {
+     "type": "float",
+     "default": 62.5,
+     "unit": "um",
+     "min": 5.0,
+     "max": 500.0,
+     "doc": "Cladding radius"
+    },
+    "core_index": {
+     "type": "float",
+     "default": 1.4492,
+     "unit": "",
+     "min": 1.0,
+     "max": 4.0,
+     "doc": "Core refractive index"
+    },
+    "cladding_index": {
+     "type": "float",
+     "default": 1.444,
+     "unit": "",
+     "min": 1.0,
+     "max": 4.0,
+     "doc": "Cladding refractive index"
+    },
+    "surrounding_index": {
+     "type": "float",
+     "default": 1.0,
+     "unit": "",
+     "min": 1.0,
+     "max": 4.0,
+     "doc": "What the fibre sits in: 1 is air, 1.333 water. Moves the comb and not the Bragg line"
+    },
+    "azimuthal_orders": {
+     "type": "float",
+     "default": 6.0,
+     "unit": "",
+     "min": 0.0,
+     "max": 20.0,
+     "doc": "Highest azimuthal order of cladding mode coupled"
+    }
+   },
+   "structural": {},
+   "ports": {
+    "inputs": {
+     "in": "optical"
+    },
+    "outputs": {
+     "reflected": "optical",
+     "transmitted": "optical"
     }
    }
   },

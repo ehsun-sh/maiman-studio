@@ -2166,10 +2166,43 @@ on trust:
 ```
 
 The finite-difference reference is built in the test from a tridiagonal matrix and shares no code
-with the solver. **Scalar is an approximation, and it is stated rather than tested**: the
-cladding-air step is not weak, and the vector modes the LP modes stand in for sit up to about 1e-4
-away in effective index — a few nanometres in where a notch lands. Material dispersion is not
-included either.
+with the solver. That pins the numerics of the scalar equation. Whether the scalar equation is the
+right one is a separate question, and `maiman.vector_modes` answers it.
+
+### And the modes the scalar equation cannot tell apart
+
+The LP approximation assumes every index step is small. The core's step is. The cladding-air step is
+a third of an index, and there each LP mode stands in for a family of true modes that Maxwell's
+equations split. `maiman.vector_modes` solves for those: concentric layers, Bessel functions for
+`Ez` and `Hz` in each, all four tangential components matched at every interface, and a mode where
+the solutions regular on the axis meet the ones that decay outside. For `nu = 0` that splits into TE
+and TM; above it the modes are hybrid, HE and EH, and `LP_lm` is `HE_{l+1,m}` together with
+`EH_{l-1,m}`.
+
+```
+   glass rod in air, exact equation of Snyder and Love   residual 1e-10
+   core HE11, same equation                              residual 1e-12
+   three layers with no core step = two layers           1e-15
+   weak guidance against the scalar solver               2.5e-7 in n_eff, 0.1 % in coupling
+   power flow between distinct modes                     orthogonal to 1e-10
+```
+
+Snyder and Love's characteristic equation is written out in the test and shares nothing with the
+solver but the Bessel functions. **What the split is worth**, on standard fibre in air: the HE1m sit
+1.3e-7 below their LP0m at the top of the band, 1e-5 ten modes down and 1.9e-4 thirty modes down —
+and the core's own HE11 sits 5.2e-6 below LP01, which is the polarization correction the scalar
+equation has no way to see.
+
+Set `vector` on a `LongPeriodGrating` and it couples HE11 to the cladding's order-one modes instead:
+
+```
+   LP04 notch, scalar modes    1584.1 nm
+   HE14 notch, vector modes    1583.0 nm     -1.10 nm, and as deep
+```
+
+A nanometre is not a rounding error on a device whose whole output is where its notch went. The
+EH1m, which the scalar model has no mode for at this order, couple at about one percent of the HE1m
+and cut their own shallow notches between them. Material dispersion is still not included.
 
 ### Where the notches land
 
@@ -2202,6 +2235,50 @@ liquid and every notch moves shortward, faster the closer the liquid comes to th
 ```
 
 LP01 moves a tenth as far: the low-order cladding modes barely reach the boundary.
+
+## A grating that reads a liquid, because it is tilted
+
+A Bragg grating reflects the core mode into itself and is blind to everything outside the glass.
+Tilt its fringes by a few degrees and the fringe front now varies *across* the core, which lets the
+core mode reach every backward cladding mode whose azimuthal shape matches the tilt — a comb of
+narrow notches below the Bragg line, each at `(n_core + n_cladding,m) · period / cos θ`.
+`TiltedFiberBraggGrating` is that device.
+
+Expanding the tilted fringe across the core in azimuthal orders leaves each order a Bessel function
+of `2π sin θ · r / period`, so the overlap is closed-form and the tilt is a divider:
+
+```
+   tilt    into itself   into LP15        dn = 1e-4
+   0°        152.6 /m        0.0 /m
+   2°        114.9 /m       28.4 /m
+   4°         41.1 /m       28.4 /m
+   6°          3.5 /m        8.5 /m
+```
+
+Square on the whole coupling is the mirror and nothing else exists, which is the Bragg grating the
+library already had — the same number to 1e-12. The overlap is checked against the two-dimensional
+integral of the fringe pattern itself, on a grid, with no expansion in it: 1e-5.
+
+The coupled equations are contra-directional and every mode is coupled only through the core, so the
+32 modes nearest phase matching are solved together by matrix exponential and the rest enter as the
+shift they leave behind on the core. One mode alone is the textbook `1/cosh(κL)`; transmitted plus
+reflected plus what went into the cladding is 1 to 1e-10, exactly, because the equations conserve it.
+
+**Why anyone tilts a grating**: the comb feels what the fibre is dipped in and the Bragg line cannot,
+while temperature moves both together. A 10 mm grating tilted 4°, moved from air into water:
+
+```
+   notch                    in air        moves by
+   Bragg line               1551.243 nm      0.0 pm
+   LP0,1, just below it     1550.020 nm      0.2 pm
+   LP1,19, 12 nm down       1539.782 nm     71.2 pm
+   LP2,19                   1539.273 nm     75.0 pm
+```
+
+Read at the bottom of its comb against the Bragg line at the top, it is a refractometer carrying its
+own temperature reference. `python examples/tilted_grating_refractometer.py` prints all four tables.
+The modes here are scalar, so the polarization dependence of a real tilted grating's comb is not in
+it — that wants the vector modes above, which the long-period grating uses and this does not yet.
 
 ## A laser that chirps because it is being modulated
 
@@ -3044,8 +3121,8 @@ time window, and results are reproducible.
 | **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier frequency and phase recovery, coarse frequency acquisition over the whole sampled band, blind square-law timing recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km with blind estimation of the accumulated value, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
 | **3 — GUI & WDM** ✅ | Wavelength-selective filters, the ITU grids and a multiplexer/demultiplexer pair on them with crosstalk that falls out of the channel spacing, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — the OSA's trace drawn in the dock, and 400G/800G reference designs validated against the OSNR relations, and a back-end indirection the propagation kernels dispatch through — CuPy runs it where a device exists, `maiman devices` cross-checks it against NumPy, and a CI job does the same on any runner labelled `gpu` | ~6 months |
 | **4 — PIC** ✅ | Bidirectional S-matrix circuit solver, waveguide, directional coupler, all-pass and add-drop ring resonators, cross-validated against SAX; N×N MMI couplers on the self-imaging phase relations; a Mach-Zehnder interferometer assembled from them — switch, interleaver, or both; and PDK import, which reads a foundry's fitted numbers out of a JSON kit and refuses to extrapolate them past the window they were fitted in; and birefringence, with each guided polarization carrying its own indices through the same reduction | — |
-| **5 — Gratings, sensing, loops and coupling** ✅ | Fibre Bragg gratings assembled from transfer matrices — apodized, chirped, sampled and phase-shifted — a circulator with isolation and return loss, and a grating read as a strain gauge and a thermometer, by a swept laser or by broadband light on an analyser; noise that carries the spectral shape of what it passed through; loop control that runs a cavity to its fixed point, and a delay line that turns the same loop into a recirculating one lap by lap; pump depletion for four-wave mixing and Raman's measured gain shape past its peak; an erbium transient spread across the spectrum, each channel moving by the fibre's own tilt, drained per channel by its own cross section, and answered by a pump control loop with a bandwidth and a ceiling; PMD applied along the span between Kerr steps, and the coherent polarization term that moves power between the axes; a scalar mode solver for core and cladding modes, and a long-period grating built on it; edge and grating couplers that put a signal into the chip's TE and TM; a PAM4 driver with its modulator's linearity corrected, and a feed-forward and decision-feedback equaliser; a directly modulated laser whose chirp comes out of its own rate equations; and templates in the studio's File menu, including an eight-channel DWDM link | — |
-| **Open** | Amplified spontaneous emission saturating the reservoir, which in a lightly loaded amplifier it does; the pumps' own nonlinear phase in four-wave mixing between spans; vector cladding modes, material dispersion and tilted gratings; the etalon between an edge coupler's facets and a grating coupler's passband computed from its vertical stack; bit-exact oFEC, which needs the OIF document open rather than recalled; a spectral view of a block's scattering matrix in the studio | — |
+| **5 — Gratings, sensing, loops and coupling** ✅ | Fibre Bragg gratings assembled from transfer matrices — apodized, chirped, sampled and phase-shifted — a circulator with isolation and return loss, and a grating read as a strain gauge and a thermometer, by a swept laser or by broadband light on an analyser; noise that carries the spectral shape of what it passed through; loop control that runs a cavity to its fixed point, and a delay line that turns the same loop into a recirculating one lap by lap; pump depletion for four-wave mixing and Raman's measured gain shape past its peak; an erbium transient spread across the spectrum, each channel moving by the fibre's own tilt, drained per channel by its own cross section, and answered by a pump control loop with a bandwidth and a ceiling; PMD applied along the span between Kerr steps, and the coherent polarization term that moves power between the axes; a scalar mode solver for core and cladding modes, and the vector HE, EH, TE and TM modes the glass-air boundary splits them into, checked against the exact characteristic equation; a long-period grating built on either, and a tilted grating whose comb of cladding resonances reads what the fibre is dipped in; edge and grating couplers that put a signal into the chip's TE and TM; a PAM4 driver with its modulator's linearity corrected, and a feed-forward and decision-feedback equaliser; a directly modulated laser whose chirp comes out of its own rate equations; and templates in the studio's File menu, including an eight-channel DWDM link | — |
+| **Open** | Amplified spontaneous emission saturating the reservoir, which in a lightly loaded amplifier it does; the pumps' own nonlinear phase in four-wave mixing between spans; material dispersion, the polarization dependence of a tilted grating's comb, and recoupling at a second long-period grating; the etalon between an edge coupler's facets and a grating coupler's passband computed from its vertical stack; bit-exact oFEC, which needs the OIF document open rather than recalled; a spectral view of a block's scattering matrix in the studio | — |
 
 ¹ One developer, part-time. Estimates, not commitments.
 

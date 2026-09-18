@@ -53,6 +53,11 @@ _BLOCK = 2_000_000
 
 _LEGENDRE: dict[int, tuple[np.ndarray, np.ndarray]] = {}
 
+#: Smallest core ``u`` searched above order zero. Every such mode sits well past
+#: it -- the lowest, LP11, beyond the first zero of ``J_0`` at 2.405 -- and below
+#: it the eigenvalue equation is too small for its sign to be trusted.
+ORDER_FLOOR = 0.5
+
 
 def _legendre(count: int) -> tuple[np.ndarray, np.ndarray]:
     nodes = _LEGENDRE.get(count)
@@ -246,8 +251,15 @@ class Mode:
         return _cladding_field(self, r)
 
     def power(self) -> float:
-        """``int psi^2 r dr`` over the whole cross-section, the normalisation."""
-        return _radial_integral(self, lambda r: self.field(r) ** 2, *_regions(self))
+        """``int psi^2 r dr`` over the whole cross-section, the normalisation.
+
+        In closed form, layer by layer, from Lommel's integrals: for any cylinder
+        function ``Z`` of order ``nu``, ``int x Z^2 dx = (x^2/2) (Z'^2 + (1 -
+        nu^2/x^2) Z^2)``, and ``int x K^2 dx = (x^2/2) ((1 + nu^2/x^2) K^2 -
+        K'^2)``. Exact where quadrature is not, and a few Bessel evaluations
+        where quadrature is a thousand; the tests hold the two together.
+        """
+        return _lommel_power(self)
 
 
 def _k0(wavelength: float) -> float:
@@ -302,7 +314,14 @@ def core_modes(fibre: StepIndexFibre, wavelength: float, *, order: int = 0) -> l
             order - 1, w
         ) * bessel_j(order, u)
 
-    grid = np.linspace(v * 1e-6, v * (1.0 - 1e-9), max(400, int(200 * v)))
+    # Above order zero a mode's u is never small -- LP11 is not guided until u
+    # passes the first zero of J_0 -- while the equation is of order u**l near
+    # u = 0, where quadrature noise alone changes its sign. Starting there would
+    # report a mode at n_eff = n1 that is not one.
+    start = v * 1e-6 if order == 0 else ORDER_FLOOR
+    if start >= v:
+        return []
+    grid = np.linspace(start, v * (1.0 - 1e-9), max(400, int(200 * v)))
     roots = _roots(equation, grid, tolerance=1e-14 * v)
     n1, n2 = fibre.core_index, fibre.cladding_index
     modes = []
@@ -345,7 +364,10 @@ def cladding_modes(
     q_limit = k * math.sqrt(n2**2 - n3**2)
     q_top = min(q_limit * (1.0 - 1e-9), (count + 2 + nu / 2) * math.pi / b)
     samples = int(40 * (count + 3 + nu))
-    grid = np.linspace(1e-3 / b, q_top, samples)
+    # The same floor in the cladding: a mode of order nu has q b beyond the first
+    # zero of J_nu, which is beyond nu, and below it Y_nu(q a) is too large for
+    # its sign to mean anything.
+    grid = np.linspace(max(1e-3, 0.5 * nu) / b, q_top, samples)
     roots = sorted(_roots(equation, grid, tolerance=1e-14 * q_limit))
     modes = []
     for rank, q in enumerate(roots[:count], start=1):
@@ -376,6 +398,69 @@ def _core_field(mode: Mode, r: np.ndarray) -> np.ndarray:
             * np.exp(-w * (rho[outside] - 1.0))
         )
     return out
+
+
+def _cladding_amplitudes(mode: Mode) -> tuple[float, float, float, float, float, float]:
+    """``(p, q, s, A, B, psi(b))``: ``J_nu(p r)`` continues as ``A J_nu(q r) + B Y_nu(q r)``."""
+    fibre, nu = mode.fibre, mode.order
+    k = _k0(mode.wavelength)
+    a, b = fibre.core_radius, fibre.cladding_radius
+    neff = mode.effective_index
+    p = k * math.sqrt(fibre.core_index**2 - neff**2)
+    q = k * math.sqrt(fibre.cladding_index**2 - neff**2)
+    s = k * math.sqrt(neff**2 - fibre.surrounding_index**2)
+    one = np.ones(1)
+    at_core = bessel_j(nu, p * a * one)[0]
+    slope_core = p * _j_prime(nu, p * a * one)[0]
+    x = q * a * one
+    amp_j = (
+        0.5 * math.pi * x[0] * (_y_prime(nu, x)[0] * at_core - bessel_y(nu, x)[0] * slope_core / q)
+    )
+    amp_y = (
+        0.5 * math.pi * x[0] * (-_j_prime(nu, x)[0] * at_core + bessel_j(nu, x)[0] * slope_core / q)
+    )
+    at_edge = amp_j * bessel_j(nu, q * b * one)[0] + amp_y * bessel_y(nu, q * b * one)[0]
+    return p, q, s, float(amp_j), float(amp_y), float(at_edge)
+
+
+def _lommel_power(mode: Mode) -> float:
+    fibre, nu = mode.fibre, mode.order
+    k = _k0(mode.wavelength)
+    a, b = fibre.core_radius, fibre.cladding_radius
+    neff = mode.effective_index
+    one = np.ones(1)
+
+    def oscillating(amp_j: float, amp_y: float, wavenumber: float, r: float) -> float:
+        x = wavenumber * r * one
+        z = amp_j * bessel_j(nu, x)[0]
+        zp = amp_j * _j_prime(nu, x)[0]
+        if amp_y:
+            z += amp_y * bessel_y(nu, x)[0]
+            zp += amp_y * _y_prime(nu, x)[0]
+        return float(0.5 * r * r * (zp**2 + (1.0 - nu**2 / (wavenumber * r) ** 2) * z**2))
+
+    def decaying(value_at_r: float, wavenumber: float, r: float) -> float:
+        # int_r^inf K(s r')^2 r' dr', scaled so the field is ``value_at_r`` at r.
+        x = wavenumber * r * one
+        kk = bessel_k_scaled(nu, x)[0]
+        kp = -bessel_k_scaled(nu - 1, x)[0] - nu / x[0] * kk
+        ratio = kp / kk
+        return float(
+            value_at_r**2 * 0.5 * r * r * (ratio**2 - (1.0 + nu**2 / (wavenumber * r) ** 2))
+        )
+
+    if mode.kind == "core":
+        u = k * math.sqrt(fibre.core_index**2 - neff**2)
+        w = k * math.sqrt(neff**2 - fibre.cladding_index**2)
+        scale = 1.0 / bessel_j(nu, u * a * one)[0]
+        return oscillating(scale, 0.0, u, a) + decaying(1.0, w, a)
+    p, q, s, amp_j, amp_y, at_edge = _cladding_amplitudes(mode)
+    return (
+        oscillating(1.0, 0.0, p, a)
+        + oscillating(amp_j, amp_y, q, b)
+        - oscillating(amp_j, amp_y, q, a)
+        + decaying(at_edge, s, b)
+    )
 
 
 def _cladding_field(mode: Mode, r: np.ndarray) -> np.ndarray:

@@ -25,7 +25,7 @@ from collections.abc import Callable
 import numpy as np
 
 from ..circuit import SMatrix
-from ..component import Param, PortType
+from ..component import BoolParam, Param, PortType
 from ..context import SimulationContext
 from ..modes import StepIndexFibre
 from ..photonics import long_period_grating, long_period_resonances
@@ -49,9 +49,11 @@ class LongPeriodGrating(ScatteringDevice):
     every frequency. A notch's depth is ``cos^2(kappa L)`` at its centre, and its
     width is set by how fast the two indices part with wavelength.
 
-    **What it does not.** The fields are scalar LP modes: the cladding-air step
-    is not weak, and the vector modes these stand in for sit up to about 1e-4 away
-    in effective index, a few nanometres in where a notch lands. Material
+    **What it does not.** By default the fields are scalar LP modes, and the
+    cladding-air step is not weak: set ``vector`` and the block solves the true
+    HE and EH modes of :mod:`maiman.vector_modes` instead, which moves the LP04
+    notch of the default grating from 1584.1 nm to 1583.0 and adds the weak EH1m
+    notches the scalar model has no modes for. It costs a few seconds. Material
     dispersion is not included -- the indices are constants and only the
     waveguide's dispersion is computed -- and the average index the writing
     raises is not either, so a real grating's notches sit a few nanometres
@@ -81,6 +83,9 @@ class LongPeriodGrating(ScatteringDevice):
     cladding_modes = Param(
         8.0, unit="", min=1.0, max=40.0, doc="Cladding modes coupled, highest index first"
     )
+    vector = BoolParam(
+        False, doc="Solve the true HE and EH modes instead of the scalar LP ones. Slower"
+    )
 
     inputs = {"in": PortType.OPTICAL}
     outputs = {"transmitted": PortType.OPTICAL}
@@ -95,13 +100,29 @@ class LongPeriodGrating(ScatteringDevice):
             surrounding_index=self.surrounding_index,
         )
 
+    def _coupled_modes(self) -> int:
+        """How many cladding modes to couple: twice as many in the vector solver.
+
+        ``cladding_modes`` counts the LP0m the scalar model reaches. The vector
+        solver reaches the same depth in the spectrum by solving every cladding
+        mode of order one, which is those modes -- as HE1m -- and the EH1m in
+        between them, so it needs twice the count for the same reach.
+        """
+        count = int(self.cladding_modes)
+        return 2 * count if self.vector else count
+
     def resonances(self, band: tuple[float, float] = (1.2e-6, 1.7e-6)) -> list[tuple[int, float]]:
-        """``(cladding mode rank, wavelength [m])`` for every notch inside ``band``."""
+        """``(cladding mode rank, wavelength [m])`` for every notch inside ``band``.
+
+        With ``vector`` set, the rank counts order-one modes of both families,
+        so the notch an LP0m cuts is an odd rank.
+        """
         return long_period_resonances(
             self.fibre(),
             period=self.si("period"),
-            count=int(self.cladding_modes),
+            count=self._coupled_modes(),
             band=band,
+            vector=self.vector,
         )
 
     def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
@@ -116,7 +137,8 @@ class LongPeriodGrating(ScatteringDevice):
         period = self.si("period")
         length = self.si("length")
         modulation = self.index_modulation
-        count = int(self.cladding_modes)
+        count = self._coupled_modes()
+        vector = self.vector
         return solve_once(
             lambda f: long_period_grating(
                 f,
@@ -125,5 +147,6 @@ class LongPeriodGrating(ScatteringDevice):
                 length=length,
                 index_modulation=modulation,
                 cladding_modes=count,
+                vector=vector,
             )
         )

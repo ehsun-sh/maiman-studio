@@ -565,8 +565,15 @@ be finished without it, and each is validated against a result it does not share
   a lossless span conserves energy; Raman past its 13.2 THz peak is integrated with silica's shape.
 * **Modes.** A scalar LP mode solver for a three-layer step-index fibre, with Bessel functions from
   their integral representations so the package still depends on NumPy alone, agreeing with an
-  independent finite-difference solve to 1e-10. A long-period grating couples the core mode to the
-  cladding modes it finds.
+  independent finite-difference solve to 1e-10. Beside it a vector solver -- HE, EH, TE and TM by
+  matching all four tangential components across every interface -- which satisfies the exact
+  characteristic equation of Snyder and Love to 1e-10 at a glass-air boundary and meets the scalar
+  solver where guidance is weak. A long-period grating couples the core mode to either set, and the
+  vector modes move its notch by 1.1 nm.
+* **Tilted gratings.** Tilting a Bragg grating's fringes opens every azimuthal order to the core
+  mode, through an overlap that is a Bessel function of the tilt; the contra-directional equations
+  are solved for the modes nearest phase matching, with the rest entering as the shift they leave on
+  the core. The comb that comes out reads the fibre's surroundings against a Bragg line that cannot.
 * **Getting onto a chip.** An edge coupler as the closed-form overlap of two Gaussian beams across a
   gap, and a grating coupler centred by phase matching with the grating's dispersion. Both project
   the signal onto the die's axes, which is where the photonic blocks' TE and TM come from.
@@ -587,9 +594,9 @@ Stated in the code where each approximation is made, and collected here:
   noise, no delay and no dither.
 * **Fibre.** Four-wave mixing tracks the linear mismatch between spans but not the pumps' own
   nonlinear phase.
-* **Gratings and modes.** Cladding modes are scalar, which places a long-period notch to within a few
-  nanometres; material dispersion is not included; tilted gratings and recoupling at a second
-  grating are not modelled.
+* **Gratings and modes.** Material dispersion is not included in either mode solver, and neither is
+  the average index a writing process raises. A tilted grating is solved with scalar modes, so its
+  comb has no polarization dependence; recoupling at a second long-period grating is not modelled.
 * **Coupling.** The etalon between an edge coupler's two facets; a grating coupler's passband
   computed from its vertical stack rather than taken from a PDK.
 * **Transceivers.** A fractionally spaced or blind (decision-directed) PAM equaliser; mode
