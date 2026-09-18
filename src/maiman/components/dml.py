@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..component import Component, Param, PortType
+from ..component import BoolParam, Component, Param, PortType
 from ..context import SimulationContext
 from ..laser import LaserParameters, LaserWaveform, integrate_rate_equations
 from ..signals import Band, ElectricalSignal, OpticalSignal, Signal
@@ -41,6 +41,13 @@ class DirectlyModulatedLaser(Component):
     The parameters are the active region's, because that is what the model is
     written in; :meth:`threshold_current`, :meth:`slope_efficiency` and
     :meth:`relaxation_frequency` report the datasheet quantities they imply.
+
+    **Noise, when asked for.** With ``noise`` set, spontaneous emission is random
+    as well as a rate: the field carries the phase noise that gives the laser its
+    linewidth -- Henry's ``(1 + alpha^2)`` times Schawlow and Townes', which
+    :meth:`linewidth` reports and the tests measure coming out of the
+    integration -- and the intensity noise that peaks at the relaxation
+    frequency. Seeded from the run's context, so a run repeats.
     """
 
     display_name = "Directly Modulated Laser"
@@ -78,6 +85,9 @@ class DirectlyModulatedLaser(Component):
         max=1024.0,
         doc="Integration steps per sample; the ringing needs them",
     )
+    noise = BoolParam(
+        False, doc="Spontaneous emission noise: the laser's linewidth and intensity noise"
+    )
 
     inputs = {"in": PortType.ELECTRICAL}
     outputs = {"out": PortType.OPTICAL}
@@ -110,19 +120,29 @@ class DirectlyModulatedLaser(Component):
         """Where the step response rings at this bias [Hz]."""
         return self.parameters().relaxation_frequency(self.si("bias_current"))
 
+    def linewidth(self) -> float:
+        """The Lorentzian linewidth at this bias with ``noise`` on [Hz]: Henry's."""
+        return self.parameters().linewidth(self.si("bias_current"))
+
     def drive_current(self, waveform: ElectricalSignal) -> np.ndarray:
         """``bias + g V`` [A], clipped at zero: a driver cannot pull current out."""
         volts = np.asarray(waveform.samples, dtype=np.float64)
         current = self.si("bias_current") + self.si("transconductance") * volts
         return np.maximum(current, 0.0)
 
-    def solve(self, waveform: ElectricalSignal) -> LaserWaveform:
+    def solve(
+        self, waveform: ElectricalSignal, rng: np.random.Generator | None = None
+    ) -> LaserWaveform:
         """Integrate the rate equations across this drive, without building a band."""
+        if self.noise and rng is None:
+            rng = np.random.default_rng()
         return integrate_rate_equations(
             self.parameters(),
             self.drive_current(waveform),
             waveform.fs,
             substeps=int(self.substeps),
+            noise=self.noise,
+            rng=rng,
         )
 
     def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
@@ -132,7 +152,7 @@ class DirectlyModulatedLaser(Component):
                 f"{self.label}: the drive has {waveform.samples.shape[0]} samples and the run "
                 f"window holds {ctx.num_samples}"
             )
-        solved = self.solve(waveform)
+        solved = self.solve(waveform, ctx.rng(type(self).__name__, self.label, "langevin"))
         field = solved.field
         band = Band(
             Ex=field.astype(ctx.complex_dtype),

@@ -114,6 +114,15 @@ class FFEDFEEqualizer(Component):
     the count. ``ffe_taps = 1`` and ``dfe_taps = 0`` is no equalisation at all --
     a gain, an offset and a slicer -- which is the baseline the others improve on.
 
+    **Fractionally spaced**, with ``fractional``: two samples a symbol, half a
+    symbol apart, and the taps with them. It no longer matters much where in the
+    symbol the sampling lands, because the equaliser makes its own phase.
+
+    **Blind**, with ``blind``: the taps adapt to the equaliser's own decisions and
+    the reference is used only to count errors, which is what a receiver in the
+    field does. It needs the eye open enough to start: see
+    :func:`maiman.dsp.ffe_dfe_equalize` for where it stops working.
+
     The result also carries :func:`maiman.modulation.ser_pam` at the equalised
     SNR, so a count far above it says the errors are not Gaussian noise: residual
     ISI, or a DFE propagating its own mistakes.
@@ -129,6 +138,8 @@ class FFEDFEEqualizer(Component):
     sample_offset = Param(
         -1.0, unit="", doc="Samples into the symbol to take; negative finds it blind"
     )
+    fractional = BoolParam(False, doc="Two samples a symbol, taps half a symbol apart")
+    blind = BoolParam(False, doc="Adapt to its own decisions; the reference only counts errors")
 
     inputs = {"in": PortType.ELECTRICAL, "reference": PortType.BINARY}
     outputs = {"out": PortType.METRIC}
@@ -159,14 +170,29 @@ class FFEDFEEqualizer(Component):
         pattern = bits_to_indices(reference.bits, BITS_PER_SYMBOL)
         gray = gray_pam_levels(BITS_PER_SYMBOL)
         sent = gray[pattern]
+        per_symbol = 1
+        samples = grid[:, offset]
+        if self.fractional:
+            half = ctx.samples_per_symbol // 2
+            if ctx.samples_per_symbol % 2:
+                raise ValueError(
+                    f"{self.label}: a T/2-spaced equaliser needs an even number of samples a "
+                    f"symbol, and the run has {ctx.samples_per_symbol}"
+                )
+            flat = grid.reshape(-1)
+            starts = np.arange(ctx.sequence_length) * ctx.samples_per_symbol + offset
+            samples = flat[(starts[:, None] + np.array([0, half])[None, :]) % flat.size].reshape(-1)
+            per_symbol = 2
         result = ffe_dfe_equalize(
-            grid[:, offset],
+            samples,
             sent,
             levels=gray,
             ffe_taps=taps,
             dfe_taps=int(self.dfe_taps),
             step=self.step,
             passes=int(self.training_passes),
+            samples_per_symbol=per_symbol,
+            blind=self.blind,
         )
 
         alphabet = np.sort(gray)

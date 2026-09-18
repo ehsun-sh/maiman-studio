@@ -2168,6 +2168,11 @@ verdict, and DESIGN.md
      "min": 1.0,
      "max": 1024.0,
      "doc": "Integration steps per sample; the ringing needs them"
+    },
+    "noise": {
+     "type": "bool",
+     "default": false,
+     "doc": "Spontaneous emission noise: the laser's linewidth and intensity noise"
     }
    },
    "structural": {},
@@ -2636,6 +2641,16 @@ verdict, and DESIGN.md
      "default": -1.0,
      "unit": "",
      "doc": "Samples into the symbol to take; negative finds it blind"
+    },
+    "fractional": {
+     "type": "bool",
+     "default": false,
+     "doc": "Two samples a symbol, taps half a symbol apart"
+    },
+    "blind": {
+     "type": "bool",
+     "default": false,
+     "doc": "Adapt to its own decisions; the reference only counts errors"
     }
    },
    "structural": {},

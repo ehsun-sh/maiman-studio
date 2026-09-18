@@ -1041,20 +1041,40 @@ def ffe_dfe_equalize(
     dfe_taps: int = 0,
     step: float = 0.05,
     passes: int = 4,
+    samples_per_symbol: int = 1,
+    blind: bool = False,
 ) -> EqualizerResult:
-    """Train a symbol-spaced FFE/DFE on the transmitted levels, then run it on its own.
+    """Train an FFE/DFE on the transmitted levels, or on its own decisions, then run it.
 
-    ``received`` is one real sample per symbol, at whatever gain and offset the
-    detector left it; ``transmitted`` is the level each symbol was sent at. The
+    ``received`` is ``samples_per_symbol`` real samples per symbol, at whatever
+    gain and offset the detector left it, the first of each symbol's at its
+    sampling instant; ``transmitted`` is the level each symbol was sent at. The
     equaliser's output is ``y_k = w . x_k + c - b . d_k``, with ``x_k`` the
     ``ffe_taps`` samples centred on symbol ``k``, ``c`` a bias, and ``d_k`` the
     ``dfe_taps`` previous decisions. The window is circular, as every waveform in
     this engine is.
 
+    **Fractionally spaced**, with ``samples_per_symbol = 2``: the taps sit half a
+    symbol apart and the output is still one a symbol. A symbol-spaced equaliser
+    sees the channel only at the instants it samples, so the phase it samples at
+    decides how much of the pulse it can undo, and half a symbol wrong can close
+    an eye it would otherwise open. A T/2-spaced one sees the whole pulse and
+    synthesises its own sampling phase. That is what it buys, and the tests
+    measure it: the same channel, sampled half a symbol late.
+
     **Training is data-aided and normalised.** ``passes`` sweeps of NLMS over the
     window against ``transmitted`` -- the reference-receiver arrangement a
     compliance test uses -- with ``step`` in ``(0, 2)`` and independent of the
     signal's scale. During training the feedback is fed the transmitted levels.
+
+    **Blind**, with ``blind`` set: nothing is known but the alphabet. The gain and
+    offset start from the signal's own statistics -- its mean is the alphabet's
+    mean and its spread the alphabet's spread -- and the error that adapts the
+    taps is the distance to the equaliser's *own* decision rather than to the
+    transmitted level (decision-directed LMS). ``transmitted`` is then used only to
+    count what came out. It works when the eye is open enough at the start for
+    most decisions to be right, and the tests show the channel where it does not:
+    a receiver in the field has no reference, and this is what it has to do.
 
     **The answer is then taken with the taps frozen and the feedback fed its own
     decisions**, so an error propagates through the DFE exactly as it would in a
@@ -1064,9 +1084,15 @@ def ffe_dfe_equalize(
     x = np.asarray(received, dtype=np.float64)
     target = np.asarray(transmitted, dtype=np.float64)
     alphabet = np.sort(np.asarray(levels, dtype=np.float64))
-    n = x.shape[0]
-    if target.shape != x.shape:
-        raise ValueError(f"transmitted must match received, got {target.shape} and {x.shape}")
+    if samples_per_symbol < 1:
+        raise ValueError(f"samples_per_symbol must be at least 1, got {samples_per_symbol}")
+    if x.ndim != 1 or x.shape[0] != target.shape[0] * samples_per_symbol:
+        raise ValueError(
+            f"transmitted must match received: {target.shape[0]} symbols at "
+            f"{samples_per_symbol} a symbol is {target.shape[0] * samples_per_symbol} samples, "
+            f"and received has {x.shape[0]}"
+        )
+    n = target.shape[0]
     if ffe_taps < 1 or ffe_taps % 2 == 0:
         raise ValueError(f"ffe_taps must be odd and at least 1, got {ffe_taps}")
     if dfe_taps < 0:
@@ -1089,23 +1115,37 @@ def ffe_dfe_equalize(
         raise ValueError("the received samples are constant; there is nothing to equalise")
     centre = ffe_taps // 2
     offsets = np.arange(ffe_taps) - centre
-    windows = ((x - mean) / scale)[(np.arange(n)[:, None] + offsets[None, :]) % n]
+    starts = np.arange(n)[:, None] * samples_per_symbol
+    windows = ((x - mean) / scale)[(starts + offsets[None, :]) % x.shape[0]]
     thresholds = 0.5 * (alphabet[1:] + alphabet[:-1])
 
-    # Start at the least-squares gain and offset, so the adaptation spends its
-    # passes on the ISI and not on finding the detector's scale.
     theta = np.zeros(ffe_taps + 1 + dfe_taps)
-    theta[centre] = float(np.mean(windows[:, centre] * (target - np.mean(target))))
-    theta[ffe_taps] = float(np.mean(target))
+    if blind:
+        # Nothing but the alphabet: the standardised samples are given its
+        # spread and its mean, which is right whenever the eye is open at all.
+        theta[centre] = float(np.std(alphabet))
+        theta[ffe_taps] = float(np.mean(alphabet))
+    else:
+        # The least-squares gain and offset, so the adaptation spends its passes
+        # on the ISI and not on finding the detector's scale.
+        theta[centre] = float(np.mean(windows[:, centre] * (target - np.mean(target))))
+        theta[ffe_taps] = float(np.mean(target))
+
+    def decide(value: float) -> float:
+        return float(alphabet[int(np.searchsorted(thresholds, value))])
 
     history = np.zeros(dfe_taps)
+    own = np.array([decide(float(theta @ np.concatenate((w, (1.0,), history)))) for w in windows])
     for _ in range(passes):
         for k in range(n):
             if dfe_taps:
-                history = target[(k - 1 - np.arange(dfe_taps)) % n]
+                fed = own if blind else target
+                history = fed[(k - 1 - np.arange(dfe_taps)) % n]
             regressor = np.concatenate((windows[k], (1.0,), -history))
-            error = target[k] - float(theta @ regressor)
-            theta += step * error * regressor / (float(regressor @ regressor) + 1e-12)
+            value = float(theta @ regressor)
+            reference = decide(value) if blind else target[k]
+            own[k] = decide(value)
+            theta += step * (reference - value) * regressor / (float(regressor @ regressor) + 1e-12)
 
     output = np.empty(n)
     decided = np.empty(n, dtype=np.int64)
