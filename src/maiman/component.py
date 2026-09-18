@@ -263,6 +263,11 @@ class Component:
     #: half-built block to the palette.
     abstract: ClassVar[bool] = False
 
+    #: Whether this block is a scattering device that can hand over its
+    #: scattering matrix on any wavelength grid -- which is what lets the
+    #: studio plot one without running a link through it.
+    spectral: ClassVar[bool] = False
+
     def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
         from .registry import register
@@ -394,6 +399,7 @@ class Component:
             "class": f"{cls.__module__}.{cls.__qualname__}",
             "category": cls.category,
             "version": cls.version,
+            "spectral": cls.spectral,
             "parameters": {name: spec.to_dict() for name, spec in cls.param_specs().items()},
             "structural": probe.structural_config() if probe is not None else {},
             "ports": {

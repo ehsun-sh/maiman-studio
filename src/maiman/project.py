@@ -74,6 +74,32 @@ def graph_to_dict(graph: Graph, *, ui: dict[str, dict[str, float]] | None = None
     }
 
 
+def component_from_dict(node: dict[str, Any]) -> Component:
+    """One node of a project -- ``{id, type, config, params}`` -- as the component it names.
+
+    What :func:`graph_from_dict` does for every node, available for one: the
+    studio builds a single block this way to plot its spectrum, and doing it
+    through the same function is what keeps a retired parameter or a bad value
+    treated the same there as in a run.
+    """
+    for field in ("id", "type"):
+        if field not in node:
+            raise ProjectError(f"node is missing {field!r}: {node}")
+    component_class = lookup(node["type"])
+    config = node.get("config", {})
+    params = node.get("params", {})
+    # Parameters the component has since retired are dropped rather than
+    # refused. They were removed because they had stopped affecting the
+    # model, so a project carrying one describes the same link either way.
+    retired = component_class.retired_parameters
+    if retired:
+        params = {k: v for k, v in params.items() if k not in retired}
+    try:
+        return component_class(label=node["id"], **config, **params)
+    except (TypeError, ValueError) as exc:
+        raise ProjectError(f"cannot build node {node['id']!r}: {exc}") from None
+
+
 def graph_from_dict(data: dict[str, Any]) -> Graph:
     """Rebuild a graph from a dictionary produced by :func:`graph_to_dict`."""
     version = data.get("schema_version")
@@ -93,23 +119,7 @@ def graph_from_dict(data: dict[str, Any]) -> Graph:
 
     graph = Graph(context)
     for node in data.get("nodes", []):
-        for field in ("id", "type"):
-            if field not in node:
-                raise ProjectError(f"node is missing {field!r}: {node}")
-        component_class = lookup(node["type"])
-        config = node.get("config", {})
-        params = node.get("params", {})
-        # Parameters the component has since retired are dropped rather than
-        # refused. They were removed because they had stopped affecting the
-        # model, so a project carrying one describes the same link either way.
-        retired = component_class.retired_parameters
-        if retired:
-            params = {k: v for k, v in params.items() if k not in retired}
-        try:
-            component: Component = component_class(label=node["id"], **config, **params)
-        except (TypeError, ValueError) as exc:
-            raise ProjectError(f"cannot build node {node['id']!r}: {exc}") from None
-        graph.add(component)
+        graph.add(component_from_dict(node))
 
     by_label = {c.label: c for c in graph.components}
     for edge in data.get("edges", []):

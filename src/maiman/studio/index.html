@@ -667,6 +667,11 @@ verdict, and DESIGN.md
 
   /* ---- Inspector ------------------------------------------------------ */
   .inspector { background: var(--panel); border-left: 1px solid var(--rule); }
+  .smx-traces { display: flex; flex-direction: column; gap: 3px; margin: 6px 0 8px; }
+  .smx-traces label { display: flex; align-items: center; gap: 6px; font-size: 11px;
+                      color: var(--ink-2); cursor: pointer; }
+  .smx-traces .swatch { width: 10px; height: 3px; border-radius: 1px; display: inline-block; }
+  .insp-spectrum { margin-top: 8px; width: 100%; }
   .insp-scroll { overflow-y: auto; flex: 1; }
   .insp-title {
     padding: 11px 12px 9px;
@@ -1020,6 +1025,7 @@ verdict, and DESIGN.md
         <button role="menuitem" id="view-pane-eye"><svg class="menu-tick" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 5"/></svg>Eye diagram</button>
         <button role="menuitem" id="view-pane-osa"><svg class="menu-tick" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 5"/></svg>Spectrum</button>
         <button role="menuitem" id="view-pane-sens"><svg class="menu-tick" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 5"/></svg>Sensitivity</button>
+        <button role="menuitem" id="view-pane-smx"><svg class="menu-tick" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 5"/></svg>S-matrix</button>
         <button role="menuitem" id="view-pane-log"><svg class="menu-tick" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 5"/></svg>Log</button>
         <hr class="menu-sep">
         <button role="menuitem" id="view-ground-light"><svg class="menu-tick" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 5"/></svg>Paper</button>
@@ -1239,6 +1245,7 @@ verdict, and DESIGN.md
         <button class="tab" role="tab" aria-selected="false" data-pane="eye">Eye (I)</button>
         <button class="tab" role="tab" aria-selected="false" data-pane="osa">Spectrum</button>
         <button class="tab" role="tab" aria-selected="false" data-pane="sens">Sensitivity</button>
+        <button class="tab" role="tab" aria-selected="false" data-pane="smx">S-matrix</button>
         <button class="tab" role="tab" aria-selected="false" data-pane="log">Log</button>
         <div class="dock-metrics">
           <!-- Says whether the numbers to its right came from this session or
@@ -1374,6 +1381,48 @@ verdict, and DESIGN.md
             <dl style="margin:0" id="s-summary"></dl>
           </div>
         </div>
+        <div class="pane" data-pane="smx">
+          <div class="plot-wrap"><canvas id="smx-canvas"></canvas></div>
+          <div class="plot-side">
+            <!-- A block's own scattering matrix, across a window, without a
+                 link run through it: what a grating reflects, where a ring
+                 resonates, how much a coupler loses. -->
+            <p class="side-title">Block</p>
+            <div class="sweep-form">
+              <label class="sweep-row"><span>Block</span>
+                <select id="smx-node"></select></label>
+              <div class="sweep-grid">
+                <label><span>From nm</span><input id="smx-from" type="text" value=""
+                       placeholder="auto"></label>
+                <label><span>To nm</span><input id="smx-to" type="text" value=""
+                       placeholder="auto"></label>
+                <label><span>Points</span><input id="smx-points" type="text" value="801"></label>
+                <label><span>Mode</span><select id="smx-pol">
+                  <option value="te">TE</option><option value="tm">TM</option></select></label>
+              </div>
+              <button class="sweep-go" id="smx-run" type="button">Compute spectrum</button>
+            </div>
+            <p class="side-title">Plot</p>
+            <label class="sweep-row"><span>Y axis</span>
+              <select id="smx-y">
+                <option value="power_db">|S|&sup2; (dB)</option>
+                <option value="phase_rad">Phase (rad)</option>
+                <option value="group_delay_ps">Group delay (ps)</option>
+              </select></label>
+            <div class="smx-traces" id="smx-traces"></div>
+            <dl style="margin:0" id="smx-summary"></dl>
+            <p class="side-title">Note</p>
+            <p class="field-doc" style="margin:0">
+              The block on its own, as its scattering matrix: every port to
+              every port, across the window. A run shows what one signal made of
+              a device; this shows the device. Empty ends take the block's own
+              window -- a grating's line, a ring's resonances -- and group delay
+              is <em>&minus;d&phi;/d&omega;</em>, which is where a grating's
+              dispersion and a ring's slow light are, and a power trace does not
+              show either.
+            </p>
+          </div>
+        </div>
         <div class="pane" data-pane="log">
           <div class="log" id="log"></div>
         </div>
@@ -1402,6 +1451,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.detectors.APDPhotodiode",
    "category": "Receivers",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "responsivity": {
      "type": "float",
@@ -1480,6 +1530,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.passive.Attenuator",
    "category": "Passive",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "attenuation": {
      "type": "float",
@@ -1505,6 +1556,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.analyzers.BERAnalyzer",
    "category": "Measurements",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "ignore_edges": {
      "type": "float",
@@ -1543,6 +1595,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.dsp.ButterflyEqualizer",
    "category": "DSP",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "taps": {
      "type": "float",
@@ -1599,6 +1652,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.sources.CWLaser",
    "category": "Optical Sources",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "power": {
      "type": "float",
@@ -1643,6 +1697,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.coherent.CarrierRecovery",
    "category": "DSP",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "test_phases": {
      "type": "float",
@@ -1676,6 +1731,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.reflective.Circulator",
    "category": "Passive",
    "version": "0.1.0",
+   "spectral": true,
    "parameters": {
     "insertion_loss": {
      "type": "float",
@@ -1722,6 +1778,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.dsp.CoarseFrequencyRecovery",
    "category": "DSP",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {},
    "structural": {},
    "ports": {
@@ -1742,6 +1799,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.coherent.CoherentReceiver",
    "category": "Receivers",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "responsivity": {
      "type": "float",
@@ -1800,6 +1858,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.passive.Combiner",
    "category": "Passive",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "insertion_loss": {
      "type": "float",
@@ -1828,6 +1887,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.analyzers.ConstellationAnalyzer",
    "category": "Measurements",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "ignore_edges": {
      "type": "float",
@@ -1859,6 +1919,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.analyzers.ConstellationDiagram",
    "category": "Measurements",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "bins": {
      "type": "float",
@@ -1891,6 +1952,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.electrical.DCVoltage",
    "category": "Electrical Sources",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "voltage": {
      "type": "float",
@@ -1913,6 +1975,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.delay.DelayLine",
    "category": "Passive",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "delay": {
      "type": "float",
@@ -1938,6 +2001,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.wdm.Demultiplexer",
    "category": "Passive",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "first_wavelength": {
      "type": "float",
@@ -2005,6 +2069,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.mapping.DifferentialDecoder",
    "category": "DSP",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {},
    "structural": {},
    "ports": {
@@ -2022,6 +2087,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.photonic.DirectionalCoupler",
    "category": "Photonic IC",
    "version": "0.1.0",
+   "spectral": true,
    "parameters": {
     "coupling": {
      "type": "float",
@@ -2058,6 +2124,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.dml.DirectlyModulatedLaser",
    "category": "Optical Sources",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "bias_current": {
      "type": "float",
@@ -2191,6 +2258,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.dsp.DispersionCompensator",
    "category": "DSP",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "accumulated_dispersion": {
      "type": "float",
@@ -2243,6 +2311,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.coherent.DualPolarizationReceiver",
    "category": "Receivers",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "responsivity": {
      "type": "float",
@@ -2303,6 +2372,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.amplifiers.EDFA",
    "category": "Amplifiers",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "gain": {
      "type": "float",
@@ -2362,6 +2432,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.couplers.EdgeCoupler",
    "category": "Photonic IC",
    "version": "0.1.0",
+   "spectral": true,
    "parameters": {
     "rotation": {
      "type": "float",
@@ -2473,6 +2544,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.filters.ElectricalFilter",
    "category": "Electrical",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "bandwidth": {
      "type": "float",
@@ -2498,6 +2570,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.analyzers.EyeDiagram",
    "category": "Measurements",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "span_symbols": {
      "type": "float",
@@ -2537,6 +2610,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.electrical.FECDecoder",
    "category": "Measurements",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {},
    "structural": {},
    "ports": {
@@ -2556,6 +2630,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.electrical.FECEncoder",
    "category": "Electrical Sources",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "order": {
      "type": "float",
@@ -2603,6 +2678,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.pam.FFEDFEEqualizer",
    "category": "DSP",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "ffe_taps": {
      "type": "float",
@@ -2670,6 +2746,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.feedback.Feedback",
    "category": "Signal Flow",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "passes": {
      "type": "float",
@@ -2697,6 +2774,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.fiber.Fiber",
    "category": "Fiber",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "length": {
      "type": "float",
@@ -2823,6 +2901,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.reflective.FiberBraggGrating",
    "category": "Passive",
    "version": "0.1.0",
+   "spectral": true,
    "parameters": {
     "length": {
      "type": "float",
@@ -2959,6 +3038,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.dsp.FrequencyRecovery",
    "category": "DSP",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {},
    "structural": {},
    "ports": {
@@ -2977,6 +3057,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.sources.GaussianPulse",
    "category": "Optical Sources",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "peak_power": {
      "type": "float",
@@ -3020,6 +3101,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.couplers.GratingCoupler",
    "category": "Photonic IC",
    "version": "0.1.0",
+   "spectral": true,
    "parameters": {
     "rotation": {
      "type": "float",
@@ -3195,6 +3277,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.electrical.IQDriver",
    "category": "Electrical",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "v_pi": {
      "type": "float",
@@ -3257,6 +3340,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.modulators.IQModulator",
    "category": "Modulators",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "v_pi": {
      "type": "float",
@@ -3309,6 +3393,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.coherent.IQSampler",
    "category": "Receivers",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "sample_offset": {
      "type": "float",
@@ -3363,6 +3448,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.long_period.LongPeriodGrating",
    "category": "Passive",
    "version": "0.1.0",
+   "spectral": true,
    "parameters": {
     "period": {
      "type": "float",
@@ -3458,6 +3544,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.photonic.MMI",
    "category": "Photonic IC",
    "version": "0.1.0",
+   "spectral": true,
    "parameters": {
     "excess_loss": {
      "type": "float",
@@ -3494,6 +3581,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.photonic.MachZehnderInterferometer",
    "category": "Photonic IC",
    "version": "0.1.0",
+   "spectral": true,
    "parameters": {
     "reference_wavelength": {
      "type": "float",
@@ -3616,6 +3704,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.modulators.MachZehnderModulator",
    "category": "Modulators",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "v_pi": {
      "type": "float",
@@ -3662,6 +3751,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.wdm.Multiplexer",
    "category": "Passive",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "first_wavelength": {
      "type": "float",
@@ -3729,6 +3819,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.electrical.NRZDriver",
    "category": "Electrical",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "v_low": {
      "type": "float",
@@ -3759,6 +3850,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.meters.OSNRMeter",
    "category": "Measurements",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "reference_bandwidth": {
      "type": "float",
@@ -3784,6 +3876,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.filters.OpticalFilter",
    "category": "Passive",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "center_wavelength": {
      "type": "float",
@@ -3839,6 +3932,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.filters.OpticalSpectrumAnalyzer",
    "category": "Measurements",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "auto_span": {
      "type": "bool",
@@ -3894,6 +3988,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.pam.PAM4Driver",
    "category": "Electrical",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "v_low": {
      "type": "float",
@@ -3937,6 +4032,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.detectors.PINPhotodiode",
    "category": "Receivers",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "responsivity": {
      "type": "float",
@@ -4000,6 +4096,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.electrical.PRBSGenerator",
    "category": "Electrical Sources",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "order": {
      "type": "float",
@@ -4046,6 +4143,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.mapping.PilotInserter",
    "category": "Modulation",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "spacing": {
      "type": "float",
@@ -4071,6 +4169,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.mapping.PilotPhaseRecovery",
    "category": "DSP",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "spacing": {
      "type": "float",
@@ -4098,6 +4197,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.passive.PolarizationCombiner",
    "category": "Passive",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "insertion_loss": {
      "type": "float",
@@ -4124,6 +4224,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.passive.PolarizationRotator",
    "category": "Passive",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "angle": {
      "type": "float",
@@ -4154,6 +4255,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.meters.PowerMeter",
    "category": "Measurements",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {},
    "structural": {},
    "ports": {
@@ -4171,6 +4273,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.mapping.QAMMapper",
    "category": "Modulation",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "bits_per_symbol": {
      "type": "float",
@@ -4210,6 +4313,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.photonic.RingResonator",
    "category": "Photonic IC",
    "version": "0.1.0",
+   "spectral": true,
    "parameters": {
     "reference_wavelength": {
      "type": "float",
@@ -4312,6 +4416,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.sources.SechPulse",
    "category": "Optical Sources",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "peak_power": {
      "type": "float",
@@ -4349,6 +4454,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.analyzers.Slicer",
    "category": "Receivers",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "sample_offset": {
      "type": "float",
@@ -4379,6 +4485,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.dsp.SoftDemapper",
    "category": "DSP",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "pilot_spacing": {
      "type": "float",
@@ -4404,6 +4511,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.electrical.SoftFECDecoder",
    "category": "Measurements",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "iterations": {
      "type": "float",
@@ -4440,6 +4548,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.electrical.SoftFECEncoder",
    "category": "Electrical Sources",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "order": {
      "type": "float",
@@ -4487,6 +4596,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.passive.Splitter",
    "category": "Passive",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "excess_loss": {
      "type": "float",
@@ -4515,6 +4625,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.tilted.TiltedFiberBraggGrating",
    "category": "Passive",
    "version": "0.1.0",
+   "spectral": true,
    "parameters": {
     "period": {
      "type": "float",
@@ -4614,6 +4725,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.dsp.TimingRecovery",
    "category": "DSP",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "target": {
      "type": "float",
@@ -4643,6 +4755,7 @@ verdict, and DESIGN.md
    "class": "maiman.components.photonic.Waveguide",
    "category": "Photonic IC",
    "version": "0.1.0",
+   "spectral": true,
    "parameters": {
     "reference_wavelength": {
      "type": "float",
@@ -24637,6 +24750,8 @@ verdict, and DESIGN.md
            <span>${escapeHtml(m.category)}</span>
            <span style="color:var(--ink-4)">v${escapeHtml(m.version)}</span>
          </div>
+         ${m.spectral && label ? `<button class="sweep-go insp-spectrum" type="button"
+             data-node="${escapeHtml(label)}">Show its S-matrix spectrum</button>` : ""}
        </div>
        ${Object.entries(m.parameters)
           .map(([n, s]) => fieldFor(n, s, values && values[n],
@@ -24653,6 +24768,14 @@ verdict, and DESIGN.md
            </div>`).join("")}
        </div>`;
     $("#sb-sel").textContent = `${m.name}${label ? " · " + label : ""} selected`;
+    const spectrumButton = inspector.querySelector(".insp-spectrum");
+    if (spectrumButton) {
+      spectrumButton.addEventListener("click", () => {
+        showTab("smx");
+        fillSmatrixForm(spectrumButton.dataset.node);
+        runSmatrix();
+      });
+    }
   }
 
   /* ---------- Editing a parameter -------------------------------------------
@@ -25791,6 +25914,7 @@ verdict, and DESIGN.md
     if (active.dataset.pane === "eye") drawEye();
     if (active.dataset.pane === "osa") drawSpectrum();
     if (active.dataset.pane === "sens") { SWEEP.points ? drawSweep() : drawSens(); }
+    if (active.dataset.pane === "smx") { fillSmatrixForm(); drawSmatrix(); }
   }
 
   document.querySelectorAll(".tab").forEach((tab) => {
@@ -26924,7 +27048,7 @@ verdict, and DESIGN.md
       setRow("view-zoom-reset", { enabled: zoom !== 100 || view.x !== 0 || view.y !== 0 });
       const pane = $(".tab[aria-selected='true']");
       const current = pane ? pane.dataset.pane : "con";
-      for (const key of ["con", "eye", "osa", "sens", "log"]) {
+      for (const key of ["con", "eye", "osa", "sens", "smx", "log"]) {
         setRow(`view-pane-${key}`, { ticked: key === current });
       }
       const ground = document.documentElement.getAttribute("data-theme") === "dark"
@@ -26989,7 +27113,7 @@ verdict, and DESIGN.md
   onMenu("view-zoom-in", () => setZoom(zoom + 20));
   onMenu("view-zoom-out", () => setZoom(zoom - 20));
   onMenu("view-zoom-reset", resetView);
-  for (const key of ["con", "eye", "osa", "sens", "log"]) {
+  for (const key of ["con", "eye", "osa", "sens", "smx", "log"]) {
     onMenu(`view-pane-${key}`, () => showTab(key));
   }
   onMenu("view-ground-light", () => applyTheme("light"));
@@ -27051,6 +27175,226 @@ verdict, and DESIGN.md
     nodeSelect.onchange = fillSweepParams;
     paramSelect.onchange = seedSweepRange;
   }
+
+  /* ---------- S-matrix spectrum -------------------------------------------
+     One block, taken out of the link and asked for its scattering matrix
+     across a window. The engine does the work -- POST /api/spectrum builds the
+     block from the same node the run would and calls its spectrum() -- and this
+     draws every entry that is not identically zero. */
+  const SMX = { data: null, hidden: new Set(), node: null };
+
+  function spectralNodes() {
+    return PROJECT.nodes.filter((n) => DATA.manifests[n.type] && DATA.manifests[n.type].spectral);
+  }
+
+  function fillSmatrixForm(prefer) {
+    const select = $("#smx-node");
+    if (!select) return;
+    const nodes = spectralNodes();
+    const previous = prefer || select.value;
+    select.innerHTML = nodes
+      .map((n) => `<option value="${escapeHtml(n.id)}">${escapeHtml(n.id)} · ` +
+                  `${escapeHtml(DATA.manifests[n.type].name)}</option>`)
+      .join("");
+    if (previous && nodes.some((n) => n.id === previous)) select.value = previous;
+    else if (selected && nodes.some((n) => n.id === selected)) select.value = selected;
+    $("#smx-run").disabled = !nodes.length;
+    /* A spectrum of a block that has since been deleted is not a spectrum of
+       anything on the canvas. */
+    if (SMX.node && !nodes.some((n) => n.id === SMX.node)) { SMX.data = null; SMX.node = null; }
+  }
+
+  function smxLabel(trace) {
+    return `S(${trace.to} \u2190 ${trace.from})`;
+  }
+
+  function fillSmatrixTraces() {
+    const box = $("#smx-traces");
+    if (!SMX.data) { box.innerHTML = ""; return; }
+    box.innerHTML = SMX.data.traces.map((t, i) => {
+      const key = `${t.to}|${t.from}`;
+      const on = !SMX.hidden.has(key);
+      return `<label><input type="checkbox" data-key="${escapeHtml(key)}" ${on ? "checked" : ""}>` +
+             `<span class="swatch" style="background:${seriesColour(i)}"></span>` +
+             `${escapeHtml(smxLabel(t))}</label>`;
+    }).join("");
+    box.querySelectorAll("input").forEach((input) => {
+      input.addEventListener("change", () => {
+        if (input.checked) SMX.hidden.delete(input.dataset.key);
+        else SMX.hidden.add(input.dataset.key);
+        drawSmatrix();
+      });
+    });
+  }
+
+  async function runSmatrix() {
+    if (!SESSION.api) {
+      flashHint("the S-matrix needs the session server");
+      logLine("—", "S-matrix needs the session server; this page was opened from disk", "warn");
+      return;
+    }
+    const node = nodeById($("#smx-node").value);
+    if (!node) { flashHint("this graph has no photonic block with a spectrum"); return; }
+    const request = {
+      node: { id: node.id, type: node.type, config: node.config || {}, params: node.params || {} },
+      points: Math.round(Number($("#smx-points").value) || 801),
+      polarization: $("#smx-pol").value,
+    };
+    const from = $("#smx-from").value.trim(), to = $("#smx-to").value.trim();
+    if (from) request.from_nm = Number(from);
+    if (to) request.to_nm = Number(to);
+
+    const button = $("#smx-run");
+    button.disabled = true;
+    button.textContent = "computing…";
+    kernel(`spectrum of ${node.id}…`);
+    const started = performance.now();
+    try {
+      const payload = await callApi("/api/spectrum", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      });
+      const seconds = (performance.now() - started) / 1000;
+      SMX.data = payload;
+      SMX.node = node.id;
+      SMX.hidden.clear();
+      const wl = payload.wavelength_nm;
+      $("#smx-from").value = fmt(wl[0]);
+      $("#smx-to").value = fmt(wl[wl.length - 1]);
+      fillSmatrixTraces();
+      drawSmatrix();
+      kernel("engine ready");
+      $("#sb-time").textContent = `spectrum ${seconds.toFixed(2)} s`;
+      logLine("—", `spectrum of ${node.id}: ${payload.traces.length} entries over ` +
+                   `${fmt(wl[0])}–${fmt(wl[wl.length - 1])} nm, ${wl.length} points`, "ok");
+    } catch (err) {
+      const status = err.status || 0;
+      const kind = status === 400 ? "spectrum rejected"
+                 : status === 422 ? "block will not build"
+                 : "session server unreachable";
+      kernel(kind, "failed");
+      logLine("—", `${kind}: ${err.message}`, "fail");
+      if (err.detail) logLine("", err.detail, "warn");
+      showTab("log");
+    } finally {
+      button.disabled = !spectralNodes().length;
+      button.textContent = "Compute spectrum";
+    }
+  }
+
+  function drawSmatrix() {
+    const c = $("#smx-canvas");
+    if (!c || !c.parentElement.offsetWidth) return;
+    const { ctx, w, h } = sizeCanvas(c);
+    ctx.fillStyle = tok("--plot-bg"); ctx.fillRect(0, 0, w, h);
+    const summary = $("#smx-summary");
+    if (!spectralNodes().length) {
+      summary.innerHTML = "";
+      drawNothing(ctx, w, h, "No photonic block in this graph", [
+        "A grating, a ring, a coupler or an interferometer has a scattering",
+        "matrix to show. Add one from the palette.",
+      ]);
+      return;
+    }
+    if (!SMX.data) {
+      summary.innerHTML = "";
+      drawNothing(ctx, w, h, "No spectrum computed", [
+        "Pick a block and press Compute spectrum,",
+        "or use the button in its properties.",
+      ]);
+      return;
+    }
+    const quantity = $("#smx-y").value;
+    const wl = SMX.data.wavelength_nm;
+    const shown = SMX.data.traces
+      .map((t, i) => ({ trace: t, colour: seriesColour(i) }))
+      .filter(({ trace }) => !SMX.hidden.has(`${trace.to}|${trace.from}`));
+    if (!shown.length) {
+      summary.innerHTML = "";
+      drawNothing(ctx, w, h, "Every entry hidden", ["Tick one in the list beside the plot."]);
+      return;
+    }
+
+    const padL = 58, padB = 30, padT = 12, padR = 14;
+    const pw = w - padL - padR, ph = h - padT - padB;
+    const values = shown.flatMap(({ trace }) => trace[quantity]).filter(Number.isFinite)
+      .sort((a, b) => a - b);
+    if (!values.length) {
+      summary.innerHTML = "";
+      drawNothing(ctx, w, h, "Nothing defined to plot", [
+        "Every entry shown is too far down for its phase to mean anything.",
+      ]);
+      return;
+    }
+    /* Power keeps its extremes -- the depth of a notch is the reading. Phase
+       and delay are fitted to the 1st and 99th percentiles, so one steep point
+       at the edge of a gap cannot flatten everything else against the axis. */
+    const at = (q) => values[Math.min(values.length - 1, Math.max(0, Math.round(q * (values.length - 1))))];
+    let y0 = quantity === "power_db" ? values[0] : at(0.01);
+    let y1 = quantity === "power_db" ? values[values.length - 1] : at(0.99);
+    if (quantity === "power_db") { y1 = Math.max(0, y1); y0 = Math.max(y0, y1 - 80); }
+    if (y1 - y0 < 1e-9) { y0 -= 1; y1 += 1; }
+    const pad = (y1 - y0) * 0.06;
+    y0 -= pad; y1 += pad;
+    const x0 = wl[0], x1 = wl[wl.length - 1];
+    const X = (v) => padL + ((v - x0) / (x1 - x0)) * pw;
+    const Y = (v) => padT + ph - ((Math.max(y0, Math.min(y1, v)) - y0) / (y1 - y0)) * ph;
+
+    ctx.font = MONO_10;
+    ctx.strokeStyle = tok("--rule-soft"); ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i += 1) {
+      const value = y0 + ((y1 - y0) * i) / 4;
+      const y = padT + ph - (i / 4) * ph;
+      ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
+      ctx.fillStyle = tok("--ink-4"); ctx.textAlign = "right"; ctx.textBaseline = "middle";
+      ctx.fillText(String(Number(value.toPrecision(3))), padL - 6, y);
+    }
+    ctx.strokeStyle = tok("--rule"); ctx.beginPath();
+    ctx.moveTo(padL, padT); ctx.lineTo(padL, padT + ph); ctx.lineTo(w - padR, padT + ph);
+    ctx.stroke();
+    ctx.fillStyle = tok("--ink-4"); ctx.textAlign = "center"; ctx.textBaseline = "top";
+    for (let i = 0; i <= 4; i += 1) {
+      const value = x0 + ((x1 - x0) * i) / 4;
+      ctx.fillText(value.toFixed(value >= 1000 ? 2 : 3), X(value), padT + ph + 7);
+    }
+    ctx.textAlign = "left";
+    ctx.fillText("wavelength (nm)", padL, padT + ph + 19);
+    ctx.textAlign = "right";
+    const unit = { power_db: "|S|² (dB)", phase_rad: "phase (rad)",
+                   group_delay_ps: "group delay (ps)" }[quantity];
+    ctx.fillText(`${SMX.node} · ${unit}`, w - padR, padT + ph + 19);
+
+    for (const { trace, colour } of shown) {
+      const ys = trace[quantity];
+      ctx.strokeStyle = colour; ctx.lineWidth = 1.5; ctx.beginPath();
+      /* A null is a point with no defined value: lift the pen there, so a gap
+         reads as a gap rather than as a line drawn across it. */
+      let pen = false;
+      ys.forEach((v, k) => {
+        if (v === null || !Number.isFinite(v)) { pen = false; return; }
+        if (pen) ctx.lineTo(X(wl[k]), Y(v)); else ctx.moveTo(X(wl[k]), Y(v));
+        pen = true;
+      });
+      ctx.stroke();
+    }
+
+    /* The readings follow the first ticked entry, the way the OSA's do: its
+       extremes and where they sit, which for a transmission is the notch. */
+    const first = shown[0].trace;
+    const ys = first.power_db;
+    let lo = 0, hi = 0;
+    ys.forEach((v, k) => { if (v < ys[lo]) lo = k; if (v > ys[hi]) hi = k; });
+    summary.innerHTML =
+      `<div class="stat"><dt>Entry</dt><dd>${escapeHtml(smxLabel(first))}</dd></div>` +
+      `<div class="stat"><dt>Deepest</dt><dd>${ys[lo].toFixed(2)} dB</dd></div>` +
+      `<div class="stat"><dt>At</dt><dd>${wl[lo].toFixed(3)} nm</dd></div>` +
+      `<div class="stat"><dt>Highest</dt><dd>${ys[hi].toFixed(2)} dB</dd></div>` +
+      `<div class="stat"><dt>At</dt><dd>${wl[hi].toFixed(3)} nm</dd></div>`;
+  }
+
+  $("#smx-run").addEventListener("click", runSmatrix);
+  $("#smx-y").addEventListener("change", drawSmatrix);
 
   /* Start the range somewhere sensible: around the value the block already has,
      inside whatever bounds the parameter declares. Someone sweeping launch

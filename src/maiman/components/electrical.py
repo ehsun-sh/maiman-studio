@@ -339,10 +339,11 @@ class SoftFECEncoder(Component):
     class for the argument in full.
 
     The code is the braided BCH staircase in :mod:`maiman.softfec` at 16.4 %
-    overhead — **not** OIF's oFEC, which is normative about an interleaver and a
-    framing this does not reproduce. What it is is the family oFEC belongs to,
-    built from the open literature, and the thing that makes it worth having in
-    a link is that it decodes on log-likelihood ratios rather than on bits.
+    overhead — the family OFEC belongs to, built from the open literature, and
+    **not** OFEC, whose frame is 596,736 bits and would not fit a run window.
+    OFEC itself, bit-exact, is :mod:`maiman.ofec`. What makes either worth
+    having in a link is that it decodes on log-likelihood ratios rather than on
+    bits.
 
     The window must hold a whole number of 16384-bit blocks, and it wants
     **several**: the last block of a stream has no successor stripe, so half its

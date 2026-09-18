@@ -117,6 +117,11 @@ class TiltedFiberBraggGrating(ScatteringDevice):
             wavelength = 2.0 * guided[0].effective_index * axial
         return wavelength
 
+    def spectral_window(self) -> tuple[float, float]:
+        """The comb below the Bragg line, and the line itself."""
+        bragg = self.bragg_wavelength()
+        return bragg - 6e-9, bragg + 1e-9
+
     def resonances(
         self, band: tuple[float, float] | None = None
     ) -> list[tuple[int, int, float, float]]:

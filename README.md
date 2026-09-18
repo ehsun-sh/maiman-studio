@@ -354,6 +354,18 @@ none: a figure read off the displayed curve would move with the resolution knob 
 the OSNR anyone means. `examples/wdm_osa.maiman` opens four channels on the 100 GHz grid through
 two amplified spans, which is what the trace baked into the page is a run of.
 
+**A block's own spectrum.** Select a grating, a ring, a coupler or any other photonic block and its
+properties carry *Show its S-matrix spectrum*: the S-matrix tab draws every entry of its scattering
+matrix across a window — as power, phase or group delay — without a link run through it. The
+window starts where the device is worth looking at (a grating's line, four of a ring's free spectral
+ranges) and can be moved anywhere. The engine does the work: `POST /api/spectrum` builds the block
+from the same node a run would and calls `spectrum()` on it, which a script can call just the same.
+Group delay is a local derivative, `S(f + δ)` against `S(f)`, not a differenced unwrap of the
+sampled phase: the unwrap made a straight waveguide's 14 ps into −1 ps as soon as the grid was
+coarser than its delay, and the derivative has no such limit. Where an entry is 40 dB below its own
+peak its phase means nothing, and the plot leaves a gap rather than drawing the spike. A 10 mm
+Bragg grating reads 48 ps away from its line — one transit — and 72 ps at the band edge.
+
 **Open and save.** `File → Save` writes a `.maiman` file: the same document the canvas draws, the
 same one the server runs, with the block positions folded in. `File → Open` reads one back. Both
 go through the browser — the file is chosen in the operating system's own picker and read locally,
@@ -599,10 +611,42 @@ soft-decision argument is about.
 
 **The code is a braided BCH staircase** — Smith, Farhood, Hunt, Kschischang and Lodge,
 *J. Lightwave Technol.* 30(1), 2012 — with Chase-II component decoding (Chase, 1972) and Pyndiah's
-soft-output variant (Pyndiah, 1998). It is the family OIF's **oFEC belongs to and it is not oFEC**:
-the 400ZR Implementation Agreement is normative about an interleaver and a framing this does not
-reproduce, and a block that carried the name while being a reconstruction would be the one thing
-this project refuses. The parameters are stated as a choice, not as a standard.
+soft-output variant (Pyndiah, 1998). It is the family **OFEC belongs to and it is not OFEC**, and a
+block that carried the name while being a reconstruction would be the one thing this project
+refuses. The parameters are stated as a choice, not as a standard.
+
+### And OFEC itself, bit for bit
+
+`maiman.ofec` is OFEC, written with the normative document open — the Open ROADM MSA 6.0 W-Port
+Digital Specification, clause 10 (the same code is in ITU-T G.709.6, OpenZR+ and OIF's 800ZR, and
+**not** in 400ZR, which uses another; this README once said otherwise). Four encoders, each a
+semi-infinite matrix of 16 × 16 blocks in which every bit is the front of one extended BCH(256, 239)
+codeword and the back of another twenty block-rows later, the `^ r` twist the specification credits
+with a minimum distance of at least 42, Table 8's intra-block permutation and the four-subset
+inter-block read-out. Its component generator is exactly the one `softfec.bch_code(8, 2)` builds.
+
+**Bit-exact is a claim with a test behind it**: against the specification's own test vectors the
+encoders reproduce TP5 from TP2 and the interleavers TP6 from TP5 with no bit different —
+2,752,512 bits for DP-QPSK, 5,505,024 for DP-16QAM. The two places the text left open were settled
+by the vectors, which only one reading reproduces: which encoder each bit of a codec block goes to,
+and that TP6 is already merged four (or eight) bits at a time from the two interleavers. The vectors
+carry no licence to redistribute, so they are not in this repository; point `MAIMAN_OFEC_VECTORS` at
+them and the test runs, and without them a fingerprint of the output taken while it matched holds it
+in place.
+
+The decoder is this project's — the specification leaves decoding open — soft-in soft-out Chase on
+each bit's two codewords:
+
+```
+   raw BER    3 passes, Chase-4    6 passes, Chase-6
+   1.0 %      clean                clean
+   1.5 %      18 in 1e5            clean
+   2.0 %      1 in 80              17 in 1e5
+```
+
+The specification quotes 2.0e-2 with three iterations for its decoders; this one reaches it with
+six passes and six test bits. The gap is the decoder's, not the code's. Not covered: the FlexO
+adaptation, CRC and scrambler before the encoders, and the symbol mapping and framing after them.
 
 **Three things had to exist before any of this could be wired up**, and each is its own block:
 
@@ -3211,7 +3255,7 @@ time window, and results are reproducible.
 | **3 — GUI & WDM** ✅ | Wavelength-selective filters, the ITU grids and a multiplexer/demultiplexer pair on them with crosstalk that falls out of the channel spacing, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — the OSA's trace drawn in the dock, and 400G/800G reference designs validated against the OSNR relations, and a back-end indirection the propagation kernels dispatch through — CuPy runs it where a device exists, `maiman devices` cross-checks it against NumPy, and a CI job does the same on any runner labelled `gpu` | ~6 months |
 | **4 — PIC** ✅ | Bidirectional S-matrix circuit solver, waveguide, directional coupler, all-pass and add-drop ring resonators, cross-validated against SAX; N×N MMI couplers on the self-imaging phase relations; a Mach-Zehnder interferometer assembled from them — switch, interleaver, or both; and PDK import, which reads a foundry's fitted numbers out of a JSON kit and refuses to extrapolate them past the window they were fitted in; and birefringence, with each guided polarization carrying its own indices through the same reduction | — |
 | **5 — Gratings, sensing, loops and coupling** ✅ | Fibre Bragg gratings assembled from transfer matrices — apodized, chirped, sampled and phase-shifted — a circulator with isolation and return loss, and a grating read as a strain gauge and a thermometer, by a swept laser or by broadband light on an analyser; noise that carries the spectral shape of what it passed through; loop control that runs a cavity to its fixed point, and a delay line that turns the same loop into a recirculating one lap by lap; pump depletion for four-wave mixing and Raman's measured gain shape past its peak; an erbium transient spread across the spectrum, each channel moving by the fibre's own tilt, drained per channel by its own cross section, and answered by a pump control loop with a bandwidth and a ceiling; PMD applied along the span between Kerr steps, and the coherent polarization term that moves power between the axes; a scalar mode solver for core and cladding modes, and the vector HE, EH, TE and TM modes the glass-air boundary splits them into, checked against the exact characteristic equation; a long-period grating built on either, and a tilted grating whose comb of cladding resonances reads what the fibre is dipped in; edge and grating couplers that put a signal into the chip's TE and TM, the edge coupler's two facets a cavity summed bounce by bounce and the grating coupler's passband computed from its vertical stack; a PAM4 driver with its modulator's linearity corrected, and a feed-forward and decision-feedback equaliser, fractionally spaced or blind; a laser's linewidth and intensity noise from its own Langevin forces, and the partition noise between a Fabry-Perot laser's modes; a directly modulated laser whose chirp comes out of its own rate equations; and templates in the studio's File menu, including an eight-channel DWDM link | — |
-| **Open** | Amplified spontaneous emission saturating the reservoir, which in a lightly loaded amplifier it does; the pumps' own nonlinear phase in four-wave mixing between spans; material dispersion, the polarization dependence of a tilted grating's comb, and recoupling at a second long-period grating; the grating's own back-reflection from its teeth, and the fibre's height above it; mode partition noise in the link itself, which needs bands that carry their delays to the detector; bit-exact oFEC, which needs the OIF document open rather than recalled; a spectral view of a block's scattering matrix in the studio | — |
+| **Open** | Amplified spontaneous emission saturating the reservoir, which in a lightly loaded amplifier it does; the pumps' own nonlinear phase in four-wave mixing between spans; material dispersion, the polarization dependence of a tilted grating's comb, and recoupling at a second long-period grating; the grating's own back-reflection from its teeth, and the fibre's height above it; mode partition noise in the link itself, which needs bands that carry their delays to the detector; the W-Port framing around OFEC — its FlexO adaptation, scrambler and symbol framing | — |
 
 ¹ One developer, part-time. Estimates, not commitments.
 

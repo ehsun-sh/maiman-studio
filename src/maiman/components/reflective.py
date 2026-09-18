@@ -286,6 +286,12 @@ class FiberBraggGrating(ScatteringDevice):
         """
         return float(np.tanh(self.coupling() * self.si("length")) ** 2)
 
+    def spectral_window(self) -> tuple[float, float]:
+        """The Bragg line, four of its own widths across, as sensed."""
+        centre = self.sensed_bragg_wavelength()
+        half = 2.0 * self.bandwidth()
+        return centre - half, centre + half
+
     def bandwidth(self) -> float:
         """Full width between the first nulls either side of the peak [m of wavelength].
 

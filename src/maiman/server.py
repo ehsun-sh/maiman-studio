@@ -43,10 +43,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from typing import Any
 
+import numpy as np
+
 from . import __version__, manifests
 from .encoding import EncodingError, encode, encode_results, scalars
 from .graph import Graph, GraphError, Progress, Results
-from .project import ProjectError, graph_from_dict, ui_from_dict
+from .project import ProjectError, component_from_dict, graph_from_dict, ui_from_dict
 from .registry import UnknownComponentError
 from .sweep import sweep
 
@@ -203,6 +205,76 @@ MAX_SWEEP_RUNS = 64
 #: And the product of the two, which is what actually decides how long a browser
 #: sits waiting.
 MAX_SWEEP_TOTAL = 1024
+
+
+def run_spectrum(request: dict[str, Any]) -> dict[str, Any]:
+    """One block's scattering matrix across a window: the studio's S-matrix pane.
+
+    The request carries a project node -- ``{id, type, config, params}``, as the
+    studio holds it -- and optionally ``from_nm``, ``to_nm``, ``points`` and
+    ``polarization``; the answer is every non-zero entry as power, phase and
+    group delay. It builds the block through
+    :func:`maiman.project.component_from_dict` and calls its
+    :meth:`~maiman.components.photonic.ScatteringDevice.spectrum`, which is all it
+    does: a script gets the same numbers from those two calls.
+    """
+    if not isinstance(request, dict) or not isinstance(request.get("node"), dict):
+        raise RequestError(HTTPStatus.BAD_REQUEST, "expected {'node': {...}} describing one block")
+    try:
+        component = component_from_dict(request["node"])
+    except (ProjectError, UnknownComponentError) as error:
+        raise RequestError(HTTPStatus.UNPROCESSABLE_ENTITY, str(error)) from error
+    spectrum_of = getattr(component, "spectrum", None)
+    if not type(component).spectral or spectrum_of is None:
+        raise RequestError(
+            HTTPStatus.BAD_REQUEST,
+            f"{request['node'].get('type')} is not a scattering device and has no spectrum",
+            "Pick a grating, a ring, a coupler or another photonic block.",
+        )
+
+    def nanometres(key: str) -> float | None:
+        value = request.get(key)
+        if value is None:
+            return None
+        try:
+            return float(value) * 1e-9
+        except (TypeError, ValueError):
+            raise RequestError(HTTPStatus.BAD_REQUEST, f"{key} must be a number") from None
+
+    try:
+        spectrum = spectrum_of(
+            nanometres("from_nm"),
+            nanometres("to_nm"),
+            points=int(request.get("points", 801)),
+            polarization=str(request.get("polarization", "te")),
+        )
+    except (TypeError, ValueError) as error:
+        raise RequestError(HTTPStatus.BAD_REQUEST, str(error)) from error
+
+    traces = []
+    for to, source in spectrum.pairs():
+        traces.append(
+            {
+                "to": to,
+                "from": source,
+                "power_db": spectrum.power_db(to, source).tolist(),
+                "phase_rad": spectrum.phase(to, source).tolist(),
+                # Undefined where the entry is too small to have a phase; JSON
+                # has no NaN, so those points travel as null and the plot
+                # leaves a gap there.
+                "group_delay_ps": [
+                    None if not np.isfinite(value) else value
+                    for value in (spectrum.group_delay(to, source) * 1e12).tolist()
+                ],
+            }
+        )
+    return {
+        "node": request["node"].get("id"),
+        "type": request["node"].get("type"),
+        "ports": list(spectrum.ports),
+        "wavelength_nm": (spectrum.wavelengths * 1e9).tolist(),
+        "traces": traces,
+    }
 
 
 def run_sweep(request: dict[str, Any]) -> dict[str, Any]:
@@ -466,6 +538,8 @@ class StudioHandler(BaseHTTPRequestHandler):
                 self._stream_run(self._body())
             elif route == "/api/sweep":
                 self._send(HTTPStatus.OK, run_sweep(self._body()))
+            elif route == "/api/spectrum":
+                self._send(HTTPStatus.OK, run_spectrum(self._body()))
             else:
                 raise RequestError(HTTPStatus.NOT_FOUND, f"no route {route!r}")
         except RequestError as error:

@@ -24,7 +24,7 @@ on one axis. Launch into one axis until that changes.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Any
 
 import numpy as np
@@ -275,6 +275,77 @@ def solve_once(build: Callable[[np.ndarray], SMatrix]) -> Callable[[np.ndarray],
     return solved
 
 
+#: Most points a spectrum is computed on. A grating's ripple and a ring's
+#: resonances are resolved long before this, and some devices solve modes at
+#: every call, so it is a ceiling on the wait rather than on the physics.
+MAX_SPECTRUM_POINTS = 4001
+
+
+@dataclass(frozen=True)
+class ScatteringSpectrum:
+    """A device's scattering matrix across a wavelength window, and what it means.
+
+    ``s[k, i, j]`` is the amplitude from port ``ports[j]`` to port ``ports[i]``
+    at ``wavelengths[k]``. The rest is read off it: power in decibels, phase,
+    and the group delay ``-d phi / d omega`` -- the quantity a grating's
+    dispersion and a ring's slow light are both made of, which a power trace
+    alone does not show.
+
+    ``shifted`` is the same matrix a hair higher in frequency, ``step`` [Hz]
+    above each point, and it is what the group delay is taken from. Unwrapping
+    the sampled phase and differencing it is the obvious way and it is wrong
+    whenever a device delays by more than half a period of the grid spacing: a
+    straight waveguide's 14 ps across 201 points of 100 nm moves its phase 5.5
+    rad a step, and the unwrap turned that into -1 ps. A local derivative has
+    no such limit.
+    """
+
+    ports: tuple[str, ...]
+    wavelengths: np.ndarray
+    s: np.ndarray
+    shifted: np.ndarray
+    step: np.ndarray
+
+    def pairs(self, floor: float = 1e-9) -> list[tuple[str, str]]:
+        """``(to, from)`` for every entry that is not identically zero across the window."""
+        found = []
+        for j, source in enumerate(self.ports):
+            for i, target in enumerate(self.ports):
+                if float(np.max(np.abs(self.s[:, i, j]))) > floor:
+                    found.append((target, source))
+        return found
+
+    def entry(self, to: str, source: str) -> np.ndarray:
+        return np.asarray(self.s[:, self.ports.index(to), self.ports.index(source)])
+
+    def power_db(self, to: str, source: str, floor_db: float = -100.0) -> np.ndarray:
+        power = np.abs(self.entry(to, source)) ** 2
+        return np.asarray(np.maximum(10.0 * np.log10(np.maximum(power, 1e-300)), floor_db))
+
+    def phase(self, to: str, source: str) -> np.ndarray:
+        """Unwrapped along increasing frequency, returned in wavelength order [rad]."""
+        order = np.argsort(C_LIGHT / self.wavelengths)
+        unwrapped = np.empty(self.wavelengths.size)
+        unwrapped[order] = np.unwrap(np.angle(self.entry(to, source)[order]))
+        return unwrapped
+
+    def group_delay(self, to: str, source: str, *, depth_db: float = 40.0) -> np.ndarray:
+        """``-d phi / d omega`` [s], in wavelength order; NaN where it means nothing.
+
+        Where an entry falls ``depth_db`` below its own peak -- a grating's
+        reflection between its sidelobes, a ring's through port on resonance --
+        its phase is the phase of almost nothing and jumps by pi across every
+        zero, and the derivative of that is a spike, not a delay. Those points
+        are left undefined rather than drawn as a delay nobody could measure.
+        """
+        i, j = self.ports.index(to), self.ports.index(source)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            turn = np.angle(self.shifted[:, i, j] / self.s[:, i, j])
+        delay = -turn / (2.0 * np.pi * self.step)
+        power = self.power_db(to, source, floor_db=-400.0)
+        return np.where(power < float(np.max(power)) - depth_db, np.nan, delay)
+
+
 class ScatteringDevice(Component):
     """A block whose physics *is* a scattering matrix, and which will hand it over.
 
@@ -292,6 +363,59 @@ class ScatteringDevice(Component):
     """
 
     abstract = True
+    spectral = True
+
+    def spectral_window(self) -> tuple[float, float]:
+        """The wavelengths [m] its spectrum is worth looking at by default.
+
+        The C and L bands' neighbourhood unless a device knows better: a grating
+        knows where its line is, a ring how far apart its resonances sit. Only a
+        default -- the studio lets the window be moved anywhere.
+        """
+        return 1.5e-6, 1.6e-6
+
+    def spectrum(
+        self,
+        low: float | None = None,
+        high: float | None = None,
+        *,
+        points: int = 801,
+        polarization: str = "te",
+    ) -> ScatteringSpectrum:
+        """The scattering matrix across ``[low, high]`` [m], evenly in wavelength.
+
+        Either end left out comes from :meth:`spectral_window`. This is what the
+        studio's S-matrix pane plots, and a script can call it the same way.
+        """
+        default_low, default_high = self.spectral_window()
+        lo = default_low if low is None else low
+        hi = default_high if high is None else high
+        if not 0.0 < lo < hi:
+            raise ValueError(
+                f"a window runs from a shorter wavelength to a longer, got {lo}..{hi} m"
+            )
+        if not 2 <= points <= MAX_SPECTRUM_POINTS:
+            raise ValueError(f"points must be between 2 and {MAX_SPECTRUM_POINTS}, got {points}")
+        if polarization not in ("te", "tm"):
+            raise ValueError(f"polarization is 'te' or 'tm', got {polarization!r}")
+        wavelengths = np.linspace(lo, hi, points)
+        frequencies = C_LIGHT / wavelengths
+        # One part in ten million: far below any feature a device has, far above
+        # rounding, and small enough that a delay of microseconds still turns
+        # the phase by less than a half turn across it. Both grids go through
+        # one call, so a device that interpolates a mode table sees one table.
+        step = frequencies * 1e-7
+        matrix = self.scattering_matrix(
+            np.concatenate([frequencies, frequencies + step]), polarization=polarization
+        )
+        both = np.asarray(matrix.s)
+        return ScatteringSpectrum(
+            ports=tuple(matrix.ports),
+            wavelengths=wavelengths,
+            s=both[:points],
+            shifted=both[points:],
+            step=step,
+        )
 
     def scattering_matrix(self, frequencies: np.ndarray, *, polarization: str = "te") -> SMatrix:
         """This device's scattering matrix on a frequency grid [Hz]."""
@@ -770,6 +894,12 @@ class RingResonator(_Photonic):
     def free_spectral_range(self) -> float:
         """Spacing between resonances [Hz]."""
         return free_spectral_range(self.si("length"), self.n_group)
+
+    def spectral_window(self) -> tuple[float, float]:
+        """Four free spectral ranges around the reference wavelength."""
+        centre = self.si("reference_wavelength")
+        span = 4.0 * centre**2 * self.free_spectral_range() / C_LIGHT
+        return centre - span / 2.0, centre + span / 2.0
 
     def linewidth(self) -> float:
         """Full width at half depth of one resonance [Hz]."""

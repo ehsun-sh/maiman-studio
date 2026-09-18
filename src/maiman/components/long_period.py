@@ -111,6 +111,10 @@ class LongPeriodGrating(ScatteringDevice):
         count = int(self.cladding_modes)
         return 2 * count if self.vector else count
 
+    def spectral_window(self) -> tuple[float, float]:
+        """Half a micron of band: its notches are tens of nanometres wide and far apart."""
+        return 1.2e-6, 1.7e-6
+
     def resonances(self, band: tuple[float, float] = (1.2e-6, 1.7e-6)) -> list[tuple[int, float]]:
         """``(cladding mode rank, wavelength [m])`` for every notch inside ``band``.
 

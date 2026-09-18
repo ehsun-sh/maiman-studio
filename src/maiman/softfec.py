@@ -9,12 +9,14 @@ two to three decibels over hard-decision coding come from — that, and the fact
 that it decodes on **log-likelihood ratios** rather than on bits.
 
 **What this is, and what it is not.** The construction here is the braided /
-staircase family that OIF's oFEC belongs to, with the soft component decoding
-oFEC uses. It is **not bit-exact oFEC**. The 400ZR Implementation Agreement is
-normative about its interleaver, its framing and its exact component-code
-shortening, and reproducing those faithfully needs the document open, not
-recalled. A block that claimed to be oFEC while being a reconstruction of it
-would be the one thing this project refuses to do: a number nobody can back.
+staircase family that OFEC belongs to, with the soft component decoding OFEC
+uses. It is **not OFEC**: OFEC is normative about its component-code layout,
+its interleavers and its bit order, and a block that claimed the name while
+being a reconstruction of it would be the one thing this project refuses to do.
+OFEC itself -- bit-exact, checked against its specification's test vectors -- is
+:mod:`maiman.ofec`, written with the Open ROADM document open. (It is defined by
+the Open ROADM MSA, ITU-T G.709.6 and OpenZR+, not by OIF's 400ZR agreement,
+as this note once said.)
 
 So the parts here are the parts that are derivable from the open literature, and
 they are cited:

@@ -6,6 +6,7 @@
    "class": "maiman.components.detectors.APDPhotodiode",
    "category": "Receivers",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "responsivity": {
      "type": "float",
@@ -84,6 +85,7 @@
    "class": "maiman.components.passive.Attenuator",
    "category": "Passive",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "attenuation": {
      "type": "float",
@@ -109,6 +111,7 @@
    "class": "maiman.components.analyzers.BERAnalyzer",
    "category": "Measurements",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "ignore_edges": {
      "type": "float",
@@ -147,6 +150,7 @@
    "class": "maiman.components.dsp.ButterflyEqualizer",
    "category": "DSP",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "taps": {
      "type": "float",
@@ -203,6 +207,7 @@
    "class": "maiman.components.sources.CWLaser",
    "category": "Optical Sources",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "power": {
      "type": "float",
@@ -247,6 +252,7 @@
    "class": "maiman.components.coherent.CarrierRecovery",
    "category": "DSP",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "test_phases": {
      "type": "float",
@@ -280,6 +286,7 @@
    "class": "maiman.components.reflective.Circulator",
    "category": "Passive",
    "version": "0.1.0",
+   "spectral": true,
    "parameters": {
     "insertion_loss": {
      "type": "float",
@@ -326,6 +333,7 @@
    "class": "maiman.components.dsp.CoarseFrequencyRecovery",
    "category": "DSP",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {},
    "structural": {},
    "ports": {
@@ -346,6 +354,7 @@
    "class": "maiman.components.coherent.CoherentReceiver",
    "category": "Receivers",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "responsivity": {
      "type": "float",
@@ -404,6 +413,7 @@
    "class": "maiman.components.passive.Combiner",
    "category": "Passive",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "insertion_loss": {
      "type": "float",
@@ -432,6 +442,7 @@
    "class": "maiman.components.analyzers.ConstellationAnalyzer",
    "category": "Measurements",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "ignore_edges": {
      "type": "float",
@@ -463,6 +474,7 @@
    "class": "maiman.components.analyzers.ConstellationDiagram",
    "category": "Measurements",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "bins": {
      "type": "float",
@@ -495,6 +507,7 @@
    "class": "maiman.components.electrical.DCVoltage",
    "category": "Electrical Sources",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "voltage": {
      "type": "float",
@@ -517,6 +530,7 @@
    "class": "maiman.components.delay.DelayLine",
    "category": "Passive",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "delay": {
      "type": "float",
@@ -542,6 +556,7 @@
    "class": "maiman.components.wdm.Demultiplexer",
    "category": "Passive",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "first_wavelength": {
      "type": "float",
@@ -609,6 +624,7 @@
    "class": "maiman.components.mapping.DifferentialDecoder",
    "category": "DSP",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {},
    "structural": {},
    "ports": {
@@ -626,6 +642,7 @@
    "class": "maiman.components.photonic.DirectionalCoupler",
    "category": "Photonic IC",
    "version": "0.1.0",
+   "spectral": true,
    "parameters": {
     "coupling": {
      "type": "float",
@@ -662,6 +679,7 @@
    "class": "maiman.components.dml.DirectlyModulatedLaser",
    "category": "Optical Sources",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "bias_current": {
      "type": "float",
@@ -795,6 +813,7 @@
    "class": "maiman.components.dsp.DispersionCompensator",
    "category": "DSP",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "accumulated_dispersion": {
      "type": "float",
@@ -847,6 +866,7 @@
    "class": "maiman.components.coherent.DualPolarizationReceiver",
    "category": "Receivers",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "responsivity": {
      "type": "float",
@@ -907,6 +927,7 @@
    "class": "maiman.components.amplifiers.EDFA",
    "category": "Amplifiers",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "gain": {
      "type": "float",
@@ -966,6 +987,7 @@
    "class": "maiman.components.couplers.EdgeCoupler",
    "category": "Photonic IC",
    "version": "0.1.0",
+   "spectral": true,
    "parameters": {
     "rotation": {
      "type": "float",
@@ -1077,6 +1099,7 @@
    "class": "maiman.components.filters.ElectricalFilter",
    "category": "Electrical",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "bandwidth": {
      "type": "float",
@@ -1102,6 +1125,7 @@
    "class": "maiman.components.analyzers.EyeDiagram",
    "category": "Measurements",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "span_symbols": {
      "type": "float",
@@ -1141,6 +1165,7 @@
    "class": "maiman.components.electrical.FECDecoder",
    "category": "Measurements",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {},
    "structural": {},
    "ports": {
@@ -1160,6 +1185,7 @@
    "class": "maiman.components.electrical.FECEncoder",
    "category": "Electrical Sources",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "order": {
      "type": "float",
@@ -1207,6 +1233,7 @@
    "class": "maiman.components.pam.FFEDFEEqualizer",
    "category": "DSP",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "ffe_taps": {
      "type": "float",
@@ -1274,6 +1301,7 @@
    "class": "maiman.components.feedback.Feedback",
    "category": "Signal Flow",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "passes": {
      "type": "float",
@@ -1301,6 +1329,7 @@
    "class": "maiman.components.fiber.Fiber",
    "category": "Fiber",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "length": {
      "type": "float",
@@ -1427,6 +1456,7 @@
    "class": "maiman.components.reflective.FiberBraggGrating",
    "category": "Passive",
    "version": "0.1.0",
+   "spectral": true,
    "parameters": {
     "length": {
      "type": "float",
@@ -1563,6 +1593,7 @@
    "class": "maiman.components.dsp.FrequencyRecovery",
    "category": "DSP",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {},
    "structural": {},
    "ports": {
@@ -1581,6 +1612,7 @@
    "class": "maiman.components.sources.GaussianPulse",
    "category": "Optical Sources",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "peak_power": {
      "type": "float",
@@ -1624,6 +1656,7 @@
    "class": "maiman.components.couplers.GratingCoupler",
    "category": "Photonic IC",
    "version": "0.1.0",
+   "spectral": true,
    "parameters": {
     "rotation": {
      "type": "float",
@@ -1799,6 +1832,7 @@
    "class": "maiman.components.electrical.IQDriver",
    "category": "Electrical",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "v_pi": {
      "type": "float",
@@ -1861,6 +1895,7 @@
    "class": "maiman.components.modulators.IQModulator",
    "category": "Modulators",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "v_pi": {
      "type": "float",
@@ -1913,6 +1948,7 @@
    "class": "maiman.components.coherent.IQSampler",
    "category": "Receivers",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "sample_offset": {
      "type": "float",
@@ -1967,6 +2003,7 @@
    "class": "maiman.components.long_period.LongPeriodGrating",
    "category": "Passive",
    "version": "0.1.0",
+   "spectral": true,
    "parameters": {
     "period": {
      "type": "float",
@@ -2062,6 +2099,7 @@
    "class": "maiman.components.photonic.MMI",
    "category": "Photonic IC",
    "version": "0.1.0",
+   "spectral": true,
    "parameters": {
     "excess_loss": {
      "type": "float",
@@ -2098,6 +2136,7 @@
    "class": "maiman.components.photonic.MachZehnderInterferometer",
    "category": "Photonic IC",
    "version": "0.1.0",
+   "spectral": true,
    "parameters": {
     "reference_wavelength": {
      "type": "float",
@@ -2220,6 +2259,7 @@
    "class": "maiman.components.modulators.MachZehnderModulator",
    "category": "Modulators",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "v_pi": {
      "type": "float",
@@ -2266,6 +2306,7 @@
    "class": "maiman.components.wdm.Multiplexer",
    "category": "Passive",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "first_wavelength": {
      "type": "float",
@@ -2333,6 +2374,7 @@
    "class": "maiman.components.electrical.NRZDriver",
    "category": "Electrical",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "v_low": {
      "type": "float",
@@ -2363,6 +2405,7 @@
    "class": "maiman.components.meters.OSNRMeter",
    "category": "Measurements",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "reference_bandwidth": {
      "type": "float",
@@ -2388,6 +2431,7 @@
    "class": "maiman.components.filters.OpticalFilter",
    "category": "Passive",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "center_wavelength": {
      "type": "float",
@@ -2443,6 +2487,7 @@
    "class": "maiman.components.filters.OpticalSpectrumAnalyzer",
    "category": "Measurements",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "auto_span": {
      "type": "bool",
@@ -2498,6 +2543,7 @@
    "class": "maiman.components.pam.PAM4Driver",
    "category": "Electrical",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "v_low": {
      "type": "float",
@@ -2541,6 +2587,7 @@
    "class": "maiman.components.detectors.PINPhotodiode",
    "category": "Receivers",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "responsivity": {
      "type": "float",
@@ -2604,6 +2651,7 @@
    "class": "maiman.components.electrical.PRBSGenerator",
    "category": "Electrical Sources",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "order": {
      "type": "float",
@@ -2650,6 +2698,7 @@
    "class": "maiman.components.mapping.PilotInserter",
    "category": "Modulation",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "spacing": {
      "type": "float",
@@ -2675,6 +2724,7 @@
    "class": "maiman.components.mapping.PilotPhaseRecovery",
    "category": "DSP",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "spacing": {
      "type": "float",
@@ -2702,6 +2752,7 @@
    "class": "maiman.components.passive.PolarizationCombiner",
    "category": "Passive",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "insertion_loss": {
      "type": "float",
@@ -2728,6 +2779,7 @@
    "class": "maiman.components.passive.PolarizationRotator",
    "category": "Passive",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "angle": {
      "type": "float",
@@ -2758,6 +2810,7 @@
    "class": "maiman.components.meters.PowerMeter",
    "category": "Measurements",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {},
    "structural": {},
    "ports": {
@@ -2775,6 +2828,7 @@
    "class": "maiman.components.mapping.QAMMapper",
    "category": "Modulation",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "bits_per_symbol": {
      "type": "float",
@@ -2814,6 +2868,7 @@
    "class": "maiman.components.photonic.RingResonator",
    "category": "Photonic IC",
    "version": "0.1.0",
+   "spectral": true,
    "parameters": {
     "reference_wavelength": {
      "type": "float",
@@ -2916,6 +2971,7 @@
    "class": "maiman.components.sources.SechPulse",
    "category": "Optical Sources",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "peak_power": {
      "type": "float",
@@ -2953,6 +3009,7 @@
    "class": "maiman.components.analyzers.Slicer",
    "category": "Receivers",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "sample_offset": {
      "type": "float",
@@ -2983,6 +3040,7 @@
    "class": "maiman.components.dsp.SoftDemapper",
    "category": "DSP",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "pilot_spacing": {
      "type": "float",
@@ -3008,6 +3066,7 @@
    "class": "maiman.components.electrical.SoftFECDecoder",
    "category": "Measurements",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "iterations": {
      "type": "float",
@@ -3044,6 +3103,7 @@
    "class": "maiman.components.electrical.SoftFECEncoder",
    "category": "Electrical Sources",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "order": {
      "type": "float",
@@ -3091,6 +3151,7 @@
    "class": "maiman.components.passive.Splitter",
    "category": "Passive",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "excess_loss": {
      "type": "float",
@@ -3119,6 +3180,7 @@
    "class": "maiman.components.tilted.TiltedFiberBraggGrating",
    "category": "Passive",
    "version": "0.1.0",
+   "spectral": true,
    "parameters": {
     "period": {
      "type": "float",
@@ -3218,6 +3280,7 @@
    "class": "maiman.components.dsp.TimingRecovery",
    "category": "DSP",
    "version": "0.1.0",
+   "spectral": false,
    "parameters": {
     "target": {
      "type": "float",
@@ -3247,6 +3310,7 @@
    "class": "maiman.components.photonic.Waveguide",
    "category": "Photonic IC",
    "version": "0.1.0",
+   "spectral": true,
    "parameters": {
     "reference_wavelength": {
      "type": "float",
