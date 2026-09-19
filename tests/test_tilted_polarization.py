@@ -25,14 +25,19 @@ from maiman.context import SimulationContext
 from maiman.modes import StepIndexFibre, cladding_modes, core_modes
 from maiman.photonics import tilted_grating_coupling, vector_tilted_coupling
 from maiman.signals import Band, OpticalSignal
-from maiman.vector_modes import vector_cladding_modes, vector_core_modes, vector_coupling
+from maiman.vector_modes import (
+    VectorMode,
+    vector_cladding_modes,
+    vector_core_modes,
+    vector_coupling,
+)
 
 WAVELENGTH = 1.55e-6
 PERIOD = 535e-9
 TILT = math.radians(4.0)
 
 
-def coupling(core, partner, polarization: str, tilt: float = TILT) -> float:  # type: ignore[no-untyped-def]
+def coupling(core: VectorMode, partner: VectorMode, polarization: str, tilt: float = TILT) -> float:
     return vector_tilted_coupling(
         core, partner, period=PERIOD, tilt=tilt, index_modulation=5e-4, polarization=polarization
     )
@@ -71,7 +76,7 @@ def test_the_core_reflects_into_itself_as_the_scalar_core_does() -> None:
         assert coupling(vector, vector, polarization) == pytest.approx(expected, rel=5e-3)
 
 
-def family(fibre: StepIndexFibre, order: int, rank: int) -> list:  # type: ignore[type-arg]
+def family(fibre: StepIndexFibre, order: int, rank: int) -> list[VectorMode]:
     """The vector modes an ``LP_{order, rank}`` stands for, by family and rank."""
     members: list[tuple[int, str]]
     if order == 0:
