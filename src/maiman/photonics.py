@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Mapping, Sequence
+from functools import lru_cache
 from typing import Any
 
 import numpy as np
@@ -44,7 +45,7 @@ from .modes import (
     lpg_coupling,
 )
 from .units import C_LIGHT, frequency_to_wavelength
-from .vector_modes import vector_cladding_modes, vector_core_modes, vector_coupling
+from .vector_modes import VectorMode, vector_cladding_modes, vector_core_modes, vector_coupling
 
 #: Effective index of a 500 x 220 nm silicon strip waveguide, TE, at 1550 nm.
 SILICON_STRIP_NEFF = 2.44
@@ -1223,6 +1224,8 @@ def long_period_grating(
     grid_points: int = LPG_GRID_POINTS,
     vector: bool = False,
     ports: tuple[str, str] = ("in", "out"),
+    separation: float | None = None,
+    gap_loss_db: float = 0.0,
 ) -> SMatrix:
     """A long-period grating's transmission, from coupled modes solved exactly.
 
@@ -1255,6 +1258,21 @@ def long_period_grating(
     scalar LP0m do. The EH1m are the modes the scalar model has no counterpart
     for at this order; they couple, weakly, because the glass-air step mixes
     them. The equations are otherwise the same.
+
+    **A pair.** With ``separation`` the grating is written twice, ``separation``
+    apart, over fibre whose cladding still guides -- a bare stretch rather than a
+    coated one. The first grating hands part of the core's light to the cladding;
+    in the gap each cladding mode runs ahead of or behind the core by ``k (n_m -
+    n_0)`` per metre; and the second grating hands back what it can. That is a
+    Mach-Zehnder interferometer inside one fibre: the notch the first grating
+    cuts is filled with fringes ``lambda^2 / (dn_g d)`` apart, ``dn_g`` the two
+    modes' group-index difference. The transfer of each grating is the full
+    matrix exponential, cladding amplitudes and all, and the gap is diagonal,
+    so ``T G T`` is exact. ``gap_loss_db`` is the power the cladding modes lose in
+    the gap -- to a recoat, a bend, a dirty surface -- and it washes the fringes
+    out. The second grating's fringes continue the first's, as from one phase
+    mask with its middle left unexposed; a zero separation is one grating of
+    twice the length, which the tests hold it to.
     """
     if period <= 0.0:
         raise ValueError(f"period must be positive, got {period} m")
@@ -1264,6 +1282,10 @@ def long_period_grating(
         raise ValueError(f"index modulation must not be negative, got {index_modulation}")
     if cladding_modes < 1:
         raise ValueError(f"couple at least one cladding mode, got {cladding_modes}")
+    if separation is not None and separation < 0.0:
+        raise ValueError(f"separation must not be negative, got {separation} m")
+    if gap_loss_db < 0.0:
+        raise ValueError(f"the gap's loss must not be negative, got {gap_loss_db} dB")
     grid = np.asarray(frequencies, dtype=float)
     wavelengths = C_LIGHT / grid
     core, cladding, kappa = _interpolated_tables(
@@ -1278,7 +1300,16 @@ def long_period_grating(
     diagonal = np.arange(1, size)
     matrix[:, diagonal, diagonal] = k[:, None] * (cladding - core[:, None]) + 2.0 * np.pi / period
     values, vectors = np.linalg.eigh(matrix)
-    through = np.sum(vectors[:, 0, :] ** 2 * np.exp(-1j * values * length), axis=1)
+    if separation is None:
+        through = np.sum(vectors[:, 0, :] ** 2 * np.exp(-1j * values * length), axis=1)
+    else:
+        # The whole transfer, not just its core entry: the cladding amplitudes
+        # the first grating leaves are what the second one hands back.
+        transfer = np.einsum("fij,fj,fkj->fik", vectors, np.exp(-1j * values * length), vectors)
+        gap = np.ones((grid.size, size), dtype=np.complex128)
+        surviving = 10.0 ** (-gap_loss_db / 20.0)
+        gap[:, 1:] = surviving * np.exp(-1j * matrix[:, diagonal, diagonal] * separation)
+        through = np.einsum("fj,fj,fj->f", transfer[:, 0, :], gap, transfer[:, :, 0])
 
     s = np.zeros((grid.size, 2, 2), dtype=np.complex128)
     s[:, 1, 0] = through
@@ -1431,6 +1462,88 @@ def tilted_grating_coupling(
     )
 
 
+def vector_tilted_coupling(
+    core: VectorMode,
+    partner: VectorMode,
+    *,
+    period: float,
+    tilt: float,
+    index_modulation: float,
+    polarization: str,
+) -> float:
+    """Contra-directional coupling from the core's HE11 to a vector mode, tilted fringes [1/m].
+
+    :func:`tilted_grating_coupling` with the true fields. The fringes are tilted
+    in the ``x-z`` plane, and each mode of order ``nu`` comes in two orientations
+    of one effective index. An ``x``-polarized HE11 -- in the plane of the tilt,
+    p -- reaches the one with ``E_r`` on ``cos(nu phi)``, and a ``y``-polarized
+    one -- s -- the other; the cross terms are odd in ``phi`` and vanish. Writing
+    ``E . E'*`` out in ``nu - 1`` and ``nu + 1`` harmonics and expanding the
+    fringe's phase by Jacobi-Anger, the overlap is
+
+        ``pi int_core (J_{nu-1}(K_t r) S -+ J_{nu+1}(K_t r) D) r dr``
+
+    with ``S = e_r e_r' + e_phi e_phi'`` and ``D = e_r e_r' - e_phi e_phi'``: minus
+    for p, plus for s. That is the whole of the polarization dependence. For
+    ``nu = 0`` it leaves a p-polarized core reaching only TM0m and an s-polarized
+    one only TE0m; for the others it weights HE and EH differently, which is what
+    splits a real tilted grating's comb. Normalised as :func:`vector_coupling`,
+    with each mode's power over the whole cross-section -- ``2 pi`` or ``pi``
+    times its radial integral -- and reducing to it untilted.
+
+    ``polarization`` is ``"p"`` or ``"s"``.
+    """
+    if polarization not in ("p", "s"):
+        raise ValueError(f"polarization must be 'p' or 's', got {polarization!r}")
+    if core.wavelength != partner.wavelength:
+        raise ValueError("a coupling is between two modes at one wavelength")
+    if core.order != 1:
+        raise ValueError("the grating is driven by the core's HE11")
+    transverse = 2.0 * math.pi / period * math.sin(tilt)
+    nu = partner.order
+    sign = -1.0 if polarization == "p" else 1.0
+
+    def overlap(r: np.ndarray) -> np.ndarray:
+        e1, p1, _, _ = core.transverse(r)
+        e2, p2, _, _ = partner.transverse(r)
+        same, differ = e1 * e2 + p1 * p2, e1 * e2 - p1 * p2
+        if transverse == 0.0:
+            # Untilted: J_0(0) = 1 and every other order vanishes.
+            lower = np.full_like(r, 1.0 if nu == 1 else 0.0)
+            upper = np.zeros_like(r)
+        else:
+            lower = bessel_j(nu - 1, transverse * r) if nu >= 1 else -bessel_j(1, transverse * r)
+            upper = bessel_j(nu + 1, transverse * r)
+        return math.pi * (lower * same + sign * upper * differ)
+
+    shared = core.integrate(overlap, upto=core.radii[0])
+    angular_core = math.pi
+    angular_partner = 2.0 * math.pi if nu == 0 else math.pi
+    k0 = 2.0 * math.pi / core.wavelength
+    norm = math.sqrt(angular_core * core.power() * angular_partner * partner.power())
+    return k0 * core.indices[0] * index_modulation * abs(shared) / (2.0 * norm)
+
+
+@lru_cache(maxsize=512)
+def _vector_tilted_modes(
+    fibre: StepIndexFibre, wavelength: float, counts: tuple[int, ...]
+) -> tuple[VectorMode, tuple[tuple[VectorMode, ...], ...]]:
+    """HE11 and the cladding modes of every order at one wavelength, solved once.
+
+    Cached because the two polarizations see the same modes and differ only in
+    the overlaps, and a vector cladding solve is seconds where an overlap is a
+    millisecond.
+    """
+    guided = vector_core_modes(fibre, wavelength, order=1)
+    if not guided:
+        raise ValueError(f"the fibre guides no core mode at {wavelength * 1e9:.1f} nm")
+    rows = tuple(
+        tuple(vector_cladding_modes(fibre, wavelength, order=order, count=count)) if count else ()
+        for order, count in enumerate(counts)
+    )
+    return guided[0], rows
+
+
 def _tilted_tables(
     fibre: StepIndexFibre,
     wavelengths: np.ndarray,
@@ -1439,35 +1552,52 @@ def _tilted_tables(
     tilt: float,
     max_order: int,
     lowest_index: float,
+    vector: bool = False,
+    polarization: str = "p",
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[tuple[int, int]]]:
     """Core index, every coupled mode's index and coupling per unit ``dn``, at each wavelength.
 
     Column 0 is the core mode reflected into itself. The rest are cladding modes
     of each order down to ``lowest_index``, as many as every wavelength has.
+
+    With ``vector`` the modes are :mod:`maiman.vector_modes`' HE, EH, TE and TM,
+    of orders up to ``max_order + 1`` -- the LP order ``l`` is HE of ``l + 1`` and
+    EH of ``l - 1`` -- and twice as many of each, one per family; the couplings
+    are those ``polarization`` sees.
     """
     k_top = 2.0 * math.pi / float(wavelengths.min())
     floor = max(lowest_index, fibre.surrounding_index + 1e-6)
-    per_order: list[list[list[Mode]]] = []
-    cores = []
+    per_order: list[list[list[Any]]] = []
+    cores: list[Any] = []
+    orders = max_order + 2 if vector else max_order + 1
     for wavelength in wavelengths:
         # The cladding's own index at this wavelength, if its glass disperses.
         n2 = fibre.at(float(wavelength)).cladding_index
+        counts = []
+        for order in range(orders):
+            if floor >= n2:
+                counts.append(0)
+                continue
+            q = k_top * math.sqrt(n2**2 - floor**2)
+            scalar = max(1, math.ceil(q * fibre.cladding_radius / math.pi - order / 2) + 3)
+            counts.append(2 * scalar + 2 if vector else scalar)
+        if vector:
+            core, rows_v = _vector_tilted_modes(fibre, float(wavelength), tuple(counts))
+            cores.append(core)
+            per_order.append([list(row) for row in rows_v])
+            continue
         guided = core_modes(fibre, float(wavelength))
         if not guided:
             raise ValueError(f"the fibre guides no core mode at {wavelength * 1e9:.1f} nm")
         cores.append(guided[0])
-        rows: list[list[Mode]] = []
-        for order in range(max_order + 1):
-            if floor >= n2:
-                rows.append([])
-                continue
-            q = k_top * math.sqrt(n2**2 - floor**2)
-            count = max(1, math.ceil(q * fibre.cladding_radius / math.pi - order / 2) + 3)
-            rows.append(cladding_modes(fibre, float(wavelength), order=order, count=count))
+        rows: list[list[Any]] = [
+            cladding_modes(fibre, float(wavelength), order=order, count=count) if count else []
+            for order, count in enumerate(counts)
+        ]
         per_order.append(rows)
 
     columns: list[tuple[int, int]] = [(0, 0)]
-    for order in range(max_order + 1):
+    for order in range(orders):
         common = min(len(rows[order]) for rows in per_order)
         # Keep a rank only if it is above the floor somewhere in the band.
         kept = [
@@ -1484,9 +1614,19 @@ def _tilted_tables(
         for column, (order, rank) in enumerate(columns):
             partner = core if rank == 0 else rows[order][rank - 1]
             index[row, column] = partner.effective_index
-            coupling[row, column] = tilted_grating_coupling(
-                core, partner, period=period, tilt=tilt, index_modulation=1.0
-            )
+            if vector:
+                coupling[row, column] = vector_tilted_coupling(
+                    core,
+                    partner,
+                    period=period,
+                    tilt=tilt,
+                    index_modulation=1.0,
+                    polarization=polarization,
+                )
+            else:
+                coupling[row, column] = tilted_grating_coupling(
+                    core, partner, period=period, tilt=tilt, index_modulation=1.0
+                )
     return core_index, index, coupling, columns
 
 
@@ -1538,6 +1678,8 @@ def tilted_grating_spectrum(
     max_order: int = 6,
     nearest: int | None = TILTED_NEAREST,
     grid_points: int = TILTED_GRID_POINTS,
+    vector: bool = False,
+    polarization: str = "p",
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Transmission, the core's own reflection, and the power sent back into the cladding.
 
@@ -1567,6 +1709,10 @@ def tilted_grating_spectrum(
     Returns ``(t, r_core, cladding_power)`` on the grid; ``t`` and ``r_core`` are
     amplitudes in the rotating frame, ``cladding_power`` the sum of ``|r_m|^2``
     over cladding modes, which a coated fibre strips.
+
+    With ``vector`` the modes are the true HE, EH, TE and TM ones and the comb is
+    the one ``polarization`` sees -- ``"p"``, in the plane of the tilt, or ``"s"``
+    across it: :func:`vector_tilted_coupling`.
     """
     _tilted_setup(period, tilt, length, index_modulation, max_order)
     if nearest is not None and nearest < 1:
@@ -1587,6 +1733,8 @@ def tilted_grating_spectrum(
         tilt=tilt,
         max_order=max_order,
         lowest_index=lowest,
+        vector=vector,
+        polarization=polarization,
     )
     k = 2.0 * math.pi / wavelengths
     delta = k[:, None] * (core[:, None] + index) - axial
@@ -1628,6 +1776,8 @@ def tilted_fiber_bragg_grating(
     nearest: int | None = TILTED_NEAREST,
     grid_points: int = TILTED_GRID_POINTS,
     ports: tuple[str, str] = ("in", "out"),
+    vector: bool = False,
+    polarization: str = "p",
 ) -> SMatrix:
     """A tilted fibre Bragg grating as a two-port: its comb of cladding notches, and its mirror.
 
@@ -1641,8 +1791,8 @@ def tilted_fiber_bragg_grating(
 
     ``s[out, in]`` is the transmission and ``s[in, in]`` the core's reflection;
     what went into the cladding is stripped. The grating is uniform, so both ends
-    see the same. Scalar LP modes: the vector splitting that makes a real tilted
-    grating's comb depend on polarization is not in it.
+    see the same. Scalar LP modes by default, in which the two polarizations are
+    one; with ``vector`` the comb ``polarization`` sees, split as a real one is.
     """
     t, r_core, _ = tilted_grating_spectrum(
         frequencies,
@@ -1654,6 +1804,8 @@ def tilted_fiber_bragg_grating(
         max_order=max_order,
         nearest=nearest,
         grid_points=grid_points,
+        vector=vector,
+        polarization=polarization,
     )
     grid = np.asarray(frequencies, dtype=float)
     s = np.zeros((grid.size, 2, 2), dtype=np.complex128)
@@ -1670,6 +1822,8 @@ def tilted_grating_resonances(
     band: tuple[float, float],
     max_order: int = 6,
     grid_points: int = TILTED_GRID_POINTS,
+    vector: bool = False,
+    polarization: str = "p",
 ) -> list[tuple[int, int, float, float]]:
     """``(order, rank, wavelength, coupling per unit dn)`` for every resonance in ``band``.
 
@@ -1691,6 +1845,8 @@ def tilted_grating_resonances(
         tilt=tilt,
         max_order=max_order,
         lowest_index=axial * lo / (2.0 * math.pi) - fibre.at(lo).core_index - 2e-3,
+        vector=vector,
+        polarization=polarization,
     )
     cheb = np.polynomial.chebyshev
     mismatch = core[:, None] + index - nodes[:, None] * axial / (2.0 * math.pi)

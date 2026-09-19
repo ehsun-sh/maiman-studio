@@ -3537,6 +3537,29 @@ verdict, and DESIGN.md
      "default": false,
      "doc": "Solve the true HE and EH modes instead of the scalar LP ones. Slower"
     },
+    "pair": {
+     "type": "bool",
+     "default": false,
+     "doc": "Write it twice, the cladding bare between: a Mach-Zehnder inside the fibre"
+    },
+    "separation": {
+     "type": "float",
+     "default": 50.0,
+     "unit": "mm",
+     "min": 0.0,
+     "max": 1000.0,
+     "doc": "From the end of one grating to the start of the next",
+     "applies_when": "pair"
+    },
+    "gap_loss": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "dB",
+     "min": 0.0,
+     "max": 60.0,
+     "doc": "Power the cladding modes lose between the two",
+     "applies_when": "pair"
+    },
     "material_dispersion": {
      "type": "bool",
      "default": false,
@@ -4718,6 +4741,11 @@ verdict, and DESIGN.md
      "type": "bool",
      "default": false,
      "doc": "Let the glass disperse: silica cladding, germania-doped core, the indices above holding at 1550 nm"
+    },
+    "vector": {
+     "type": "bool",
+     "default": false,
+     "doc": "Solve the true HE, EH, TE and TM modes: each polarization sees its own comb"
     },
     "azimuthal_orders": {
      "type": "float",

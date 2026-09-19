@@ -49,18 +49,25 @@ class TiltedFiberBraggGrating(ScatteringDevice):
     exactly, every coupled mode at once. Cladding light is taken to be lost, as
     it is under a coating: it leaves through neither port.
 
-    **What it does not.** The modes are scalar LP modes, so the splitting that
-    makes a real tilted grating's comb depend on the input polarization is
-    absent -- that needs the vector modes of :mod:`maiman.vector_modes`, which
-    the long-period grating can use and this cannot yet. ``material_dispersion``
-    lets the glass disperse, which moves the comb by picometres since its indices
-    hold at 1550 nm, where the comb is. The average index the writing raises is
-    not included, so a real grating's comb sits a few nanometres longward of this
-    one.
+    **Polarization, with** ``vector``. By default the modes are scalar LP modes,
+    in which the two polarizations are one. Set ``vector`` and the block solves
+    the true HE, EH, TE and TM modes of :mod:`maiman.vector_modes` and couples
+    each input polarization separately: ``x``, in the plane of the tilt (p), and
+    ``y``, across it (s). An LP mode is a family of vector modes whose effective
+    indices the glass-air boundary splits, and the two polarizations weight the
+    family differently -- p reaches TM0m and never TE0m, s the reverse -- so each
+    sees its own comb, and a notch moves when the input polarization turns. The
+    field's ``x`` component goes through p's response and ``y`` through s's.
+
+    **What it does not.** ``material_dispersion`` lets the glass disperse, which
+    moves the comb by picometres since its indices hold at 1550 nm, where the
+    comb is. The average index the writing raises is not included, so a real
+    grating's comb sits a few nanometres longward of this one.
 
     **Speed.** A mode solve per azimuthal order per wavelength node, and a
     tilted grating reaches dozens of cladding modes: expect seconds, and more of
-    them for a wider band or a larger ``azimuthal_orders``.
+    them for a wider band or a larger ``azimuthal_orders``. The vector modes are
+    slower again, by about ten; the two polarizations share one solve.
     """
 
     display_name = "Tilted FBG"
@@ -89,6 +96,10 @@ class TiltedFiberBraggGrating(ScatteringDevice):
         False,
         doc="Let the glass disperse: silica cladding, germania-doped core, "
         "the indices above holding at 1550 nm",
+    )
+    vector = BoolParam(
+        False,
+        doc="Solve the true HE, EH, TE and TM modes: each polarization sees its own comb",
     )
     azimuthal_orders = Param(
         6.0, unit="", min=0.0, max=20.0, doc="Highest azimuthal order of cladding mode coupled"
@@ -131,13 +142,15 @@ class TiltedFiberBraggGrating(ScatteringDevice):
         return bragg - 6e-9, bragg + 1e-9
 
     def resonances(
-        self, band: tuple[float, float] | None = None
+        self, band: tuple[float, float] | None = None, *, polarization: str = "p"
     ) -> list[tuple[int, int, float, float]]:
         """``(order, rank, wavelength [m], coupling per unit dn)`` for every resonance in ``band``.
 
         Rank 0 is the Bragg reflection. The default band is the forty nanometres
         below the Bragg line and two above it, which is where a few degrees of
-        tilt puts the comb.
+        tilt puts the comb. With ``vector`` the orders are the vector modes' and
+        the couplings those ``polarization`` -- ``"p"`` or ``"s"`` -- sees; a mode
+        it cannot reach is still listed, at zero coupling.
         """
         bragg = self.bragg_wavelength()
         window = band if band is not None else (bragg - 40e-9, bragg + 2e-9)
@@ -147,29 +160,38 @@ class TiltedFiberBraggGrating(ScatteringDevice):
             tilt=self.si("tilt"),
             band=window,
             max_order=int(self.azimuthal_orders),
+            vector=self.vector,
+            polarization=polarization,
         )
 
     def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
         signal: OpticalSignal = inputs["in"]
-        matrix_for = self._matrix_factory()
+        # ``x`` lies in the plane of the tilt, which is the studio's TM; with
+        # scalar modes the two are one and the same factory.
+        across = self._matrix_factory("te")
+        along = self._matrix_factory("tm") if self.vector else across
         # A cladding notch is as narrow as the Bragg line is: its width is set by
         # the same kappa L and the same length. Averaging an ASE bin any coarser
         # than the ripple period would stride over notches and report where the
         # stride landed.
         resolution = C_LIGHT / (2.0 * self.core_index * self.si("length"))
         return {
-            "reflected": apply_response(
-                signal, port_response(matrix_for, "in", "in"), resolution=resolution
-            ),
-            "transmitted": apply_response(
-                signal, port_response(matrix_for, "out", "in"), resolution=resolution
-            ),
+            port: apply_response(
+                signal,
+                port_response(along, to, "in"),
+                response_y=port_response(across, to, "in") if self.vector else None,
+                resolution=resolution,
+            )
+            for port, to in (("reflected", "in"), ("transmitted", "out"))
         }
 
     def _matrix_factory(self, polarization: str = "te") -> Callable[[np.ndarray], SMatrix]:
-        # ``polarization`` is accepted and ignored: these are scalar LP modes,
-        # in which the two polarizations are degenerate. A real tilted grating's
-        # comb is not -- see the class docstring.
+        # With scalar modes the two polarizations are degenerate and
+        # ``polarization`` changes nothing. With vector modes "tm" is p, the field
+        # in the plane of the tilt, and "te" is s, across it -- the same sense a
+        # chip's TE and TM have against the plane they are launched in.
+        vector = self.vector
+        plane = "p" if polarization == "tm" else "s"
         fibre = self.fibre()
         period = self.si("period")
         tilt = self.si("tilt")
@@ -185,5 +207,7 @@ class TiltedFiberBraggGrating(ScatteringDevice):
                 length=length,
                 index_modulation=modulation,
                 max_order=orders,
+                vector=vector,
+                polarization=plane,
             )
         )

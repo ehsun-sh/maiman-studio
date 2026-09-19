@@ -228,13 +228,24 @@ class VectorMode:
         return fields
 
     def power(self) -> float:
-        """``int (e_r h_phi + e_phi h_r) rho d rho``, which fixes a mode's normalisation."""
+        """``int (e_r h_phi + e_phi h_r) rho d rho``, which fixes a mode's normalisation.
+
+        Computed once and kept: it is a whole-cross-section quadrature of Bessel
+        functions, and a tilted grating asks for it once per mode pair.
+        """
+        cached = self.__dict__.get("_power")
+        if cached is not None:
+            return float(cached)
 
         def flow(radius: np.ndarray) -> np.ndarray:
             e_r, e_phi, h_r, h_phi = self.transverse(radius)
             return e_r * h_phi + e_phi * h_r
 
-        return self.integrate(flow)
+        value = self.integrate(flow)
+        # A frozen dataclass: set around its guard. Not a field, so equality and
+        # hashing never see it.
+        object.__setattr__(self, "_power", value)
+        return value
 
     def integrate(
         self,

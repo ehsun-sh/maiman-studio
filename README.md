@@ -2358,6 +2358,30 @@ liquid and every notch moves shortward, faster the closer the liquid comes to th
 
 LP01 moves a tenth as far: the low-order cladding modes barely reach the boundary.
 
+### Two of them, and the cladding light comes back
+
+A single grating's cladding light is lost under the coating. Strip the coating between two gratings
+and it is not lost. Set `pair` and the grating is written twice, `separation` apart over bare fibre:
+
+1. The first grating splits the core's light between the core and the cladding.
+2. The two run at different speeds through the gap.
+3. The second grating recombines them.
+
+That is a Mach-Zehnder interferometer inside one fibre, and the notch one grating would cut fills
+with fringes. Each grating is solved as the full matrix exponential, cladding amplitudes and all,
+and the gap is diagonal, so the pair is exact. `gap_loss` is what the cladding modes lose on the
+way. Four checks hold it:
+
+- **No gap** is one grating twice as long, to 1e-12.
+- **At a 3 dB split** the fringes swing between `(1 + g)²/4` and `(1 − g)²/4`, where `g` is the
+  cladding amplitude that survives the gap. So a lossless gap gives a perfect null; the minimum
+  matches to 1e-4, at 0, 3 and 10 dB of loss.
+- **The fringe spacing** is `λ²/(Δn_g d)`, where `Δn_g` is the two modes' group-index difference,
+  taken from the mode solver. It is within 5 % at a 20 cm gap and 2 % at 80 cm. The gap is the
+  interferometer, and the gratings' own length matters less as the gap grows.
+- **At a full crossover** each grating on its own empties the core, and the pair passes all of it
+  back.
+
 ## A grating that reads a liquid, because it is tilted
 
 A Bragg grating reflects the core mode into itself and is blind to everything outside the glass.
@@ -2399,8 +2423,47 @@ while temperature moves both together. A 10 mm grating tilted 4°, moved from ai
 
 Read at the bottom of its comb against the Bragg line at the top, it is a refractometer carrying its
 own temperature reference. `python examples/tilted_grating_refractometer.py` prints all four tables.
-The modes here are scalar, so the polarization dependence of a real tilted grating's comb is not in
-it — that wants the vector modes above, which the long-period grating uses and this does not yet.
+
+### And each polarization sees its own comb
+
+The modes above are scalar, and in the scalar picture the two polarizations are one. The cladding's
+true modes are HE, EH, TE and TM. An LP mode is a family of them whose effective indices the
+glass-air boundary splits, and a real tilted grating's comb changes as the input polarization
+turns. Set `vector` on a `TiltedFiberBraggGrating` and it solves the vector modes and couples each
+polarization on its own. `x` is in the plane of the tilt (p, the studio's TM), and `y` is across
+it (s, TE).
+
+With the fringes tilted in `x–z`, each vector mode of order `ν` comes in two orientations of one
+effective index. p reaches one orientation and s the other, and the cross terms are odd in `φ`, so
+they vanish. The overlap is:
+
+```
+π ∫_core [ J_{ν−1}(K_t r) S  ∓  J_{ν+1}(K_t r) D ] r dr
+S = e_r e_r' + e_φ e_φ'     D = e_r e_r' − e_φ e_φ'     minus for p, plus for s
+```
+
+That one sign is the whole of the polarization dependence:
+
+- For `ν = 0` it leaves p reaching TM0m and never TE0m, and s the reverse, exactly.
+- For the other orders it weights HE and EH differently.
+
+Four checks hold it:
+
+- **Untilted**, it is the long-period grating's vector coupling to 1e-12.
+- **The core's own reflection** matches the scalar core's to 0.2 % for either polarization.
+- **In weak guidance** (the fibre in a liquid of index 1.43), each LP family's vector modes together
+  carry what the scalar LP mode does, to 2 %.
+- **LP3**, reached a thousandth as strongly as LP1 at 4°, converges on its LP value as the step at
+  the cladding closes, rather than matching it outright. The families it is built from are reached
+  through `J₁` as well as `J₃`, and those `J₁` terms cancel only in the limit.
+
+Near the cladding's cutoff the split is largest. There TE and TM part by tens of picometres, and a
+30 mm grating's notches are narrow enough to separate them. Five nanometres below the Bragg line,
+the two polarizations' transmission differs by up to 14 dB. The block sends the field's `x` through
+p's comb and `y` through s's.
+
+The vector modes cost about ten times the scalar ones: a minute rather than seconds for a
+spectrum. The two polarizations share one mode solve, so the second costs a fraction of a second.
 
 ## A laser that chirps because it is being modulated
 
@@ -3367,8 +3430,8 @@ time window, and results are reproducible.
 | **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier frequency and phase recovery, coarse frequency acquisition over the whole sampled band, blind square-law timing recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km with blind estimation of the accumulated value, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
 | **3 — GUI & WDM** ✅ | Wavelength-selective filters, the ITU grids and a multiplexer/demultiplexer pair on them with crosstalk that falls out of the channel spacing, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — the OSA's trace drawn in the dock, and 400G/800G reference designs validated against the OSNR relations, and a back-end indirection the propagation kernels dispatch through — CuPy runs it where a device exists, `maiman devices` cross-checks it against NumPy, and a CI job does the same on any runner labelled `gpu` | ~6 months |
 | **4 — PIC** ✅ | Bidirectional S-matrix circuit solver, waveguide, directional coupler, all-pass and add-drop ring resonators, cross-validated against SAX; N×N MMI couplers on the self-imaging phase relations; a Mach-Zehnder interferometer assembled from them — switch, interleaver, or both; and PDK import, which reads a foundry's fitted numbers out of a JSON kit and refuses to extrapolate them past the window they were fitted in; and birefringence, with each guided polarization carrying its own indices through the same reduction | — |
-| **5 — Gratings, sensing, loops and coupling** ✅ | Fibre Bragg gratings assembled from transfer matrices — apodized, chirped, sampled and phase-shifted — a circulator with isolation and return loss, and a grating read as a strain gauge and a thermometer, by a swept laser or by broadband light on an analyser; noise that carries the spectral shape of what it passed through; loop control that runs a cavity to its fixed point, and a delay line that turns the same loop into a recirculating one lap by lap; pump depletion for four-wave mixing and Raman's measured gain shape past its peak; an erbium transient spread across the spectrum, each channel moving by the fibre's own tilt, drained per channel by its own cross section, and answered by a pump control loop with a bandwidth and a ceiling; an amplifier's own ASE, both ways, depleting its inversion; PMD applied along the span between Kerr steps, and the coherent polarization term that moves power between the axes; a scalar mode solver for core and cladding modes, and the vector HE, EH, TE and TM modes the glass-air boundary splits them into, checked against the exact characteristic equation; glass that disperses as Sellmeier's silica and germania, which makes the default fibre a G.652 one; a long-period grating built on either, and a tilted grating whose comb of cladding resonances reads what the fibre is dipped in; edge and grating couplers that put a signal into the chip's TE and TM, the edge coupler's two facets a cavity summed bounce by bounce and the grating coupler's passband computed from its vertical stack; a PAM4 driver with its modulator's linearity corrected, and a feed-forward and decision-feedback equaliser, fractionally spaced or blind; a laser's linewidth and intensity noise from its own Langevin forces, and the partition noise between a Fabry-Perot laser's modes; a directly modulated laser whose chirp comes out of its own rate equations; and templates in the studio's File menu, including an eight-channel DWDM link | — |
-| **Open** | The polarization dependence of a tilted grating's comb, and recoupling at a second long-period grating; the grating's own back-reflection from its teeth, and the fibre's height above it; mode partition noise in the link itself, which needs bands that carry their delays to the detector; the W-Port framing around OFEC — its FlexO adaptation, scrambler and symbol framing | — |
+| **5 — Gratings, sensing, loops and coupling** ✅ | Fibre Bragg gratings assembled from transfer matrices — apodized, chirped, sampled and phase-shifted — a circulator with isolation and return loss, and a grating read as a strain gauge and a thermometer, by a swept laser or by broadband light on an analyser; noise that carries the spectral shape of what it passed through; loop control that runs a cavity to its fixed point, and a delay line that turns the same loop into a recirculating one lap by lap; pump depletion for four-wave mixing and Raman's measured gain shape past its peak; an erbium transient spread across the spectrum, each channel moving by the fibre's own tilt, drained per channel by its own cross section, and answered by a pump control loop with a bandwidth and a ceiling; an amplifier's own ASE, both ways, depleting its inversion; PMD applied along the span between Kerr steps, and the coherent polarization term that moves power between the axes; a scalar mode solver for core and cladding modes, and the vector HE, EH, TE and TM modes the glass-air boundary splits them into, checked against the exact characteristic equation; glass that disperses as Sellmeier's silica and germania, which makes the default fibre a G.652 one; a long-period grating built on either, alone or as a pair recoupling its cladding light, and a tilted grating whose comb of cladding resonances reads what the fibre is dipped in, split by polarization when its vector modes are solved; edge and grating couplers that put a signal into the chip's TE and TM, the edge coupler's two facets a cavity summed bounce by bounce and the grating coupler's passband computed from its vertical stack; a PAM4 driver with its modulator's linearity corrected, and a feed-forward and decision-feedback equaliser, fractionally spaced or blind; a laser's linewidth and intensity noise from its own Langevin forces, and the partition noise between a Fabry-Perot laser's modes; a directly modulated laser whose chirp comes out of its own rate equations; and templates in the studio's File menu, including an eight-channel DWDM link | — |
+| **Open** | The grating's own back-reflection from its teeth, and the fibre's height above it; mode partition noise in the link itself, which needs bands that carry their delays to the detector; the W-Port framing around OFEC — its FlexO adaptation, scrambler and symbol framing | — |
 
 ¹ One developer, part-time. Estimates, not commitments.
 

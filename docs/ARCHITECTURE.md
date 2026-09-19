@@ -574,13 +574,17 @@ be finished without it, and each is validated against a result it does not share
   matching all four tangential components across every interface -- which satisfies the exact
   characteristic equation of Snyder and Love to 1e-10 at a glass-air boundary and meets the scalar
   solver where guidance is weak. A long-period grating couples the core mode to either set, and the
-  vector modes move its notch by 1.1 nm. With `material_dispersion` the glass disperses as
+  vector modes move its notch by 1.1 nm. Written twice over bare fibre it is a Mach-Zehnder, its
+  fringes `lambda^2 / (dn_g d)` apart. With `material_dispersion` the glass disperses as
   Malitson's silica and Fleming's germania, and the default fibre's dispersion zero lands at
   1308 nm.
 * **Tilted gratings.** Tilting a Bragg grating's fringes opens every azimuthal order to the core
   mode, through an overlap that is a Bessel function of the tilt; the contra-directional equations
   are solved for the modes nearest phase matching, with the rest entering as the shift they leave on
   the core. The comb that comes out reads the fibre's surroundings against a Bragg line that cannot.
+  With `vector` the true HE, EH, TE and TM modes are solved and each polarization couples through its
+  own overlap -- p reaching TM0m, s TE0m -- so the comb splits as a real one does, by up to 14 dB near
+  the cladding's cutoff.
 * **Getting onto a chip.** An edge coupler as the closed-form overlap of two Gaussian beams across a
   gap, its two facets optionally a cavity summed bounce by bounce, each beam with its own
   diffraction and Gouy phase. A grating coupler centred by phase matching with the grating's
@@ -617,8 +621,7 @@ Stated in the code where each approximation is made, and collected here:
   coherent polarization term's exchange of power between the axes is not part of it, and products
   mix again among themselves only as far as each span's own bookkeeping reaches.
 * **Gratings and modes.** The average index a writing process raises is not included, and a
-  dispersing fibre's surrounding medium stays constant. A tilted grating is solved with scalar modes, so its
-  comb has no polarization dependence; recoupling at a second long-period grating is not modelled.
+  dispersing fibre's surrounding medium stays constant.
 * **Coupling.** A grating's back-reflection is still a number, because it comes from its teeth
   rather than its stack; the fibre's height above a grating and any bottom mirror or apodization are
   not modelled; and the etalon sum is paraxial, good to 7e-3 at six degrees of fibre tilt.

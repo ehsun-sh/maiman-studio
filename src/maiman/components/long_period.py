@@ -58,8 +58,14 @@ class LongPeriodGrating(ScatteringDevice):
     ``material_dispersion`` and the glass does too (silica cladding, germania-doped
     core, the quoted indices holding at 1550 nm), which moves the notches by
     nanometres, the first cladding mode's 4.2 nm shortward. The average index the writing
-    raises is not included. The cladding light is taken to be lost, as it is under a
-    coating; its recoupling at a second grating is not modelled.
+    raises is not included.
+
+    **Two of them.** A single grating's cladding light is taken to be lost, as it
+    is under a coating. Set ``pair`` and the grating is written twice,
+    ``separation`` apart over bare fibre, and the second recouples what the first
+    handed to the cladding: a Mach-Zehnder inside one fibre, its notch filled
+    with fringes ``lambda^2 / (dn_g d)`` apart. ``gap_loss`` is what the cladding
+    modes lose on the way, which washes the fringes out.
     """
 
     display_name = "Long-Period Grating"
@@ -86,6 +92,26 @@ class LongPeriodGrating(ScatteringDevice):
     )
     vector = BoolParam(
         False, doc="Solve the true HE and EH modes instead of the scalar LP ones. Slower"
+    )
+    pair = BoolParam(
+        False,
+        doc="Write it twice, the cladding bare between: a Mach-Zehnder inside the fibre",
+    )
+    separation = Param(
+        50.0,
+        unit="mm",
+        min=0.0,
+        max=1000.0,
+        doc="From the end of one grating to the start of the next",
+        applies_when="pair",
+    )
+    gap_loss = Param(
+        0.0,
+        unit="dB",
+        min=0.0,
+        max=60.0,
+        doc="Power the cladding modes lose between the two",
+        applies_when="pair",
     )
     material_dispersion = BoolParam(
         False,
@@ -150,6 +176,9 @@ class LongPeriodGrating(ScatteringDevice):
         modulation = self.index_modulation
         count = self._coupled_modes()
         vector = self.vector
+        separation = self.si("separation") if self.pair else None
+        # Raw dB: the unit machinery already turns a dB parameter into a ratio.
+        gap_loss = self.gap_loss
         return solve_once(
             lambda f: long_period_grating(
                 f,
@@ -159,5 +188,7 @@ class LongPeriodGrating(ScatteringDevice):
                 index_modulation=modulation,
                 cladding_modes=count,
                 vector=vector,
+                separation=separation,
+                gap_loss_db=gap_loss,
             )
         )
