@@ -46,7 +46,15 @@ from ..photonics import (
     ring_resonator,
     straight_waveguide,
 )
-from ..signals import Band, NoiseBin, NoiseShape, OpticalSignal, Signal, joined_accumulated_gvd
+from ..signals import (
+    Band,
+    NoiseBin,
+    NoiseShape,
+    OpticalSignal,
+    Signal,
+    joined_accumulated_gvd,
+    joined_nonlinear_history,
+)
 from ..units import C_LIGHT, frequency_to_wavelength, wavelength_to_frequency
 
 #: Fewest points a noise bin is averaged over. A bin is flat and the response is
@@ -241,6 +249,7 @@ def apply_response(
         bands=tuple(bands),
         noise=tuple(noise),
         accumulated_gvd=(signal.accumulated_gvd if accumulated_gvd is None else accumulated_gvd),
+        nonlinear_history=signal.nonlinear_history,
     )
 
 
@@ -989,4 +998,5 @@ def _sum_signals(signals: list[OpticalSignal], *, where: str) -> OpticalSignal:
         bands=tuple(by_centre[f0] for f0 in sorted(by_centre)),
         noise=tuple(noise),
         accumulated_gvd=joined_accumulated_gvd(signals, where=where),
+        nonlinear_history=joined_nonlinear_history(signals, where=where),
     )

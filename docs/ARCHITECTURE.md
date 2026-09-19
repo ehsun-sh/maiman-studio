@@ -565,6 +565,9 @@ be finished without it, and each is validated against a result it does not share
   answer exactly, and everywhere else that answer times the dynamic gain tilt.
 * **Nonlinear bookkeeping.** Four-wave mixing products are paid for by the pumps that make them, so
   a lossless span conserves energy; Raman past its 13.2 THz peak is integrated with silica's shape.
+  With `pump_phase` the mismatch carries the pumps' own Kerr phase, inside each span and from span
+  to span through a Kerr history on the signal, and four amplified spans match the one-band
+  split-step to 5 %.
 * **Modes.** A scalar LP mode solver for a three-layer step-index fibre, with Bessel functions from
   their integral representations so the package still depends on NumPy alone, agreeing with an
   independent finite-difference solve to 1e-10. Beside it a vector solver -- HE, EH, TE and TM by
@@ -610,8 +613,9 @@ Stated in the code where each approximation is made, and collected here:
 * **Amplifiers.** The control loop is the ideal integral one, with no detector noise, no delay
   and no dither; and an amplifier's own ASE drains its reservoir at the centre wavelength's rate,
   flat across the band, as the block emits it.
-* **Fibre.** Four-wave mixing tracks the linear mismatch between spans but not the pumps' own
-  nonlinear phase.
+* **Fibre.** With `pump_phase`, four-wave mixing carries the pumps' Kerr phase as a phase only: the
+  coherent polarization term's exchange of power between the axes is not part of it, and products
+  mix again among themselves only as far as each span's own bookkeeping reaches.
 * **Gratings and modes.** The average index a writing process raises is not included, and a
   dispersing fibre's surrounding medium stays constant. A tilted grating is solved with scalar modes, so its
   comb has no polarization dependence; recoupling at a second long-period grating is not modelled.

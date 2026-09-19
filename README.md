@@ -2827,8 +2827,43 @@ What remains drawn is one phase per *triplet*, standing in for the pump phase co
 modelling the pumps by their powers has thrown away. It is keyed on the three pump frequencies and
 on nothing else — not on the block, not on which span it is — because the same three pumps make the
 same product wherever they are, and a phase redrawn per block is precisely what made the spans
-average instead of add. What is still missing is the pumps' own nonlinear phase: only the linear
-mismatch is tracked between spans.
+average instead of add.
+
+### And the pumps' own phase
+
+Self- and cross-phase modulation turn a product's drive, `A_i A_j A_k*`, and the carrier the product
+lands on by different amounts. With cross-phase modulation on, the difference is the textbook
+`−γ(P_i + P_j − P_k − P_F)`: the cross-phase of everything else turns every carrier alike, so it
+cancels, and so does the orthogonal polarization's. That difference shifts the mismatch.
+
+Set `pump_phase` on the fibre and the block carries the shift in three places:
+
+1. **Inside a span**, as a rate the mixing integral carries down the span as the pumps decay, like
+   `L_eff(z)` rather than `z`. It is summed as a series in `r/α`, or by quadrature beyond it; the
+   two agree to 1e-12.
+2. **Between spans**, as how far the drive has turned against the product's carrier in the spans
+   before. The signal now carries a Kerr history, the nonlinear counterpart of its accumulated
+   dispersion: each carrier's angle, plus the angle a weak carrier on the same path would have.
+3. **In the product's frame.** The split-step keeps turning the band a product was added to, so a
+   new span's share has to arrive turned the same way, or the spans do not add as the fibre adds
+   them.
+
+What checks it is the split-step solution of the same fibre with every tone in one band. That
+solution has no mixing model at all: the products grow out of `|A|²A`. The test uses one strong pump
+and one weak signal, so the products stay small and do not mix again among themselves. Then the
+only thing the linear model leaves out is the Kerr phase. At 20 mW, the product 100 GHz below the
+pump after four amplified 80 km spans:
+
+| D [ps/(nm·km)] | linear mismatch ÷ split-step | with `pump_phase` ÷ split-step |
+| ---: | ---: | ---: |
+| +4 | 23.9 | 1.04 |
+| −4 | 0.044 | 1.01 |
+| +17 | 0.021 | 0.99 |
+
+A single span of 10 km moves it by 12 to 29 %, and with it the error is 2 %. The flag is off by
+default, because turning it on changes which way the drawn phase and the mismatch combine, and so
+moves every product. A join of two paths that went through different Kerr fibre is recorded rather
+than refused, and only a span that asks for `pump_phase` refuses it.
 
 ## The short wavelengths pump the long ones
 
@@ -3333,7 +3368,7 @@ time window, and results are reproducible.
 | **3 — GUI & WDM** ✅ | Wavelength-selective filters, the ITU grids and a multiplexer/demultiplexer pair on them with crosstalk that falls out of the channel spacing, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — the OSA's trace drawn in the dock, and 400G/800G reference designs validated against the OSNR relations, and a back-end indirection the propagation kernels dispatch through — CuPy runs it where a device exists, `maiman devices` cross-checks it against NumPy, and a CI job does the same on any runner labelled `gpu` | ~6 months |
 | **4 — PIC** ✅ | Bidirectional S-matrix circuit solver, waveguide, directional coupler, all-pass and add-drop ring resonators, cross-validated against SAX; N×N MMI couplers on the self-imaging phase relations; a Mach-Zehnder interferometer assembled from them — switch, interleaver, or both; and PDK import, which reads a foundry's fitted numbers out of a JSON kit and refuses to extrapolate them past the window they were fitted in; and birefringence, with each guided polarization carrying its own indices through the same reduction | — |
 | **5 — Gratings, sensing, loops and coupling** ✅ | Fibre Bragg gratings assembled from transfer matrices — apodized, chirped, sampled and phase-shifted — a circulator with isolation and return loss, and a grating read as a strain gauge and a thermometer, by a swept laser or by broadband light on an analyser; noise that carries the spectral shape of what it passed through; loop control that runs a cavity to its fixed point, and a delay line that turns the same loop into a recirculating one lap by lap; pump depletion for four-wave mixing and Raman's measured gain shape past its peak; an erbium transient spread across the spectrum, each channel moving by the fibre's own tilt, drained per channel by its own cross section, and answered by a pump control loop with a bandwidth and a ceiling; an amplifier's own ASE, both ways, depleting its inversion; PMD applied along the span between Kerr steps, and the coherent polarization term that moves power between the axes; a scalar mode solver for core and cladding modes, and the vector HE, EH, TE and TM modes the glass-air boundary splits them into, checked against the exact characteristic equation; glass that disperses as Sellmeier's silica and germania, which makes the default fibre a G.652 one; a long-period grating built on either, and a tilted grating whose comb of cladding resonances reads what the fibre is dipped in; edge and grating couplers that put a signal into the chip's TE and TM, the edge coupler's two facets a cavity summed bounce by bounce and the grating coupler's passband computed from its vertical stack; a PAM4 driver with its modulator's linearity corrected, and a feed-forward and decision-feedback equaliser, fractionally spaced or blind; a laser's linewidth and intensity noise from its own Langevin forces, and the partition noise between a Fabry-Perot laser's modes; a directly modulated laser whose chirp comes out of its own rate equations; and templates in the studio's File menu, including an eight-channel DWDM link | — |
-| **Open** | The pumps' own nonlinear phase in four-wave mixing between spans; the polarization dependence of a tilted grating's comb, and recoupling at a second long-period grating; the grating's own back-reflection from its teeth, and the fibre's height above it; mode partition noise in the link itself, which needs bands that carry their delays to the detector; the W-Port framing around OFEC — its FlexO adaptation, scrambler and symbol framing | — |
+| **Open** | The polarization dependence of a tilted grating's comb, and recoupling at a second long-period grating; the grating's own back-reflection from its teeth, and the fibre's height above it; mode partition noise in the link itself, which needs bands that carry their delays to the detector; the W-Port framing around OFEC — its FlexO adaptation, scrambler and symbol framing | — |
 
 ¹ One developer, part-time. Estimates, not commitments.
 
@@ -3388,6 +3423,7 @@ Every physics block ships with a test against a closed-form result, run in CI
 | **PMD** | DGD Maxwellian: `⟨τ²⟩/⟨τ⟩² = 3π/8`, mean `∝√L`, spread `0.42·mean` | ✅ |
 | APD | `F(M) = kM + (2−1/M)(1−k)`; an **interior optimum gain** exists | ✅ |
 | **Cross-phase modulation** | `n` equal channels give `(2n−1)×` one channel's nonlinear phase — exact to 1e-3 | ✅ |
+| **Mixing with the pumps' own phase** | Four amplified spans at 20 mW against the one-band split-step, within 5 % where the linear mismatch is off by 10× and more | ✅ |
 | XPM swing | Peak-to-peak `2·γ·P·L_eff` on a probe beside an on/off pump, with no walk-off | ✅ |
 | Walk-off | `D·Δλ` per unit length, derived from β₂ and not declared beside it | ✅ |
 | Walk-off conserves the mean | Mean XPM phase fixed at `2·γ·⟨P⟩·L_eff` across a 16× change in slip, while its spread falls 5.7× | ✅ |

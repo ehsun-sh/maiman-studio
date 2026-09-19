@@ -33,7 +33,14 @@ from typing import Any
 from ..component import Component, Param, PortType
 from ..context import SimulationContext
 from ..grid import channel_frequencies
-from ..signals import Band, NoiseBin, OpticalSignal, Signal, joined_accumulated_gvd
+from ..signals import (
+    Band,
+    NoiseBin,
+    OpticalSignal,
+    Signal,
+    joined_accumulated_gvd,
+    joined_nonlinear_history,
+)
 from ..units import frequency_to_wavelength, wavelength_to_frequency
 from .filters import apply_passband
 
@@ -185,5 +192,6 @@ class Multiplexer(_Grid):
                 bands=tuple(bands),
                 noise=tuple(noise),
                 accumulated_gvd=joined_accumulated_gvd(filtered, where=self.label),
+                nonlinear_history=joined_nonlinear_history(filtered, where=self.label),
             )
         }

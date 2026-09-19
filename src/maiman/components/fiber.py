@@ -18,6 +18,7 @@ import numpy as np
 from ..component import BoolParam, Component, Param, PortType
 from ..context import SimulationContext
 from ..kernels import (
+    ORTHOGONAL_KERR_WEIGHT,
     RAMAN_TRIANGLE_LIMIT,
     PMDSection,
     PropagationDiagnostics,
@@ -29,9 +30,11 @@ from ..kernels import (
     effective_length,
     fwm_accumulated_phase,
     fwm_mixing_integral,
+    fwm_nonlinear_rate,
     fwm_phase_mismatch,
     fwm_power_transfer,
     fwm_product_power,
+    kerr_rate,
     propagate_coupled_ssfm,
     propagate_dispersion,
     raman_tilt,
@@ -39,7 +42,7 @@ from ..kernels import (
     random_pmd_sections,
     walkoff_from_dispersion,
 )
-from ..signals import Band, OpticalSignal, Signal
+from ..signals import Band, KerrHistory, OpticalSignal, Signal
 from ..units import db_to_linear
 
 #: Two mixing products this close in frequency are the same wave [Hz]. Real
@@ -132,9 +135,16 @@ class Fiber(Component):
     dispersion the path has accumulated, which is all it takes to say how far a
     product generated in one span has rotated away from its pumps by the time the
     next span generates another — four lossless spans give sixteen times one
-    span's product where adding in power would give four. What is *not* tracked
-    is the pumps' own nonlinear phase, so the interference between spans is
-    computed from the linear mismatch alone.
+    span's product where adding in power would give four.
+
+    **And, with** ``pump_phase``, **the pumps' own nonlinear phase.** Self- and
+    cross-phase modulation turn a product's drive and the product itself at
+    different rates, ``-gamma (P_i + P_j - P_k)`` apart with cross-phase on, and
+    that shifts the mismatch inside a span and the interference between spans.
+    Every carrier carries its share of it on the signal, as the dispersion is
+    carried. Against the split-step solution of a strong pump and a weak signal,
+    a quarter of a radian of nonlinear phase takes the linear-mismatch product
+    12--29 % off, depending on the sign of the dispersion; with it, 2 %.
 
     **The coherent polarization term, and PMD along the span.** With
     ``cross_polarization`` on, ``coherent_polarization`` adds the ``A_x* A_y**2``
@@ -209,6 +219,11 @@ class Fiber(Component):
         doc="Largest relative slip between bands allowed per split-step [samples]",
     )
     four_wave_mixing = BoolParam(True, doc="Generate mixing products between bands")
+    pump_phase = BoolParam(
+        False,
+        doc="Let the pumps' own SPM and XPM phase shift the mixing, within and between spans",
+        applies_when="four_wave_mixing",
+    )
     mixing_floor = Param(
         70.0,
         unit="dB",
@@ -352,8 +367,11 @@ class Fiber(Component):
         bands, tilt = self._raman(signal, bands, alpha=alpha, distance=distance)
         diagnostics = replace(diagnostics, raman_tilt=tilt)
 
+        history = self._nonlinear_history(signal, gamma=gamma, alpha=alpha)
         if gamma != 0.0 and self.four_wave_mixing:
-            bands, emitted, depleted = self._mix(ctx, signal, bands, gamma=gamma, alpha=alpha)
+            bands, emitted, depleted = self._mix(
+                ctx, signal, bands, gamma=gamma, alpha=alpha, after=history
+            )
             diagnostics = replace(diagnostics, mixing_products=emitted, fwm_depletion=depleted)
 
         return {
@@ -364,6 +382,7 @@ class Fiber(Component):
                 # tells the *next* span how far these products have already
                 # rotated away from their pumps.
                 accumulated_gvd=signal.accumulated_gvd + self.reference_beta2(signal) * distance,
+                nonlinear_history=history,
             ),
             "diagnostics": diagnostics,
         }
@@ -583,6 +602,58 @@ class Fiber(Component):
 
     # -- four-wave mixing -------------------------------------------------
 
+    def _couples_bands(self, signal: OpticalSignal) -> bool:
+        """Whether the bands share one split-step solve, and so cross-phase modulate."""
+        return self.cross_phase_modulation and len(signal.bands) > 1
+
+    def _nonlinear_history(
+        self, signal: OpticalSignal, *, gamma: float, alpha: float
+    ) -> KerrHistory:
+        """The path's Kerr history with this span added: each carrier's ``rate * L_eff``.
+
+        Every carrier present is turned by :func:`maiman.kernels.kerr_rate` at the
+        span's start, carried down it by the loss as ``L_eff``; a carrier the
+        history has not seen starts from the weak carrier's angle, because that is
+        what it was turned by on the way here. The weak carrier itself -- where a
+        new mixing product sits -- is turned by the cross-phase of everything
+        else, and by nothing when each band is propagated alone. Kept whether or
+        not this span mixes: the Kerr phase is there either way.
+        """
+        before = signal.nonlinear_history
+        if gamma == 0.0 or not signal.bands:
+            return before
+        if self.four_wave_mixing and self.pump_phase and before.conflict:
+            raise ValueError(
+                f"{self.label or 'Fiber'}: {before.conflict}, and pump_phase needs one history "
+                "to say how far a product has turned from its pumps. Combine the channels "
+                "before the fibre, or set pump_phase=False on the spans downstream."
+            )
+        length = effective_length(alpha, self.si("length"))
+        weight = ORTHOGONAL_KERR_WEIGHT if self.cross_polarization else 0.0
+        coupled = self._couples_bands(signal)
+        powers = [
+            (float(np.mean(np.abs(b.Ex) ** 2)), float(np.mean(np.abs(b.Ey) ** 2)))
+            for b in signal.bands
+        ]
+        total = (sum(p[0] for p in powers), sum(p[1] for p in powers))
+        weak_rate = (
+            kerr_rate(gamma, (0.0, 0.0), total, cross_phase=True, orthogonal_weight=weight)
+            if coupled
+            else (0.0, 0.0)
+        )
+        carriers = {f0: (x, y) for f0, x, y in before.carriers}
+        for band, power in zip(signal.bands, powers, strict=True):
+            rate = kerr_rate(gamma, power, total, cross_phase=coupled, orthogonal_weight=weight)
+            start = before.at(band.f0)
+            for known in [f for f in carriers if abs(f - band.f0) <= 1e-9 * band.f0]:
+                del carriers[known]
+            carriers[band.f0] = (start[0] + rate[0] * length, start[1] + rate[1] * length)
+        return KerrHistory(
+            carriers=tuple((f0, x, y) for f0, (x, y) in sorted(carriers.items())),
+            weak=(before.weak[0] + weak_rate[0] * length, before.weak[1] + weak_rate[1] * length),
+            conflict=before.conflict,
+        )
+
     def _mix(
         self,
         ctx: SimulationContext,
@@ -591,6 +662,7 @@ class Fiber(Component):
         *,
         gamma: float,
         alpha: float,
+        after: KerrHistory,
     ) -> tuple[list[Band], int, float]:
         """Add the mixing products this span generated to the propagated bands.
 
@@ -618,11 +690,25 @@ class Fiber(Component):
         was redrawn every span would make the spans add in power, which is
         exactly the thing this is not doing any more.
 
-        What is still missing is the pumps' *nonlinear* phase: self- and
-        cross-phase modulation rotate the pump combination span by span, and only
-        the linear mismatch is tracked here. At a tenth of a radian per span it
-        moves the interference between spans a little; it does not change which
-        regime the link is in.
+        **With** ``pump_phase`` **the Kerr phase joins it**, in three places. Inside
+        the span, as :func:`~maiman.kernels.fwm_nonlinear_rate`, which the mixing
+        integral carries down the span with the pumps' power. Between spans, as
+        how far the drive ``A_i A_j A_k*`` has been turned against the carrier the
+        product lands on, from the path's
+        :class:`~maiman.signals.KerrHistory`. And in the frame the product is added
+        in: the split-step goes on turning the band a product was added to, so
+        what earlier spans put there has been turned by that carrier's own Kerr
+        phase since, and this span's share has to arrive turned the same way or
+        the two do not add as the fibre adds them. Without the last, four
+        amplified spans of one strong pump and one weak signal were off from the
+        split-step solution by a factor of five.
+
+        Per axis, because each axis is mixed as its own scalar problem. The
+        coherent polarization term's exchange of power between the axes is not
+        part of it. And the phases are those the split-step applies, so the
+        product's own phase runs the way its fields do: the flag changes which
+        way the drawn phase and the mismatch combine, which is why it is off by
+        default and moves nothing until set.
 
         **And the pumps are depleted.** Every product's photons are taken from
         the pumps that made it and one is given to its idler, per
@@ -651,6 +737,15 @@ class Fiber(Component):
         powers = [
             (float(np.mean(np.abs(b.Ex) ** 2)), float(np.mean(np.abs(b.Ey) ** 2))) for b in sources
         ]
+        coupled = self._couples_bands(signal)
+        weight = ORTHOGONAL_KERR_WEIGHT if self.cross_polarization else 0.0
+        histories = [signal.history_at(b.f0) for b in sources]
+
+        def power_at(frequency: float) -> tuple[float, float]:
+            for band, power in zip(sources, powers, strict=True):
+                if abs(band.f0 - frequency) <= MIXING_MERGE_TOLERANCE:
+                    return power
+            return 0.0, 0.0
 
         found: list[tuple[float, complex, complex]] = []
         # Power each pump gives up per axis; negative for an idler that gains.
@@ -672,6 +767,27 @@ class Fiber(Component):
                         sources[j].f0 - reference.f0,
                         sources[k].f0 - reference.f0,
                     )
+                    if self.pump_phase:
+                        rates = fwm_nonlinear_rate(
+                            gamma,
+                            powers[i],
+                            powers[j],
+                            powers[k],
+                            power_at(frequency),
+                            cross_phase=coupled,
+                            orthogonal_weight=weight,
+                        )
+                        landing = signal.history_at(frequency)
+                        walked = tuple(
+                            histories[i][axis]
+                            + histories[j][axis]
+                            - histories[k][axis]
+                            - landing[axis]
+                            for axis in (0, 1)
+                        )
+                        frame = after.at(frequency)
+                    else:
+                        rates, walked, frame = (0.0, 0.0), (0.0, 0.0), (0.0, 0.0)
                     generated = [
                         fwm_product_power(
                             powers[i][axis],
@@ -682,6 +798,7 @@ class Fiber(Component):
                             distance=distance,
                             phase_mismatch=mismatch,
                             degenerate=i == j,
+                            nonlinear_rate=rates[axis],
                         )
                         for axis in (0, 1)
                     ]
@@ -703,17 +820,42 @@ class Fiber(Component):
                     # the same phase in every span, which is what lets the spans
                     # add rather than average.
                     drawn = float(ctx.rng("Fiber", "fwm", *offsets).random())
-                    phase = (
-                        2.0 * np.pi * drawn
-                        + float(np.angle(fwm_mixing_integral(mismatch, alpha, distance)))
-                        + fwm_accumulated_phase(travelled, *offsets)
-                    )
-                    phasor = np.exp(1j * phase)
+                    linear = fwm_accumulated_phase(travelled, *offsets)
+                    if self.pump_phase:
+                        # In the split-step's own sense, exp(-i angle): the drive's
+                        # walk against the landing carrier, this span's integral, and
+                        # the frame that carrier has been turned into since.
+                        phasors = [
+                            np.exp(
+                                2j * np.pi * drawn
+                                - 1j
+                                * (
+                                    linear
+                                    + walked[axis]
+                                    + frame[axis]
+                                    + float(
+                                        np.angle(
+                                            fwm_mixing_integral(
+                                                mismatch, alpha, distance, rates[axis]
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                            for axis in (0, 1)
+                        ]
+                    else:
+                        phase = (
+                            2.0 * np.pi * drawn
+                            + float(np.angle(fwm_mixing_integral(mismatch, alpha, distance)))
+                            + linear
+                        )
+                        phasors = [np.exp(1j * phase)] * 2
                     found.append(
                         (
                             frequency,
-                            math.sqrt(generated[0]) * phasor,
-                            math.sqrt(generated[1]) * phasor,
+                            math.sqrt(generated[0]) * phasors[0],
+                            math.sqrt(generated[1]) * phasors[1],
                         )
                     )
 

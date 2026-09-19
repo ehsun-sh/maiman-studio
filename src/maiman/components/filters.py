@@ -96,6 +96,7 @@ def apply_passband(
         bands=tuple(bands),
         noise=tuple(noise),
         accumulated_gvd=signal.accumulated_gvd,
+        nonlinear_history=signal.nonlinear_history,
     )
 
 

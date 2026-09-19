@@ -946,7 +946,9 @@ def fwm_phase_mismatch(beta2: float, offset_i: float, offset_j: float, offset_k:
     return -beta2 * (two_pi * (offset_i - offset_k)) * (two_pi * (offset_j - offset_k))
 
 
-def fwm_efficiency(phase_mismatch: float, alpha: float, distance: float) -> float:
+def fwm_efficiency(
+    phase_mismatch: float, alpha: float, distance: float, nonlinear_rate: float = 0.0
+) -> float:
     """Four-wave mixing efficiency, dimensionless and between 0 and 1.
 
     Under undepleted pumps the product field obeys
@@ -969,17 +971,100 @@ def fwm_efficiency(phase_mismatch: float, alpha: float, distance: float) -> floa
     because it stays well behaved in both limits: lossless, where the expression
     is 0/0 and the true answer is ``sinc**2(delta_beta L / 2)``, and phase
     matched, where it is 1.
+
+    With ``nonlinear_rate`` the pumps' own Kerr phase enters the mismatch as well
+    (see :func:`fwm_mixing_integral`), and the efficiency can then exceed 1 where
+    it undoes a linear mismatch -- nonlinear phase matching.
     """
     if distance <= 0.0:
         return 0.0
     reference = effective_length(alpha, distance)
     if reference <= 0.0:
         return 0.0
-    return float(abs(fwm_mixing_integral(phase_mismatch, alpha, distance)) ** 2 / reference**2)
+    integral = fwm_mixing_integral(phase_mismatch, alpha, distance, nonlinear_rate)
+    return float(abs(integral) ** 2 / reference**2)
 
 
-def fwm_mixing_integral(phase_mismatch: float, alpha: float, distance: float) -> complex:
-    """``integral_0^L exp((i delta_beta - alpha) z) dz`` [m], with its phase kept.
+#: Largest ``|r / alpha|`` the mixing integral is summed as a series at. Beyond it
+#: the terms grow before they fall and cancel each other; quadrature takes over.
+MIXING_SERIES_LIMIT = 8.0
+
+
+def kerr_rate(
+    gamma: float,
+    own: tuple[float, float],
+    total: tuple[float, float],
+    *,
+    cross_phase: bool,
+    orthogonal_weight: float = 0.0,
+) -> tuple[float, float]:
+    """How fast the split-step turns one carrier, per axis [rad/m], ``exp(-i rate z)``.
+
+    :func:`propagate_coupled_ssfm`'s ``gamma (2 P_same - |A|^2 + w P_other)`` for a
+    carrier of ``own`` power among ``total`` when the bands share one solve; its own
+    ``gamma (P + w P_other_own)`` when each is propagated alone. ``w`` is
+    ``orthogonal_weight``, two thirds with the polarizations coupled and zero
+    without. ``own = (0, 0)`` is a weak carrier: a mixing product at a new
+    frequency.
+    """
+    x, y = own
+    if cross_phase:
+        return (
+            gamma * (2.0 * total[0] - x + orthogonal_weight * total[1]),
+            gamma * (2.0 * total[1] - y + orthogonal_weight * total[0]),
+        )
+    return gamma * (x + orthogonal_weight * y), gamma * (y + orthogonal_weight * x)
+
+
+def fwm_nonlinear_rate(
+    gamma: float,
+    power_i: tuple[float, float],
+    power_j: tuple[float, float],
+    power_k: tuple[float, float],
+    power_f: tuple[float, float] = (0.0, 0.0),
+    *,
+    cross_phase: bool,
+    orthogonal_weight: float = 0.0,
+) -> tuple[float, float]:
+    """How fast the Kerr effect walks a product off its drive, per axis [rad/m].
+
+    The product at ``f_i + f_j - f_k`` is driven by ``A_i A_j A_k*``, which the
+    split-step turns at ``rate_i + rate_j - rate_k`` (:func:`kerr_rate`), and the
+    carrier it lands on turns at its own ``rate_f``. The mixing integral needs the
+    difference at the start of the span; the loss carries it down the span as the
+    powers fall. Written out, on axis ``a``:
+
+    * **cross-phase on**, every band in one solve: ``-gamma (P_i + P_j - P_k -
+      P_f)``. The ``2T`` of cross-phase and the orthogonal axis's ``w T`` turn
+      every carrier alike, and cancel. That is the textbook ``P1 + P2 - P3 - P4``.
+    * **cross-phase off**, each band alone: ``+gamma (Q_a + w Q_b)`` with
+      ``Q = P_i + P_j - P_k - P_f``, each carrier turned by its own power only.
+
+    ``power_f`` is the power already at the product's frequency -- zero for a
+    product at a new one, a channel's for one landing on it. ``power_*`` are
+    ``(x, y)`` at the span's start [W], and the sign is the one the integral's
+    ``delta_beta`` has. Checked against the split-step solution of a strong pump
+    and a weak signal, whose product it brings from 12--29 % off to 2 % at a
+    quarter of a radian of nonlinear phase.
+    """
+    # The total turns every carrier alike and cancels in ``i + j - k - f``, so it
+    # is left at zero: what is left of each carrier's rate is its own part.
+    rates = [
+        kerr_rate(
+            gamma, power, (0.0, 0.0), cross_phase=cross_phase, orthogonal_weight=orthogonal_weight
+        )
+        for power in (power_i, power_j, power_k, power_f)
+    ]
+    return (
+        rates[0][0] + rates[1][0] - rates[2][0] - rates[3][0],
+        rates[0][1] + rates[1][1] - rates[2][1] - rates[3][1],
+    )
+
+
+def fwm_mixing_integral(
+    phase_mismatch: float, alpha: float, distance: float, nonlinear_rate: float = 0.0
+) -> complex:
+    """``integral_0^L exp((i delta_beta - alpha) z + i r L_eff(z)) dz`` [m], with its phase kept.
 
     :func:`fwm_efficiency` is this integral's squared magnitude and throws the
     argument away, which is all a single span needs: one span's product has
@@ -991,11 +1076,66 @@ def fwm_mixing_integral(phase_mismatch: float, alpha: float, distance: float) ->
     stays well behaved in both limits: lossless, where the expanded expression is
     0/0 and the answer is ``L sinc(delta_beta L / 2)``, and phase matched, where
     it is ``L_eff``.
+
+    **The pumps' own phase.** ``r`` is :func:`fwm_nonlinear_rate`: self- and
+    cross-phase modulation turn the drive and the product at different rates,
+    and as the pumps decay that difference accumulates as ``r L_eff(z)`` rather
+    than ``r z``. Lossless, it only shifts the mismatch to ``delta_beta + r``,
+    closed form. With loss it is summed as a series in ``x = r / alpha`` --
+    ``exp(i x (1 - e^{-alpha z}))`` expanded in powers of ``e^{-alpha z}``, each
+    term a closed-form exponential integral -- and past
+    :data:`MIXING_SERIES_LIMIT` by composite Gauss-Legendre quadrature, fine
+    enough to resolve every turn of the integrand. The two agree to 1e-12 where
+    both apply, which the tests hold them to.
     """
     rate = complex(-alpha, phase_mismatch)
-    if abs(rate) * distance < 1e-9:
-        return complex(distance)
-    return complex((np.exp(rate * distance) - 1.0) / rate)
+    if nonlinear_rate == 0.0:
+        if abs(rate) * distance < 1e-9:
+            return complex(distance)
+        return complex((np.exp(rate * distance) - 1.0) / rate)
+    if alpha * distance < 1e-9:
+        shifted = complex(-alpha, phase_mismatch + nonlinear_rate)
+        if abs(shifted) * distance < 1e-9:
+            return complex(distance)
+        return complex((np.exp(shifted * distance) - 1.0) / shifted)
+    if abs(nonlinear_rate / alpha) <= MIXING_SERIES_LIMIT:
+        return _mixing_series(phase_mismatch, alpha, distance, nonlinear_rate)
+    return _mixing_quadrature(phase_mismatch, alpha, distance, nonlinear_rate)
+
+
+def _mixing_series(
+    phase_mismatch: float, alpha: float, distance: float, nonlinear_rate: float
+) -> complex:
+    """The lossy mixing integral, summed term by term as a series in ``x = r / alpha``.
+
+    ``e^{ix} sum_n (-ix)^n / n! int_0^L e^{(i delta_beta - (n + 1) alpha) z} dz``.
+    """
+    x = nonlinear_rate / alpha
+    total = 0j
+    coefficient = 1.0 + 0j
+    for n in range(400):
+        exponent = complex(-(n + 1) * alpha, phase_mismatch)
+        term = coefficient * (np.exp(exponent * distance) - 1.0) / exponent
+        total += term
+        if n > abs(x) and abs(term) < 1e-17 * max(abs(total), 1e-300):
+            break
+        coefficient *= -1j * x / (n + 1)
+    return complex(np.exp(1j * x) * total)
+
+
+def _mixing_quadrature(
+    phase_mismatch: float, alpha: float, distance: float, nonlinear_rate: float
+) -> complex:
+    """The same integral by composite Gauss-Legendre, half a radian of phase per panel."""
+    turning = abs(phase_mismatch) + abs(nonlinear_rate) + alpha
+    panels = max(16, math.ceil(distance * turning / 0.5))
+    nodes, weights = np.polynomial.legendre.leggauss(8)
+    edges = np.linspace(0.0, distance, panels + 1)
+    half = 0.5 * np.diff(edges)
+    z = (0.5 * (edges[:-1] + edges[1:]))[:, None] + half[:, None] * nodes[None, :]
+    length = -np.expm1(-alpha * z) / alpha
+    values = np.exp(complex(-alpha, phase_mismatch) * z + 1j * nonlinear_rate * length)
+    return complex(np.sum(values * weights[None, :] * half[:, None]))
 
 
 def fwm_accumulated_phase(
@@ -1037,6 +1177,7 @@ def fwm_product_power(
     distance: float,
     phase_mismatch: float,
     degenerate: bool,
+    nonlinear_rate: float = 0.0,
 ) -> float:
     """Power generated at ``f_i + f_j - f_k`` over one span [W].
 
@@ -1064,7 +1205,7 @@ def fwm_product_power(
     """
     factor = 1.0 if degenerate else 2.0
     length = effective_length(alpha, distance)
-    efficiency = fwm_efficiency(phase_mismatch, alpha, distance)
+    efficiency = fwm_efficiency(phase_mismatch, alpha, distance, nonlinear_rate)
     return (
         factor**2
         * gamma**2

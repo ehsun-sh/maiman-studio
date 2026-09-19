@@ -341,6 +341,89 @@ def joined_accumulated_gvd(signals: Sequence[OpticalSignal], *, where: str) -> f
 
 
 @dataclass(frozen=True)
+class KerrHistory:
+    """How far each carrier has been turned by the Kerr effect along its path [rad].
+
+    The nonlinear counterpart of :attr:`OpticalSignal.accumulated_gvd`. Self- and
+    cross-phase modulation turn every carrier by ``gamma`` times the power that
+    modulates it, and a four-wave mixing product and the pumps driving it are
+    turned by different amounts -- so a product generated in one span and one
+    generated in the next differ by that walk as well as by the dispersion.
+
+    ``carriers`` holds ``(f0, x, y)``: the angle, per axis, the split-step has
+    turned that carrier by, in the sense it applies it (``exp(-i angle)``).
+    ``weak`` is the angle a weak carrier on the same path would have been turned
+    by -- the cross-phase of everything else -- which is what a mixing product at
+    a new frequency has been turned by, and what a carrier arriving without an
+    entry is taken to have been. A fresh signal is all zeros.
+
+    ``conflict`` is set when two paths with different histories were joined. It
+    is not refused there, because nothing needs the history until a span asks
+    for its pumps' phase -- and that span refuses, naming the join.
+    """
+
+    carriers: tuple[tuple[float, float, float], ...] = ()
+    weak: tuple[float, float] = (0.0, 0.0)
+    conflict: str = ""
+
+    def at(self, f0: float, rtol: float = 1e-9) -> tuple[float, float]:
+        """The ``(x, y)`` angle of the carrier at ``f0``, or the weak carrier's if none."""
+        for centre, x, y in self.carriers:
+            if abs(centre - f0) <= rtol * f0:
+                return x, y
+        return self.weak
+
+
+def _differs(first: float, second: float) -> bool:
+    return abs(first - second) > 1e-12 * max(abs(first), abs(second), 1.0)
+
+
+def joined_nonlinear_history(signals: Sequence[OpticalSignal], *, where: str) -> KerrHistory:
+    """The Kerr histories of several inputs joined, with any disagreement recorded.
+
+    Per carrier, so a comb joined out of channels that each carry their own is a
+    union and not a conflict. What cannot be joined is one carrier arriving twice
+    with two different angles, or two paths whose weak-carrier angles differ --
+    the nonlinear counterpart of what :func:`joined_accumulated_gvd` refuses.
+    Recorded as :attr:`KerrHistory.conflict` rather than raised, because a link
+    that never asks for the pumps' phase has no use for the history and joined
+    these paths without complaint before it existed. Inputs with no bands carry
+    nothing to disagree about.
+    """
+    present = [signal.nonlinear_history for signal in signals if signal.bands]
+    if not present:
+        return KerrHistory()
+    weak = present[0].weak
+    conflict = next((history.conflict for history in present if history.conflict), "")
+    merged: dict[float, tuple[float, float]] = {}
+    for history in present:
+        if not conflict and (
+            _differs(history.weak[0], weak[0]) or _differs(history.weak[1], weak[1])
+        ):
+            conflict = (
+                f"{where} joined inputs that have been through different Kerr fibre -- their "
+                f"paths turned a weak carrier by {weak} and {history.weak} rad"
+            )
+        for f0, x, y in history.carriers:
+            known = merged.get(f0)
+            if (
+                not conflict
+                and known is not None
+                and (_differs(known[0], x) or _differs(known[1], y))
+            ):
+                conflict = (
+                    f"{where} joined the carrier at {f0:.6e} Hz arriving by two paths with "
+                    "different Kerr histories"
+                )
+            merged[f0] = (x, y)
+    return KerrHistory(
+        carriers=tuple((f0, x, y) for f0, (x, y) in sorted(merged.items())),
+        weak=weak,
+        conflict=conflict,
+    )
+
+
+@dataclass(frozen=True)
 class OpticalSignal:
     """A set of sampled bands plus the noise accompanying them."""
 
@@ -369,6 +452,14 @@ class OpticalSignal:
     here on its own.
     """
 
+    nonlinear_history: KerrHistory = field(default_factory=KerrHistory)
+    """How far the Kerr effect has turned each carrier: see :class:`KerrHistory`.
+
+    Added to by every span with a nonlinearity, and carried through unchanged by
+    every block that does not change a carrier's frequency, as
+    :attr:`accumulated_gvd` is.
+    """
+
     def __post_init__(self) -> None:
         object.__setattr__(self, "bands", tuple(self.bands))
         object.__setattr__(self, "noise", tuple(self.noise))
@@ -383,6 +474,10 @@ class OpticalSignal:
     @property
     def num_bands(self) -> int:
         return len(self.bands)
+
+    def history_at(self, f0: float, rtol: float = 1e-9) -> tuple[float, float]:
+        """The ``(x, y)`` Kerr angle of the carrier at ``f0``: see :meth:`KerrHistory.at`."""
+        return self.nonlinear_history.at(f0, rtol)
 
     def band_at(self, f0: float, rtol: float = 1e-9) -> Band:
         """The band whose centre frequency matches ``f0``."""

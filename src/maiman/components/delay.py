@@ -83,6 +83,7 @@ def delay_signal(signal: OpticalSignal, delay: float) -> OpticalSignal:
         bands=tuple(delay_band(band, delay) for band in signal.bands),
         noise=signal.noise,
         accumulated_gvd=signal.accumulated_gvd,
+        nonlinear_history=signal.nonlinear_history,
     )
 
 
