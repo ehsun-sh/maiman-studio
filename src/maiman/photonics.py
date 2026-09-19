@@ -1446,11 +1446,12 @@ def _tilted_tables(
     of each order down to ``lowest_index``, as many as every wavelength has.
     """
     k_top = 2.0 * math.pi / float(wavelengths.min())
-    n2, n3 = fibre.cladding_index, fibre.surrounding_index
-    floor = max(lowest_index, n3 + 1e-6)
+    floor = max(lowest_index, fibre.surrounding_index + 1e-6)
     per_order: list[list[list[Mode]]] = []
     cores = []
     for wavelength in wavelengths:
+        # The cladding's own index at this wavelength, if its glass disperses.
+        n2 = fibre.at(float(wavelength)).cladding_index
         guided = core_modes(fibre, float(wavelength))
         if not guided:
             raise ValueError(f"the fibre guides no core mode at {wavelength * 1e9:.1f} nm")
@@ -1577,7 +1578,7 @@ def tilted_grating_spectrum(
     # few resonance widths either side, are worth solving for.
     # The lowest cladding index phase matches at the shortest wavelength.
     k_top = 2.0 * math.pi / float(wavelengths.min())
-    lowest = axial / k_top - fibre.core_index - 2e-3
+    lowest = axial / k_top - fibre.at(float(wavelengths.min())).core_index - 2e-3
     core, index, coupling, _ = _tilted_interpolated(
         fibre,
         wavelengths,
@@ -1689,7 +1690,7 @@ def tilted_grating_resonances(
         period=period,
         tilt=tilt,
         max_order=max_order,
-        lowest_index=axial * lo / (2.0 * math.pi) - fibre.core_index - 2e-3,
+        lowest_index=axial * lo / (2.0 * math.pi) - fibre.at(lo).core_index - 2e-3,
     )
     cheb = np.polynomial.chebyshev
     mismatch = core[:, None] + index - nodes[:, None] * axial / (2.0 * math.pi)

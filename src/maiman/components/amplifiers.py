@@ -70,10 +70,26 @@ class EDFA(Component):
     small-signal gain that is ``1.443 * P_3dB``, and the factor is carried in
     full rather than as that limit because a 10 dB amplifier is 20 % away from it.
 
-    **Saturation is driven by total power, ASE included.** That is what makes two
-    WDM channels share a gain that neither of them alone would have compressed,
-    and it is why a high-gain amplifier left in the dark still does not deliver
-    its small-signal gain: its own spontaneous emission is a load like any other.
+    **Saturation is driven by total power, incoming ASE included.** That is what
+    makes two WDM channels share a gain that neither of them alone would have
+    compressed.
+
+    **And, with** ``self_saturation``, **by the amplifier's own ASE.** Saleh's
+    equation is energy conservation for the reservoir: ``P_sat ln(G_0 / G)`` is
+    everything the inversion hands out, output minus input over every field in
+    the fibre. The spontaneous emission the amplifier generates is one of those
+    fields, and it has no input. It leaves both ends -- a uniformly inverted
+    fibre sends as much backwards as forwards -- and each end carries what this
+    block emits, ``2 S_ASE B = NF G h nu B`` over both polarizations. So::
+
+        ln(G_0 / G) = [(G - 1) P_in + 2 NF G h nu B] / P_sat
+
+    A lightly loaded amplifier is where that matters: with no input at all the
+    gain is ``W(beta G_0) / beta``, Lambert's W, with ``beta = 2 NF h nu B /
+    P_sat`` -- a ceiling on how much gain an erbium coil can hold before its own
+    noise empties it. It is flat across the band here, as the block's ASE is, so
+    it drains the reservoir at the centre wavelength's rate. Off by default,
+    because it moves every saturated amplifier's gain.
 
     **The gain here is the steady state the erbium settles into**, and within any
     window this engine runs that is not an approximation but the right answer.
@@ -112,6 +128,11 @@ class EDFA(Component):
         17.0,
         unit="dBm",
         doc="Output power at 3 dB gain compression, as a datasheet quotes it",
+        applies_when="saturate",
+    )
+    self_saturation = BoolParam(
+        False,
+        doc="Let the amplifier's own ASE, forwards and backwards, deplete its inversion",
         applies_when="saturate",
     )
     center_wavelength = Param(
@@ -160,28 +181,55 @@ class EDFA(Component):
             / (small_signal_gain * math.log(2.0))
         )
 
+    def self_saturation_load(self) -> float:
+        """The amplifier's own ASE per unit gain, both ends, both polarizations [W].
+
+        ``2 NF h nu B``: the ASE this block emits from one end is ``2 S_ASE B``,
+        which for the noise figure's ``n_sp`` is ``NF G h nu B``, and the other
+        end emits the same. Zero unless ``self_saturation`` is set. Multiply by
+        the gain for the power the reservoir spends on it.
+        """
+        if not (self.saturate and self.self_saturation):
+            return 0.0
+        frequency = C_LIGHT / self.si("center_wavelength")
+        return 2.0 * db_to_linear(self.noise_figure) * H_PLANCK * frequency * self.si("bandwidth")
+
     def effective_gain(self, input_power: float) -> float:
         """Linear gain at this input power, from the Saleh compression model.
 
-        Solves ``g + a*exp(g) - a - ln(G_0) = 0`` for ``g = ln G``, with
-        ``a = P_in / P_sat``. The function is increasing and convex, and the root
-        is bracketed by ``[0, ln G_0]``, so Newton started at the upper end
-        descends monotonically onto it — no bisection fallback and no iteration
-        cap that could quietly return a half-converged gain.
+        Solves ``g + a*exp(g) - a + b*exp(g) - ln(G_0) = 0`` for ``g = ln G``,
+        with ``a = P_in / P_sat`` and ``b`` the amplifier's own ASE per unit gain
+        over ``P_sat`` (zero without ``self_saturation``). The function is
+        increasing and convex, and the root is bracketed by ``[0, ln G_0]``, so
+        Newton started at the upper end descends monotonically onto it — no
+        bisection fallback and no iteration cap that could quietly return a
+        half-converged gain.
         """
         small_signal_gain = db_to_linear(self.gain)
         saturation = self.si("saturation_power")
-        if not self.saturate or input_power <= 0.0 or small_signal_gain <= 2.0 or saturation <= 0.0:
+        load = self.self_saturation_load()
+        if (
+            not self.saturate
+            or (input_power <= 0.0 and load <= 0.0)
+            or small_signal_gain <= 2.0
+            or saturation <= 0.0
+        ):
             # Below 6 dB there is no half-gain point to anchor P_sat to, and an
             # amplifier that small is not what this model is for. Returning the
             # small-signal gain is exact for zero input and honest for the rest.
             return small_signal_gain
 
-        a = input_power / self.intrinsic_saturation_power(small_signal_gain)
+        intrinsic = self.intrinsic_saturation_power(small_signal_gain)
+        a = max(input_power, 0.0) / intrinsic
+        b = load / intrinsic
         log_small_signal = math.log(small_signal_gain)
+        if b >= log_small_signal:
+            # Its own noise would empty it before it reached unity gain.
+            return 1.0
         g = log_small_signal
         for _ in range(64):
-            step = (g + a * math.exp(g) - a - log_small_signal) / (1.0 + a * math.exp(g))
+            grown = (a + b) * math.exp(g)
+            step = (g + grown - a - log_small_signal) / (1.0 + grown)
             g -= step
             if abs(step) < 1e-14:
                 break

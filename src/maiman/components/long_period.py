@@ -53,11 +53,12 @@ class LongPeriodGrating(ScatteringDevice):
     cladding-air step is not weak: set ``vector`` and the block solves the true
     HE and EH modes of :mod:`maiman.vector_modes` instead, which moves the LP04
     notch of the default grating from 1584.1 nm to 1583.0 and adds the weak EH1m
-    notches the scalar model has no modes for. It costs a few seconds. Material
-    dispersion is not included -- the indices are constants and only the
-    waveguide's dispersion is computed -- and the average index the writing
-    raises is not either, so a real grating's notches sit a few nanometres
-    longward of these. The cladding light is taken to be lost, as it is under a
+    notches the scalar model has no modes for. It costs a few seconds. By
+    default the indices are constants and only the waveguide disperses; set
+    ``material_dispersion`` and the glass does too (silica cladding, germania-doped
+    core, the quoted indices holding at 1550 nm), which moves the notches by
+    nanometres, the first cladding mode's 4.2 nm shortward. The average index the writing
+    raises is not included. The cladding light is taken to be lost, as it is under a
     coating; its recoupling at a second grating is not modelled.
     """
 
@@ -86,6 +87,11 @@ class LongPeriodGrating(ScatteringDevice):
     vector = BoolParam(
         False, doc="Solve the true HE and EH modes instead of the scalar LP ones. Slower"
     )
+    material_dispersion = BoolParam(
+        False,
+        doc="Let the glass disperse: silica cladding, germania-doped core, "
+        "the indices above holding at 1550 nm",
+    )
 
     inputs = {"in": PortType.OPTICAL}
     outputs = {"transmitted": PortType.OPTICAL}
@@ -98,6 +104,7 @@ class LongPeriodGrating(ScatteringDevice):
             core_index=self.core_index,
             cladding_index=self.cladding_index,
             surrounding_index=self.surrounding_index,
+            material_dispersion=self.material_dispersion,
         )
 
     def _coupled_modes(self) -> int:

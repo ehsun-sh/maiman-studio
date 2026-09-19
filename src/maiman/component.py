@@ -203,8 +203,8 @@ class BoolParam(Param):
     an SI unit is meaningless and asking for it means something is confused.
     """
 
-    def __init__(self, default: bool, *, doc: str = "") -> None:
-        super().__init__(0.0, doc=doc)
+    def __init__(self, default: bool, *, doc: str = "", applies_when: str | None = None) -> None:
+        super().__init__(0.0, doc=doc, applies_when=applies_when)
         self.default = default
 
     @overload

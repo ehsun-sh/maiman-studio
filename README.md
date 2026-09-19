@@ -971,6 +971,41 @@ long-wavelength half of equal power. A comb sitting at the reference wavelength 
 which is the single total this model was always driven with. `examples/edfa_pump_control.py` prints
 all three tables.
 
+### Its own noise is a load
+
+Saleh's equation is the reservoir's energy balance: `P_sat ln(G₀/G)` is everything the inversion
+hands out, output minus input, over every field in the fibre. The amplifier's own spontaneous
+emission is one of those fields — with no input, and leaving by both ends. Set `self_saturation`
+(it applies once `saturate` is on) and it is counted. Each end carries exactly what the block emits
+into the link, `2 S_ASE B = NF·G·hν·B` over both polarizations, so:
+
+```
+ln(G₀/G) = [(G − 1)·P_in + 2·NF·G·hν·B] / P_sat
+```
+
+With no input at all that has a closed form, `G = W(βG₀)/β` in Lambert's W, where
+`β = 2·NF·hν·B/P_sat`. That is the gain a coil can hold before its own noise empties it. The test
+solves W by Halley's iteration, which shares nothing with the component's Newton on `ln G`, and
+the two agree to 1e-12. With the 17 dBm, 5 dB, 4 THz defaults:
+
+```
+   small-signal   gain in the dark   forward ASE    cost at −40 dBm in
+   20 dB             19.98 dB          −7.9 dBm        0.02 dB
+   30 dB             29.81 dB          +1.9 dBm        0.19 dB
+   35 dB             34.46 dB          +6.6 dBm        0.54 dB
+   40 dB             38.59 dB         +10.7 dBm        1.38 dB
+```
+
+At 0 dBm input every one of them is within 0.02 dB of the model without it. Its own ASE matters
+where the amplifier is lightly loaded and its gain is high, and that is where it was missing.
+
+The transient integrators carry the same term. So an amplifier whose channels are all dropped
+comes to rest on Lambert's gain rather than on `G₀`, and it answers faster than `τ` even in the
+dark, at `τ/(1 + (P_out + P_ASE)/P_sat)`. A test measures that rate against the closed form to a
+part in a thousand. The ASE drains the reservoir at the centre wavelength's rate, flat across the
+band, because that is how the block emits it. The flag is off by default, because it moves every
+saturated amplifier's gain.
+
 ### What RIN is for
 
 Every noise in this project until now got *quieter*, relative to the signal, as the launch power
@@ -2246,7 +2281,50 @@ Set `vector` on a `LongPeriodGrating` and it couples HE11 to the cladding's orde
 
 A nanometre is not a rounding error on a device whose whole output is where its notch went. The
 EH1m, which the scalar model has no mode for at this order, couple at about one percent of the HE1m
-and cut their own shallow notches between them. Material dispersion is still not included.
+and cut their own shallow notches between them.
+
+### And the glass disperses
+
+By default a fibre's three indices are constants, and the only dispersion the solvers see is the
+waveguide's. Set `material_dispersion` on a `StepIndexFibre`, a `LongPeriodGrating` or a
+`TiltedFiberBraggGrating`, and the glass disperses:
+
+- the cladding follows Malitson's Sellmeier equation for fused silica;
+- the core follows germania-doped silica. Its Sellmeier coefficients are interpolated in mole
+  fraction between silica and Fleming's pure germania, at the fraction that gives the quoted index
+  step: 3.5 mol % for 0.0052.
+
+The quoted indices hold at 1550 nm and nowhere else. The default 1.4440 is Malitson's silica
+there to 2e-5, so at 1550 nm nothing moves at all.
+
+The check is that the default fibre becomes the fibre it was meant to be:
+
+```
+                          constant indices     dispersing glass     G.652
+   D at 1550 nm           −4.8 ps/(nm·km)      16.7 ps/(nm·km)      ≤ 18
+   zero dispersion        none                 1308.3 nm            1300 – 1324 nm
+```
+
+Nothing was fitted to get there. Silica's own zero of dispersion sits at 1272.7 nm, and the core's
+waveguide dispersion drags the fibre's zero thirty-five nanometres longward. At 1550 nm the
+material and waveguide terms add to the total to within half a picosecond per nanometre per
+kilometre.
+
+A long-period grating's notches are set by the difference of two indices that disperse
+differently, so they move by nanometres:
+
+```
+   cladding mode   constant indices   dispersing glass
+   LP01            1354.9 nm          1350.7 nm        −4.2 nm
+   LP02            1388.7 nm          1384.9 nm        −3.8 nm
+   LP03            1455.7 nm          1453.0 nm        −2.7 nm
+   LP04            1584.1 nm          1585.5 nm        +1.4 nm
+```
+
+Each notch still sits where the dispersive fibre's own indices phase match, to 1e-9. A tilted
+grating's comb is read against indices that hold at 1550 nm, where the comb is, so it moves by
+picometres: 16 pm on its Bragg line, and 12 pm twenty nanometres below it. The surrounding medium
+stays constant.
 
 ### Where the notches land
 
@@ -3254,8 +3332,8 @@ time window, and results are reproducible.
 | **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier frequency and phase recovery, coarse frequency acquisition over the whole sampled band, blind square-law timing recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km with blind estimation of the accumulated value, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
 | **3 — GUI & WDM** ✅ | Wavelength-selective filters, the ITU grids and a multiplexer/demultiplexer pair on them with crosstalk that falls out of the channel spacing, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — the OSA's trace drawn in the dock, and 400G/800G reference designs validated against the OSNR relations, and a back-end indirection the propagation kernels dispatch through — CuPy runs it where a device exists, `maiman devices` cross-checks it against NumPy, and a CI job does the same on any runner labelled `gpu` | ~6 months |
 | **4 — PIC** ✅ | Bidirectional S-matrix circuit solver, waveguide, directional coupler, all-pass and add-drop ring resonators, cross-validated against SAX; N×N MMI couplers on the self-imaging phase relations; a Mach-Zehnder interferometer assembled from them — switch, interleaver, or both; and PDK import, which reads a foundry's fitted numbers out of a JSON kit and refuses to extrapolate them past the window they were fitted in; and birefringence, with each guided polarization carrying its own indices through the same reduction | — |
-| **5 — Gratings, sensing, loops and coupling** ✅ | Fibre Bragg gratings assembled from transfer matrices — apodized, chirped, sampled and phase-shifted — a circulator with isolation and return loss, and a grating read as a strain gauge and a thermometer, by a swept laser or by broadband light on an analyser; noise that carries the spectral shape of what it passed through; loop control that runs a cavity to its fixed point, and a delay line that turns the same loop into a recirculating one lap by lap; pump depletion for four-wave mixing and Raman's measured gain shape past its peak; an erbium transient spread across the spectrum, each channel moving by the fibre's own tilt, drained per channel by its own cross section, and answered by a pump control loop with a bandwidth and a ceiling; PMD applied along the span between Kerr steps, and the coherent polarization term that moves power between the axes; a scalar mode solver for core and cladding modes, and the vector HE, EH, TE and TM modes the glass-air boundary splits them into, checked against the exact characteristic equation; a long-period grating built on either, and a tilted grating whose comb of cladding resonances reads what the fibre is dipped in; edge and grating couplers that put a signal into the chip's TE and TM, the edge coupler's two facets a cavity summed bounce by bounce and the grating coupler's passband computed from its vertical stack; a PAM4 driver with its modulator's linearity corrected, and a feed-forward and decision-feedback equaliser, fractionally spaced or blind; a laser's linewidth and intensity noise from its own Langevin forces, and the partition noise between a Fabry-Perot laser's modes; a directly modulated laser whose chirp comes out of its own rate equations; and templates in the studio's File menu, including an eight-channel DWDM link | — |
-| **Open** | Amplified spontaneous emission saturating the reservoir, which in a lightly loaded amplifier it does; the pumps' own nonlinear phase in four-wave mixing between spans; material dispersion, the polarization dependence of a tilted grating's comb, and recoupling at a second long-period grating; the grating's own back-reflection from its teeth, and the fibre's height above it; mode partition noise in the link itself, which needs bands that carry their delays to the detector; the W-Port framing around OFEC — its FlexO adaptation, scrambler and symbol framing | — |
+| **5 — Gratings, sensing, loops and coupling** ✅ | Fibre Bragg gratings assembled from transfer matrices — apodized, chirped, sampled and phase-shifted — a circulator with isolation and return loss, and a grating read as a strain gauge and a thermometer, by a swept laser or by broadband light on an analyser; noise that carries the spectral shape of what it passed through; loop control that runs a cavity to its fixed point, and a delay line that turns the same loop into a recirculating one lap by lap; pump depletion for four-wave mixing and Raman's measured gain shape past its peak; an erbium transient spread across the spectrum, each channel moving by the fibre's own tilt, drained per channel by its own cross section, and answered by a pump control loop with a bandwidth and a ceiling; an amplifier's own ASE, both ways, depleting its inversion; PMD applied along the span between Kerr steps, and the coherent polarization term that moves power between the axes; a scalar mode solver for core and cladding modes, and the vector HE, EH, TE and TM modes the glass-air boundary splits them into, checked against the exact characteristic equation; glass that disperses as Sellmeier's silica and germania, which makes the default fibre a G.652 one; a long-period grating built on either, and a tilted grating whose comb of cladding resonances reads what the fibre is dipped in; edge and grating couplers that put a signal into the chip's TE and TM, the edge coupler's two facets a cavity summed bounce by bounce and the grating coupler's passband computed from its vertical stack; a PAM4 driver with its modulator's linearity corrected, and a feed-forward and decision-feedback equaliser, fractionally spaced or blind; a laser's linewidth and intensity noise from its own Langevin forces, and the partition noise between a Fabry-Perot laser's modes; a directly modulated laser whose chirp comes out of its own rate equations; and templates in the studio's File menu, including an eight-channel DWDM link | — |
+| **Open** | The pumps' own nonlinear phase in four-wave mixing between spans; the polarization dependence of a tilted grating's comb, and recoupling at a second long-period grating; the grating's own back-reflection from its teeth, and the fibre's height above it; mode partition noise in the link itself, which needs bands that carry their delays to the detector; the W-Port framing around OFEC — its FlexO adaptation, scrambler and symbol framing | — |
 
 ¹ One developer, part-time. Estimates, not commitments.
 
@@ -3344,6 +3422,8 @@ Every physics block ships with a test against a closed-form result, run in CI
 | A cross term lands where the solver finds it | Nothing produces one; the matrix can still hold it, so block-diagonal stays a model's choice | ✅ |
 | **Gain dynamics settle onto the static solve** | The reservoir ODE integrated to rest lands on `EDFA.effective_gain` to 1e-9, at seven input powers — two code paths sharing no arithmetic | ✅ |
 | The effective time constant is `τ/(1+P_out/P_sat)` | Measured from a step response against the closed form, to a part in a thousand, and monotone in drive | ✅ |
+| **An amplifier in the dark holds Lambert's gain** | `W(βG₀)/β` by Halley's iteration against the component's Newton, to 1e-12; its own ASE load is the ASE it emits, both ends; the transient comes to rest there | ✅ |
+| **The default fibre is a G.652 fibre once its glass disperses** | Zero dispersion at 1308.3 nm and 16.7 ps/(nm·km) at 1550 from Malitson and Fleming alone; silica's own zero at 1272.7 nm | ✅ |
 | A transient is far longer than a window | 25,000 windows at the most saturated point — the measurement the decision to keep it out of the component rests on | ✅ |
 | A coarse output grid still gets the right curve | Identical to 1e-6 dB across a 200× range of grid spacing; the integrator takes its own steps and reports how many | ✅ |
 | Relaxation is monotone | A first-order system cannot ring, so an overshoot is an integrator bug rather than physics | ✅ |

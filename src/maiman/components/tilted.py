@@ -28,7 +28,7 @@ from collections.abc import Callable
 import numpy as np
 
 from ..circuit import SMatrix
-from ..component import Param, PortType
+from ..component import BoolParam, Param, PortType
 from ..context import SimulationContext
 from ..modes import StepIndexFibre
 from ..photonics import tilted_fiber_bragg_grating, tilted_grating_resonances
@@ -52,9 +52,11 @@ class TiltedFiberBraggGrating(ScatteringDevice):
     **What it does not.** The modes are scalar LP modes, so the splitting that
     makes a real tilted grating's comb depend on the input polarization is
     absent -- that needs the vector modes of :mod:`maiman.vector_modes`, which
-    the long-period grating can use and this cannot yet. Material dispersion is
-    not included, and neither is the average index the writing raises, so a real
-    grating's comb sits a few nanometres longward of this one.
+    the long-period grating can use and this cannot yet. ``material_dispersion``
+    lets the glass disperse, which moves the comb by picometres since its indices
+    hold at 1550 nm, where the comb is. The average index the writing raises is
+    not included, so a real grating's comb sits a few nanometres longward of this
+    one.
 
     **Speed.** A mode solve per azimuthal order per wavelength node, and a
     tilted grating reaches dozens of cladding modes: expect seconds, and more of
@@ -83,6 +85,11 @@ class TiltedFiberBraggGrating(ScatteringDevice):
         max=4.0,
         doc="What the fibre sits in: 1 is air, 1.333 water. Moves the comb and not the Bragg line",
     )
+    material_dispersion = BoolParam(
+        False,
+        doc="Let the glass disperse: silica cladding, germania-doped core, "
+        "the indices above holding at 1550 nm",
+    )
     azimuthal_orders = Param(
         6.0, unit="", min=0.0, max=20.0, doc="Highest azimuthal order of cladding mode coupled"
     )
@@ -98,6 +105,7 @@ class TiltedFiberBraggGrating(ScatteringDevice):
             core_index=self.core_index,
             cladding_index=self.cladding_index,
             surrounding_index=self.surrounding_index,
+            material_dispersion=self.material_dispersion,
         )
 
     def bragg_wavelength(self) -> float:

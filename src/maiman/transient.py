@@ -59,9 +59,15 @@ inversion, holding either the gain or the output power. That is what a deployed
 amplifier does about the excursion the uncontrolled model computes -- and what it
 cannot do past its pump's ceiling, which is reported rather than smoothed over.
 
-**What this does not model.** Amplified spontaneous emission does not saturate
-the reservoir here, though in a lightly loaded amplifier it does; and the loop is
-the ideal integral one, with no detector noise, no delay and no dither.
+**Its own noise is a load too.** With ``self_saturation`` set on the amplifier,
+the ASE it emits from both ends drains the reservoir alongside the signal, a term
+``b e^g`` beside ``(e^g - 1) P_in / P_sat``, in every integrator here as in the
+static solve -- so a coil left in the dark rests below its small-signal gain, and
+a drop to nothing lands there rather than on ``G_0``.
+
+**What this does not model.** The loop is the ideal integral one, with no
+detector noise, no delay and no dither; and the amplifier's ASE drains the
+reservoir at the centre wavelength's rate, flat across the band, as it is emitted.
 
 Model references: A. A. M. Saleh, R. M. Jopson, J. D. Evankow and J. Aspell,
 "Modeling of gain in erbium-doped fiber amplifiers", IEEE Photon. Technol. Lett.
@@ -177,12 +183,16 @@ def effective_time_constant(
     that says whether a transient matters on the timescale someone cares about.
     """
     small_signal = db_to_linear(amplifier.gain)
-    if not amplifier.saturate or small_signal <= 2.0 or input_power <= 0.0:
+    load = amplifier.self_saturation_load()
+    if not amplifier.saturate or small_signal <= 2.0 or (input_power <= 0.0 and load <= 0.0):
         return lifetime
     saturation = amplifier.intrinsic_saturation_power(small_signal)
     if saturation <= 0.0:
         return lifetime
-    output_power = amplifier.effective_gain(input_power) * input_power
+    # The amplifier's own ASE grows with the gain as the output does, so it
+    # speeds the reservoir up by the same token: d/dg of b e^g is b e^g.
+    gain = amplifier.effective_gain(input_power)
+    output_power = gain * max(input_power, 0.0) + gain * load
     return lifetime / (1.0 + output_power / saturation)
 
 
@@ -290,6 +300,7 @@ def gain_transient(
         )
 
     saturation = amplifier.intrinsic_saturation_power(small_signal)
+    own = amplifier.self_saturation_load() / saturation
     log_small_signal = math.log(small_signal)
 
     # One substep count for the whole run, from the fastest constant any of these
@@ -304,7 +315,10 @@ def gain_transient(
 
     def slope(log_gain: float, power: float) -> float:
         return (
-            log_small_signal - log_gain - (math.exp(log_gain) - 1.0) * power / saturation
+            log_small_signal
+            - log_gain
+            - (math.exp(log_gain) - 1.0) * power / saturation
+            - own * math.exp(log_gain)
         ) / lifetime
 
     gains = np.empty(grid.shape, dtype=np.float64)
@@ -762,6 +776,7 @@ def controlled_gain_transient(
             "its limit; raise max_pump_gain or lower the amplifier's gain"
         )
     saturation = amplifier.intrinsic_saturation_power(small_signal)
+    own = amplifier.self_saturation_load() / saturation
     settled_gain = amplifier.effective_gain(float(drive[0]))
     if control.setpoint is None:
         setpoint = (
@@ -786,7 +801,12 @@ def controlled_gain_transient(
     nepers = math.log(10.0) / 10.0  # one decibel, in the units the loop integrates
 
     def reservoir_slope(log_gain: float, log_pump: float, power: float) -> float:
-        return (log_pump - log_gain - (math.exp(log_gain) - 1.0) * power / saturation) / lifetime
+        return (
+            log_pump
+            - log_gain
+            - (math.exp(log_gain) - 1.0) * power / saturation
+            - own * math.exp(log_gain)
+        ) / lifetime
 
     def loop_slope(log_gain: float, power: float) -> float:
         if control.mode == "gain":

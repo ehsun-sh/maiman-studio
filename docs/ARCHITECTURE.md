@@ -557,7 +557,9 @@ be finished without it, and each is validated against a result it does not share
   scrambling, and the tests say the coherent term does not change that average.
 * **Pump control.** The pump is a state integrated beside the inversion, driven by an integral
   loop holding gain or output power, with a bandwidth and a ceiling it can saturate against;
-  and each channel drains the reservoir by its own cross section and photon energy.
+  and each channel drains the reservoir by its own cross section and photon energy. With
+  `self_saturation` the amplifier's own ASE, leaving by both ends, drains it too, and a coil in
+  the dark holds Lambert's `W(βG₀)/β` rather than `G₀`.
 * **Gain tilt.** An erbium transient is one average inversion moving, and `ErbiumSpectrum` spreads it
   across the band from the fibre's Giles parameters: at the centre wavelength the single-reservoir
   answer exactly, and everywhere else that answer times the dynamic gain tilt.
@@ -569,7 +571,9 @@ be finished without it, and each is validated against a result it does not share
   matching all four tangential components across every interface -- which satisfies the exact
   characteristic equation of Snyder and Love to 1e-10 at a glass-air boundary and meets the scalar
   solver where guidance is weak. A long-period grating couples the core mode to either set, and the
-  vector modes move its notch by 1.1 nm.
+  vector modes move its notch by 1.1 nm. With `material_dispersion` the glass disperses as
+  Malitson's silica and Fleming's germania, and the default fibre's dispersion zero lands at
+  1308 nm.
 * **Tilted gratings.** Tilting a Bragg grating's fringes opens every azimuthal order to the core
   mode, through an overlap that is a Bessel function of the tilt; the contra-directional equations
   are solved for the modes nearest phase matching, with the rest entering as the shift they leave on
@@ -603,13 +607,13 @@ be finished without it, and each is validated against a result it does not share
 
 Stated in the code where each approximation is made, and collected here:
 
-* **Amplifiers.** Amplified spontaneous emission does not saturate the reservoir, though in a
-  lightly loaded amplifier it does; and the control loop is the ideal integral one, with no detector
-  noise, no delay and no dither.
+* **Amplifiers.** The control loop is the ideal integral one, with no detector noise, no delay
+  and no dither; and an amplifier's own ASE drains its reservoir at the centre wavelength's rate,
+  flat across the band, as the block emits it.
 * **Fibre.** Four-wave mixing tracks the linear mismatch between spans but not the pumps' own
   nonlinear phase.
-* **Gratings and modes.** Material dispersion is not included in either mode solver, and neither is
-  the average index a writing process raises. A tilted grating is solved with scalar modes, so its
+* **Gratings and modes.** The average index a writing process raises is not included, and a
+  dispersing fibre's surrounding medium stays constant. A tilted grating is solved with scalar modes, so its
   comb has no polarization dependence; recoupling at a second long-period grating is not modelled.
 * **Coupling.** A grating's back-reflection is still a number, because it comes from its teeth
   rather than its stack; the fibre's height above a grating and any bottom mirror or apodization are

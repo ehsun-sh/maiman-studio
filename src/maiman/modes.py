@@ -29,6 +29,15 @@ nanometres. The tests check the solver against an independent finite-difference
 solution of the *same* scalar equation, which pins the numerics, not the
 approximation; the approximation is stated here instead.
 
+**Material dispersion is a flag.** By default the three indices are constants,
+and the only dispersion computed is the waveguide's. Set ``material_dispersion``
+and the glass disperses as glass does: the cladding as fused silica (Malitson's
+Sellmeier equation), the core as germania-doped silica, its Sellmeier
+coefficients interpolated linearly in mole fraction between silica's and pure
+germania's (Fleming's), at the fraction that gives the quoted index step at the
+reference wavelength. The quoted indices then hold at that wavelength -- 1550 nm
+unless told otherwise -- and nowhere else; the surrounding medium stays constant.
+
 **No SciPy.** The Bessel functions are evaluated from their integral
 representations by quadrature, which converges exponentially for the smooth,
 bounded integrands these are, and the values are checked against tabulated ones.
@@ -38,7 +47,8 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from functools import lru_cache
 from itertools import pairwise
 
 import numpy as np
@@ -183,6 +193,69 @@ def _k_log_derivative(order: int, x: np.ndarray) -> np.ndarray:
 # --------------------------------------------------------------------------
 # The fibre and its modes
 # --------------------------------------------------------------------------
+# The glass
+# --------------------------------------------------------------------------
+
+#: Fused silica, ``(B_i, lambda_i [um])``: I. H. Malitson, "Interspecimen
+#: comparison of the refractive index of fused silica", J. Opt. Soc. Am. 55(10),
+#: 1965. Measured from 0.21 to 3.71 microns at 20 C.
+SILICA_SELLMEIER = ((0.6961663, 0.0684043), (0.4079426, 0.1162414), (0.8974794, 9.896161))
+
+#: Pure germania glass, ``(B_i, lambda_i [um])``: J. W. Fleming, "Dispersion in
+#: GeO2-SiO2 glasses", Appl. Opt. 23(24), 1984.
+GERMANIA_SELLMEIER = (
+    (0.80686642, 0.068972606),
+    (0.71815848, 0.15396605),
+    (0.85416831, 11.841931),
+)
+
+#: The wavelength a fibre's quoted indices are read at when its glass disperses [m].
+INDEX_WAVELENGTH = 1.55e-6
+
+
+def glass_index(wavelength: np.ndarray | float, germania: float = 0.0) -> np.ndarray:
+    """Refractive index of germania-doped silica, ``germania`` its mole fraction.
+
+    ``n^2 = 1 + sum B_i lambda^2 / (lambda^2 - lambda_i^2)``, with each ``B_i``
+    and ``lambda_i`` interpolated linearly in mole fraction between silica
+    (Malitson) and germania (Fleming) -- the interpolation fibre design uses
+    between the two measured end members. ``germania = 0`` is Malitson exactly.
+    """
+    if not 0.0 <= germania <= 1.0:
+        raise ValueError(f"a mole fraction lies between 0 and 1, got {germania}")
+    microns = np.asarray(wavelength, dtype=float) * 1e6
+    square = microns**2
+    total = np.ones_like(square)
+    for (b_s, l_s), (b_g, l_g) in zip(SILICA_SELLMEIER, GERMANIA_SELLMEIER, strict=True):
+        b = b_s + germania * (b_g - b_s)
+        pole = l_s + germania * (l_g - l_s)
+        total = total + b * square / (square - pole**2)
+    return np.sqrt(total)
+
+
+@lru_cache(maxsize=64)
+def germania_fraction(index_step: float, wavelength: float = INDEX_WAVELENGTH) -> float:
+    """The germania mole fraction that raises silica's index by ``index_step`` at ``wavelength``.
+
+    Bisection: the index rises monotonically with the fraction. A standard
+    single-mode fibre's 0.0052 is 3.6 mol %.
+    """
+    base = float(glass_index(wavelength))
+    if index_step < 0.0 or index_step > float(glass_index(wavelength, 1.0)) - base:
+        raise ValueError(
+            f"an index step of {index_step} is not reachable by doping silica with germania"
+        )
+    lo, hi = 0.0, 1.0
+    for _ in range(80):
+        middle = 0.5 * (lo + hi)
+        if float(glass_index(wavelength, middle)) - base < index_step:
+            lo = middle
+        else:
+            hi = middle
+    return 0.5 * (lo + hi)
+
+
+# --------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -193,6 +266,14 @@ class StepIndexFibre:
     liquid's and every cladding mode moves, which is what makes a long-period
     grating a refractometer. It has to stay below the cladding's, or the
     cladding guides nothing.
+
+    With ``material_dispersion`` the core and cladding indices are what they are
+    at ``reference_wavelength``, and :meth:`at` gives the fibre at any other; the
+    solvers call it, so a dispersive fibre can be handed to any of them as it is.
+    The cladding follows fused silica, offset so it passes through the quoted
+    index, and the core follows the germania-doped glass whose step over silica
+    is the quoted one, offset the same way. The default fibre's 1.4440 is
+    Malitson's silica at 1550 nm to 2e-5, so there the offset is nothing.
     """
 
     core_radius: float = 4.1e-6
@@ -200,6 +281,8 @@ class StepIndexFibre:
     core_index: float = 1.4492
     cladding_index: float = 1.4440
     surrounding_index: float = 1.0
+    material_dispersion: bool = False
+    reference_wavelength: float = INDEX_WAVELENGTH
 
     def __post_init__(self) -> None:
         if not 0.0 < self.core_radius < self.cladding_radius:
@@ -212,15 +295,38 @@ class StepIndexFibre:
                 "need core index > cladding index > surrounding index > 0, got "
                 f"{self.core_index}, {self.cladding_index}, {self.surrounding_index}"
             )
+        if self.material_dispersion:
+            if self.reference_wavelength <= 0.0:
+                raise ValueError(
+                    f"the reference wavelength must be positive, got {self.reference_wavelength}"
+                )
+            germania_fraction(self.core_index - self.cladding_index, self.reference_wavelength)
+
+    def at(self, wavelength: float) -> StepIndexFibre:
+        """This fibre with its glass's indices at ``wavelength``, and constant from there.
+
+        The identity without ``material_dispersion``, and at the reference
+        wavelength to the last bit of the indices.
+        """
+        if not self.material_dispersion:
+            return self
+        reference = self.reference_wavelength
+        fraction = germania_fraction(self.core_index - self.cladding_index, reference)
+        core = self.core_index + float(
+            glass_index(wavelength, fraction) - glass_index(reference, fraction)
+        )
+        cladding = self.cladding_index + float(glass_index(wavelength) - glass_index(reference))
+        return replace(self, core_index=core, cladding_index=cladding, material_dispersion=False)
 
     def v_number(self, wavelength: float) -> float:
         """Normalised frequency of the core, ``V = (2 pi a / lambda) sqrt(n1^2 - n2^2)``."""
+        fibre = self.at(wavelength)
         return (
             2.0
             * math.pi
-            * self.core_radius
+            * fibre.core_radius
             / wavelength
-            * math.sqrt(self.core_index**2 - self.cladding_index**2)
+            * math.sqrt(fibre.core_index**2 - fibre.cladding_index**2)
         )
 
 
@@ -304,6 +410,7 @@ def core_modes(fibre: StepIndexFibre, wavelength: float, *, order: int = 0) -> l
     poles to mistake for roots: ``u J_{l-1}(u) K_l(w) + w K_{l-1}(w) J_l(u) = 0``
     with ``u^2 + w^2 = V^2``.
     """
+    fibre = fibre.at(wavelength)
     v = fibre.v_number(wavelength)
     if order < 0:
         raise ValueError(f"azimuthal order must be non-negative, got {order}")
@@ -344,6 +451,7 @@ def cladding_modes(
     """
     if count < 1:
         raise ValueError(f"ask for at least one cladding mode, got {count}")
+    fibre = fibre.at(wavelength)
     k = _k0(wavelength)
     a, b = fibre.core_radius, fibre.cladding_radius
     n1, n2, n3 = fibre.core_index, fibre.cladding_index, fibre.surrounding_index

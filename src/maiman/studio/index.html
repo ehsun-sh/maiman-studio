@@ -2400,6 +2400,11 @@ verdict, and DESIGN.md
      "doc": "Output power at 3 dB gain compression, as a datasheet quotes it",
      "applies_when": "saturate"
     },
+    "self_saturation": {
+     "type": "bool",
+     "default": false,
+     "doc": "Let the amplifier's own ASE, forwards and backwards, deplete its inversion"
+    },
     "center_wavelength": {
      "type": "float",
      "default": 1550.0,
@@ -3526,6 +3531,11 @@ verdict, and DESIGN.md
      "type": "bool",
      "default": false,
      "doc": "Solve the true HE and EH modes instead of the scalar LP ones. Slower"
+    },
+    "material_dispersion": {
+     "type": "bool",
+     "default": false,
+     "doc": "Let the glass disperse: silica cladding, germania-doped core, the indices above holding at 1550 nm"
     }
    },
    "structural": {},
@@ -4698,6 +4708,11 @@ verdict, and DESIGN.md
      "min": 1.0,
      "max": 4.0,
      "doc": "What the fibre sits in: 1 is air, 1.333 water. Moves the comb and not the Bragg line"
+    },
+    "material_dispersion": {
+     "type": "bool",
+     "default": false,
+     "doc": "Let the glass disperse: silica cladding, germania-doped core, the indices above holding at 1550 nm"
     },
     "azimuthal_orders": {
      "type": "float",

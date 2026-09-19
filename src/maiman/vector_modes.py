@@ -419,6 +419,7 @@ def vector_core_modes(
 
     Solved as core and unbounded cladding, as :func:`maiman.modes.core_modes` is.
     """
+    fibre = fibre.at(wavelength)
     n1, n2 = fibre.core_index, fibre.cladding_index
     margin = 1e-12
     k0 = 2.0 * math.pi / wavelength
@@ -447,6 +448,7 @@ def vector_cladding_modes(
     """The first ``count`` cladding modes of azimuthal ``order``, every family, highest first."""
     if count < 1:
         raise ValueError(f"ask for at least one cladding mode, got {count}")
+    fibre = fibre.at(wavelength)
     k0 = 2.0 * math.pi / wavelength
     b = fibre.cladding_radius
     n2, n3 = fibre.cladding_index, fibre.surrounding_index
