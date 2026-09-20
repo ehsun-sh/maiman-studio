@@ -590,8 +590,10 @@ be finished without it, and each is validated against a result it does not share
   diffraction and Gouy phase. A grating coupler centred by phase matching with the grating's
   dispersion, its passband either a PDK's two numbers or computed from the vertical stack: the
   directionality of a sheet source in the silicon, and the overlap of its exponential beam with the
-  fibre's as the emission angle turns. Both project the signal onto the die's axes, which is where
-  the photonic blocks' TE and TM come from.
+  fibre's as the emission angle turns. Its teeth's second order gives the reflection back into the
+  waveguide, a bottom mirror is a complex substrate index, a strength taper is apodization, and the
+  height the fibre sits at both widens its beam and rings against the chip. Both project the signal
+  onto the die's axes, which is where the photonic blocks' TE and TM come from.
 * **Directly modulated lasers.** Single-mode rate equations whose transient and adiabatic chirp
   are measured from the field's phase rather than declared, with the threshold current, slope
   efficiency and relaxation frequency they imply. With their Langevin forces the Schawlow-Townes
@@ -622,9 +624,9 @@ Stated in the code where each approximation is made, and collected here:
   mix again among themselves only as far as each span's own bookkeeping reaches.
 * **Gratings and modes.** The average index a writing process raises is not included, and a
   dispersing fibre's surrounding medium stays constant.
-* **Coupling.** A grating's back-reflection is still a number, because it comes from its teeth
-  rather than its stack; the fibre's height above a grating and any bottom mirror or apodization are
-  not modelled; and the etalon sum is paraxial, good to 7e-3 at six degrees of fibre tilt.
+* **Coupling.** The etalon sum is paraxial, good to 7e-3 at six degrees of fibre tilt, and the gap
+  between fibre and chip acts on the coupling as a multiplier rather than being solved with the
+  grating inside the cavity.
 * **Transceivers.** Mode partition noise is computed at the laser by `dispersed_power`, not by a
   link, because every band is carried in its own retarded frame and a detector summing several
   after a span does not see the delays between them; a laser's thermal wavelength drift with bias; the W-Port framing around OFEC -- FlexO adaptation,

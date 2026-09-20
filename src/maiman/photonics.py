@@ -2278,6 +2278,23 @@ def grating_coupler(
 # --------------------------------------------------------------------------
 
 
+def _passive(index: complex, name: str) -> complex:
+    """Refuse an index that would amplify under this module's sign convention.
+
+    Fields here carry ``exp(+i k z)``, so a medium that absorbs has a *positive*
+    imaginary index: aluminium is ``1.44 + 16j``. The other sign is a gain medium,
+    and it makes a stack reflect more than it is given -- silently, and only in
+    the third decimal of a directionality, which is why it is refused here rather
+    than left to be noticed.
+    """
+    if complex(index).imag < 0.0:
+        raise ValueError(
+            f"{name} is {index}, which amplifies: an absorbing medium's index has a "
+            "positive imaginary part here, as aluminium's 1.44 + 16j does"
+        )
+    return complex(index)
+
+
 def grating_directionality(
     wavelength: np.ndarray | float,
     *,
@@ -2287,7 +2304,7 @@ def grating_directionality(
     silicon_thickness: float = 220e-9,
     box_index: float = 1.444,
     box_thickness: float = 2e-6,
-    substrate_index: float = 3.476,
+    substrate_index: complex = 3.476,
 ) -> np.ndarray:
     """Share of a grating's radiated power that goes up, rather than into the substrate.
 
@@ -2312,16 +2329,20 @@ def grating_directionality(
     cos(theta_box))`` = 0.54 microns -- and the standard 2 microns sits at 0.59,
     well short of the top, which is 1.1 dB a 2.2 micron oxide would buy back.
 
-    ``emission_sine`` is ``sin(theta)`` in the top medium. The tests hold this
-    against a direct solve of every layer's boundary conditions, which shares
-    no algebra with it, and against 0.5 for a stack with nothing to reflect.
+    ``emission_sine`` is ``sin(theta)`` in the top medium. A complex
+    ``substrate_index`` is a bottom mirror: aluminium's ``1.44 + 16j`` under the
+    oxide sends almost everything that goes down back up, and the share leaving
+    upward rises from 0.59 to 0.99. The tests hold this against a direct solve
+    of every layer's boundary conditions, which shares no algebra with it, and
+    against 0.5 for a stack with nothing to reflect.
     """
     lam = np.asarray(wavelength, dtype=float)
+    substrate_index = _passive(substrate_index, "the substrate's index")
     k = 2.0 * np.pi / lam
     transverse = top_index * np.asarray(emission_sine, dtype=float)
 
-    def kz(n: float) -> np.ndarray:
-        return np.asarray(k * np.sqrt((n**2 - transverse**2).astype(np.complex128)))
+    def kz(n: complex) -> np.ndarray:
+        return np.asarray(k * np.sqrt(np.asarray(n**2 - transverse**2, dtype=np.complex128)))
 
     k_top, k_si, k_box, k_sub = kz(top_index), kz(silicon_index), kz(box_index), kz(substrate_index)
     half = 0.5 * silicon_thickness
@@ -2336,7 +2357,32 @@ def grating_directionality(
     loop = 1.0 - up * down
     upward = np.abs((1.0 + down) / loop) ** 2 * (1.0 - np.abs(up) ** 2)
     downward = np.abs((1.0 + up) / loop) ** 2 * (1.0 - np.abs(down) ** 2)
-    return np.asarray(upward / (upward + downward))
+    # A mirror underneath keeps some of what it does not send back, so the share
+    # is of what escapes the stack either way rather than of the whole.
+    escaping = upward + downward
+    return np.asarray(upward / np.where(escaping > 0.0, escaping, 1.0))
+
+
+def _grating_profile(
+    x: np.ndarray, *, strength: float, strength_end: float, length: float
+) -> np.ndarray:
+    """The field a grating emits along itself, normalised over its length.
+
+    A grating radiating at ``alpha(x)`` per metre empties as ``exp(-int alpha)``
+    and emits ``sqrt(2 alpha(x))`` times what is left, which is energy
+    conservation and nothing else. Uniform, that is the usual ``exp(-alpha x)``;
+    tapered -- ``strength`` at the start to ``strength_end`` at the far end, the
+    apodization a real coupler is drawn with -- it is the profile that makes the
+    emitted beam rounder, and a rounder beam meets the fibre's Gaussian better.
+    """
+    slope = (strength_end - strength) / length
+    alpha = strength + slope * x
+    integral = strength * x + 0.5 * slope * x**2
+    emitted = np.sqrt(2.0 * alpha) * np.exp(-integral)
+    # Normalised over the length: what leaves the grating at all is counted once,
+    # by the caller, and this is its shape.
+    escaping = 1.0 - math.exp(-(strength + strength_end) * length)
+    return np.asarray(emitted / math.sqrt(escaping))
 
 
 def _grating_mode_overlap(
@@ -2345,29 +2391,163 @@ def _grating_mode_overlap(
     *,
     strength: float,
     length: float,
-    fibre_radius: float,
+    fibre_radius: np.ndarray | float,
     position: float,
     top_index: float,
+    strength_end: float | None = None,
+    curvature: np.ndarray | float = 0.0,
     nodes: int = 400,
 ) -> np.ndarray:
     """``|int p(x) g(x) exp(i k n dsin x) dx|^2``: the grating's beam onto the fibre's.
 
-    ``p`` is the grating's own beam, ``exp(-strength x)`` from its start to its
-    end and normalised over that length; ``g`` the fibre's Gaussian footprint
-    centred at ``position``; the phase is the angle between them.
+    ``p`` is the grating's own beam from :func:`_grating_profile`, ``g`` the
+    fibre's Gaussian footprint centred at ``position``, and the phase is the
+    angle between them. ``curvature`` is ``1 / R`` of the fibre's wavefront where
+    it lands, which is zero at the surface and not zero a height above it.
     """
     x, w = _legendre(nodes)
     x = 0.5 * length * (x + 1.0)
     w = 0.5 * length * w
-    emitted = np.sqrt(2.0 * strength / (1.0 - math.exp(-2.0 * strength * length))) * np.exp(
-        -strength * x
+    emitted = _grating_profile(
+        x,
+        strength=strength,
+        strength_end=strength if strength_end is None else strength_end,
+        length=length,
     )
-    fibre = (2.0 / (math.pi * fibre_radius**2)) ** 0.25 * np.exp(
-        -((x - position) ** 2) / fibre_radius**2
-    )
+    radius = np.atleast_1d(np.asarray(fibre_radius, dtype=float))[..., None]
+    fibre = (2.0 / (math.pi * radius**2)) ** 0.25 * np.exp(-((x - position) ** 2) / radius**2)
     k = 2.0 * np.pi * top_index / np.asarray(wavelength, dtype=float)
-    phase = np.exp(1j * (k * np.asarray(mismatch, dtype=float))[..., None] * x)
+    bend = np.asarray(curvature, dtype=float)
+    phase = np.exp(
+        1j
+        * (
+            (k * np.asarray(mismatch, dtype=float))[..., None] * x
+            - 0.5 * (k * bend)[..., None] * (x - position) ** 2
+        )
+    )
     return np.asarray(np.abs((phase * (w * emitted * fibre)).sum(axis=-1)) ** 2)
+
+
+def grating_harmonic(index_contrast: float, duty: float, order: int) -> float:
+    """The ``order``-th Fourier amplitude of a grating's square tooth profile.
+
+    Teeth of index ``n + dn`` over a fraction ``duty`` of each period and ``n``
+    over the rest are ``dn [duty + sum_m (2 / pi m) sin(pi m duty) cos(m K z)]``.
+    The coefficient of ``cos(m K z)`` is what couples: the first order radiates,
+    the second reflects. A fifty-fifty grating has no second harmonic at all --
+    ``sin(2 pi * 0.5)`` is zero -- so it reflects nothing this way, which is why
+    a duty cycle is worth stating.
+    """
+    if order < 1:
+        raise ValueError(f"the order must be positive, got {order}")
+    if not 0.0 <= duty <= 1.0:
+        raise ValueError(f"the duty cycle lies between 0 and 1, got {duty}")
+    return 2.0 * index_contrast * math.sin(math.pi * order * duty) / (math.pi * order)
+
+
+def grating_tooth_reflection(
+    wavelength: np.ndarray | float,
+    *,
+    period: float,
+    effective_index: float,
+    group_index: float,
+    reference_wavelength: float,
+    index_contrast: float,
+    duty: float = 0.5,
+    length: float,
+    order: int = 2,
+) -> np.ndarray:
+    """What a grating coupler's own teeth send back down the waveguide, as an amplitude.
+
+    The teeth that radiate also couple the forward guided mode to the backward
+    one, through the ``order``-th harmonic of their corrugation -- the second for
+    a grating radiating on its first. That is a fibre Bragg grating written in
+    the chip, and it obeys the same coupled-mode solution::
+
+        r = kappa sinh(gamma L) / (delta sinh(gamma L) + i gamma cosh(gamma L))
+
+    with ``kappa = pi c_m / lambda`` from :func:`grating_harmonic`, ``delta =
+    beta - m pi / Lambda`` the detuning from its own Bragg wavelength ``2 n_eff
+    Lambda / m``, and ``gamma = sqrt(kappa^2 - delta^2)``, imaginary where the
+    detuning wins. A coupler radiating at 1550 nm sits far off that resonance --
+    a 611 nm period at ``n_eff = 2.71`` reflects at 1656 nm on its second order --
+    so what comes back is the tail of it, ``2 kappa / delta`` in amplitude and
+    ringing with the grating's length. A fifty-fifty duty cycle reflects nothing
+    at all.
+
+    The mismatch is not free to choose: the same phase matching that sets the
+    emission angle sets it, ``delta = 2 pi n_top sin(theta) / lambda`` for
+    ``m = 2``, so a grating that radiates straight up reflects on resonance and a
+    tilted one does not. That is the whole reason a fibre is angled.
+
+    Checked against this module's own transfer-matrix grating, which shares no
+    algebra with the closed form.
+    """
+    lam = np.asarray(wavelength, dtype=float)
+    if period <= 0.0 or length <= 0.0:
+        raise ValueError("the grating's period and length must both be positive")
+    dispersed = (
+        effective_index
+        + (effective_index - group_index) * (lam - reference_wavelength) / reference_wavelength
+    )
+    harmonic = grating_harmonic(index_contrast, duty, order)
+    kappa = math.pi * harmonic / lam
+    delta = 2.0 * np.pi * dispersed / lam - order * np.pi / period
+    gamma = np.sqrt((kappa**2 - delta**2).astype(np.complex128))
+    # Where kappa and delta are both tiny the ratio is 0/0 and the answer is 0.
+    small = np.abs(gamma) * length < 1e-12
+    gamma = np.where(small, 1.0, gamma)
+    reflection = (
+        kappa
+        * np.sinh(gamma * length)
+        / (delta * np.sinh(gamma * length) + 1j * gamma * np.cosh(gamma * length))
+    )
+    return np.asarray(np.where(small, 0.0, reflection))
+
+
+def stack_reflection(
+    wavelength: np.ndarray | float,
+    *,
+    emission_sine: np.ndarray | float,
+    top_index: float = 1.0,
+    silicon_index: float = 3.476,
+    silicon_thickness: float = 220e-9,
+    box_index: float = 1.444,
+    box_thickness: float = 2e-6,
+    substrate_index: complex = 3.476,
+) -> np.ndarray:
+    """The chip's own reflection seen from above, as a TE amplitude.
+
+    The same stack :func:`grating_directionality` radiates into, taken from the
+    other side: what a beam coming down from the fibre finds. Three interfaces
+    folded in from the bottom up, each ``(r + r' e^{2 i k t}) / (1 + r r' e^{2 i k
+    t})``. It is what makes the gap between fibre and chip an etalon.
+    """
+    lam = np.asarray(wavelength, dtype=float)
+    substrate_index = _passive(substrate_index, "the substrate's index")
+    k = 2.0 * np.pi / lam
+    transverse = top_index * np.asarray(emission_sine, dtype=float)
+
+    def kz(n: complex) -> np.ndarray:
+        return np.asarray(k * np.sqrt(np.asarray(n**2 - transverse**2, dtype=np.complex128)))
+
+    k_top, k_si = kz(top_index), kz(silicon_index)
+    k_box, k_sub = kz(box_index), kz(substrate_index)
+
+    def fresnel(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+        return np.asarray((a - b) / (a + b))
+
+    def over(
+        inner: np.ndarray, outer: np.ndarray, below: np.ndarray, thickness: float
+    ) -> np.ndarray:
+        """The reflection at ``inner``'s side of a layer of ``outer`` with ``below`` under it."""
+        phase = np.exp(2j * outer * thickness)
+        first = fresnel(inner, outer)
+        return np.asarray((first + below * phase) / (1.0 + first * below * phase))
+
+    at_box = fresnel(k_box, k_sub)
+    at_silicon = over(k_si, k_box, at_box, box_thickness)
+    return over(k_top, k_si, at_silicon, silicon_thickness)
 
 
 def grating_coupler_stack(
@@ -2385,10 +2565,15 @@ def grating_coupler_stack(
     box_thickness: float = 2e-6,
     substrate_index: float = 3.476,
     strength: float = 0.14e6,
+    strength_end: float | None = None,
     length: float = 20e-6,
     fibre_radius: float = 5.2e-6,
     grating_radius_y: float = 5.2e-6,
     fibre_position: float | None = None,
+    fibre_height: float = 0.0,
+    fibre_index: float = 1.444,
+    index_contrast: float | None = None,
+    duty: float = 0.5,
     back_reflection_db: float = 20.0,
     extinction_db: float = 0.0,
     ports: tuple[str, str] = ("in", "out"),
@@ -2418,13 +2603,35 @@ def grating_coupler_stack(
     Gaussians, which does not move with wavelength. The fibre sits where it
     couples best at the centre wavelength unless ``fibre_position`` (from the
     grating's start) is given. ``extinction_db`` is taken off the whole
-    passband, which is how a TM input is rejected; the second-order back
-    reflection stays a number, ``back_reflection_db``, because it needs the
-    grating's teeth rather than its stack.
+    passband, which is how a TM input is rejected.
 
-    Not in it: the fibre's height above the chip (its beam is taken at the
-    chip's surface), any bottom mirror or apodization, and the reflection the
-    grating's own teeth make back into the waveguide.
+    **What the teeth send back.** With ``index_contrast`` and ``duty`` the
+    reflection into the waveguide is :func:`grating_tooth_reflection` rather than
+    the flat ``back_reflection_db``: the same corrugation that radiates on its
+    first order reflects on its second, far off resonance because the fibre is
+    angled, and not at all at a duty cycle of exactly one half.
+
+    **The height the fibre sits at.** ``fibre_height`` is the gap between the
+    fibre's facet and the chip. Three things follow, and all three are measured
+    rather than declared: the beam is wider where it lands, by
+    ``sqrt(1 + (h / z_R)^2)``; it arrives curved, which the overlap integral
+    carries as a phase; and the gap is an etalon between the fibre's facet and
+    the chip's own reflection, :func:`stack_reflection`, whose fringes are
+    ``lambda^2 / 2 n h`` apart. The tilt walks each round trip sideways by
+    ``2 h tan(theta)``, so an angled fibre damps the ripple the way an angled
+    facet damps an edge coupler's -- which is the same calculation, and the same
+    functions.
+
+    **Apodization.** ``strength_end`` tapers the radiation strength along the
+    grating, from ``strength`` at the start. The emitted profile follows from
+    energy conservation, :func:`_grating_profile`, and a taper makes it rounder
+    and so closer to the fibre's Gaussian than the uniform grating's 80 percent.
+
+    ``substrate_index`` may be complex, which is a bottom mirror.
+
+    Not in it: the etalon's own effect on what the grating radiates, which is
+    taken as a multiplier on the coupling rather than solved with the grating in
+    the cavity, and capped at unity.
     """
     if period <= 0.0:
         raise ValueError(f"period must be positive, got {period} m")
@@ -2432,6 +2639,10 @@ def grating_coupler_stack(
         raise ValueError("the grating's strength and length must both be positive")
     if silicon_thickness <= 0.0 or box_thickness < 0.0:
         raise ValueError("the silicon must have a thickness, and the oxide must not be negative")
+    if fibre_height < 0.0:
+        raise ValueError(f"the fibre's height must not be negative, got {fibre_height} m")
+    if strength_end is not None and strength_end <= 0.0:
+        raise ValueError(f"the grating's strength must stay positive, got {strength_end}")
     grid = np.asarray(frequencies, dtype=float)
     wavelength = C_LIGHT / grid
     dispersed = (
@@ -2442,8 +2653,14 @@ def grating_coupler_stack(
     )
     emission = (dispersed - wavelength / period) / top_index
     fibre_sine = math.sin(angle)
+    # A beam that has travelled to the chip is wider there, and curved. Both come
+    # from the same Rayleigh range, one per wavelength.
+    travel = fibre_height / math.cos(angle)
+    rayleigh = np.pi * fibre_radius**2 * top_index / wavelength
+    landed = fibre_radius * np.sqrt(1.0 + (travel / rayleigh) ** 2)
+    curvature = travel / (travel**2 + rayleigh**2) if fibre_height > 0.0 else np.zeros_like(landed)
     # The fibre's round mode lands on the chip stretched along the tilt.
-    footprint = fibre_radius / math.cos(angle)
+    footprint = landed / math.cos(angle)
 
     if fibre_position is None:
         centre = grating_coupler_centre(
@@ -2455,14 +2672,20 @@ def grating_coupler_stack(
             medium_index=top_index,
         )
         candidates = np.linspace(0.0, length, 401)
+        at_centre = float(
+            fibre_radius
+            * math.sqrt(1.0 + (travel / (math.pi * fibre_radius**2 * top_index / centre)) ** 2)
+            / math.cos(angle)
+        )
         matched = np.array(
             [
                 _grating_mode_overlap(
                     np.array([centre]),
                     np.zeros(1),
                     strength=strength,
+                    strength_end=strength_end,
                     length=length,
-                    fibre_radius=footprint,
+                    fibre_radius=at_centre,
                     position=float(place),
                     top_index=top_index,
                 )[0]
@@ -2487,19 +2710,91 @@ def grating_coupler_stack(
         wavelength,
         sine - fibre_sine,
         strength=strength,
+        strength_end=strength_end,
         length=length,
         fibre_radius=footprint,
         position=fibre_position,
         top_index=top_index,
+        curvature=curvature,
     )
-    across = gaussian_overlap(fibre_radius, grating_radius_y, wavelength=wavelength)
-    leaves = 1.0 - math.exp(-2.0 * strength * length)
+    across = gaussian_overlap(
+        fibre_radius, grating_radius_y, wavelength=wavelength, gap=travel, index=top_index
+    )
+    taper = strength if strength_end is None else strength_end
+    leaves = 1.0 - math.exp(-(strength + taper) * length)
     power = np.where(radiating, leaves * upward * along * across, 0.0) * 10.0 ** (
         -extinction_db / 10.0
     )
+    power = power * _fibre_gap_etalon(
+        wavelength,
+        emission_sine=sine,
+        radius=fibre_radius,
+        height=fibre_height,
+        angle=angle,
+        top_index=top_index,
+        fibre_index=fibre_index,
+        silicon_index=silicon_index,
+        silicon_thickness=silicon_thickness,
+        box_index=box_index,
+        box_thickness=box_thickness,
+        substrate_index=substrate_index,
+    )
 
     s = np.zeros((grid.size, 2, 2), dtype=np.complex128)
-    s[:, 1, 0] = s[:, 0, 1] = np.sqrt(power)
-    echo = 10.0 ** (-back_reflection_db / 20.0)
-    s[:, 0, 0] = s[:, 1, 1] = echo
+    s[:, 1, 0] = s[:, 0, 1] = np.sqrt(np.minimum(power, 1.0))
+    if index_contrast is None:
+        s[:, 0, 0] = s[:, 1, 1] = 10.0 ** (-back_reflection_db / 20.0)
+    else:
+        teeth = grating_tooth_reflection(
+            wavelength,
+            period=period,
+            effective_index=effective_index,
+            group_index=group_index,
+            reference_wavelength=reference_wavelength,
+            index_contrast=index_contrast,
+            duty=duty,
+            length=length,
+        )
+        s[:, 0, 0] = s[:, 1, 1] = teeth
     return SMatrix(ports=ports, frequencies=grid, s=s)
+
+
+def _fibre_gap_etalon(
+    wavelength: np.ndarray,
+    *,
+    emission_sine: np.ndarray,
+    radius: float,
+    height: float,
+    angle: float,
+    top_index: float,
+    fibre_index: float,
+    **stack: object,
+) -> np.ndarray:
+    """``|1 / (1 - rho)|^2``: what the gap between fibre and chip does to the coupling.
+
+    ``rho`` is one round trip -- off the chip's own reflection, back off the
+    fibre's facet, and onto the fibre's mode again, displaced by ``2 h
+    tan(theta)`` and diffracted over ``2 h / cos(theta)``. Zero height is no
+    cavity and no ripple.
+    """
+    if height <= 0.0:
+        return np.ones_like(wavelength)
+    chip = stack_reflection(
+        wavelength,
+        emission_sine=emission_sine,
+        top_index=top_index,
+        **stack,  # type: ignore[arg-type]
+    )
+    facet = math.sqrt(fresnel_reflectance(fibre_index, top_index))
+    path = 2.0 * height / math.cos(angle)
+    returning = gaussian_coupling(
+        radius,
+        radius,
+        wavelength=wavelength,
+        offset=2.0 * height * math.tan(angle),
+        gap=path,
+        index=top_index,
+    )
+    carrier = np.exp(-2j * np.pi * top_index * path / wavelength)
+    rho = facet * chip * returning * carrier
+    return np.asarray(np.abs(1.0 / (1.0 - rho)) ** 2)

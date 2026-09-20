@@ -2667,6 +2667,57 @@ but its geometry. It peaks 4 nm short of the phase-matched centre, because the s
 still rising there. TM is rejected by `tm_extinction`: an x-polarized carrier onto a die rotated by
 90 degrees couples 25 dB worse than onto one aligned to it.
 
+### What its teeth send back, and what the gap above it does
+
+Four more things the stack can answer, each off by default.
+
+**The reflection into the waveguide.** The same corrugation that radiates on its first order couples
+the forward mode to the backward one on its second: a Bragg grating written in the chip, at
+`2 n_eff Λ / 2`. Set `from_teeth` and it is solved rather than quoted, from the tooth's index step
+and its duty cycle. Three things fall out of it:
+
+```
+   fibre angle   period that radiates there   reflection
+   0 degrees     572.0 nm                      -1.6 dB     on its own Bragg line
+   2 degrees     579.4 nm                     -12.2 dB
+   5 degrees     591.0 nm                     -19.4 dB
+   10 degrees    611.1 nm                     -21.5 dB
+   15 degrees    632.3 nm                     -26.2 dB
+```
+
+- **The angle is the whole defence.** A vertical coupler reflects its own Bragg line; the detuning
+  that keeps a tilted one quiet is `2π n sin θ / λ`, the same phase matching that sets the emission
+  angle. Tilting the fibre is not only about the beam.
+- **A duty cycle of exactly one half reflects nothing**, because `sin(2π · 0.5)` is zero and the
+  second harmonic with it. Either side of a half it comes back, symmetrically.
+- It is checked against this library's own transfer-matrix grating, which shares no algebra with the
+  closed form, to 1e-9 across the band.
+
+**The height the fibre sits at.** `fibre_height` is the gap between facet and chip, and three
+things follow. The beam is wider where it lands, so a fibre 150 µm up couples more than a decibel
+worse. It arrives curved, which the overlap integral carries as a phase. And the gap is an etalon
+between the fibre's facet and the chip's own reflection, ringing at `λ²/(2nh)` — measured against
+that closed form to 5 %. The tilt walks each round trip `2h tan θ` sideways, so the ripple falls
+from 0.81 dB at normal incidence to 0.06 dB at 12 degrees, which is the same reason an edge
+coupler's facet is angled.
+
+**A mirror under the oxide.** `substrate_extinction` makes the substrate absorbing — aluminium is
+`1.44 + 16j` — and what would have gone down comes back up: the share leaving upward rises from
+**0.59 to 0.99**. An index with the other sign would be a gain medium, and is refused rather than
+quietly flipped.
+
+**Apodization.** `grating_strength_end` tapers the radiation strength along the grating. The
+emitted profile follows from energy conservation alone, `sqrt(2α(x)) exp(−∫α)`, and a taper makes
+it rounder — closer to the fibre's Gaussian than the uniform grating's 80.1 % ceiling:
+
+```
+   uniform, 0.14 /um                 -3.19 dB
+   tapered, 0.05 to 0.4 /um          -2.63 dB
+   with a mirror as well             -0.48 dB
+```
+
+Half a decibel from the taper and two more from the mirror, from geometry and a complex index.
+
 ## What a layout tool knows, and what it does not
 
 A `.pdk` here carries a foundry's *fitted numbers*. gdsfactory draws the mask. Joining them is the
@@ -3430,8 +3481,8 @@ time window, and results are reproducible.
 | **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier frequency and phase recovery, coarse frequency acquisition over the whole sampled band, blind square-law timing recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km with blind estimation of the accumulated value, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
 | **3 — GUI & WDM** ✅ | Wavelength-selective filters, the ITU grids and a multiplexer/demultiplexer pair on them with crosstalk that falls out of the channel spacing, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — the OSA's trace drawn in the dock, and 400G/800G reference designs validated against the OSNR relations, and a back-end indirection the propagation kernels dispatch through — CuPy runs it where a device exists, `maiman devices` cross-checks it against NumPy, and a CI job does the same on any runner labelled `gpu` | ~6 months |
 | **4 — PIC** ✅ | Bidirectional S-matrix circuit solver, waveguide, directional coupler, all-pass and add-drop ring resonators, cross-validated against SAX; N×N MMI couplers on the self-imaging phase relations; a Mach-Zehnder interferometer assembled from them — switch, interleaver, or both; and PDK import, which reads a foundry's fitted numbers out of a JSON kit and refuses to extrapolate them past the window they were fitted in; and birefringence, with each guided polarization carrying its own indices through the same reduction | — |
-| **5 — Gratings, sensing, loops and coupling** ✅ | Fibre Bragg gratings assembled from transfer matrices — apodized, chirped, sampled and phase-shifted — a circulator with isolation and return loss, and a grating read as a strain gauge and a thermometer, by a swept laser or by broadband light on an analyser; noise that carries the spectral shape of what it passed through; loop control that runs a cavity to its fixed point, and a delay line that turns the same loop into a recirculating one lap by lap; pump depletion for four-wave mixing and Raman's measured gain shape past its peak; an erbium transient spread across the spectrum, each channel moving by the fibre's own tilt, drained per channel by its own cross section, and answered by a pump control loop with a bandwidth and a ceiling; an amplifier's own ASE, both ways, depleting its inversion; PMD applied along the span between Kerr steps, and the coherent polarization term that moves power between the axes; a scalar mode solver for core and cladding modes, and the vector HE, EH, TE and TM modes the glass-air boundary splits them into, checked against the exact characteristic equation; glass that disperses as Sellmeier's silica and germania, which makes the default fibre a G.652 one; a long-period grating built on either, alone or as a pair recoupling its cladding light, and a tilted grating whose comb of cladding resonances reads what the fibre is dipped in, split by polarization when its vector modes are solved; edge and grating couplers that put a signal into the chip's TE and TM, the edge coupler's two facets a cavity summed bounce by bounce and the grating coupler's passband computed from its vertical stack; a PAM4 driver with its modulator's linearity corrected, and a feed-forward and decision-feedback equaliser, fractionally spaced or blind; a laser's linewidth and intensity noise from its own Langevin forces, and the partition noise between a Fabry-Perot laser's modes; a directly modulated laser whose chirp comes out of its own rate equations; and templates in the studio's File menu, including an eight-channel DWDM link | — |
-| **Open** | The grating's own back-reflection from its teeth, and the fibre's height above it; mode partition noise in the link itself, which needs bands that carry their delays to the detector; the W-Port framing around OFEC — its FlexO adaptation, scrambler and symbol framing | — |
+| **5 — Gratings, sensing, loops and coupling** ✅ | Fibre Bragg gratings assembled from transfer matrices — apodized, chirped, sampled and phase-shifted — a circulator with isolation and return loss, and a grating read as a strain gauge and a thermometer, by a swept laser or by broadband light on an analyser; noise that carries the spectral shape of what it passed through; loop control that runs a cavity to its fixed point, and a delay line that turns the same loop into a recirculating one lap by lap; pump depletion for four-wave mixing and Raman's measured gain shape past its peak; an erbium transient spread across the spectrum, each channel moving by the fibre's own tilt, drained per channel by its own cross section, and answered by a pump control loop with a bandwidth and a ceiling; an amplifier's own ASE, both ways, depleting its inversion; PMD applied along the span between Kerr steps, and the coherent polarization term that moves power between the axes; a scalar mode solver for core and cladding modes, and the vector HE, EH, TE and TM modes the glass-air boundary splits them into, checked against the exact characteristic equation; glass that disperses as Sellmeier's silica and germania, which makes the default fibre a G.652 one; a long-period grating built on either, alone or as a pair recoupling its cladding light, and a tilted grating whose comb of cladding resonances reads what the fibre is dipped in, split by polarization when its vector modes are solved; edge and grating couplers that put a signal into the chip's TE and TM, the edge coupler's two facets a cavity summed bounce by bounce, and the grating coupler's passband, its teeth's own reflection, its bottom mirror and its apodization computed from its geometry; a PAM4 driver with its modulator's linearity corrected, and a feed-forward and decision-feedback equaliser, fractionally spaced or blind; a laser's linewidth and intensity noise from its own Langevin forces, and the partition noise between a Fabry-Perot laser's modes; a directly modulated laser whose chirp comes out of its own rate equations; and templates in the studio's File menu, including an eight-channel DWDM link | — |
+| **Open** | Mode partition noise in the link itself, which needs bands that carry their delays to the detector; the W-Port framing around OFEC — its FlexO adaptation, scrambler and symbol framing | — |
 
 ¹ One developer, part-time. Estimates, not commitments.
 
@@ -3572,6 +3623,7 @@ Every physics block ships with a test against a closed-form result, run in CI
 | **Parallel sweeps are invisible** | Bit-identical at 1, 2, 3, 4 and one-per-core workers, in sweep order; derived seeds unchanged | ✅ |
 | A failing point does not hang | More points than lanes, so a borrowed graph must come back — verified by deleting the `finally` and watching it deadlock | ✅ |
 | **MMI phase relations** | `SᴴS = I` at N = 1, 2, 3, 4, 5, 8 — even amplitudes with invented phases pass every other check and fail this one | ✅ |
+| **A grating coupler's own reflection** | Its teeth's second order against the transfer-matrix grating to 1e-9; zero at a half duty cycle; and the fibre's gap ringing at `λ²/2nh` to 5 % | ✅ |
 | 2×2 MMI ≡ 3 dB coupler | The same matrix to 1e-15, factor of j included; self-imaging at N = 2 *is* the quadrature relation | ✅ |
 | MMI split and imbalance | `1/N` per path; a tilted MMI is lossy and its matrix says so rather than claiming unitarity | ✅ |
 | **MZI as a switch** | `sin²(φ/2)` / `cos²(φ/2)` against the assembled circuit, and the sum is 1 across a full turn to 1e-12 | ✅ |

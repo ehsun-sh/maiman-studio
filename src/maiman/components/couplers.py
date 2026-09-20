@@ -274,6 +274,54 @@ class GratingCoupler(_ChipCoupler):
     grating_width = Param(
         10.4, unit="um", min=0.5, max=100.0, doc="Mode field diameter across the grating"
     )
+    grating_strength_end = Param(
+        0.0,
+        unit="1/um",
+        min=0.0,
+        max=5.0,
+        doc="Strength at the far end: apodization. 0 keeps it uniform",
+        applies_when="from_stack",
+    )
+    fibre_height = Param(
+        0.0,
+        unit="um",
+        min=0.0,
+        max=1000.0,
+        doc="Gap between the fibre's facet and the chip: widens the beam, and rings",
+        applies_when="from_stack",
+    )
+    fibre_index = Param(
+        1.444, unit="", min=1.0, max=2.0, doc="The fibre's own index, for its facet's reflection"
+    )
+    substrate_extinction = Param(
+        0.0,
+        unit="",
+        min=0.0,
+        max=60.0,
+        doc="Imaginary index of what is under the oxide: 16 is an aluminium mirror",
+        applies_when="from_stack",
+    )
+    from_teeth = BoolParam(
+        False,
+        doc="Compute the back reflection from the teeth's second order, not the quoted number",
+        applies_when="from_stack",
+    )
+    index_contrast = Param(
+        0.3,
+        unit="",
+        min=0.0,
+        max=3.0,
+        doc="Index step between tooth and groove, as the guided mode sees it",
+        applies_when="from_teeth",
+    )
+    duty = Param(
+        0.55,
+        unit="",
+        min=0.0,
+        max=1.0,
+        doc="Fraction of each period that is tooth. Exactly half reflects nothing",
+        applies_when="from_teeth",
+    )
 
     def centre_wavelength(self) -> float:
         """Where it couples best [m]."""
@@ -371,11 +419,16 @@ class GratingCoupler(_ChipCoupler):
             "silicon_thickness": self.si("silicon_thickness"),
             "box_index": self.box_index,
             "box_thickness": self.si("box_thickness"),
-            "substrate_index": self.silicon_index,
+            "substrate_index": complex(self.silicon_index, self.substrate_extinction),
             "strength": self.si("grating_strength"),
+            "strength_end": self.si("grating_strength_end") or None,
             "length": self.si("grating_length"),
             "fibre_radius": self.si("fibre_mfd") / 2.0,
             "grating_radius_y": self.si("grating_width") / 2.0,
+            "fibre_height": self.si("fibre_height"),
+            "fibre_index": self.fibre_index,
+            "index_contrast": self.index_contrast if self.from_teeth else None,
+            "duty": self.duty,
             # Raw dB, as above.
             "back_reflection_db": self.back_reflection,
             "extinction_db": self.tm_extinction if polarization == "tm" else 0.0,

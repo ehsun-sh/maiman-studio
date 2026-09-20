@@ -3269,6 +3269,64 @@ verdict, and DESIGN.md
      "min": 0.5,
      "max": 100.0,
      "doc": "Mode field diameter across the grating"
+    },
+    "grating_strength_end": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "1/um",
+     "min": 0.0,
+     "max": 5.0,
+     "doc": "Strength at the far end: apodization. 0 keeps it uniform",
+     "applies_when": "from_stack"
+    },
+    "fibre_height": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "um",
+     "min": 0.0,
+     "max": 1000.0,
+     "doc": "Gap between the fibre's facet and the chip: widens the beam, and rings",
+     "applies_when": "from_stack"
+    },
+    "fibre_index": {
+     "type": "float",
+     "default": 1.444,
+     "unit": "",
+     "min": 1.0,
+     "max": 2.0,
+     "doc": "The fibre's own index, for its facet's reflection"
+    },
+    "substrate_extinction": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "",
+     "min": 0.0,
+     "max": 60.0,
+     "doc": "Imaginary index of what is under the oxide: 16 is an aluminium mirror",
+     "applies_when": "from_stack"
+    },
+    "from_teeth": {
+     "type": "bool",
+     "default": false,
+     "doc": "Compute the back reflection from the teeth's second order, not the quoted number"
+    },
+    "index_contrast": {
+     "type": "float",
+     "default": 0.3,
+     "unit": "",
+     "min": 0.0,
+     "max": 3.0,
+     "doc": "Index step between tooth and groove, as the guided mode sees it",
+     "applies_when": "from_teeth"
+    },
+    "duty": {
+     "type": "float",
+     "default": 0.55,
+     "unit": "",
+     "min": 0.0,
+     "max": 1.0,
+     "doc": "Fraction of each period that is tooth. Exactly half reflects nothing",
+     "applies_when": "from_teeth"
     }
    },
    "structural": {},
