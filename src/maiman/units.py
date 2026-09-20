@@ -126,10 +126,14 @@ _TO_SI: dict[str, Callable[[float], float]] = {
     "THz": lambda x: x * 1e12,
     # Time
     "s": lambda x: x,
+    # Microseconds: between the nanoseconds a symbol takes and the milliseconds
+    # a junction's heat does. A laser's thermal pole lives here.
+    "us": lambda x: x * 1e-6,
     "ns": lambda x: x * 1e-9,
     "ps": lambda x: x * 1e-12,
-    # Voltage
+    # Voltage, and the ohms that go with it
     "V": lambda x: x,
+    "ohm": lambda x: x,
     # Temperature, as a *difference*. A kelvin and a degree Celsius are the same
     # size, so a shift of 1 K and a shift of 1 degree C are the same shift, and a
     # component that asks for a change rather than a level never has to say which
@@ -137,6 +141,10 @@ _TO_SI: dict[str, Callable[[float], float]] = {
     "K": lambda x: x,
     # Per kelvin: the coefficient such a change is multiplied by.
     "1/K": lambda x: x,
+    # Kelvin per watt, and nanometres per kelvin: a junction's thermal
+    # resistance, and how far its line moves once it has warmed.
+    "K/W": lambda x: x,
+    "nm/K": lambda x: x * 1e-9,
     # Strain, which is dimensionless -- a fractional elongation -- and is quoted
     # in millionths because the numbers a fibre survives are small: 1000 ustrain
     # is 0.1 %, and a silica fibre breaks somewhere past 1 %.
@@ -179,11 +187,15 @@ _FROM_SI: dict[str, Callable[[float], float]] = {
     "GHz": lambda x: x * 1e-9,
     "THz": lambda x: x * 1e-12,
     "s": lambda x: x,
+    "us": lambda x: x * 1e6,
     "ns": lambda x: x * 1e9,
     "ps": lambda x: x * 1e12,
     "V": lambda x: x,
+    "ohm": lambda x: x,
     "K": lambda x: x,
     "1/K": lambda x: x,
+    "K/W": lambda x: x,
+    "nm/K": lambda x: x * 1e9,
     "ustrain": lambda x: x * 1e6,
     "rad": lambda x: x,
     "deg": lambda x: x * 180.0 / math.pi,

@@ -2524,6 +2524,44 @@ follows them, and the phase takes a second kick: that is where it comes from, an
 line is tens of megahertz and not the three that phase diffusion alone would draw. Gain compression
 moves the line without widening it, and the measurement takes that offset out.
 
+### And the heat it makes on its own
+
+Most of a laser's drive becomes heat: `I(V_j + I R_s)` goes in and only the light carries any of it
+away. The junction warms by `R_th` times what is left, and a warm junction emits longer — a DFB's
+grating moves 0.09 nm/K. Set `thermal` and the block computes both halves of that, which live on
+two different time axes.
+
+**The bias sets where the line sits.** Settled, with 45 K/W and the defaults here:
+
+```
+   bias    junction   wavelength     against cold
+   20 mA     0.90 K   1310.0810 nm    -14.1 GHz
+   35 mA     1.60 K   1310.1437 nm    -25.1 GHz
+   50 mA     2.36 K   1310.2128 nm    -37.2 GHz
+   80 mA     4.20 K   1310.3782 nm    -66.1 GHz
+```
+
+That is 4 to 6 pm per milliamp, which is what a DFB is specified at, and a quarter of a 100 GHz
+channel at the default bias. It belongs to the **band's own centre frequency**, not to the phase: a
+window of a few hundred nanoseconds cannot hold 25 GHz as a phase ramp without aliasing it.
+
+**The pattern moves it, slowly.** The junction follows its dissipation through one pole of about a
+microsecond, so a long mark warms it and the line drifts red through it. That part *is* carried in
+the phase, because it is what changes inside a window, and it is thermal chirp — the low-frequency
+tail under the adiabatic chirp the carriers make, and the reason a line code's run length matters to
+a directly modulated laser:
+
+```
+   mark, 30 to 50 mA      junction    line drifts
+     100 ns               +0.095 K      -1.34 GHz
+     500 ns               +0.394 K      -6.03 GHz
+    2000 ns               +0.865 K     -13.45 GHz
+```
+
+The temperature is a third state beside the carriers and the photons, integrated with them and
+started settled as they are. A test runs it to rest against `R_th P_diss` — two code paths, one
+closed form — and another measures the exponential's time constant back out of a step, to 5 %.
+
 **A Fabry-Perot laser has more than one mode**, and `maiman.laser.integrate_multimode` gives it them:
 one carrier reservoir, a parabolic gain curve, a Langevin force per mode drawn against the one carrier
 force. The modes trade power, so the total is quiet and each alone is not — for seven modes a
@@ -3481,7 +3519,7 @@ time window, and results are reproducible.
 | **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier frequency and phase recovery, coarse frequency acquisition over the whole sampled band, blind square-law timing recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km with blind estimation of the accumulated value, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
 | **3 — GUI & WDM** ✅ | Wavelength-selective filters, the ITU grids and a multiplexer/demultiplexer pair on them with crosstalk that falls out of the channel spacing, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — the OSA's trace drawn in the dock, and 400G/800G reference designs validated against the OSNR relations, and a back-end indirection the propagation kernels dispatch through — CuPy runs it where a device exists, `maiman devices` cross-checks it against NumPy, and a CI job does the same on any runner labelled `gpu` | ~6 months |
 | **4 — PIC** ✅ | Bidirectional S-matrix circuit solver, waveguide, directional coupler, all-pass and add-drop ring resonators, cross-validated against SAX; N×N MMI couplers on the self-imaging phase relations; a Mach-Zehnder interferometer assembled from them — switch, interleaver, or both; and PDK import, which reads a foundry's fitted numbers out of a JSON kit and refuses to extrapolate them past the window they were fitted in; and birefringence, with each guided polarization carrying its own indices through the same reduction | — |
-| **5 — Gratings, sensing, loops and coupling** ✅ | Fibre Bragg gratings assembled from transfer matrices — apodized, chirped, sampled and phase-shifted — a circulator with isolation and return loss, and a grating read as a strain gauge and a thermometer, by a swept laser or by broadband light on an analyser; noise that carries the spectral shape of what it passed through; loop control that runs a cavity to its fixed point, and a delay line that turns the same loop into a recirculating one lap by lap; pump depletion for four-wave mixing and Raman's measured gain shape past its peak; an erbium transient spread across the spectrum, each channel moving by the fibre's own tilt, drained per channel by its own cross section, and answered by a pump control loop with a bandwidth and a ceiling; an amplifier's own ASE, both ways, depleting its inversion; PMD applied along the span between Kerr steps, and the coherent polarization term that moves power between the axes; a scalar mode solver for core and cladding modes, and the vector HE, EH, TE and TM modes the glass-air boundary splits them into, checked against the exact characteristic equation; glass that disperses as Sellmeier's silica and germania, which makes the default fibre a G.652 one; a long-period grating built on either, alone or as a pair recoupling its cladding light, and a tilted grating whose comb of cladding resonances reads what the fibre is dipped in, split by polarization when its vector modes are solved; edge and grating couplers that put a signal into the chip's TE and TM, the edge coupler's two facets a cavity summed bounce by bounce, and the grating coupler's passband, its teeth's own reflection, its bottom mirror and its apodization computed from its geometry; a PAM4 driver with its modulator's linearity corrected, and a feed-forward and decision-feedback equaliser, fractionally spaced or blind; a laser's linewidth and intensity noise from its own Langevin forces, and the partition noise between a Fabry-Perot laser's modes; a directly modulated laser whose chirp comes out of its own rate equations; and templates in the studio's File menu, including an eight-channel DWDM link | — |
+| **5 — Gratings, sensing, loops and coupling** ✅ | Fibre Bragg gratings assembled from transfer matrices — apodized, chirped, sampled and phase-shifted — a circulator with isolation and return loss, and a grating read as a strain gauge and a thermometer, by a swept laser or by broadband light on an analyser; noise that carries the spectral shape of what it passed through; loop control that runs a cavity to its fixed point, and a delay line that turns the same loop into a recirculating one lap by lap; pump depletion for four-wave mixing and Raman's measured gain shape past its peak; an erbium transient spread across the spectrum, each channel moving by the fibre's own tilt, drained per channel by its own cross section, and answered by a pump control loop with a bandwidth and a ceiling; an amplifier's own ASE, both ways, depleting its inversion; PMD applied along the span between Kerr steps, and the coherent polarization term that moves power between the axes; a scalar mode solver for core and cladding modes, and the vector HE, EH, TE and TM modes the glass-air boundary splits them into, checked against the exact characteristic equation; glass that disperses as Sellmeier's silica and germania, which makes the default fibre a G.652 one; a long-period grating built on either, alone or as a pair recoupling its cladding light, and a tilted grating whose comb of cladding resonances reads what the fibre is dipped in, split by polarization when its vector modes are solved; edge and grating couplers that put a signal into the chip's TE and TM, the edge coupler's two facets a cavity summed bounce by bounce, and the grating coupler's passband, its teeth's own reflection, its bottom mirror and its apodization computed from its geometry; a PAM4 driver with its modulator's linearity corrected, and a feed-forward and decision-feedback equaliser, fractionally spaced or blind; a laser's linewidth and intensity noise from its own Langevin forces, and the partition noise between a Fabry-Perot laser's modes; a directly modulated laser whose chirp comes out of its own rate equations, with its junction's heat moving the line; and templates in the studio's File menu, including an eight-channel DWDM link | — |
 | **Open** | Mode partition noise in the link itself, which needs bands that carry their delays to the detector; the W-Port framing around OFEC — its FlexO adaptation, scrambler and symbol framing | — |
 
 ¹ One developer, part-time. Estimates, not commitments.
@@ -3570,6 +3608,7 @@ Every physics block ships with a test against a closed-form result, run in CI
 | Stacking reduces exactly to one polarization | Same indices twice reproduces the single-polarization matrix element for element, and the block's output to `rel=1e-12` | ✅ |
 | The modes do not leak into each other | Exactly zero, checked at the resonance where circulation would amplify any leak into something visible | ✅ |
 | A cross term lands where the solver finds it | Nothing produces one; the matrix can still hold it, so block-diagonal stays a model's choice | ✅ |
+| **A junction's heat settles where its closed form says** | The temperature integrated to rest lands on `R_th P_diss`, and its step response gives the time constant back to 5 % | ✅ |
 | **Gain dynamics settle onto the static solve** | The reservoir ODE integrated to rest lands on `EDFA.effective_gain` to 1e-9, at seven input powers — two code paths sharing no arithmetic | ✅ |
 | The effective time constant is `τ/(1+P_out/P_sat)` | Measured from a step response against the closed form, to a part in a thousand, and monotone in drive | ✅ |
 | **An amplifier in the dark holds Lambert's gain** | `W(βG₀)/β` by Halley's iteration against the component's Newton, to 1e-12; its own ASE load is the ASE it emits, both ends; the transient comes to rest there | ✅ |

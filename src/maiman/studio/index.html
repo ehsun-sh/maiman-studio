@@ -2236,6 +2236,56 @@ verdict, and DESIGN.md
      "max": 1024.0,
      "doc": "Integration steps per sample; the ringing needs them"
     },
+    "thermal": {
+     "type": "bool",
+     "default": false,
+     "doc": "Let the junction warm and the line drift with it"
+    },
+    "thermal_resistance": {
+     "type": "float",
+     "default": 45.0,
+     "unit": "K/W",
+     "min": 0.0,
+     "max": 1000.0,
+     "doc": "Junction to case",
+     "applies_when": "thermal"
+    },
+    "thermal_time_constant": {
+     "type": "float",
+     "default": 1.0,
+     "unit": "us",
+     "min": 0.001,
+     "max": 10000.0,
+     "doc": "How fast the junction follows",
+     "applies_when": "thermal"
+    },
+    "wavelength_drift": {
+     "type": "float",
+     "default": 0.09,
+     "unit": "nm/K",
+     "min": 0.0,
+     "max": 1.0,
+     "doc": "How far the line moves per kelvin: a DFB's grating",
+     "applies_when": "thermal"
+    },
+    "junction_voltage": {
+     "type": "float",
+     "default": 0.9,
+     "unit": "V",
+     "min": 0.0,
+     "max": 5.0,
+     "doc": "The diode's forward drop",
+     "applies_when": "thermal"
+    },
+    "series_resistance": {
+     "type": "float",
+     "default": 5.0,
+     "unit": "ohm",
+     "min": 0.0,
+     "max": 100.0,
+     "doc": "In series with the junction",
+     "applies_when": "thermal"
+    },
     "noise": {
      "type": "bool",
      "default": false,

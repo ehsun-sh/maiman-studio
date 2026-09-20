@@ -291,6 +291,80 @@ class LaserParameters:
 
 
 @dataclass(frozen=True)
+class ThermalModel:
+    """The junction's own heat, and what it does to the wavelength.
+
+    A laser turns most of its drive into heat: ``I (V_j + I R_s)`` goes in and
+    the light that leaves carries a fraction of it away. What is left warms the
+    junction, and a warm junction emits longer -- the grating expands and the
+    index rises with it, ``0.09 nm/K`` for a DFB, where a Fabry-Perot's mode
+    hops are larger and not this model's.
+
+    Two things follow, and they live on different time axes.
+
+    **The bias sets where the line sits.** Settled, the rise is ``R_th P_diss``
+    and the wavelength is ``lambda + dl/dT * rise``: for the 1310 nm laser here
+    at 35 mA that is 1.4 K and 0.13 nm, which is 23 GHz -- a shift the band's own
+    centre frequency has to carry, because a window of a few hundred nanoseconds
+    cannot hold it as a phase ramp.
+
+    **The pattern moves it, slowly.** The junction follows its drive with a time
+    constant of microseconds, so a long run of ones warms it and the line drifts
+    red through them -- thermal chirp, the low-frequency tail under the
+    adiabatic chirp the carriers make, and the reason a line code's run length
+    matters to a directly modulated laser. That part *is* carried in the phase,
+    because it is what changes inside a window.
+
+    ``junction_voltage`` and ``series_resistance`` are the diode's: the voltage
+    it drops once it conducts, and the ohms in series with it.
+    """
+
+    resistance: float = 45.0
+    """``R_th`` [K/W]: junction to case, for a laser on a submount."""
+
+    time_constant: float = 1.0e-6
+    """``tau_th`` [s]: how fast the junction follows its dissipation."""
+
+    drift: float = 0.09e-9
+    """``dlambda/dT`` [m/K]. A DFB's grating: 0.09 nm/K at 1310 and 1550 nm."""
+
+    junction_voltage: float = 0.9
+    """``V_j`` [V]: the diode's forward drop."""
+
+    series_resistance: float = 5.0
+    """``R_s`` [ohm]."""
+
+    def __post_init__(self) -> None:
+        if self.time_constant <= 0.0:
+            raise ValueError(
+                f"the thermal time constant must be positive, got {self.time_constant}"
+            )
+        for name in ("resistance", "drift", "junction_voltage", "series_resistance"):
+            if getattr(self, name) < 0.0:
+                raise ValueError(f"{name} must not be negative, got {getattr(self, name)}")
+
+    def dissipation(
+        self, current: np.ndarray | float, optical: np.ndarray | float = 0.0
+    ) -> np.ndarray:
+        """``I (V_j + I R_s) - P_out`` [W]: what goes in and does not leave as light."""
+        drive = np.asarray(current, dtype=float)
+        electrical = drive * (self.junction_voltage + drive * self.series_resistance)
+        return np.asarray(np.maximum(electrical - np.asarray(optical, dtype=float), 0.0))
+
+    def rise(self, current: np.ndarray | float, optical: np.ndarray | float = 0.0) -> np.ndarray:
+        """The settled temperature rise at this drive [K]."""
+        return np.asarray(self.resistance * self.dissipation(current, optical))
+
+    def wavelength_at(self, wavelength: float, rise: np.ndarray | float) -> np.ndarray:
+        """Where the line sits [m] once the junction has warmed by ``rise``."""
+        return np.asarray(wavelength + self.drift * np.asarray(rise, dtype=float))
+
+    def frequency_shift(self, wavelength: float, rise: np.ndarray | float) -> np.ndarray:
+        """How far the line has moved [Hz], negative because warmer is longer."""
+        return np.asarray(-C_LIGHT * self.drift * np.asarray(rise, dtype=float) / wavelength**2)
+
+
+@dataclass(frozen=True)
 class LaserWaveform:
     """What the rate equations produced: power, phase, and the reservoirs behind them."""
 
@@ -300,6 +374,11 @@ class LaserWaveform:
     photons: np.ndarray
     phase: np.ndarray
     parameters: LaserParameters
+    temperature: np.ndarray | None = None
+    """The junction's rise above its case [K], where a :class:`ThermalModel` was given."""
+
+    thermal: ThermalModel | None = None
+    """The heat model this was integrated with, if any."""
 
     @property
     def power(self) -> np.ndarray:
@@ -315,6 +394,12 @@ class LaserWaveform:
         """Frequency offset from the unmodulated line [Hz], read off the phase."""
         step = float(self.times[1] - self.times[0])
         return np.gradient(self.phase, step) / (2.0 * math.pi)
+
+    def wavelength(self) -> np.ndarray:
+        """Where the line sits at each instant [m], the junction's heat included."""
+        if self.thermal is None or self.temperature is None:
+            return np.full(self.times.shape, self.parameters.wavelength)
+        return np.asarray(self.thermal.wavelength_at(self.parameters.wavelength, self.temperature))
 
     def extinction_ratio(self) -> float:
         """The high level over the low one [dB], from the settled ends of the power."""
@@ -334,6 +419,8 @@ def integrate_rate_equations(
     initial: tuple[float, float] | None = None,
     noise: bool = False,
     rng: np.random.Generator | None = None,
+    thermal: ThermalModel | None = None,
+    reference_rise: float | None = None,
 ) -> LaserWaveform:
     """Integrate the rate equations across a drive current.
 
@@ -350,6 +437,14 @@ def integrate_rate_equations(
     With ``noise`` the Langevin forces in the module docstring are added after
     each Runge-Kutta step (Euler-Maruyama), drawn from ``rng``; without it the
     integration is deterministic and exactly what it was.
+
+    With ``thermal`` the junction's temperature is a third state, following its
+    own dissipation with the model's time constant, and the phase carries the
+    wavelength drift it causes -- *relative to* ``reference_rise``, the rise the
+    caller has already accounted for in the carrier frequency. Left unset that
+    is the settled rise at the first sample's drive, so the phase carries the
+    pattern's drift and not the bias's offset, which belongs to the band's own
+    centre. The temperature starts settled, as the carriers and photons do.
     """
     drive = np.asarray(current, dtype=np.float64)
     if drive.ndim != 1 or drive.size < 2:
@@ -389,7 +484,16 @@ def integrate_rate_equations(
     carrier_track = np.empty(count)
     photon_track = np.empty(count)
     phase_track = np.empty(count)
+    temperature_track = np.empty(count) if thermal is not None else None
     phase = 0.0
+    if thermal is not None:
+        settled = parameters.power_from_photons(photons)
+        temperature = float(thermal.rise(float(drive[0]), settled))
+        anchor = temperature if reference_rise is None else float(reference_rise)
+        # Radians per kelvin of drift, in the sense the phase already runs.
+        per_kelvin = 2.0 * math.pi * float(thermal.frequency_shift(parameters.wavelength, 1.0))
+    else:
+        temperature = anchor = per_kelvin = 0.0
     kicks = (
         rng.standard_normal((count, substeps, 3))
         if noise and rng is not None
@@ -399,6 +503,8 @@ def integrate_rate_equations(
         carrier_track[index] = carriers
         photon_track[index] = photons
         phase_track[index] = phase
+        if temperature_track is not None:
+            temperature_track[index] = temperature
         pump = float(drive[index])
         for sub in range(substeps):
             k1 = derivatives(carriers, photons, pump)
@@ -418,6 +524,12 @@ def integrate_rate_equations(
                 * parameters.gain_slope
                 * (carriers - threshold)
             )
+            if thermal is not None:
+                # One pole, driven by what the drive leaves behind as heat. The
+                # photons leaving are light and do not warm anything.
+                target = float(thermal.rise(pump, parameters.power_from_photons(photons)))
+                temperature += step * (target - temperature) / thermal.time_constant
+                phase += step * per_kelvin * (temperature - anchor)
             if noise:
                 carriers, photons, phase = _langevin_kick(
                     parameters, carriers, photons, phase, step, kicks[index, sub]
@@ -430,6 +542,8 @@ def integrate_rate_equations(
         photons=photon_track,
         phase=phase_track,
         parameters=parameters,
+        temperature=temperature_track,
+        thermal=thermal,
     )
 
 

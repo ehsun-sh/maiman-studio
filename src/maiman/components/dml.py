@@ -19,7 +19,7 @@ import numpy as np
 
 from ..component import BoolParam, Component, Param, PortType
 from ..context import SimulationContext
-from ..laser import LaserParameters, LaserWaveform, integrate_rate_equations
+from ..laser import LaserParameters, LaserWaveform, ThermalModel, integrate_rate_equations
 from ..signals import Band, ElectricalSignal, OpticalSignal, Signal
 from ..units import C_LIGHT
 
@@ -85,6 +85,40 @@ class DirectlyModulatedLaser(Component):
         max=1024.0,
         doc="Integration steps per sample; the ringing needs them",
     )
+    thermal = BoolParam(
+        False,
+        doc="Let the junction warm and the line drift with it",
+    )
+    thermal_resistance = Param(
+        45.0, unit="K/W", min=0.0, max=1000.0, doc="Junction to case", applies_when="thermal"
+    )
+    thermal_time_constant = Param(
+        1.0,
+        unit="us",
+        min=0.001,
+        max=1e4,
+        doc="How fast the junction follows",
+        applies_when="thermal",
+    )
+    wavelength_drift = Param(
+        0.09,
+        unit="nm/K",
+        min=0.0,
+        max=1.0,
+        doc="How far the line moves per kelvin: a DFB's grating",
+        applies_when="thermal",
+    )
+    junction_voltage = Param(
+        0.9, unit="V", min=0.0, max=5.0, doc="The diode's forward drop", applies_when="thermal"
+    )
+    series_resistance = Param(
+        5.0,
+        unit="ohm",
+        min=0.0,
+        max=100.0,
+        doc="In series with the junction",
+        applies_when="thermal",
+    )
     noise = BoolParam(
         False, doc="Spontaneous emission noise: the laser's linewidth and intensity noise"
     )
@@ -107,6 +141,39 @@ class DirectlyModulatedLaser(Component):
             wavelength=self.si("wavelength"),
             linewidth_enhancement=self.linewidth_enhancement,
         )
+
+    def thermal_model(self) -> ThermalModel | None:
+        """The junction's heat, in SI units, or nothing if it is not being modelled."""
+        if not self.thermal:
+            return None
+        return ThermalModel(
+            resistance=self.thermal_resistance,
+            time_constant=self.si("thermal_time_constant"),
+            drift=self.si("wavelength_drift"),
+            junction_voltage=self.junction_voltage,
+            series_resistance=self.series_resistance,
+        )
+
+    def junction_rise(self, current: float | None = None) -> float:
+        """The settled temperature rise at this current [K]; the bias, by default.
+
+        The light that leaves is not heat, so it is taken off: the laser is
+        solved at this current and its own output power subtracted.
+        """
+        model = self.thermal_model()
+        if model is None:
+            return 0.0
+        drive = self.si("bias_current") if current is None else current
+        parameters = self.parameters()
+        _, photons = parameters.steady_state(drive)
+        return float(model.rise(drive, parameters.power_from_photons(photons)))
+
+    def emission_wavelength(self) -> float:
+        """Where the line sits at this bias [m], warm rather than cold."""
+        model = self.thermal_model()
+        if model is None:
+            return self.si("wavelength")
+        return float(model.wavelength_at(self.si("wavelength"), self.junction_rise()))
 
     def threshold_current(self) -> float:
         """The datasheet's ``I_th`` [A], from the active region's own numbers."""
@@ -143,6 +210,10 @@ class DirectlyModulatedLaser(Component):
             substeps=int(self.substeps),
             noise=self.noise,
             rng=rng,
+            thermal=self.thermal_model(),
+            # The bias's own rise is in the band's centre frequency, so what the
+            # phase carries is the pattern's drift away from it.
+            reference_rise=self.junction_rise(),
         )
 
     def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
@@ -157,7 +228,7 @@ class DirectlyModulatedLaser(Component):
         band = Band(
             Ex=field.astype(ctx.complex_dtype),
             Ey=np.zeros(ctx.num_samples, dtype=ctx.complex_dtype),
-            f0=C_LIGHT / self.si("wavelength"),
+            f0=C_LIGHT / self.emission_wavelength(),
             fs=ctx.sample_rate,
         )
         return {"out": OpticalSignal(bands=(band,))}

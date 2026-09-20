@@ -599,7 +599,9 @@ be finished without it, and each is validated against a result it does not share
   efficiency and relaxation frequency they imply. With their Langevin forces the Schawlow-Townes
   linewidth and Henry's `1 + alpha^2` come out of the integration rather than being written into
   it; several longitudinal modes on one reservoir give mode partition, and `dispersed_power` the
-  noise it becomes after a span.
+  noise it becomes after a span. With `thermal` the junction's own heat is a third state: the bias's
+  settled rise moves the band's centre frequency, and the pattern's drift through it is thermal
+  chirp in the phase.
 * **Short reach.** A PAM4 driver whose predistortion spaces a modulator's output powers evenly,
   and an FFE/DFE, symbol- or T/2-spaced, trained on the reference or on its own decisions, and
   always counted on its own decisions.
@@ -629,8 +631,10 @@ Stated in the code where each approximation is made, and collected here:
   grating inside the cavity.
 * **Transceivers.** Mode partition noise is computed at the laser by `dispersed_power`, not by a
   link, because every band is carried in its own retarded frame and a detector summing several
-  after a span does not see the delays between them; a laser's thermal wavelength drift with bias; the W-Port framing around OFEC -- FlexO adaptation,
-  scrambler, pilots and symbol framing -- which the code itself does not need.
+  after a span does not see the delays between them; and the W-Port framing around OFEC -- FlexO
+  adaptation, scrambler, pilots and symbol framing -- which the code itself does not need. A laser's
+  junction heats as one pole, so the case's own temperature and the package around it are the
+  caller's to set.
 
 ---
 
