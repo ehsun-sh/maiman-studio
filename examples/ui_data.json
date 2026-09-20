@@ -20460,7 +20460,7 @@
    "title": "DWDM link, 8 \u00d7 10 Gb/s",
    "project": {
     "schema_version": 1,
-    "maiman_version": "0.10.0",
+    "maiman_version": "0.11.0",
     "context": {
      "bit_rate": 10000000000.0,
      "samples_per_symbol": 8,
@@ -21199,7 +21199,7 @@
    "title": "WDM spectrum, 4 channels",
    "project": {
     "schema_version": 1,
-    "maiman_version": "0.10.0",
+    "maiman_version": "0.11.0",
     "context": {
      "bit_rate": 10000000000.0,
      "samples_per_symbol": 16,
@@ -21626,7 +21626,7 @@
    "title": "Direct detection, eye diagram",
    "project": {
     "schema_version": 1,
-    "maiman_version": "0.10.0",
+    "maiman_version": "0.11.0",
     "context": {
      "bit_rate": 10000000000.0,
      "samples_per_symbol": 32,
@@ -21838,7 +21838,7 @@
    "title": "Coherent link, soft-decision FEC",
    "project": {
     "schema_version": 1,
-    "maiman_version": "0.10.0",
+    "maiman_version": "0.11.0",
     "context": {
      "bit_rate": 32000000000.0,
      "samples_per_symbol": 4,
@@ -22137,7 +22137,7 @@
  },
  "project": {
   "schema_version": 1,
-  "maiman_version": "0.10.0",
+  "maiman_version": "0.11.0",
   "context": {
    "bit_rate": 32000000000.0,
    "samples_per_symbol": 16,
