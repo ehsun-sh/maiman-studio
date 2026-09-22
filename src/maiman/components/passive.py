@@ -15,6 +15,7 @@ from ..signals import (
     Signal,
     joined_accumulated_gvd,
     joined_nonlinear_history,
+    joined_walkoff,
 )
 from ..units import db_to_linear
 
@@ -77,6 +78,7 @@ class Combiner(Component):
                 bands=tuple(bands),
                 noise=tuple(noise),
                 accumulated_gvd=joined_accumulated_gvd(joined, where=self.label),
+                walkoff=joined_walkoff(joined, where=self.label),
                 nonlinear_history=joined_nonlinear_history(joined, where=self.label),
             )
         }
@@ -118,6 +120,7 @@ class Splitter(Component):
             bands=tuple(b.scale_amplitude(amplitude_factor) for b in signal.bands),
             noise=tuple(n.scale_power(power_factor) for n in signal.noise),
             accumulated_gvd=signal.accumulated_gvd,
+            walkoff=signal.walkoff,
             nonlinear_history=signal.nonlinear_history,
         )
         return {name: split for name in self.outputs}
@@ -191,6 +194,7 @@ class PolarizationCombiner(Component):
                 bands=tuple(by_frequency.values()),
                 noise=noise,
                 accumulated_gvd=joined_accumulated_gvd((arm_x, arm_y), where=self.label),
+                walkoff=joined_walkoff((arm_x, arm_y), where=self.label),
                 nonlinear_history=joined_nonlinear_history((arm_x, arm_y), where=self.label),
             )
         }
@@ -252,6 +256,7 @@ class PolarizationRotator(Component):
                 bands=tuple(bands),
                 noise=signal.noise,
                 accumulated_gvd=signal.accumulated_gvd,
+                walkoff=signal.walkoff,
                 nonlinear_history=signal.nonlinear_history,
             )
         }
@@ -277,6 +282,7 @@ class Attenuator(Component):
                 bands=tuple(b.scale_amplitude(amplitude_factor) for b in signal.bands),
                 noise=tuple(n.scale_power(power_factor) for n in signal.noise),
                 accumulated_gvd=signal.accumulated_gvd,
+                walkoff=signal.walkoff,
                 nonlinear_history=signal.nonlinear_history,
             )
         }

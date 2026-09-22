@@ -894,6 +894,37 @@ def walkoff_from_dispersion(beta2: float, frequency_offset: float) -> float:
     return beta2 * 2.0 * math.pi * frequency_offset
 
 
+
+def apply_group_delay(field: np.ndarray, sample_rate: float, delay: float) -> np.ndarray:
+    """Delay a sampled waveform by ``delay`` seconds [s], positive for later.
+
+    The group-delay term of the same expansion whose quadratic term
+    :func:`propagate_dispersion` applies, and carried with the same
+    ``exp(-i beta z)`` convention: a constant delay is ``exp(-i omega tau)`` on
+    the spectrum. Being all-pass it conserves energy exactly and is exactly
+    invertible, and it is not restricted to whole samples -- a fraction of one is
+    the interpolation this ramp implies, which is the right one for a waveform
+    the sampling theorem already says is band-limited.
+
+    **Circular, as every waveform here is.** What leaves the end of the window
+    arrives at its start. That is the same convention the rest of the library
+    runs on, and it is exact for the periodic signal a finite window stands for.
+
+    This is deliberately *not* applied inside a band: there a common delay is
+    unobservable. It is what one band has walked relative to another, which is
+    what :class:`maiman.signals.WalkoffHistory` carries to the detector.
+    """
+    if delay == 0.0:
+        return field
+    xp = array_module(field)
+    omega = angular_frequency_grid(int(field.shape[-1]), sample_rate, like=field)
+    ramp = xp.exp(-1j * omega * delay)
+    delayed = xp.fft.ifft(xp.fft.fft(field) * ramp)
+    if not xp.issubdtype(field.dtype, xp.complexfloating):
+        return xp.real(delayed)
+    return delayed
+
+
 # --------------------------------------------------------------------------
 # Four-wave mixing
 # --------------------------------------------------------------------------

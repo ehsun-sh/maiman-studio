@@ -96,6 +96,7 @@ class MachZehnderModulator(Component):
                 bands=bands,
                 noise=noise,
                 accumulated_gvd=optical.accumulated_gvd,
+                walkoff=optical.walkoff,
                 nonlinear_history=optical.nonlinear_history,
             )
         }
@@ -200,6 +201,7 @@ class IQModulator(Component):
                 bands=bands,
                 noise=noise,
                 accumulated_gvd=optical.accumulated_gvd,
+                walkoff=optical.walkoff,
                 nonlinear_history=optical.nonlinear_history,
             )
         }

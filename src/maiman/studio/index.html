@@ -2795,6 +2795,100 @@ verdict, and DESIGN.md
     }
    }
   },
+  "FabryPerotLaser": {
+   "name": "Fabry-Perot Laser",
+   "type": "FabryPerotLaser",
+   "class": "maiman.components.sources.FabryPerotLaser",
+   "category": "Optical Sources",
+   "version": "0.1.0",
+   "spectral": false,
+   "parameters": {
+    "power": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "dBm",
+     "doc": "Average output power, summed over every mode"
+    },
+    "wavelength": {
+     "type": "float",
+     "default": 1310.0,
+     "unit": "nm",
+     "min": 1200.0,
+     "max": 1700.0,
+     "doc": "Where the gain peaks, in vacuum"
+    },
+    "modes": {
+     "type": "float",
+     "default": 7.0,
+     "unit": "",
+     "min": 1.0,
+     "max": 41.0,
+     "doc": "Longitudinal modes the gain supports"
+    },
+    "mode_spacing": {
+     "type": "float",
+     "default": 1.1,
+     "unit": "nm",
+     "min": 0.001,
+     "max": 50.0,
+     "doc": "The cavity's free spectral range"
+    },
+    "gain_bandwidth": {
+     "type": "float",
+     "default": 40.0,
+     "unit": "nm",
+     "min": 0.01,
+     "max": 200.0,
+     "doc": "Where the gain parabola falls to zero"
+    },
+    "bias_current": {
+     "type": "float",
+     "default": 35.0,
+     "unit": "mA",
+     "min": 0.0,
+     "max": 1000.0,
+     "doc": "Drive current"
+    },
+    "spontaneous_coupling": {
+     "type": "float",
+     "default": 0.0001,
+     "unit": "",
+     "min": 0.0,
+     "max": 0.01,
+     "doc": "beta: spontaneous emission into each mode, which is what feeds the side modes"
+    },
+    "partition_noise": {
+     "type": "bool",
+     "default": true,
+     "doc": "Langevin forces on every mode, so they trade power; off is the steady state"
+    },
+    "substeps": {
+     "type": "float",
+     "default": 16.0,
+     "unit": "",
+     "min": 1.0,
+     "max": 1024.0,
+     "doc": "Integration steps per sample",
+     "applies_when": "partition_noise"
+    },
+    "settle": {
+     "type": "float",
+     "default": 256.0,
+     "unit": "",
+     "min": 0.0,
+     "max": 100000.0,
+     "doc": "Samples integrated and thrown away before the window opens",
+     "applies_when": "partition_noise"
+    }
+   },
+   "structural": {},
+   "ports": {
+    "inputs": {},
+    "outputs": {
+     "out": "optical"
+    }
+   }
+  },
   "Feedback": {
    "name": "Feedback",
    "type": "Feedback",
@@ -2904,6 +2998,11 @@ verdict, and DESIGN.md
      "unit": "",
      "min": 0.001,
      "doc": "Largest relative slip between bands allowed per split-step [samples]"
+    },
+    "carry_walkoff": {
+     "type": "bool",
+     "default": false,
+     "doc": "Carry each band's own group delay onward, so a detector sees the bands walk apart"
     },
     "four_wave_mixing": {
      "type": "bool",

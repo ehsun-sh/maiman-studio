@@ -40,6 +40,7 @@ from ..signals import (
     Signal,
     joined_accumulated_gvd,
     joined_nonlinear_history,
+    joined_walkoff,
 )
 from ..units import frequency_to_wavelength, wavelength_to_frequency
 from .filters import apply_passband
@@ -192,6 +193,7 @@ class Multiplexer(_Grid):
                 bands=tuple(bands),
                 noise=tuple(noise),
                 accumulated_gvd=joined_accumulated_gvd(filtered, where=self.label),
+                walkoff=joined_walkoff(filtered, where=self.label),
                 nonlinear_history=joined_nonlinear_history(filtered, where=self.label),
             )
         }

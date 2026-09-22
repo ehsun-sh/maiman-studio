@@ -424,6 +424,88 @@ def joined_nonlinear_history(signals: Sequence[OpticalSignal], *, where: str) ->
 
 
 @dataclass(frozen=True)
+class WalkoffHistory:
+    """When each carrier arrives, against the frame its signal is reported in [s].
+
+    Every band here is an envelope in its own retarded frame: the constant group
+    delay a span gives it has been divided out, because inside one band a common
+    delay is unobservable and applying it would be work that cancels. *Between*
+    bands it does not cancel. Two wavelengths that left together arrive
+    ``D L dlambda`` apart, and a detector summing them sees the later one late --
+    which is how a Fabry-Perot laser's mode partition, which cancels exactly in
+    the sum at the laser, becomes noise at a receiver a span away.
+
+    ``carriers`` holds ``(f0, delay)``: how much later than the frame that
+    carrier arrives, positive for later. A carrier with no entry has not walked,
+    and a fresh signal has no entries at all.
+
+    **The frame is arbitrary and only differences matter.** A delay common to
+    every band slides the whole window and changes nothing a detector can see,
+    so a span writes its walk-off against its own first band and leaves that one
+    where it was. If that band is later filtered away the frame jumps by a
+    constant, and every difference survives it.
+
+    ``conflict`` is set when two paths carrying different delays were joined,
+    and, as :class:`KerrHistory`'s is, it is recorded here and refused where it
+    is used -- a link that never asks for the delays has no quarrel with them.
+    """
+
+    carriers: tuple[tuple[float, float], ...] = ()
+    conflict: str = ""
+
+    def at(self, f0: float, rtol: float = 1e-9) -> float:
+        """How late the carrier at ``f0`` arrives [s]; zero if it has not walked."""
+        for centre, delay in self.carriers:
+            if abs(centre - f0) <= rtol * f0:
+                return delay
+        return 0.0
+
+    @property
+    def walked(self) -> bool:
+        """Whether anything has moved: no entry and all-zero entries are the same thing."""
+        return any(delay != 0.0 for _, delay in self.carriers)
+
+    @property
+    def spread(self) -> float:
+        """The widest gap between two carriers' arrivals [s]."""
+        if not self.carriers:
+            return 0.0
+        delays = [delay for _, delay in self.carriers]
+        return max(delays) - min(delays)
+
+
+def joined_walkoff(signals: Sequence[OpticalSignal], *, where: str) -> WalkoffHistory:
+    """The arrival delays of several inputs joined, with any disagreement recorded.
+
+    Per carrier, so a comb multiplexed out of channels that have each been down
+    their own fibre is a union rather than a conflict. What cannot be joined is
+    one carrier arriving twice, by two paths, at two different times: that is a
+    real interference the sum of two envelopes cannot express, and it is recorded
+    as :attr:`WalkoffHistory.conflict` for the detector to refuse. Inputs with no
+    bands carry nothing to disagree about.
+
+    Note what this does *not* check: two paths of different length whose carriers
+    do not overlap join silently, each keeping its own delays, because the frame
+    is arbitrary and a constant between them is unobservable anyway.
+    """
+    present = [signal.walkoff for signal in signals if signal.bands]
+    if not present:
+        return WalkoffHistory()
+    conflict = next((history.conflict for history in present if history.conflict), "")
+    merged: dict[float, float] = {}
+    for history in present:
+        for f0, delay in history.carriers:
+            known = merged.get(f0)
+            if not conflict and known is not None and _differs(known, delay):
+                conflict = (
+                    f"{where} joined the carrier at {f0:.6e} Hz arriving by two paths "
+                    f"{abs(known - delay):.3e} s apart"
+                )
+            merged[f0] = delay
+    return WalkoffHistory(carriers=tuple(sorted(merged.items())), conflict=conflict)
+
+
+@dataclass(frozen=True)
 class OpticalSignal:
     """A set of sampled bands plus the noise accompanying them."""
 
@@ -460,6 +542,14 @@ class OpticalSignal:
     :attr:`accumulated_gvd` is.
     """
 
+    walkoff: WalkoffHistory = field(default_factory=WalkoffHistory)
+    """When each carrier arrives, relative to the others: see :class:`WalkoffHistory`.
+
+    Empty until a span is asked to carry it, and then carried through unchanged
+    by every block that does not delay one carrier differently from another, as
+    the two above are.
+    """
+
     def __post_init__(self) -> None:
         object.__setattr__(self, "bands", tuple(self.bands))
         object.__setattr__(self, "noise", tuple(self.noise))
@@ -478,6 +568,10 @@ class OpticalSignal:
     def history_at(self, f0: float, rtol: float = 1e-9) -> tuple[float, float]:
         """The ``(x, y)`` Kerr angle of the carrier at ``f0``: see :meth:`KerrHistory.at`."""
         return self.nonlinear_history.at(f0, rtol)
+
+    def delay_at(self, f0: float, rtol: float = 1e-9) -> float:
+        """How late the carrier at ``f0`` arrives [s]: see :meth:`WalkoffHistory.at`."""
+        return self.walkoff.at(f0, rtol)
 
     def band_at(self, f0: float, rtol: float = 1e-9) -> Band:
         """The band whose centre frequency matches ``f0``."""

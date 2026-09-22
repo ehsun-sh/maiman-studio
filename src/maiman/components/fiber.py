@@ -42,7 +42,7 @@ from ..kernels import (
     random_pmd_sections,
     walkoff_from_dispersion,
 )
-from ..signals import Band, KerrHistory, OpticalSignal, Signal
+from ..signals import Band, KerrHistory, OpticalSignal, Signal, WalkoffHistory
 from ..units import db_to_linear
 
 #: Two mixing products this close in frequency are the same wave [Hz]. Real
@@ -218,6 +218,10 @@ class Fiber(Component):
         min=1e-3,
         doc="Largest relative slip between bands allowed per split-step [samples]",
     )
+    carry_walkoff = BoolParam(
+        False,
+        doc="Carry each band's own group delay onward, so a detector sees the bands walk apart",
+    )
     four_wave_mixing = BoolParam(True, doc="Generate mixing products between bands")
     pump_phase = BoolParam(
         False,
@@ -368,6 +372,7 @@ class Fiber(Component):
         diagnostics = replace(diagnostics, raman_tilt=tilt)
 
         history = self._nonlinear_history(signal, gamma=gamma, alpha=alpha)
+        walkoff = self._walkoff(signal, distance)
         if gamma != 0.0 and self.four_wave_mixing:
             bands, emitted, depleted = self._mix(
                 ctx, signal, bands, gamma=gamma, alpha=alpha, after=history
@@ -383,9 +388,39 @@ class Fiber(Component):
                 # rotated away from their pumps.
                 accumulated_gvd=signal.accumulated_gvd + self.reference_beta2(signal) * distance,
                 nonlinear_history=history,
+                walkoff=walkoff,
             ),
             "diagnostics": diagnostics,
         }
+
+    def _walkoff(self, signal: OpticalSignal, distance: float) -> WalkoffHistory:
+        """Each band's group delay after this span, against the first band's [s].
+
+        Walk-off is a linear operator like dispersion, but it is a *constant*
+        delay per band, and :meth:`_propagate_linear` says why it is not applied
+        to the samples: every band is reported in its own retarded frame, where
+        a constant delay cancels. What does not cancel is the delay *between*
+        bands, and with ``carry_walkoff`` that number rides along on the signal
+        instead of being thrown away, for a detector summing several bands to
+        apply once, at the end.
+
+        Written against ``bands[0]``, which is the frame :meth:`reference_beta2`
+        is written against too -- and since only differences are observable, any
+        band would do.
+        """
+        if not self.carry_walkoff or not signal.bands:
+            return signal.walkoff
+        before = signal.walkoff
+        if before.conflict:
+            raise ValueError(
+                f"{self.label}: carry_walkoff needs one set of arrival delays, "
+                f"and {before.conflict}"
+            )
+        reference = signal.bands[0]
+        delays = dict(before.carriers)
+        for band in signal.bands:
+            delays[band.f0] = before.at(band.f0) + self.walkoff_of(band, reference) * distance
+        return WalkoffHistory(carriers=tuple(sorted(delays.items())))
 
     # -- propagation ------------------------------------------------------
 

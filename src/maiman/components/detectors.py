@@ -10,6 +10,7 @@ import numpy as np
 
 from ..component import BoolParam, Component, Param, PortType
 from ..context import SimulationContext
+from ..kernels import apply_group_delay
 from ..signals import ElectricalSignal, OpticalSignal, Signal
 from ..units import K_BOLTZMANN, Q_ELECTRON
 
@@ -38,6 +39,14 @@ class PINPhotodiode(Component):
       rather than merely negligible.
     * Bands are detected incoherently, so a *band* never beats with another band.
       ASE does beat with the signal, and that is modelled — see below.
+
+    **When the bands did not arrive together.** Each band is an envelope in its
+    own retarded frame, so summing them as they stand assumes they all arrived
+    at once. A span makes that false — two wavelengths separate by ``D L
+    dlambda`` — and where a fibre was asked to carry that walk-off, this is the
+    end of the line for it: each band's field is delayed by what it accumulated
+    before the powers are added. That is what turns a Fabry-Perot laser's mode
+    partition, which cancels exactly in the sum at the laser, into noise here.
 
     **ASE beat noise.** A photodiode squares the field, so an ASE field arriving
     with the signal does not simply add its power: it beats. Writing
@@ -131,11 +140,28 @@ class PINPhotodiode(Component):
     def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
         signal: OpticalSignal = inputs["in"]
 
+        walkoff = signal.walkoff
+        if walkoff.conflict and walkoff.walked:
+            raise ValueError(
+                f"{self.label}: the bands arriving here do not agree on when they arrived, "
+                f"and this detector would have to sum them: {walkoff.conflict}"
+            )
         power_x = np.zeros(ctx.num_samples, dtype=np.float64)
         power_y = np.zeros(ctx.num_samples, dtype=np.float64)
         for band in signal.bands:
-            power_x += np.abs(band.Ex.astype(np.complex128)) ** 2
-            power_y += np.abs(band.Ey.astype(np.complex128)) ** 2
+            # The *power* is delayed, not the field: these bands are summed
+            # incoherently, and what arrives late is the intensity envelope.
+            # It is also the same operation :func:`maiman.laser.dispersed_power`
+            # applies at the laser, which is what makes the two comparable rather
+            # than merely similar -- squaring a delayed field instead would put
+            # the sampling's own aliasing between them. Zero delay returns the
+            # waveform itself, so a link that never asked a fibre to carry its
+            # walk-off pays nothing and moves nothing.
+            delay = walkoff.at(band.f0)
+            px = np.abs(band.Ex.astype(np.complex128)) ** 2
+            py = np.abs(band.Ey.astype(np.complex128)) ** 2
+            power_x += apply_group_delay(px, band.fs, delay)
+            power_y += apply_group_delay(py, band.fs, delay)
         # The strongest band, not the first. A detector has no wavelength
         # selectivity, so "which channel is this" is decided by whatever survived
         # the last filter — and on a demultiplexed comb the first band in the list

@@ -111,10 +111,48 @@ def partition() -> None:
     )
 
 
+def link() -> None:
+    """The same noise again, but made by a link rather than computed beside one."""
+    from maiman.components import FabryPerotLaser, Fiber, PINPhotodiode
+    from maiman.context import SimulationContext
+
+    diode = PINPhotodiode(
+        label="pd", shot_noise=False, thermal_noise=False, ase_beat_noise=False
+    )
+    print("4. The same laser, down a link")
+    print(f"     {'span':>8} {'modes arrive over':>19} {'received noise':>15}")
+    for length in (0.0, 5.0, 20.0, 50.0):
+        noise, spread = [], 0.0
+        for seed in range(6):
+            ctx = SimulationContext(
+                bit_rate=10e9, samples_per_symbol=8, sequence_length=128, seed=seed
+            )
+            emitted = FabryPerotLaser(label="fp").run(ctx, {})["out"]
+            after = Fiber(
+                label="span",
+                length=length,
+                dispersion=17.0,
+                attenuation=0.0,
+                nonlinearity=0.0,
+                four_wave_mixing=False,
+                carry_walkoff=True,
+            ).run(ctx, {"in": emitted})["out"]
+            spread = after.walkoff.spread
+            current = diode.run(ctx, {"in": after})["out"].samples
+            noise.append(float(current.var()) / float(current.mean()) ** 2)
+        print(f"     {length:5.0f} km {spread * 1e12:15.0f} ps {float(np.mean(noise)):15.2e}")
+    print(
+        "     Each band travels in its own retarded frame, so the span carries what\n"
+        "     each mode has walked rather than applying it, and the detector spends\n"
+        "     it once at the end. That is the table above, made by the link itself."
+    )
+
+
 def main() -> None:
     linewidth()
     intensity()
     partition()
+    link()
 
 
 if __name__ == "__main__":

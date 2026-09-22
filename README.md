@@ -20,7 +20,7 @@ link in this simulator descends from.*
 > ### Project status: 0.12.0 — released, and still moving.
 >
 > `pip install maiman`, then `maiman serve` — or [start from no Python at
-> all](#installing-and-running-it). Phases 0 through 5 are done: **64 components, more than 1800 tests, and
+> all](#installing-and-running-it). Phases 0 through 5 are done: **65 components, more than 1800 tests, and
 > every physics block checked against a closed-form result in CI.**
 >
 > **Links run end to end.** Direct detection — PRBS → NRZ → laser → MZM → fiber → PIN → filter →
@@ -140,7 +140,7 @@ You will see:
 
 ```
 Maiman Studio session server
-  64 components
+  65 components
   http://127.0.0.1:8765/
 ```
 
@@ -2576,10 +2576,38 @@ its own amount, and `dispersed_power` undoes the cancellation:
    3 s/m          5.0e-2    180 km, most of every mode's
 ```
 
-A floor no received power lifts: mode partition noise. **It is computed at the laser, not in the
-link**, and deliberately: every band in this engine is carried in its own retarded frame, so a
-detector summing several modes after a span would not see the delays between them, and would report
-the laser's quiet total. `examples/laser_noise.py` prints the tables.
+A floor no received power lifts: mode partition noise. `examples/laser_noise.py` prints the tables.
+
+### The same noise, in the link
+
+`dispersed_power` does it at the laser, where the modes' delays are a number. In a link they are not:
+every band is an envelope in its own retarded frame, where the constant group delay a span gives it
+has been divided out, and a detector summing several of them would add them as though they had all
+arrived at once — and report the laser's quiet total.
+
+So the delay is **carried**. `FabryPerotLaser` emits one band per longitudinal mode; a span with
+`carry_walkoff` writes each band's `D L dlambda` into the signal's `WalkoffHistory`, beside the
+dispersion and Kerr histories it already carries; and the detector spends it, delaying each band's
+power by its own amount before the sum. Nothing is applied inside a band, where it would cancel.
+
+```
+   7 modes, 1.1 nm apart, 17 ps/nm/km, 12.8 ns window
+
+   span     modes arrive over   received noise (relative variance)
+   0 km          0 ps           1.58e-2   the laser's own, the partition cancelled
+   5 km        561 ps           1.29e-2   still largely correlated
+   20 km      2244 ps           3.33e-2
+   50 km      5610 ps           6.47e-2   against a ceiling of 8.58e-2
+```
+
+The ceiling is the sum of the modes' own variances — what a receiver sees once nothing cancels at all
+— and it is reached from below. The dip at 5 km is real and not a glitch: a delay shorter than the
+fluctuations' own correlation time leaves them partly aligned, and partly cancelling still.
+
+Held to `dispersed_power` where that function's approximation holds — each mode's bandwidth far below
+the spacing between them — to within a thousandth of the mean, two code paths that share nothing but
+the physics. Everything is behind `carry_walkoff`, which starts false: a link that does not ask sees
+exactly what it saw before.
 
 ## A PAM4 lane, and the equaliser that makes it work
 
@@ -3519,8 +3547,8 @@ time window, and results are reproducible.
 | **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier frequency and phase recovery, coarse frequency acquisition over the whole sampled band, blind square-law timing recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km with blind estimation of the accumulated value, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
 | **3 — GUI & WDM** ✅ | Wavelength-selective filters, the ITU grids and a multiplexer/demultiplexer pair on them with crosstalk that falls out of the channel spacing, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — the OSA's trace drawn in the dock, and 400G/800G reference designs validated against the OSNR relations, and a back-end indirection the propagation kernels dispatch through — CuPy runs it where a device exists, `maiman devices` cross-checks it against NumPy, and a CI job does the same on any runner labelled `gpu` | ~6 months |
 | **4 — PIC** ✅ | Bidirectional S-matrix circuit solver, waveguide, directional coupler, all-pass and add-drop ring resonators, cross-validated against SAX; N×N MMI couplers on the self-imaging phase relations; a Mach-Zehnder interferometer assembled from them — switch, interleaver, or both; and PDK import, which reads a foundry's fitted numbers out of a JSON kit and refuses to extrapolate them past the window they were fitted in; and birefringence, with each guided polarization carrying its own indices through the same reduction | — |
-| **5 — Gratings, sensing, loops and coupling** ✅ | Fibre Bragg gratings assembled from transfer matrices — apodized, chirped, sampled and phase-shifted — a circulator with isolation and return loss, and a grating read as a strain gauge and a thermometer, by a swept laser or by broadband light on an analyser; noise that carries the spectral shape of what it passed through; loop control that runs a cavity to its fixed point, and a delay line that turns the same loop into a recirculating one lap by lap; pump depletion for four-wave mixing and Raman's measured gain shape past its peak; an erbium transient spread across the spectrum, each channel moving by the fibre's own tilt, drained per channel by its own cross section, and answered by a pump control loop with a bandwidth and a ceiling; an amplifier's own ASE, both ways, depleting its inversion; PMD applied along the span between Kerr steps, and the coherent polarization term that moves power between the axes; a scalar mode solver for core and cladding modes, and the vector HE, EH, TE and TM modes the glass-air boundary splits them into, checked against the exact characteristic equation; glass that disperses as Sellmeier's silica and germania, which makes the default fibre a G.652 one; a long-period grating built on either, alone or as a pair recoupling its cladding light, and a tilted grating whose comb of cladding resonances reads what the fibre is dipped in, split by polarization when its vector modes are solved; edge and grating couplers that put a signal into the chip's TE and TM, the edge coupler's two facets a cavity summed bounce by bounce, and the grating coupler's passband, its teeth's own reflection, its bottom mirror and its apodization computed from its geometry; a PAM4 driver with its modulator's linearity corrected, and a feed-forward and decision-feedback equaliser, fractionally spaced or blind; a laser's linewidth and intensity noise from its own Langevin forces, and the partition noise between a Fabry-Perot laser's modes; a directly modulated laser whose chirp comes out of its own rate equations, with its junction's heat moving the line; and templates in the studio's File menu, including an eight-channel DWDM link | — |
-| **Open** | Mode partition noise in the link itself, which needs bands that carry their delays to the detector; the W-Port framing around OFEC — its FlexO adaptation, scrambler and symbol framing | — |
+| **5 — Gratings, sensing, loops and coupling** ✅ | Fibre Bragg gratings assembled from transfer matrices — apodized, chirped, sampled and phase-shifted — a circulator with isolation and return loss, and a grating read as a strain gauge and a thermometer, by a swept laser or by broadband light on an analyser; noise that carries the spectral shape of what it passed through; loop control that runs a cavity to its fixed point, and a delay line that turns the same loop into a recirculating one lap by lap; pump depletion for four-wave mixing and Raman's measured gain shape past its peak; an erbium transient spread across the spectrum, each channel moving by the fibre's own tilt, drained per channel by its own cross section, and answered by a pump control loop with a bandwidth and a ceiling; an amplifier's own ASE, both ways, depleting its inversion; PMD applied along the span between Kerr steps, and the coherent polarization term that moves power between the axes; a scalar mode solver for core and cladding modes, and the vector HE, EH, TE and TM modes the glass-air boundary splits them into, checked against the exact characteristic equation; glass that disperses as Sellmeier's silica and germania, which makes the default fibre a G.652 one; a long-period grating built on either, alone or as a pair recoupling its cladding light, and a tilted grating whose comb of cladding resonances reads what the fibre is dipped in, split by polarization when its vector modes are solved; edge and grating couplers that put a signal into the chip's TE and TM, the edge coupler's two facets a cavity summed bounce by bounce, and the grating coupler's passband, its teeth's own reflection, its bottom mirror and its apodization computed from its geometry; a PAM4 driver with its modulator's linearity corrected, and a feed-forward and decision-feedback equaliser, fractionally spaced or blind; a laser's linewidth and intensity noise from its own Langevin forces, and the partition noise between a Fabry-Perot laser's modes, carried down a link as each mode's own arrival time and spent at the detector; a directly modulated laser whose chirp comes out of its own rate equations, with its junction's heat moving the line; and templates in the studio's File menu, including an eight-channel DWDM link | — |
+| **Open** | The W-Port framing around OFEC — its FlexO adaptation, scrambler and symbol framing | — |
 
 ¹ One developer, part-time. Estimates, not commitments.
 

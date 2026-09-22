@@ -599,7 +599,10 @@ be finished without it, and each is validated against a result it does not share
   efficiency and relaxation frequency they imply. With their Langevin forces the Schawlow-Townes
   linewidth and Henry's `1 + alpha^2` come out of the integration rather than being written into
   it; several longitudinal modes on one reservoir give mode partition, and `dispersed_power` the
-  noise it becomes after a span. With `thermal` the junction's own heat is a third state: the bias's
+  noise it becomes after a span. `FabryPerotLaser` puts those modes on the wire as a band each, a
+  span with `carry_walkoff` records what `D L dlambda` each has walked in the signal's
+  `WalkoffHistory`, and the detector spends it: the cancellation that makes the laser quiet is
+  undone by the link rather than by a closed form beside it. With `thermal` the junction's own heat is a third state: the bias's
   settled rise moves the band's centre frequency, and the pattern's drift through it is thermal
   chirp in the phase.
 * **Short reach.** A PAM4 driver whose predistortion spaces a modulator's output powers evenly,
@@ -629,12 +632,15 @@ Stated in the code where each approximation is made, and collected here:
 * **Coupling.** The etalon sum is paraxial, good to 7e-3 at six degrees of fibre tilt, and the gap
   between fibre and chip acts on the coupling as a multiplier rather than being solved with the
   grating inside the cavity.
-* **Transceivers.** Mode partition noise is computed at the laser by `dispersed_power`, not by a
-  link, because every band is carried in its own retarded frame and a detector summing several
-  after a span does not see the delays between them; and the W-Port framing around OFEC -- FlexO
-  adaptation, scrambler, pilots and symbol framing -- which the code itself does not need. A laser's
-  junction heats as one pole, so the case's own temperature and the package around it are the
-  caller's to set.
+* **Transceivers.** A band's arrival time is carried as one number per carrier, so a span's
+  walk-off reaches the detector but its *shape* does not: within a band the span still disperses,
+  and two bands that have walked apart are still summed as powers rather than beaten together.
+  Only the direct-detection diode spends them, which is where they can be seen: a coherent front
+  end takes the one band nearest its local oscillator, and a meter or an analyser reads powers
+  that a delay does not move.
+  The W-Port framing around OFEC -- FlexO adaptation, scrambler, pilots and symbol framing -- is
+  not here, which the code itself does not need. A laser's junction heats as one pole, so the
+  case's own temperature and the package around it are the caller's to set.
 
 ---
 

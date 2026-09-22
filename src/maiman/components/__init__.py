@@ -71,7 +71,7 @@ from .photonic import (
     Waveguide,
 )
 from .reflective import Circulator, FiberBraggGrating
-from .sources import CWLaser, GaussianPulse, SechPulse
+from .sources import CWLaser, FabryPerotLaser, GaussianPulse, SechPulse
 from .tilted import TiltedFiberBraggGrating
 from .wdm import Demultiplexer, Multiplexer
 
@@ -104,6 +104,7 @@ __all__ = [
     "FECDecoder",
     "FECEncoder",
     "FFEDFEEqualizer",
+    "FabryPerotLaser",
     "Feedback",
     "Fiber",
     "FiberBraggGrating",

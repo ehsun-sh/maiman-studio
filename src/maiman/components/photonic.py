@@ -54,6 +54,7 @@ from ..signals import (
     Signal,
     joined_accumulated_gvd,
     joined_nonlinear_history,
+    joined_walkoff,
 )
 from ..units import C_LIGHT, frequency_to_wavelength, wavelength_to_frequency
 
@@ -249,6 +250,7 @@ def apply_response(
         bands=tuple(bands),
         noise=tuple(noise),
         accumulated_gvd=(signal.accumulated_gvd if accumulated_gvd is None else accumulated_gvd),
+        walkoff=signal.walkoff,
         nonlinear_history=signal.nonlinear_history,
     )
 
@@ -998,5 +1000,6 @@ def _sum_signals(signals: list[OpticalSignal], *, where: str) -> OpticalSignal:
         bands=tuple(by_centre[f0] for f0 in sorted(by_centre)),
         noise=tuple(noise),
         accumulated_gvd=joined_accumulated_gvd(signals, where=where),
+        walkoff=joined_walkoff(signals, where=where),
         nonlinear_history=joined_nonlinear_history(signals, where=where),
     )

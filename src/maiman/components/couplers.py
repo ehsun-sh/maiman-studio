@@ -72,6 +72,7 @@ def _onto_die(signal: OpticalSignal, angle: float) -> OpticalSignal:
         bands=tuple(bands),
         noise=signal.noise,
         accumulated_gvd=signal.accumulated_gvd,
+        walkoff=signal.walkoff,
         nonlinear_history=signal.nonlinear_history,
     )
 
