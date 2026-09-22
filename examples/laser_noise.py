@@ -116,9 +116,7 @@ def link() -> None:
     from maiman.components import FabryPerotLaser, Fiber, PINPhotodiode
     from maiman.context import SimulationContext
 
-    diode = PINPhotodiode(
-        label="pd", shot_noise=False, thermal_noise=False, ase_beat_noise=False
-    )
+    diode = PINPhotodiode(label="pd", shot_noise=False, thermal_noise=False, ase_beat_noise=False)
     print("4. The same laser, down a link")
     print(f"     {'span':>8} {'modes arrive over':>19} {'received noise':>15}")
     for length in (0.0, 5.0, 20.0, 50.0):

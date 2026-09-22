@@ -59,9 +59,7 @@ def span(length_km: float) -> Fiber:
 
 def diode() -> PINPhotodiode:
     """A diode with every noise source off: what is left is the light itself."""
-    return PINPhotodiode(
-        label="pd", shot_noise=False, thermal_noise=False, ase_beat_noise=False
-    )
+    return PINPhotodiode(label="pd", shot_noise=False, thermal_noise=False, ase_beat_noise=False)
 
 
 def detected(signal: OpticalSignal, ctx: SimulationContext) -> np.ndarray:
@@ -400,8 +398,10 @@ def emitted(seed: int) -> OpticalSignal:
 def received(length_km: float) -> tuple[np.ndarray, ...]:
     """The detected power after a span, one waveform per seed."""
     return tuple(
-        detected(span(length_km).run(link_context(seed), {"in": emitted(seed)})["out"],
-                 link_context(seed))
+        detected(
+            span(length_km).run(link_context(seed), {"in": emitted(seed)})["out"],
+            link_context(seed),
+        )
         for seed in SEEDS
     )
 
@@ -414,9 +414,7 @@ def test_the_span_does_not_touch_the_power_it_delivers() -> None:
     """An all-pass delay moves light in time and nowhere else."""
     for length in (0.0, 50.0):
         for waveform in received(length):
-            assert float(waveform.mean()) == pytest.approx(
-                float(received(0.0)[0].mean()), rel=0.2
-            )
+            assert float(waveform.mean()) == pytest.approx(float(received(0.0)[0].mean()), rel=0.2)
     assert all(
         float(walked.mean()) == pytest.approx(float(flat.mean()), rel=1e-6)
         for walked, flat in zip(received(50.0), received(0.0), strict=True)

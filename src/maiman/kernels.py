@@ -894,7 +894,6 @@ def walkoff_from_dispersion(beta2: float, frequency_offset: float) -> float:
     return beta2 * 2.0 * math.pi * frequency_offset
 
 
-
 def apply_group_delay(field: np.ndarray, sample_rate: float, delay: float) -> np.ndarray:
     """Delay a sampled waveform by ``delay`` seconds [s], positive for later.
 
