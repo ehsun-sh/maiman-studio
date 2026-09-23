@@ -52,15 +52,17 @@ from functools import lru_cache
 
 import numpy as np
 
-from .ofec import ofec_decode, ofec_encode, ofec_frame_bits
+from .ofec import ofec_decode, ofec_encode
 
 __all__ = [
     "DSP_FRAME_SYMBOLS",
     "FLEXO_ROW_BITS",
     "PAYLOAD_SYMBOLS",
     "PILOT_SPACING",
+    "SHAPED",
     "DSPFrame",
     "WPortReception",
+    "codec_bits",
     "codec_payload",
     "crc32",
     "dsp_deframe",
@@ -71,6 +73,7 @@ __all__ = [
     "flexo_rows",
     "information_bits",
     "jones",
+    "line_modulation",
     "pilot_symbols",
     "scramble",
     "symbol_bits",
@@ -84,17 +87,33 @@ __all__ = [
 # Clause 8: FlexO adaptation
 # ---------------------------------------------------------------------------
 
-#: One bit-column row of the FlexO-x(e) information structure.
-FLEXO_ROW_BITS = 10280
-#: A CRC32 is appended after every four of them.
-CRC_ROWS = 4
+#: One bit-column row of the FlexO-x(e) information structure: 10,280 bits on the
+#: DO path, 2,056 on the DPO one, which is the same structure read in narrower
+#: columns. Twenty of the narrow rows are four of the wide ones, which is why the
+#: CRC32 below covers the same 41,120 bits either way.
+FLEXO_ROW_BITS = {"qpsk": 10280, "16qam": 10280, "b72": 2056, "b106": 2056, "b116": 2056}
+#: Bits a CRC32 covers, clause 8.1: four wide rows, or twenty narrow ones.
+CRC_SPAN = 41120
 CRC_BITS = 32
-#: Rows that go into one OFEC coder block group: 58 for FlexO-4(e), 116 for FlexO-8(e).
-FLEXO_ROWS = {"qpsk": 58, "16qam": 116}
+#: Rows that go into one coder block group, clause 8.4 and clause 8.5.
+FLEXO_ROWS = {"qpsk": 58, "16qam": 116, "b72": 433, "b106": 522, "b116": 548}
+#: Bits the codec takes, which is those rows plus the CRC32s and the pad. The DO
+#: modes' number is :func:`maiman.ofec.ofec_frame_bits`; the DPO modes shape
+#: theirs up to 1,193,472 before the code sees it, so it is smaller here.
+CODEC_BITS = {
+    "qpsk": 596736,
+    "16qam": 1193472,
+    "b72": 892416,
+    "b106": 1075200,
+    "b116": 1128960,
+}
+#: The DPO modes, by the LUT input width that names them: FlexO-6(e), FlexO-8e
+#: and FlexO-8 with probabilistic constellation shaping. See :mod:`maiman.pcs`.
+SHAPED = ("b72", "b106", "b116")
 
 
 def _known(modulation: str) -> str:
-    """Refuse a modulation this framing is not defined for, and say which are."""
+    """Refuse a mode this framing is not defined for, and say which are."""
     if modulation not in FLEXO_ROWS:
         raise ValueError(f"modulation must be one of {sorted(FLEXO_ROWS)}, got {modulation!r}")
     return modulation
@@ -105,9 +124,24 @@ def flexo_rows(modulation: str) -> int:
     return FLEXO_ROWS[_known(modulation)]
 
 
+def codec_bits(modulation: str) -> int:
+    """Bits the adaptation hands on: rows, CRC32s and pad (test point TP1)."""
+    return CODEC_BITS[_known(modulation)]
+
+
 def information_bits(modulation: str) -> int:
     """Bits of FlexO information one frame carries (test point TP0)."""
-    return flexo_rows(modulation) * FLEXO_ROW_BITS
+    return flexo_rows(modulation) * FLEXO_ROW_BITS[modulation]
+
+
+def line_modulation(modulation: str) -> str:
+    """What the symbols on the line are: the shaped modes are DP-16QAM too.
+
+    Clause 9's shaping changes which points of the 16QAM constellation are
+    likely, not which constellation it is -- so everything from the symbol
+    mapper onward treats a shaped mode as ``"16qam"``.
+    """
+    return "16qam" if _known(modulation) in SHAPED else modulation
 
 
 def crc32(bits: np.ndarray) -> np.ndarray:
@@ -148,13 +182,12 @@ def flexo_adapt(information: np.ndarray, *, modulation: str = "qpsk") -> np.ndar
     want = information_bits(modulation)
     if bits.size != want:
         raise ValueError(f"a {modulation} frame carries {want} information bits, got {bits.size}")
-    group = CRC_ROWS * FLEXO_ROW_BITS
     pieces: list[np.ndarray] = []
-    for start in range(0, bits.size, group):
-        covered = bits[start : start + group]
+    for start in range(0, bits.size, CRC_SPAN):
+        covered = bits[start : start + CRC_SPAN]
         pieces.extend((covered, crc32(covered)))
     built = np.concatenate(pieces)
-    total = ofec_frame_bits(modulation)
+    total = codec_bits(modulation)
     return np.concatenate([built, np.zeros(total - built.size, dtype=np.uint8)])
 
 
@@ -181,10 +214,10 @@ def flexo_deadapt(frame: np.ndarray, *, modulation: str = "qpsk") -> FlexOFrame:
     Ethernet client does about that is the client's.
     """
     bits = np.asarray(frame, dtype=np.uint8).reshape(-1)
-    total = ofec_frame_bits(modulation)
+    total = codec_bits(modulation)
     if bits.size != total:
         raise ValueError(f"a {modulation} codec frame is {total} bits, got {bits.size}")
-    group = CRC_ROWS * FLEXO_ROW_BITS
+    group = CRC_SPAN
     rows, cursor = information_bits(modulation), 0
     recovered: list[np.ndarray] = []
     checks: list[bool] = []
@@ -262,7 +295,7 @@ def symbol_levels(line: np.ndarray, *, modulation: str = "qpsk") -> np.ndarray:
     bit of a pair chooses the sign and the second the magnitude.
     """
     bits = np.asarray(line, dtype=np.uint8).reshape(-1)
-    per = BITS_PER_SYMBOL[_known(modulation)]
+    per = BITS_PER_SYMBOL[line_modulation(modulation)]
     if bits.size % per:
         raise ValueError(f"{modulation} takes {per} bits a symbol, got {bits.size}")
     grouped = bits.reshape(-1, per)
@@ -298,7 +331,7 @@ def symbol_bits(levels: np.ndarray, *, modulation: str = "qpsk") -> np.ndarray:
     values = np.asarray(levels, dtype=np.float64)
     if values.ndim != 2 or values.shape[1] != 4:
         raise ValueError(f"levels are (symbols, 4) of [XI, XQ, YI, YQ], got {values.shape}")
-    if _known(modulation) == "qpsk":
+    if line_modulation(modulation) == "qpsk":
         bits = (values > 0.0).astype(np.uint8)
         return np.stack([bits[:, 0], bits[:, 2], bits[:, 1], bits[:, 3]], axis=1).reshape(-1)
     pairs = sorted((value, label) for label, value in _AMPLITUDE.items())
@@ -358,13 +391,13 @@ def faw_symbols(modulation: str = "qpsk") -> np.ndarray:
     alone. That is why clause 12.6 can allow every polarization and quadrature
     mapping: the FAW resolves them all.
     """
-    amplitude = OUTER[_known(modulation)]
+    amplitude = OUTER[line_modulation(modulation)]
     return np.concatenate([_signs(_FAW_X), _signs(_FAW_Y)], axis=1).astype(np.int8) * amplitude
 
 
 def training_symbols(modulation: str = "qpsk") -> np.ndarray:
     """The 11-symbol training sequence at the head of every subframe, ``(11, 4)``."""
-    amplitude = OUTER[_known(modulation)]
+    amplitude = OUTER[line_modulation(modulation)]
     return (
         np.concatenate([_signs(_TRAINING_X), _signs(_TRAINING_Y)], axis=1).astype(np.int8)
         * amplitude
@@ -398,7 +431,7 @@ def pilot_symbols(modulation: str = "qpsk") -> np.ndarray:
     of its training sequence, which is why the two tables agree on their first
     entry and why 114 pilots and 11 training symbols cost 124 slots and not 125.
     """
-    amplitude = OUTER[_known(modulation)]
+    amplitude = OUTER[line_modulation(modulation)]
     out = np.empty((PILOTS_PER_SUBFRAME, 4), dtype=np.int8)
     for axis, key in ((0, "x"), (2, "y")):
         bits = _prbs10(PILOT_SEEDS[key], 2 * PILOTS_PER_SUBFRAME).reshape(-1, 2)
@@ -462,7 +495,7 @@ def dsp_frame(
         raise ValueError(
             f"a DSP frame carries {PAYLOAD_SYMBOLS} payload symbols, got {symbols.shape}"
         )
-    amplitude = OUTER[_known(modulation)]
+    amplitude = OUTER[line_modulation(modulation)]
     if reserved is None:
         reserved = np.full((RESERVED_SYMBOLS, 4), -amplitude, dtype=np.int8)
     reserved = np.asarray(reserved, dtype=np.int8)
@@ -615,7 +648,7 @@ def wport_receive(
     bits = symbol_bits(np.concatenate([frame.payload for frame in taken]), modulation=modulation)
     llr = np.where(bits == 1, -confidence, confidence)
     decoded = ofec_decode(llr, modulation=modulation, iterations=iterations)
-    span = ofec_frame_bits(modulation)
+    span = codec_bits(modulation)
     recovered = [
         flexo_deadapt(scramble(decoded.payload[start : start + span]), modulation=modulation)
         for start in range(0, decoded.payload.size, span)

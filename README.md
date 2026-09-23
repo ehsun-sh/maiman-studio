@@ -681,6 +681,46 @@ Not covered, and deliberately: the DPO path, FlexO-6(e)/8(e) with probabilistic 
 shaping, whose shaping lookup table the published vectors here do not exercise — writing one from
 memory is the thing `maiman.ofec` was careful not to do.
 
+### And the shaping in front of it, on the DPO modes
+
+`maiman.pcs` is clause 9: the transcoder that makes FlexO-6(e), FlexO-8e and FlexO-8 *DPO*
+different from their DO namesakes. It does not change the constellation — the line is DP-16QAM
+either way — it changes which of its points come up. Each 16QAM amplitude is one bit of a pair, and
+shaping makes that bit the *inner* amplitude more often than the outer one:
+
+```
+   mode          b     shaping rate    P(inner)   net bits/symbol
+   FlexO-6(e)    72       33.7 %        0.8265         2.594
+   FlexO-8e     106       11.0 %        0.681          3.125
+   FlexO-8      116        5.71 %       0.623          3.281
+```
+
+Those probabilities are not written anywhere in the code. The two lookup tables are bijections on
+their words **ordered by falling weight**, so a field of nine bits reaches only the heavy half of a
+ten-bit table — fewer indices, all of them low-energy words — and the measured probability falls out
+of how far in the field can reach. The tests read it back off the shaper's output and compare with
+Table 4.
+
+The chain is the scrambled stream split a bit at a time between the four encoders, each share cut
+into 84 coder blocks, and each block alternating chunks of shaping bits with runs of sign bits;
+every chunk feeds four lookup arrays round robin; each array cuts its `b` bits into twelve fields
+that index the tables **least significant bit first**; each 128-bit result is rewired — a different
+permutation per polarization, quadrature and encoder — and the four are bit-interleaved into a
+512-bit column. Checked against the specification's TP3 and TP4 for all three modes, bit for bit,
+and inverted exactly.
+
+**The tables are not in this repository.** `SCS_LUT10`, `SCS_LUT11` and the rewiring table are
+normative data published inside the specification document, and their within-weight ordering is not
+an enumeration anything here could reproduce — colex, lexicographic and numeric were all checked and
+none of them is it. So they are handled the way the OFEC test vectors are: point
+`MAIMAN_WPORT_TABLES` at a directory holding them and the shaper runs; without it, it raises and
+says what is missing.
+
+**Where the DPO path stops.** At the encoder's input, TP4. The DPO encoder's *output* ordering is
+not the DO one, and clause 9.2.4 permutes the last 35 bits of each codeword back through the code,
+so a DPO transmitter cannot yet be run to TP7. That is the remaining item, and it is smaller than
+the one it replaced.
+
 **Three things had to exist before any of this could be wired up**, and each is its own block:
 
 `SoftDemapper` turns symbols into LLRs, max-log, with the noise variance estimated blind because a
@@ -3581,7 +3621,7 @@ time window, and results are reproducible.
 | **3 — GUI & WDM** ✅ | Wavelength-selective filters, the ITU grids and a multiplexer/demultiplexer pair on them with crosstalk that falls out of the channel spacing, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — the OSA's trace drawn in the dock, and 400G/800G reference designs validated against the OSNR relations, and a back-end indirection the propagation kernels dispatch through — CuPy runs it where a device exists, `maiman devices` cross-checks it against NumPy, and a CI job does the same on any runner labelled `gpu` | ~6 months |
 | **4 — PIC** ✅ | Bidirectional S-matrix circuit solver, waveguide, directional coupler, all-pass and add-drop ring resonators, cross-validated against SAX; N×N MMI couplers on the self-imaging phase relations; a Mach-Zehnder interferometer assembled from them — switch, interleaver, or both; and PDK import, which reads a foundry's fitted numbers out of a JSON kit and refuses to extrapolate them past the window they were fitted in; and birefringence, with each guided polarization carrying its own indices through the same reduction | — |
 | **5 — Gratings, sensing, loops and coupling** ✅ | Fibre Bragg gratings assembled from transfer matrices — apodized, chirped, sampled and phase-shifted — a circulator with isolation and return loss, and a grating read as a strain gauge and a thermometer, by a swept laser or by broadband light on an analyser; noise that carries the spectral shape of what it passed through; loop control that runs a cavity to its fixed point, and a delay line that turns the same loop into a recirculating one lap by lap; pump depletion for four-wave mixing and Raman's measured gain shape past its peak; an erbium transient spread across the spectrum, each channel moving by the fibre's own tilt, drained per channel by its own cross section, and answered by a pump control loop with a bandwidth and a ceiling; an amplifier's own ASE, both ways, depleting its inversion; PMD applied along the span between Kerr steps, and the coherent polarization term that moves power between the axes; a scalar mode solver for core and cladding modes, and the vector HE, EH, TE and TM modes the glass-air boundary splits them into, checked against the exact characteristic equation; glass that disperses as Sellmeier's silica and germania, which makes the default fibre a G.652 one; a long-period grating built on either, alone or as a pair recoupling its cladding light, and a tilted grating whose comb of cladding resonances reads what the fibre is dipped in, split by polarization when its vector modes are solved; edge and grating couplers that put a signal into the chip's TE and TM, the edge coupler's two facets a cavity summed bounce by bounce, and the grating coupler's passband, its teeth's own reflection, its bottom mirror and its apodization computed from its geometry; a PAM4 driver with its modulator's linearity corrected, and a feed-forward and decision-feedback equaliser, fractionally spaced or blind; a laser's linewidth and intensity noise from its own Langevin forces, and the partition noise between a Fabry-Perot laser's modes, carried down a link as each mode's own arrival time and spent at the detector; a directly modulated laser whose chirp comes out of its own rate equations, with its junction's heat moving the line; and templates in the studio's File menu, including an eight-channel DWDM link | — |
-| **Open** | The W-Port's DPO path — FlexO-6(e)/8(e) with probabilistic constellation shaping, whose shaping lookup table the published test vectors do not exercise | — |
+| **Open** | The DPO path past its shaper: the encoder's own output ordering on that path, and clause 9.2.4's 35-bit permute back through the code, which together stand between TP4 and TP5 | — |
 
 ¹ One developer, part-time. Estimates, not commitments.
 

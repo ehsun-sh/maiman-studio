@@ -25,7 +25,6 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from maiman.ofec import ofec_frame_bits
 from maiman.wport import (
     DSP_FRAME_SYMBOLS,
     FAW_SYMBOLS,
@@ -37,6 +36,7 @@ from maiman.wport import (
     SUBFRAME_SYMBOLS,
     SUBFRAMES,
     TRAINING_SYMBOLS,
+    codec_bits,
     crc32,
     dsp_deframe,
     dsp_frame,
@@ -46,6 +46,7 @@ from maiman.wport import (
     flexo_rows,
     information_bits,
     jones,
+    line_modulation,
     pilot_symbols,
     scramble,
     symbol_bits,
@@ -112,7 +113,7 @@ def test_every_test_point_on_the_way(modulation: str) -> None:
     tp0, tp1, tp2 = (vector(modulation, point) for point in ("TP0", "TP1", "TP2"))
     tp6, tp7 = vector(modulation, "TP6"), vector(modulation, "TP7")
     info_bits = information_bits(modulation)
-    codec = ofec_frame_bits(modulation)
+    codec = codec_bits(modulation)
     line = tp6.size // 4
 
     for index in range(4):
@@ -144,13 +145,29 @@ def test_the_output_has_not_moved_since_it_matched_the_vectors(modulation: str) 
 
 
 def test_the_rows_and_the_pad_add_up_to_the_codec_s_own_width() -> None:
-    for modulation, rows, crcs, pad in (("qpsk", 58, 15, 16), ("16qam", 116, 29, 64)):
+    """Every mode, DO and DPO: rows, CRC32s and pad are the codec's input width."""
+    for modulation, rows, crcs, pad in (
+        ("qpsk", 58, 15, 16),
+        ("16qam", 116, 29, 64),
+        ("b72", 433, 22, 1464),
+        ("b106", 522, 27, 1104),
+        ("b116", 548, 28, 1376),
+    ):
         assert flexo_rows(modulation) == rows
-        carried = rows * FLEXO_ROW_BITS
-        assert carried + crcs * 32 + pad == ofec_frame_bits(modulation)
+        carried = rows * FLEXO_ROW_BITS[modulation]
+        assert carried + crcs * 32 + pad == codec_bits(modulation)
         adapted = flexo_adapt(information(modulation), modulation=modulation)
-        assert adapted.size == ofec_frame_bits(modulation)
+        assert adapted.size == codec_bits(modulation)
         assert np.array_equal(adapted[-pad:], np.zeros(pad, dtype=np.uint8)), "the pad is zeros"
+        back = flexo_deadapt(adapted, modulation=modulation)
+        assert np.array_equal(back.information, information(modulation)) and back.clean
+
+
+def test_a_crc32_covers_the_same_bits_however_the_rows_are_cut() -> None:
+    """Four rows of 10,280 and twenty of 2,056 are both 41,120 bits."""
+    assert 4 * FLEXO_ROW_BITS["qpsk"] == 20 * FLEXO_ROW_BITS["b116"] == 41120
+    assert line_modulation("b116") == "16qam", "shaped or not, the line is DP-16QAM"
+    assert line_modulation("qpsk") == "qpsk"
 
 
 @pytest.mark.parametrize("modulation", MODULATIONS)
@@ -165,7 +182,7 @@ def test_a_flipped_bit_is_marked_by_the_crc_that_covers_it() -> None:
     info = information("qpsk")
     adapted = flexo_adapt(info, modulation="qpsk")
     spoiled = adapted.copy()
-    spoiled[5 * FLEXO_ROW_BITS] ^= 1  # the second group of four rows
+    spoiled[5 * FLEXO_ROW_BITS["qpsk"]] ^= 1  # the second group of four rows
     back = flexo_deadapt(spoiled, modulation="qpsk")
     assert not back.clean
     assert back.crc_ok.sum() == back.crc_ok.size - 1
