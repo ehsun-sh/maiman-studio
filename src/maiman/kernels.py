@@ -1197,6 +1197,71 @@ def fwm_accumulated_phase(
     return fwm_phase_mismatch(accumulated_gvd, offset_i, offset_j, offset_k)
 
 
+#: Silica's isotropic Kerr tensor, as the drive of one mixing product:
+#: ``D^m = T^m_abc A_i^a A_j^b (A_k^c)*`` over the Jones components. From
+#: ``(2/3)(E . E*) E + (1/3)(E . E) E*`` with the degeneracy factor divided out,
+#: symmetrised in ``i`` and ``j`` -- after which the degenerate and the
+#: non-degenerate products share it.
+_FWM_TENSOR = np.zeros((2, 2, 2, 2))
+for _m in range(2):
+    for _a in range(2):
+        for _b in range(2):
+            for _c in range(2):
+                _FWM_TENSOR[_m, _a, _b, _c] = (
+                    (_a == _c) * (_m == _b) + (_b == _c) * (_m == _a) + (_a == _b) * (_m == _c)
+                ) / 3.0
+
+#: The same drive when the split-step keeps only the phase-only form,
+#: ``|A_x|**2 A_x + (2/3) |A_y|**2 A_x``: what it drops is exactly the coherent
+#: ``(1/3) A_y**2 A_x*`` term, whose part in the drive is the entries where both
+#: pumps sit on the other axis and the conjugated one on this.
+_FWM_TENSOR_PHASE_ONLY = _FWM_TENSOR.copy()
+for _m in range(2):
+    _FWM_TENSOR_PHASE_ONLY[_m, 1 - _m, 1 - _m, _m] = 0.0
+
+
+def coherency(ex: np.ndarray, ey: np.ndarray) -> np.ndarray:
+    """A band's 2x2 coherency matrix ``J[a, b] = <A^a (A^b)*>`` [W]."""
+    fields = (np.asarray(ex, dtype=np.complex128), np.asarray(ey, dtype=np.complex128))
+    return np.array([[np.mean(p * np.conj(q)) for q in fields] for p in fields])
+
+
+def fwm_vector_drive(
+    pump_i: np.ndarray, pump_j: np.ndarray, pump_k: np.ndarray, *, coherent: bool = True
+) -> np.ndarray:
+    """``C^mn = <D^m (D^n)*>``, the mixing drive's own coherency [W^3].
+
+    The scalar product formula's ``P_i P_j P_k``, per axis and between the axes,
+    for pumps in any state of polarization. Taking each axis as its own scalar
+    problem builds the x product from the pumps' x components alone, which is
+    right for light on an axis and a quarter of the answer for the same light at
+    45 degrees -- where an isotropic fibre mixes exactly as it does on the axis.
+    The tensor puts back the cross-polarized terms: ``(2/3)(A_i . A_k*) A_j`` and
+    its partner, and ``(1/3)(A_i . A_j) A_k*``.
+
+    The bands are taken as independent, so the average factors into their
+    coherency matrices; a degenerate product uses its pump's twice, which is what
+    the scalar formula's ``P_i**2`` already assumed. All three on one axis give
+    ``P_i P_j P_k`` on it, exactly. Circularly polarized, ``A . A`` vanishes and
+    ``(2/3)**2`` is left. Agrawal, *Nonlinear Fiber Optics*, 5th ed., sec. 6.1,
+    for the tensor.
+
+    ``coherent`` picks which Kerr term the drive belongs to, and it has to be the
+    one the split-step is running: the isotropic tensor with the coherent
+    polarization term, or the phase-only form without it, which mixes a 45-degree
+    beam more weakly than an axial one because it is not isotropic.
+    """
+    tensor = _FWM_TENSOR if coherent else _FWM_TENSOR_PHASE_ONLY
+    return np.einsum(
+        "mabc,nxyz,ax,by,cz->mn",
+        tensor,
+        tensor,
+        np.asarray(pump_i),
+        np.asarray(pump_j),
+        np.conj(np.asarray(pump_k)),
+    )
+
+
 def fwm_product_power(
     power_i: float,
     power_j: float,

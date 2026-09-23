@@ -24,6 +24,7 @@ from ..kernels import (
     PropagationDiagnostics,
     apply_pmd,
     attenuation_db_per_m_to_alpha,
+    coherency,
     differential_group_delay,
     dispersion_slope_to_beta3,
     dispersion_to_beta2,
@@ -34,6 +35,7 @@ from ..kernels import (
     fwm_phase_mismatch,
     fwm_power_transfer,
     fwm_product_power,
+    fwm_vector_drive,
     kerr_rate,
     propagate_coupled_ssfm,
     propagate_dispersion,
@@ -738,12 +740,22 @@ class Fiber(Component):
         amplified spans of one strong pump and one weak signal were off from the
         split-step solution by a factor of five.
 
-        Per axis, because each axis is mixed as its own scalar problem. The
-        coherent polarization term's exchange of power between the axes is not
-        part of it. And the phases are those the split-step applies, so the
-        product's own phase runs the way its fields do: the flag changes which
-        way the drawn phase and the mismatch combine, which is why it is off by
-        default and moves nothing until set.
+        **With** ``cross_polarization`` **the drive is a vector.** Without it
+        each axis is mixed as its own scalar problem, which is the model the
+        split-step is then running too. With it, a product on x is driven by the
+        pumps' y components as well -- :func:`~maiman.kernels.fwm_vector_drive`,
+        from each band's coherency and the Kerr tensor the split-step is using,
+        isotropic with ``coherent_polarization`` and phase-only without. The two
+        axes of a product keep the drive's relative phase, so circular pumps make
+        a circular product. Before, a beam at 45 degrees mixed at a quarter of the
+        strength it does on the axis.
+
+        The pumps' own Kerr phase, with ``pump_phase``, is still taken per axis
+        as a phase: exact on an axis, and 10.6 % high at 45 degrees against the
+        split-step with the coherent term. And the phases are those the
+        split-step applies, so the product's own phase runs the way its fields
+        do: the flag changes which way the drawn phase and the mismatch combine,
+        which is why it is off by default and moves nothing until set.
 
         **And the pumps are depleted.** Every product's photons are taken from
         the pumps that made it and one is given to its idler, per
@@ -775,6 +787,9 @@ class Fiber(Component):
         coupled = self._couples_bands(signal)
         weight = ORTHOGONAL_KERR_WEIGHT if self.cross_polarization else 0.0
         histories = [signal.history_at(b.f0) for b in sources]
+        # With the axes coupled, the drive is a vector: each band's coherency,
+        # not only its two powers, decides what it mixes into on each axis.
+        states = [coherency(b.Ex, b.Ey) for b in sources] if self.cross_polarization else []
 
         def power_at(frequency: float) -> tuple[float, float]:
             for band, power in zip(sources, powers, strict=True):
@@ -823,11 +838,23 @@ class Fiber(Component):
                         frame = after.at(frequency)
                     else:
                         rates, walked, frame = (0.0, 0.0), (0.0, 0.0), (0.0, 0.0)
+                    if states:
+                        drive = fwm_vector_drive(
+                            states[i], states[j], states[k], coherent=self.coherent_polarization
+                        )
+                        strengths = [(float(drive[axis, axis].real), 1.0, 1.0) for axis in (0, 1)]
+                        # The product's two axes are one wave: their relative
+                        # phase is the drive's, taken against its stronger axis.
+                        lead = int(np.argmax([drive[0, 0].real, drive[1, 1].real]))
+                        skew = [float(np.angle(drive[axis, lead])) for axis in (0, 1)]
+                    else:
+                        strengths = [
+                            (powers[i][axis], powers[j][axis], powers[k][axis]) for axis in (0, 1)
+                        ]
+                        skew = [0.0, 0.0]
                     generated = [
                         fwm_product_power(
-                            powers[i][axis],
-                            powers[j][axis],
-                            powers[k][axis],
+                            *strengths[axis],
                             gamma=gamma,
                             alpha=alpha,
                             distance=distance,
@@ -889,8 +916,8 @@ class Fiber(Component):
                     found.append(
                         (
                             frequency,
-                            math.sqrt(generated[0]) * phasors[0],
-                            math.sqrt(generated[1]) * phasors[1],
+                            math.sqrt(generated[0]) * phasors[0] * np.exp(1j * skew[0]),
+                            math.sqrt(generated[1]) * phasors[1] * np.exp(1j * skew[1]),
                         )
                     )
 

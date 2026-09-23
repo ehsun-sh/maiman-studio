@@ -639,9 +639,11 @@ Stated in the code where each approximation is made, and collected here:
   the transient analysis weighs how hard each slice of it drains the reservoir by that slice's
   own cross section and photon energy, and without one -- the block itself, and the controlled
   transient -- it drains at the centre wavelength's rate.
-* **Fibre.** With `pump_phase`, four-wave mixing carries the pumps' Kerr phase as a phase only: the
-  coherent polarization term's exchange of power between the axes is not part of it, and products
-  mix again among themselves only as far as each span's own bookkeeping reaches.
+* **Fibre.** With `cross_polarization` the four-wave mixing drive is a vector, from each band's
+  coherency and the Kerr tensor the split-step runs; with `pump_phase` the pumps' Kerr phase is
+  still taken per axis as a phase only, exact on an axis and 10.6 % high at 45 degrees against the
+  split-step with the coherent term. Products mix again among themselves only as far as each span's
+  own bookkeeping reaches.
 * **Gratings and modes.** The average index a writing process raises is carried for the fibre
   Bragg grating, as the self-coupling Erdogan's coupled-mode equations give it, when its
   `dc_compensated` flag is off; the long-period and tilted gratings still take it as
