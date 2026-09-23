@@ -87,9 +87,11 @@ class EDFA(Component):
     A lightly loaded amplifier is where that matters: with no input at all the
     gain is ``W(beta G_0) / beta``, Lambert's W, with ``beta = 2 NF h nu B /
     P_sat`` -- a ceiling on how much gain an erbium coil can hold before its own
-    noise empties it. It is flat across the band here, as the block's ASE is, so
-    it drains the reservoir at the centre wavelength's rate. Off by default,
-    because it moves every saturated amplifier's gain.
+    noise empties it. This block knows no cross sections, so here it drains the
+    reservoir at the centre wavelength's rate; given an
+    :class:`~maiman.transient.ErbiumSpectrum`, the transient analysis weighs each
+    part of the band by its own. Off by default, because it moves every saturated
+    amplifier's gain.
 
     **The gain here is the steady state the erbium settles into**, and within any
     window this engine runs that is not an approximation but the right answer.
@@ -194,7 +196,7 @@ class EDFA(Component):
         frequency = C_LIGHT / self.si("center_wavelength")
         return 2.0 * db_to_linear(self.noise_figure) * H_PLANCK * frequency * self.si("bandwidth")
 
-    def effective_gain(self, input_power: float) -> float:
+    def effective_gain(self, input_power: float, *, self_load_weight: float = 1.0) -> float:
         """Linear gain at this input power, from the Saleh compression model.
 
         Solves ``g + a*exp(g) - a + b*exp(g) - ln(G_0) = 0`` for ``g = ln G``,
@@ -204,10 +206,15 @@ class EDFA(Component):
         Newton started at the upper end descends monotonically onto it — no
         bisection fallback and no iteration cap that could quietly return a
         half-converged gain.
+
+        ``self_load_weight`` scales ``b``: how hard the ASE drains the reservoir
+        against the same power at the centre wavelength. One here, where nothing
+        knows the erbium's cross sections; :func:`maiman.transient.self_saturation_weight`
+        computes it from a spectrum that does.
         """
         small_signal_gain = db_to_linear(self.gain)
         saturation = self.si("saturation_power")
-        load = self.self_saturation_load()
+        load = self.self_saturation_load() * self_load_weight
         if (
             not self.saturate
             or (input_power <= 0.0 and load <= 0.0)

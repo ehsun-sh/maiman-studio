@@ -65,9 +65,16 @@ the ASE it emits from both ends drains the reservoir alongside the signal, a ter
 static solve -- so a coil left in the dark rests below its small-signal gain, and
 a drop to nothing lands there rather than on ``G_0``.
 
+Given a spectrum, :func:`spectral_gain_transient` weighs that ASE across its band
+the way it weighs channels -- each slice by its own cross section and photon
+energy, :func:`self_saturation_weight` -- so a coil whose short-wavelength side
+drains hardest rests where that says rather than where the centre alone would.
+
 **What this does not model.** The loop is the ideal integral one, with no
-detector noise, no delay and no dither; and the amplifier's ASE drains the
-reservoir at the centre wavelength's rate, flat across the band, as it is emitted.
+detector noise, no delay and no dither. The ASE's own spectrum is flat, as the
+amplifier emits it; only how hard each part of it drains the reservoir follows
+the erbium. And without a spectrum -- :func:`gain_transient` and
+:func:`controlled_gain_transient` -- it drains at the centre wavelength's rate.
 
 Model references: A. A. M. Saleh, R. M. Jopson, J. D. Evankow and J. Aspell,
 "Modeling of gain in erbium-doped fiber amplifiers", IEEE Photon. Technol. Lett.
@@ -173,7 +180,11 @@ class GainTransient:
 
 
 def effective_time_constant(
-    amplifier: EDFA, input_power: float, *, lifetime: float = METASTABLE_LIFETIME
+    amplifier: EDFA,
+    input_power: float,
+    *,
+    lifetime: float = METASTABLE_LIFETIME,
+    self_load_weight: float = 1.0,
 ) -> float:
     """``tau / (1 + P_out / P_sat)`` at this operating point [s].
 
@@ -181,9 +192,10 @@ def effective_time_constant(
     amplifier driven hard answers faster than its own lifetime. This is the
     linearisation of the ODE in this module about its rest point, and the number
     that says whether a transient matters on the timescale someone cares about.
+    ``self_load_weight`` is :func:`self_saturation_weight`'s, one without a spectrum.
     """
     small_signal = db_to_linear(amplifier.gain)
-    load = amplifier.self_saturation_load()
+    load = amplifier.self_saturation_load() * self_load_weight
     if not amplifier.saturate or small_signal <= 2.0 or (input_power <= 0.0 and load <= 0.0):
         return lifetime
     saturation = amplifier.intrinsic_saturation_power(small_signal)
@@ -191,7 +203,7 @@ def effective_time_constant(
         return lifetime
     # The amplifier's own ASE grows with the gain as the output does, so it
     # speeds the reservoir up by the same token: d/dg of b e^g is b e^g.
-    gain = amplifier.effective_gain(input_power)
+    gain = amplifier.effective_gain(input_power, self_load_weight=self_load_weight)
     output_power = gain * max(input_power, 0.0) + gain * load
     return lifetime / (1.0 + output_power / saturation)
 
@@ -245,6 +257,7 @@ def gain_transient(
     *,
     lifetime: float = METASTABLE_LIFETIME,
     initial_gain: float | None = None,
+    self_load_weight: float = 1.0,
 ) -> GainTransient:
     """Integrate the erbium reservoir across a changing input power.
 
@@ -270,6 +283,10 @@ def gain_transient(
     An amplifier with ``saturate`` false has no dynamics to integrate — its gain
     does not depend on its input, so nothing relaxes — and the constant gain is
     returned rather than a flat line produced by integrating zero.
+
+    ``self_load_weight`` scales the amplifier's own ASE load, in the rest point
+    it starts from as in the integration, so the two cannot disagree; it is one
+    unless :func:`spectral_gain_transient` has a spectrum to compute it from.
     """
     grid = np.asarray(times, dtype=np.float64)
     drive = np.asarray(input_power, dtype=np.float64)
@@ -288,7 +305,9 @@ def gain_transient(
 
     small_signal = db_to_linear(amplifier.gain)
     settled = (
-        amplifier.effective_gain(float(drive[0])) if initial_gain is None else float(initial_gain)
+        amplifier.effective_gain(float(drive[0]), self_load_weight=self_load_weight)
+        if initial_gain is None
+        else float(initial_gain)
     )
     if not amplifier.saturate or small_signal <= 2.0:
         return GainTransient(
@@ -300,14 +319,16 @@ def gain_transient(
         )
 
     saturation = amplifier.intrinsic_saturation_power(small_signal)
-    own = amplifier.self_saturation_load() / saturation
+    own = amplifier.self_saturation_load() * self_load_weight / saturation
     log_small_signal = math.log(small_signal)
 
     # One substep count for the whole run, from the fastest constant any of these
     # powers implies. Per-interval adaptation would be cheaper and would make the
     # grid's own spacing a hidden parameter of the answer.
     fastest = min(
-        effective_time_constant(amplifier, float(power), lifetime=lifetime)
+        effective_time_constant(
+            amplifier, float(power), lifetime=lifetime, self_load_weight=self_load_weight
+        )
         for power in (float(drive.max()), float(drive.min()))
     )
     coarsest = float(np.diff(grid).max())
@@ -560,8 +581,22 @@ def spectral_gain_transient(
                 f"channel_powers must carry one row per time, got {drive.shape[0]} rows for "
                 f"{np.asarray(times).shape[0]} times"
             )
+    # The amplifier's own ASE, weighed across its band by this spectrum rather
+    # than at the centre wavelength's rate. Only asked for when there is a load
+    # to weigh, so a spectrum narrower than the ASE band is not refused for an
+    # amplifier that never saturates on its own noise.
+    weight = (
+        self_saturation_weight(amplifier, spectrum)
+        if amplifier.self_saturation_load() > 0.0
+        else 1.0
+    )
     reservoir = gain_transient(
-        amplifier, times, drive, lifetime=lifetime, initial_gain=initial_gain
+        amplifier,
+        times,
+        drive,
+        lifetime=lifetime,
+        initial_gain=initial_gain,
+        self_load_weight=weight,
     )
     inversion = spectrum.inversion(reference_wavelength, reservoir.gain_db)
     gain_db = spectrum.gain_db(channels[None, :], inversion[:, None])
@@ -618,6 +653,46 @@ def saturating_power(
             "were given"
         )
     return powers @ weights
+
+
+#: Points across the ASE band for :func:`self_saturation_weight`. The weight is
+#: an integral of a piecewise-linear curve, and at this density the trapezoid
+#: rule agrees with the closed forms the tests hold it to at 1e-9.
+SELF_LOAD_POINTS = 4097
+
+
+def self_saturation_weight(amplifier: EDFA, spectrum: ErbiumSpectrum) -> float:
+    """How hard the amplifier's own ASE drains its reservoir, against the centre's rate.
+
+    The block emits its ASE flat in frequency across ``bandwidth`` about
+    ``center_wavelength``, and without a spectrum all of it is taken to drain
+    the inversion as a watt at the centre does. With one, each slice drains at
+    :func:`saturating_weights`'s rate for its own wavelength -- its cross section
+    and its photon energy, exactly as a channel's does -- and this is the mean of
+    that across the band::
+
+        w = (1 / B) * integral over nu of tilt(lambda) * lambda / lambda_c
+
+    For a spectrum whose ``A + G*`` is flat it is only the photon energies,
+    ``(nu_c / B) ln(nu_2 / nu_1)``, a part in ten thousand above one for a 4 THz
+    band. A linear tilt hardly adds to that -- across a band centred on the
+    reference it gains on one side what it loses on the other. What moves it is
+    curvature: erbium's absorption peaks near 1530 nm, short of a C-band centre,
+    and a shape like that puts the load ten percent and more above the centre's.
+    Refused if the spectrum does not cover the whole band, because this does not
+    extrapolate either.
+    """
+    centre = C_LIGHT / amplifier.si("center_wavelength")
+    bandwidth = amplifier.si("bandwidth")
+    if bandwidth <= 0.0:
+        return 1.0
+    frequencies = np.linspace(centre - bandwidth / 2.0, centre + bandwidth / 2.0, SELF_LOAD_POINTS)
+    weights = saturating_weights(
+        spectrum, (C_LIGHT / frequencies)[::-1], amplifier.si("center_wavelength")
+    )[::-1]
+    step = float(frequencies[1] - frequencies[0])
+    area = step * (float(weights.sum()) - (float(weights[0]) + float(weights[-1])) / 2.0)
+    return area / bandwidth
 
 
 # --------------------------------------------------------------------------

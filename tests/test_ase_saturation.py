@@ -12,6 +12,9 @@ ends -- and with ``self_saturation`` it is counted. What holds that in place:
   end, doubled for the other -- two code paths, one through ``n_sp``;
 * the transient integrated to rest lands on the static solve, and relaxes at the
   rate the linearisation says, its own ASE included;
+* given an erbium spectrum, each slice of that ASE drains at its own cross
+  section and photon energy, and the mean over the band has a closed form for a
+  flat and for a linearly tilted ``A + G*``;
 * and with the flag off nothing moves.
 """
 
@@ -19,10 +22,12 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
 import pytest
 
 from maiman import effective_time_constant, gain_transient, step_schedule
 from maiman.components import EDFA
+from maiman.transient import ErbiumSpectrum, self_saturation_weight, spectral_gain_transient
 from maiman.units import C_LIGHT, H_PLANCK, db_to_linear
 
 CHANNEL = 10 ** (-6 / 10) / 1e3
@@ -135,3 +140,94 @@ def test_it_relaxes_at_the_rate_its_own_noise_adds(dbm: float) -> None:
     end = math.log(run.gain[-1] / rest)
     measured = float(times[-1]) / math.log(start / end)
     assert measured == pytest.approx(constant, rel=1e-3)
+
+
+# ---------------------------------------------------------------------------
+# Across the band: each slice of the ASE at its own cross section
+# ---------------------------------------------------------------------------
+
+#: 1500 to 1600 nm, which covers the 4 THz band about 1550 with room either side.
+GRID = np.linspace(1500e-9, 1600e-9, 201)
+
+
+def band_edges(edfa: EDFA) -> tuple[float, float, float, float]:
+    """``(nu_c, B, nu_1, nu_2)`` for the amplifier's ASE band [Hz]."""
+    centre = C_LIGHT / edfa.si("center_wavelength")
+    width = edfa.si("bandwidth")
+    return centre, width, centre - width / 2.0, centre + width / 2.0
+
+
+def test_a_flat_cross_section_leaves_only_the_photon_energies() -> None:
+    """``(nu_c / B) ln(nu_2 / nu_1)``: a watt of short-wavelength ASE is fewer photons."""
+    edfa = amplifier()
+    flat = ErbiumSpectrum(GRID, np.full(GRID.shape, 30.0), np.full(GRID.shape, 40.0))
+    centre, width, low, high = band_edges(edfa)
+    expected = centre / width * math.log(high / low)
+    assert self_saturation_weight(edfa, flat) == pytest.approx(expected, rel=1e-9)
+    assert 1.0 < expected < 1.0002, "a part in ten thousand, and above one"
+
+
+@pytest.mark.parametrize("slope", [-0.2, 0.2])
+def test_a_tilted_cross_section_weighs_the_band_by_its_integral(slope: float) -> None:
+    """``A + G* = a + b lambda``: the weight integrates to a log and a reciprocal.
+
+    ``w = [a c ln(nu_2/nu_1) + b c^2 (1/nu_1 - 1/nu_2)] / [B lambda_c (a + b lambda_c)]``.
+    And it barely moves: across a band centred on the reference, a linear tilt
+    gains on one side what it loses on the other, and only the second-order
+    cross term with the photon energies survives -- 3e-4 at 0.2 dB/nm.
+    """
+    edfa = amplifier()
+    absorption = 30.0 + slope * (GRID - 1550e-9) * 1e9  # dB, linear in lambda
+    tilted = ErbiumSpectrum(GRID, absorption, np.full(GRID.shape, 40.0))
+    a = 30.0 - slope * 1550.0 + 40.0  # A + G* = a + b lambda, lambda in nm
+    b = slope
+    _, width, low, high = band_edges(edfa)
+    c_nm = C_LIGHT * 1e9
+    expected = (a * c_nm * math.log(high / low) + b * c_nm**2 * (1.0 / low - 1.0 / high)) / (
+        width * 1550.0 * (a + b * 1550.0)
+    )
+    weight = self_saturation_weight(edfa, tilted)
+    assert weight == pytest.approx(expected, rel=1e-9)
+    assert abs(weight - 1.0) < 1e-3, "a linear tilt cancels to first order"
+
+
+def test_a_short_wavelength_peak_is_what_moves_it() -> None:
+    """Curvature, not tilt: erbium's absorption peaks short of a C-band centre.
+
+    Absorption rising 2 dB/nm below 1550 and flat above it -- the shape of the
+    1530 nm peak, crudely -- makes the short half of the ASE drain hard and
+    nothing cancels it: eleven percent more load than the centre alone says.
+    The exact figure is this spectrum's; that it is well above one is the claim.
+    """
+    edfa = amplifier()
+    absorption = 30.0 + np.where(GRID < 1550e-9, 2.0 * (1550e-9 - GRID) * 1e9, 0.0)
+    peaked = ErbiumSpectrum(GRID, absorption, np.full(GRID.shape, 40.0))
+    assert self_saturation_weight(edfa, peaked) == pytest.approx(1.113, abs=0.001)
+
+
+def test_weighed_by_a_spectrum_the_dark_coil_rests_on_lambert_w_with_the_weight() -> None:
+    """``W(beta w G_0) / (beta w)``, and a run started there does not move."""
+    edfa = amplifier(30.0)
+    absorption = 30.0 + np.where(GRID < 1550e-9, 2.0 * (1550e-9 - GRID) * 1e9, 0.0)
+    tilted = ErbiumSpectrum(GRID, absorption, np.full(GRID.shape, 40.0))
+    weight = self_saturation_weight(edfa, tilted)
+    small_signal = db_to_linear(30.0)
+    beta = weight * edfa.self_saturation_load() / edfa.intrinsic_saturation_power(small_signal)
+    expected = lambert_w(beta * small_signal) / beta
+
+    times, power = step_schedule([(20e-3, 0.0)], points_per_segment=200)
+    run = spectral_gain_transient(edfa, tilted, times, power, [1550e-9])
+    assert run.reference.gain[0] == pytest.approx(expected, rel=1e-12)
+    assert run.reference.gain[-1] == pytest.approx(expected, rel=1e-9), "at rest, and stays"
+    unweighted = gain_transient(edfa, times, power)
+    assert run.reference.gain[0] < unweighted.gain[0], "this spectrum drains harder"
+
+
+def test_a_spectrum_narrower_than_the_ase_is_refused_only_when_it_is_needed() -> None:
+    narrow = np.linspace(1545e-9, 1555e-9, 21)
+    spectrum = ErbiumSpectrum(narrow, np.full(narrow.shape, 30.0), np.full(narrow.shape, 40.0))
+    times, power = step_schedule([(1e-3, 1e-5)], points_per_segment=16)
+    with pytest.raises(ValueError, match="will not extrapolate"):
+        spectral_gain_transient(amplifier(), spectrum, times, power, [1550e-9])
+    # Without its own noise as a load there is nothing across the band to weigh.
+    spectral_gain_transient(amplifier(own=False), spectrum, times, power, [1550e-9])

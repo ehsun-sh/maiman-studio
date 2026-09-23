@@ -634,8 +634,10 @@ be finished without it, and each is validated against a result it does not share
 Stated in the code where each approximation is made, and collected here:
 
 * **Amplifiers.** The control loop is the ideal integral one, with no detector noise, no delay
-  and no dither; and an amplifier's own ASE drains its reservoir at the centre wavelength's rate,
-  flat across the band, as the block emits it.
+  and no dither. An amplifier's own ASE is emitted flat across its band; given an erbium spectrum,
+  the transient analysis weighs how hard each slice of it drains the reservoir by that slice's
+  own cross section and photon energy, and without one -- the block itself, and the controlled
+  transient -- it drains at the centre wavelength's rate.
 * **Fibre.** With `pump_phase`, four-wave mixing carries the pumps' Kerr phase as a phase only: the
   coherent polarization term's exchange of power between the axes is not part of it, and products
   mix again among themselves only as far as each span's own bookkeeping reaches.

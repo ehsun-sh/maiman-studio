@@ -1088,9 +1088,13 @@ where the amplifier is lightly loaded and its gain is high, and that is where it
 The transient integrators carry the same term. So an amplifier whose channels are all dropped
 comes to rest on Lambert's gain rather than on `G₀`, and it answers faster than `τ` even in the
 dark, at `τ/(1 + (P_out + P_ASE)/P_sat)`. A test measures that rate against the closed form to a
-part in a thousand. The ASE drains the reservoir at the centre wavelength's rate, flat across the
-band, because that is how the block emits it. The flag is off by default, because it moves every
-saturated amplifier's gain.
+part in a thousand. The block emits that ASE flat across its band and, knowing no cross
+sections, drains the reservoir with it at the centre wavelength's rate. Given an erbium spectrum,
+`spectral_gain_transient` weighs each slice by its own cross section and photon energy instead,
+the way it weighs channels. A linear tilt barely moves the result — across a band centred on the
+reference it gains on one side what it loses on the other, 3e-4 at 0.2 dB/nm — but an absorption
+peak on the short side, which is where erbium's sits, puts the load 11 % above the centre's. The
+flag is off by default, because it moves every saturated amplifier's gain.
 
 ### What RIN is for
 
