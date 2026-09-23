@@ -26,6 +26,7 @@ import pytest
 from maiman.ofec import (
     INFORMATION_BITS_PER_BLOCK,
     TAIL_START,
+    ofec_decode_stream,
     ofec_encode_stream,
     untangle_tail,
 )
@@ -39,7 +40,7 @@ from maiman.pcs import (
     TABLES_ENV,
     TAIL_PERMUTATION,
     amplitude_and_sign,
-    dpo_decode_note,
+    dpo_receive,
     dpo_transmit,
     group_bits,
     group_layout,
@@ -49,7 +50,14 @@ from maiman.pcs import (
     shaped_lanes,
     unshape_lanes,
 )
-from maiman.wport import SHAPED, codec_bits, flexo_adapt, information_bits, scramble
+from maiman.wport import (
+    DSP_FRAME_SYMBOLS,
+    SHAPED,
+    codec_bits,
+    flexo_adapt,
+    information_bits,
+    scramble,
+)
 
 VECTORS = os.environ.get("MAIMAN_OFEC_VECTORS")
 TABLES = os.environ.get(TABLES_ENV)
@@ -272,5 +280,60 @@ def test_what_is_not_a_permutation_is_refused() -> None:
         untangle_tail(np.zeros(100, dtype=np.uint8), TAIL_PERMUTATION)
 
 
-def test_the_missing_decoder_says_why_it_is_missing() -> None:
-    assert "front" in dpo_decode_note() and "unshape_lanes" in dpo_decode_note()
+@BOTH
+@pytest.mark.parametrize("mode", SHAPED)
+def test_the_decoder_recovers_the_encoders_input_from_tp5(mode: str) -> None:
+    """One view for the fronts and another for the backs: no corrections needed."""
+    tp5 = vector(mode, "TP5")[: 40 * 4096, 0]
+    llr = np.where(tp5 == 1, -8.0, 8.0)
+    bits, corrections, _ = ofec_decode_stream(llr, iterations=1, tail=TAIL_PERMUTATION)
+    assert np.array_equal(bits, vector(mode, "TP4")[: 40 * 3552, 0])
+    assert corrections == 0, "a clean stream needs none"
+
+
+@BOTH
+def test_decoding_the_shaped_stream_without_the_tail_is_wrong() -> None:
+    """The point of the two views, measured: neither single view works.
+
+    Left alone, every back half is in the wrong order; untangled wholesale,
+    every front half is. Both make the decoder correct bits that were never
+    wrong, on a stream with nothing wrong with it.
+    """
+    tp5 = vector("b72", "TP5")[: 20 * 4096, 0]
+    llr = np.where(tp5 == 1, -8.0, 8.0)
+    _, as_received, _ = ofec_decode_stream(llr, iterations=1)
+    untangled = untangle_tail(tp5, TAIL_PERMUTATION)
+    _, wholesale, _ = ofec_decode_stream(np.where(untangled == 1, -8.0, 8.0), iterations=1)
+    assert as_received > 0 and wholesale > 0
+    _, both, _ = ofec_decode_stream(llr, iterations=1, tail=TAIL_PERMUTATION)
+    assert both == 0
+
+
+@BOTH
+@pytest.mark.parametrize("mode", SHAPED)
+def test_what_goes_down_the_shaped_path_comes_back(mode: str) -> None:
+    information = vector(mode, "TP0")[: information_bits(mode)]
+    frame = dpo_transmit(information, modulation=mode)
+    received = dpo_receive(frame, modulation=mode, iterations=1)
+    assert np.array_equal(received.information, information)
+    assert received.clean
+    assert received.corrections == 0
+
+
+@BOTH
+def test_the_shaped_decoder_repairs_what_the_line_did() -> None:
+    information = vector("b72", "TP0")[: information_bits("b72")]
+    frame = dpo_transmit(information, modulation="b72")
+    rng = np.random.default_rng(5)
+    spoiled = frame.copy()
+    hit = rng.choice(np.arange(200, DSP_FRAME_SYMBOLS), size=400, replace=False)
+    spoiled[hit, 0] *= -1
+    received = dpo_receive(spoiled, modulation="b72")
+    assert received.corrections > 0
+    assert np.array_equal(received.information, information)
+    assert received.clean, "and the CRC32s agree that it is repaired"
+
+
+def test_a_frame_that_is_not_one_is_refused() -> None:
+    with pytest.raises(ValueError, match="whole DSP frames"):
+        dpo_receive(np.zeros((10, 4), dtype=np.int8), modulation="b116")

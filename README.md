@@ -725,12 +725,14 @@ permuted bits, and no reordering of the output can put that right. With it, `dpo
 **TP0 to TP7 bit for bit** for all three modes — the specification's own compliance point — reusing
 the interleavers, the symbol mapper and the DSP frame the DO modes use, unchanged.
 
-**What is still missing is the shaped path's decoder.** The same feedback that makes the permute
-work makes it awkward to undo: un-permuting the whole stream restores every back half and breaks
-every front half, and leaving it alone breaks the backs. A decoder for it has to hold both views at
-once, which is a change inside the component decoder rather than a wrapper around it. The shaper's
-own inverse is here and exact, so a receiver that has recovered the encoders' input by other means
-can finish the job.
+**And back again.** The same feedback that makes the permute work makes it interesting to undo:
+un-permuting the whole stream restores every back half and breaks every front half, and leaving it
+alone breaks the backs. So the decoder holds **both views of one matrix** — a codeword's front half
+as the line carried it, because that is what its parity was taken over, and its back half untangled,
+because the permute happened after. `dpo_receive` runs the whole path backwards, `ofec_decode_stream`
+takes a `tail` for the part that matters, and the tests measure what each single view costs: on a
+stream with nothing wrong with it, either one alone makes the decoder correct hundreds of bits that
+were never wrong, and both together make it correct none.
 
 **Three things had to exist before any of this could be wired up**, and each is its own block:
 
@@ -3632,7 +3634,7 @@ time window, and results are reproducible.
 | **3 — GUI & WDM** ✅ | Wavelength-selective filters, the ITU grids and a multiplexer/demultiplexer pair on them with crosstalk that falls out of the channel spacing, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — the OSA's trace drawn in the dock, and 400G/800G reference designs validated against the OSNR relations, and a back-end indirection the propagation kernels dispatch through — CuPy runs it where a device exists, `maiman devices` cross-checks it against NumPy, and a CI job does the same on any runner labelled `gpu` | ~6 months |
 | **4 — PIC** ✅ | Bidirectional S-matrix circuit solver, waveguide, directional coupler, all-pass and add-drop ring resonators, cross-validated against SAX; N×N MMI couplers on the self-imaging phase relations; a Mach-Zehnder interferometer assembled from them — switch, interleaver, or both; and PDK import, which reads a foundry's fitted numbers out of a JSON kit and refuses to extrapolate them past the window they were fitted in; and birefringence, with each guided polarization carrying its own indices through the same reduction | — |
 | **5 — Gratings, sensing, loops and coupling** ✅ | Fibre Bragg gratings assembled from transfer matrices — apodized, chirped, sampled and phase-shifted — a circulator with isolation and return loss, and a grating read as a strain gauge and a thermometer, by a swept laser or by broadband light on an analyser; noise that carries the spectral shape of what it passed through; loop control that runs a cavity to its fixed point, and a delay line that turns the same loop into a recirculating one lap by lap; pump depletion for four-wave mixing and Raman's measured gain shape past its peak; an erbium transient spread across the spectrum, each channel moving by the fibre's own tilt, drained per channel by its own cross section, and answered by a pump control loop with a bandwidth and a ceiling; an amplifier's own ASE, both ways, depleting its inversion; PMD applied along the span between Kerr steps, and the coherent polarization term that moves power between the axes; a scalar mode solver for core and cladding modes, and the vector HE, EH, TE and TM modes the glass-air boundary splits them into, checked against the exact characteristic equation; glass that disperses as Sellmeier's silica and germania, which makes the default fibre a G.652 one; a long-period grating built on either, alone or as a pair recoupling its cladding light, and a tilted grating whose comb of cladding resonances reads what the fibre is dipped in, split by polarization when its vector modes are solved; edge and grating couplers that put a signal into the chip's TE and TM, the edge coupler's two facets a cavity summed bounce by bounce, and the grating coupler's passband, its teeth's own reflection, its bottom mirror and its apodization computed from its geometry; a PAM4 driver with its modulator's linearity corrected, and a feed-forward and decision-feedback equaliser, fractionally spaced or blind; a laser's linewidth and intensity noise from its own Langevin forces, and the partition noise between a Fabry-Perot laser's modes, carried down a link as each mode's own arrival time and spent at the detector; a directly modulated laser whose chirp comes out of its own rate equations, with its junction's heat moving the line; and templates in the studio's File menu, including an eight-channel DWDM link | — |
-| **Open** | A decoder for the shaped DPO path, which has to read a codeword's front half as received and its back half untangled — two views of one matrix, inside the component decoder | — |
+| **Open** | Nothing on the W-Port: all eight of its interfaces, DO and DPO, run end to end and back. What is left are the approximations each block states in its own docstring and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) collects | — |
 
 ¹ One developer, part-time. Estimates, not commitments.
 

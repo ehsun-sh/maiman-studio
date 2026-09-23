@@ -65,13 +65,23 @@ from pathlib import Path
 
 import numpy as np
 
-from .ofec import ofec_encode_stream, ofec_interleave
+from .ofec import (
+    ofec_decode_stream,
+    ofec_deinterleave,
+    ofec_encode_stream,
+    ofec_interleave,
+)
 from .wport import (
+    DSP_FRAME_SYMBOLS,
     PAYLOAD_SYMBOLS,
     SHAPED,
     codec_bits,
     codec_payload,
+    dsp_deframe,
     dsp_frame,
+    flexo_deadapt,
+    scramble,
+    symbol_bits,
     symbol_levels,
 )
 
@@ -82,9 +92,10 @@ __all__ = [
     "SIGN_BITS",
     "TABLES_ENV",
     "TAIL_PERMUTATION",
+    "DPOReception",
     "ShapingTables",
     "amplitude_and_sign",
-    "dpo_decode_note",
+    "dpo_receive",
     "dpo_transmit",
     "group_layout",
     "load_tables",
@@ -591,20 +602,66 @@ def dpo_transmit(
     )
 
 
-def dpo_decode_note() -> str:
-    """Why there is no ``dpo_receive`` here, in one place a reader can find it.
+@dataclass(frozen=True)
+class DPOReception:
+    """What came back out of a shaped frame."""
 
-    The shaped path's transmitter is exact; its *decoder* is not written. The
-    reason is worth stating, because it is not laziness. Clause 9.2.4's permute
-    moves bits that a later row reads as its front half, so the matrix on the
-    line is not the matrix the parity was computed over: un-permuting the whole
-    stream restores the back halves and breaks the fronts, and leaving it alone
-    breaks the backs. A decoder for it has to hold both views at once -- fronts
-    as received, backs untangled -- which is a change inside the component
-    decoder rather than a wrapper around it.
+    information: np.ndarray
+    """The FlexO-x(e) information bits."""
 
-    What is here instead: :func:`unshape_lanes`, which inverts the shaper
-    exactly, so a receiver that has recovered the encoders' input by any means
-    can finish the job.
+    crc_ok: np.ndarray
+    """One flag per CRC32: clause 8.2's error marking, as far as this goes."""
+
+    corrections: int
+    """Bits the decoder changed."""
+
+    @property
+    def clean(self) -> bool:
+        return bool(self.crc_ok.all())
+
+
+def dpo_receive(
+    frame: np.ndarray,
+    *,
+    modulation: str,
+    directory: str | None = None,
+    confidence: float = 8.0,
+    iterations: int = 3,
+) -> DPOReception:
+    """Received symbols (TP7) back to FlexO information: the whole shaped path, backwards.
+
+    The counterpart of :func:`dpo_transmit`. The decoding is
+    :func:`maiman.ofec.ofec_decode_stream` with ``tail`` set, which is where the
+    permute is undone -- one view of the matrix for the front halves and another
+    for the backs. What comes out of it is each encoder's input, which goes back
+    through the shaper rather than through the DO path's multiplexer.
+
+    As on the DO path, the ratios here are a hard decision dressed as a soft
+    one; a receiver with a real channel behind it should form its own from its
+    own noise and call the decoder itself.
     """
-    return dpo_decode_note.__doc__ or ""
+    symbols = np.asarray(frame)
+    if symbols.ndim != 2 or symbols.shape[0] % DSP_FRAME_SYMBOLS:
+        raise ValueError(f"whole DSP frames of {DSP_FRAME_SYMBOLS} symbols, got {symbols.shape}")
+    payloads = [
+        dsp_deframe(symbols[start : start + DSP_FRAME_SYMBOLS], modulation=modulation).payload
+        for start in range(0, symbols.shape[0], DSP_FRAME_SYMBOLS)
+    ]
+    bits = symbol_bits(np.concatenate(payloads), modulation=modulation)
+    llr = np.where(bits == 1, -confidence, confidence)
+    decoded = [
+        ofec_decode_stream(lane, iterations=iterations, tail=TAIL_PERMUTATION)
+        for lane in ofec_deinterleave(llr, "16qam")
+    ]
+    lanes = np.stack([bits for bits, _, _ in decoded], axis=1)
+    payload = unshape_lanes(lanes, modulation=modulation, directory=directory)
+    span = codec_bits(modulation)
+    recovered = [
+        flexo_deadapt(scramble(payload[start : start + span]), modulation=modulation)
+        for start in range(0, payload.size, span)
+    ]
+    return DPOReception(
+        information=np.concatenate([block.information for block in recovered]),
+        crc_ok=np.concatenate([block.crc_ok for block in recovered]),
+        corrections=sum(count for _, count, _ in decoded),
+    )

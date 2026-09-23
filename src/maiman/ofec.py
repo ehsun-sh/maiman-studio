@@ -228,19 +228,51 @@ def _permute_tail(back: np.ndarray, tail: np.ndarray) -> np.ndarray:
     """Reorder each codeword's last 35 bits, the ordering chosen by ``r % 4``."""
     if tail.shape != (4, 35):
         raise ValueError(f"the tail permutation is four orderings of 35, got {tail.shape}")
-    moved = back.copy()
+    return _as_stored(back, tail)
+
+
+def _as_computed(stored: np.ndarray, tail: np.ndarray) -> np.ndarray:
+    """A row's back halves as the parity was computed over them, from what is stored.
+
+    The encoder permuted each codeword's tail on its way into the matrix, so the
+    word that satisfies its check is the stored front half beside the *untangled*
+    back half. This is the untangling, and :func:`_as_stored` is its inverse.
+    """
+    out = stored.copy()
     for r in range(BLOCK):
-        moved[r, TAIL_START:] = back[r, TAIL_START + tail[r % 4]]
-    return moved
+        out[r, TAIL_START + tail[r % 4]] = stored[r, TAIL_START:]
+    return out
+
+
+def _as_stored(computed: np.ndarray, tail: np.ndarray) -> np.ndarray:
+    """The inverse of :func:`_as_computed`: back into the positions the line carries."""
+    out = computed.copy()
+    for r in range(BLOCK):
+        out[r, TAIL_START:] = computed[r, TAIL_START + tail[r % 4]]
+    return out
+
+
+def _one_as_stored(computed: np.ndarray, ordering: np.ndarray) -> np.ndarray:
+    """:func:`_as_stored` for a single codeword's back half."""
+    out = computed.copy()
+    out[TAIL_START:] = computed[TAIL_START + ordering]
+    return out
 
 
 def untangle_tail(block: np.ndarray, tail: np.ndarray) -> np.ndarray:
     """Undo :func:`ofec_encode_stream`'s ``tail`` on a stream of output blocks.
 
-    A receiver does this before it decodes: the permutation is a reordering
-    inside each square-block row, so putting it back restores exactly the layout
-    the component decoder expects. Works on bits or on log-likelihood ratios,
-    because it only moves them.
+    This is the *output* side of the permutation and nothing more: it puts each
+    codeword's tail back where the parity computation had it. That restores the
+    stream exactly only while no front half has been read -- the first twenty
+    square-block rows -- because past them the bits it moves are also the fronts
+    the parity was taken over, and moving them invalidates every check that
+    followed.
+
+    A decoder therefore does **not** call this first. It passes ``tail`` to
+    :func:`ofec_decode_stream`, which untangles each back half as it gathers it
+    and leaves the fronts where the line put them. Works on bits or on
+    log-likelihood ratios, because it only moves them.
     """
     values = np.asarray(block)
     if values.shape[0] % OUTPUT_BITS_PER_BLOCK:
@@ -517,6 +549,7 @@ def ofec_decode_stream(
     test_bits: int = 4,
     confidence: float = 0.5,
     clip: float = 3.0,
+    tail: np.ndarray | None = None,
 ) -> tuple[np.ndarray, int, int]:
     """Iteratively decode one encoder's output. Returns ``(information, corrections, passes)``.
 
@@ -533,6 +566,15 @@ def ofec_decode_stream(
     that have not arrived, so they carry one check where every other bit has
     two; a stream that ends is weaker at its end, which is why a real decoder
     runs a window and never releases its newest rows.
+
+    ``tail`` is clause 9.2.4's permutation, for a stream the shaped modes
+    encoded with it. **One matrix, two views**: a codeword's front half is what
+    the line carried, because that is what its parity was taken over, and its
+    back half is that same line untangled, because the permute happened after
+    the parity. So the gather untangles and the scatter re-tangles, and the
+    information comes out of the untangled view at the end. Undoing the
+    permutation on the whole stream first would fix every back half and break
+    every front half; see :func:`untangle_tail`.
     """
     channel = np.asarray(llr, dtype=np.float64).reshape(-1)
     if channel.size % OUTPUT_BITS_PER_BLOCK:
@@ -557,6 +599,8 @@ def ofec_decode_stream(
             back = np.clip(
                 received[back_index] + confidence * front_extrinsic[back_index], -bound, bound
             )
+            if tail is not None:
+                back = _as_computed(back, tail)
             if row >= REACH:
                 front_index = _front_rows(row) * ROW_BITS + _FRONT_OFFSET
                 front = np.clip(
@@ -569,7 +613,10 @@ def ofec_decode_stream(
                 decided, soft = _extended_chase(words[r], test_bits, bound)
                 extrinsic = soft - words[r]
                 moved += int(np.count_nonzero(decided != (words[r] < 0.0)))
-                back_extrinsic[back_index[r]] = extrinsic[COLUMNS:]
+                half = extrinsic[COLUMNS:]
+                if tail is not None:
+                    half = _one_as_stored(half, tail[r % 4])
+                back_extrinsic[back_index[r]] = half
                 if row >= REACH:
                     front_extrinsic[front_index[r]] = extrinsic[:COLUMNS]
         if moved == 0:
@@ -580,8 +627,12 @@ def ofec_decode_stream(
     corrections = int(np.count_nonzero(decided != before))
     information = np.empty(rows // 2 * INFORMATION_BITS_PER_BLOCK, dtype=np.uint8)
     for row in range(rows):
-        fresh = decided[row * ROW_BITS + _BACK][:, :INFORMATION]
-        information[(row // 2) * INFORMATION_BITS_PER_BLOCK + _INPUT[row % 2]] = fresh
+        back = decided[row * ROW_BITS + _BACK]
+        if tail is not None:
+            back = _as_computed(back, tail)
+        information[(row // 2) * INFORMATION_BITS_PER_BLOCK + _INPUT[row % 2]] = back[
+            :, :INFORMATION
+        ]
     return information, corrections, passes
 
 
