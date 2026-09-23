@@ -120,9 +120,12 @@ class Fiber(Component):
     two thirds the co-polarized weight — so a neighbour polarized across the
     channel modulates it at exactly one third of the rate a co-polarized one
     does, and the two axes of one channel, no longer accumulating the same phase,
-    rotate the state of polarization as the power moves. With all the light on
-    one axis the setting changes nothing, which is why it is safe to leave on for
-    a dual-polarization link and pointless for a single-polarization one.
+    rotate the state of polarization as the power moves. A neighbour whose own
+    axes are correlated -- at 45 degrees, say -- turns the channel's state
+    outright, which is inter-channel cross-polarization modulation. With all the
+    light on one axis the setting changes nothing, which is why it is safe to
+    leave on for a dual-polarization link and pointless for a single-polarization
+    one.
 
     **Stimulated Raman scattering tilts the comb.** A photon can scatter off a
     silica vibration and come out at a lower frequency, and the process is

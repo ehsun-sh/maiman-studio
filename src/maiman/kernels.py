@@ -429,9 +429,20 @@ def propagate_coupled_ssfm(
     rather than only dephasing them. It is not a phase in the x/y basis, but in
     the circular basis ``A_{+-} = (A_x -+ i A_y) / sqrt(2)`` the self and
     cross-polarization terms become ``(2/3)(|A_{+-}|**2 + 2 |A_{-+}|**2)``, pure
-    phases again, so the step stays exact. Other bands still enter as a phase at
-    their co- and cross-polarized weights: their coherent cross terms oscillate
-    at the channel spacing and average away over a step.
+    phases again, so the step stays exact.
+
+    **Other bands turn a band's state, not only its phases.** Of the terms a
+    neighbour ``p`` puts at a band's own frequency, the per-axis phases are only
+    the diagonal: ``(s . p*) p`` -- and, with the coherent term, ``(p . s) p*`` --
+    sit at the band's frequency exactly, do not oscillate, and mix its two axes.
+    That is inter-channel cross-polarization modulation: a pump at 45 degrees
+    precesses a probe's Stokes vector about its own, by ``(4/3) gamma P L`` with
+    the coherent term and ``(2/3) gamma P L`` without. Each paired band is stepped
+    through the exact exponential of its 2x2 Hermitian Kerr matrix; see
+    :func:`_cross_polarization_coupling`. Neighbours whose axes are uncorrelated
+    -- all on an axis -- leave the matrix diagonal, and the step is the per-axis
+    phase it always was. What does average away are the terms that land
+    elsewhere, ``p p s*``, which are four-wave mixing and handled as such.
 
     **PMD along the span, when asked for.** ``pmd`` sections are placed at the
     midpoints of equal lengths of the span and each is applied, to every pair,
@@ -563,6 +574,7 @@ def propagate_coupled_ssfm(
             # term for term.
             per_axis = _power_per_axis(a, axis)
             rotated = list(a)
+            phases = []
             for index, (field, ax) in enumerate(zip(a, axis, strict=True)):
                 effective = 2.0 * per_axis[ax] - xp.abs(field) ** 2
                 other = per_axis.get(1 - ax)
@@ -578,7 +590,23 @@ def propagate_coupled_ssfm(
                     )
                 phase = gamma * effective * step
                 peak_phase = max(peak_phase, float(xp.max(xp.abs(phase))))
-                rotated[index] = field * xp.exp(-1j * phase)
+                phases.append(phase)
+            # What the phases above leave out: a neighbour whose two axes are
+            # correlated turns this band's state of polarization, not only its
+            # phase on each axis. See _cross_polarization_coupling.
+            coupling = _cross_polarization_coupling(a, couples, coherent=coherent_polarization)
+            stepped: set[int] = set()
+            for (x_index, y_index), off in zip(couples, coupling, strict=True):
+                if off is None:
+                    continue
+                rotated[x_index], rotated[y_index] = _hermitian_step(
+                    a[x_index], a[y_index], phases[x_index], phases[y_index], gamma * step * off
+                )
+                peak_phase = max(peak_phase, float(xp.max(xp.abs(gamma * step * off))))
+                stepped.update((x_index, y_index))
+            for index, (field, phase) in enumerate(zip(a, phases, strict=True)):
+                if index not in stepped:
+                    rotated[index] = field * xp.exp(-1j * phase)
             if coherent_polarization:
                 for x_index, y_index in couples:
                     rotated[x_index], rotated[y_index], turned = _coherent_kerr_step(
@@ -624,6 +652,71 @@ def propagate_coupled_ssfm(
         walkoff_span=spread * distance,
         peak_walkoff_slip=peak_slip,
     )
+
+
+def _cross_polarization_coupling(
+    fields: Sequence[np.ndarray], couples: Sequence[tuple[int, int]], *, coherent: bool
+) -> list[np.ndarray | None]:
+    """The off-diagonal entry the other bands put in each band's Kerr matrix [W].
+
+    A band ``s`` beside a band ``p`` at another frequency is driven, at its own
+    frequency, by the terms of ``|E|^2 E`` linear in ``s`` and quadratic in
+    ``p``. With the isotropic tensor, ``(2/3)(E.E*)E + (1/3)(E.E)E*``, those are
+    ``(2/3)[(p^H p) s + (p p^H) s + (p* p^T) s]``; with the phase-only form they
+    are ``2|p_x|^2 + (2/3)|p_y|^2`` on the diagonal and ``(2/3) p_x p_y*`` off it.
+    The diagonals are the per-axis phases every step already applies, so what is
+    left is the off-diagonal: ``(2/3)(p_x p_y* + p_x* p_y)`` or ``(2/3) p_x p_y*``,
+    summed over every band but ``s``.
+
+    None of it oscillates. ``(s . p*) p`` sits at the frequency of ``s`` exactly,
+    which is why a neighbour at 45 degrees turns a channel's state of
+    polarization -- inter-channel cross-polarization modulation -- and why it
+    cannot be dropped as a beat at the channel spacing. A band whose neighbours
+    all sit on an axis gets ``None``, and the step it takes is the one it always
+    took.
+    """
+    if len(couples) < 2:
+        return [None] * len(couples)
+    xp = array_module(*fields)
+    terms = []
+    for x_index, y_index in couples:
+        px, py = fields[x_index], fields[y_index]
+        cross = px * xp.conj(py)
+        terms.append((2.0 / 3.0) * (cross + xp.conj(cross)) if coherent else (2.0 / 3.0) * cross)
+    total = terms[0]
+    for term in terms[1:]:
+        total = total + term
+    result: list[np.ndarray | None] = []
+    for term in terms:
+        off = total - term
+        result.append(off if bool(xp.any(off != 0.0)) else None)
+    return result
+
+
+def _hermitian_step(
+    ex: np.ndarray, ey: np.ndarray, a: np.ndarray, b: np.ndarray, c: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """``exp(-i [[a, c], [c*, b]])`` applied to ``(ex, ey)``, sample by sample, exactly.
+
+    With ``m = (a + b) / 2``, ``d = (a - b) / 2`` and ``w = sqrt(d^2 + |c|^2)``, the
+    exponential of a 2x2 Hermitian matrix is
+    ``exp(-i m) [cos w - i sin(w)/w (H - m)]``, and ``sin(w)/w`` goes to one as
+    ``w`` does. The powers the matrix is built from do not change during the step
+    -- it is unitary -- so this is the step's solution, not a Taylor term of it.
+    """
+    xp = array_module(ex, ey)
+    mean = (a + b) / 2.0
+    half = (a - b) / 2.0
+    omega = xp.sqrt(half**2 + xp.abs(c) ** 2)
+    cosine = xp.cos(omega)
+    # sin(w)/w, with its limit where w is too small to divide by; the series'
+    # next term is w^4/120, below double precision there.
+    small = omega < 1e-4
+    ratio = xp.where(small, 1.0 - omega**2 / 6.0, xp.sin(omega) / xp.where(small, 1.0, omega))
+    common = xp.exp(-1j * mean)
+    new_x = common * (cosine * ex - 1j * ratio * (half * ex + c * ey))
+    new_y = common * (cosine * ey - 1j * ratio * (xp.conj(c) * ex - half * ey))
+    return new_x, new_y
 
 
 def _coherent_kerr_step(

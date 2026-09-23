@@ -235,8 +235,14 @@ def test_a_neighbours_power_moves_the_polarization_state() -> None:
     phase and nothing to its X phase, so the differential phase moves — by an
     amount set by a *different* channel's power, which is what makes XPolM a
     crosstalk mechanism rather than a self-effect.
+
+    The channel is a thousandth of the neighbour's power. At 45 degrees its own
+    axes are correlated, so it turns the neighbour off Y in return
+    (:mod:`tests.test_xpolm`), and the neighbour, turned, turns it back; weak, it
+    turns the neighbour by a thousandth as much, and the weights are what is left.
     """
-    channel = band(0.5 * POWER, 0.5 * POWER)
+    weak = 1e-3 * POWER
+    channel = band(0.5 * weak, 0.5 * weak)
     alone = phase((channel,), coupled=True, axis="Ex") - phase((channel,), coupled=True, axis="Ey")
     with_neighbour = phase((channel, band(0.0, POWER, 1)), coupled=True, axis="Ex") - phase(
         (channel, band(0.0, POWER, 1)), coupled=True, axis="Ey"
@@ -246,35 +252,54 @@ def test_a_neighbours_power_moves_the_polarization_state() -> None:
     # The neighbour is on Y, so it enters the channel's Y phase at the
     # co-polarized weight of 2 and its X phase at 2/3. What rotates the state is
     # the *difference* between the two weights, and that is the whole of XPolM.
-    assert with_neighbour == pytest.approx(ORTHOGONAL_KERR_WEIGHT - 2.0, rel=1e-9)
+    assert with_neighbour == pytest.approx(ORTHOGONAL_KERR_WEIGHT - 2.0, rel=1e-4)
 
 
-def test_the_coupling_is_still_a_pure_phase() -> None:
-    """It rotates; it must not move energy between the axes.
+def test_within_a_band_the_coupling_is_still_a_pure_phase() -> None:
+    """Its own axes: it rotates; it does not move energy between them.
 
-    The term that would — the coherent ``A_x* A_y**2`` exchange — is deliberately
-    not modelled, and this is the assertion that says so in numbers rather than
-    in the docstring.
+    The term that would — the coherent ``A_x* A_y**2`` exchange — is left out
+    unless ``coherent_polarization`` is set, and this is the assertion that says
+    so in numbers rather than in the docstring.
+    """
+    bands = (band(0.7 * POWER, 0.3 * POWER),)
+    out = propagated(bands, coupled=True)
+    for axis in ("Ex", "Ey"):
+        assert float(np.mean(np.abs(getattr(out.bands[0], axis)) ** 2)) == pytest.approx(
+            float(np.mean(np.abs(getattr(bands[0], axis)) ** 2)), rel=1e-12
+        )
+
+
+def test_between_bands_it_turns_the_state_and_keeps_each_band_s_power() -> None:
+    """A neighbour with correlated axes moves power between this band's axes, and no more.
+
+    Inter-channel XPolM: ``(s . p*) p`` is a rotation, so each band's power is
+    exactly what it was and its split between the axes is not. Before it was
+    carried the axes' powers did not move at all.
     """
     bands = (band(0.7 * POWER, 0.3 * POWER), band(0.2 * POWER, 0.8 * POWER, 1))
     out = propagated(bands, coupled=True)
     for before, after in zip(bands, out.bands, strict=True):
-        for axis in ("Ex", "Ey"):
-            assert float(np.mean(np.abs(getattr(after, axis)) ** 2)) == pytest.approx(
-                float(np.mean(np.abs(getattr(before, axis)) ** 2)), rel=1e-12
-            )
+        assert after.average_power() == pytest.approx(before.average_power(), rel=1e-12)
+        moved = float(np.mean(np.abs(after.Ex) ** 2)) - float(np.mean(np.abs(before.Ex) ** 2))
+        assert abs(moved) > 1e-3 * before.average_power()
 
 
 def test_the_axes_couple_even_with_the_bands_left_independent() -> None:
-    """Two settings, two questions: which bands see each other, and which axes do."""
-    bands = (band(POWER / 2, POWER / 2), band(POWER, 0.0, 1))
+    """Two settings, two questions: which bands see each other, and which axes do.
+
+    The channel is weak for the reason the XPolM test above gives: at 45 degrees
+    it would turn the neighbour, and be turned back.
+    """
+    weak = 1e-3
+    bands = (band(weak * POWER / 2, weak * POWER / 2), band(POWER, 0.0, 1))
     independent = phase(bands, coupled=True, cross_phase_modulation=False)
     together = phase(bands, coupled=True, cross_phase_modulation=True)
 
     # Its own axes still couple, so the self-phase is the split-power answer.
-    assert independent == pytest.approx(0.5 + ORTHOGONAL_KERR_WEIGHT * 0.5, rel=1e-9)
+    assert independent == pytest.approx(weak * (0.5 + ORTHOGONAL_KERR_WEIGHT * 0.5), rel=1e-9)
     # And the neighbour adds 2 * its co-polarized power on top of that.
-    assert together == pytest.approx(independent + 2.0, rel=1e-9)
+    assert together == pytest.approx(independent + 2.0, rel=1e-4)
 
 
 # ---------------------------------------------------------------------------
