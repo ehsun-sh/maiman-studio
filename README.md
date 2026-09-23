@@ -645,8 +645,41 @@ each bit's two codewords:
 ```
 
 The specification quotes 2.0e-2 with three iterations for its decoders; this one reaches it with
-six passes and six test bits. The gap is the decoder's, not the code's. Not covered: the FlexO
-adaptation, CRC and scrambler before the encoders, and the symbol mapping and framing after them.
+six passes and six test bits. The gap is the decoder's, not the code's.
+
+### And the framing around it, symbol for symbol
+
+`maiman.wport` is everything on either side of the code: clause 8 before it and clauses 11 and 12
+after. The specification's compliance point is TP7 from TP0 — every test point between is an
+implementation choice — and this reproduces all of them, for DP-QPSK and DP-16QAM alike.
+
+```
+   TP0  58 x 10,280 bits of FlexO-4(e)          116 rows for FlexO-8(e)
+        a CRC32 every four rows, then a CRC32 and zero pad
+   TP1  596,736 bits                            1,193,472
+        scrambled, x^16 + x^12 + x^3 + x + 1, reset to 0xFFFF each block
+   TP2  the codec payload            maiman.ofec takes it from here
+   TP6  688,128 line bits                       1,376,256
+        four bits to a DP-QPSK symbol, eight to a DP-16QAM one
+        FAW, training, reserved and pilots inserted
+   TP7  175,104 symbols in each polarization
+```
+
+**A DSP frame is 24 subframes of 7,296 symbols.** A pilot every 64 of them, from a PRBS10 reset at
+each subframe's head; 11 training symbols at that head, the first of which *is* that subframe's
+first pilot; and, in the first subframe only, a 22-symbol alignment word and 74 reserved symbols.
+The budget closes exactly: 2,736 pilots, 240 training symbols that are not pilots, 22 + 74 of
+alignment and reserve, and 172,032 payload — which is precisely what the symbol mapper made.
+
+Two readings the text leaves open, and the vectors settle: the reserved symbols **straddle** the
+pilot at slot 64 rather than displacing it, because the overhead goes in first and the pilot grid
+second; and the pilot PRBS10's seeds appear at its output least significant bit first, which makes
+its recurrence the stated polynomial's reciprocal. The CRC32 is checked twice over — against the
+vectors, and against the catalogued check value `0xFC891918` that every CRC-32/BZIP2 publishes.
+
+Not covered, and deliberately: the DPO path, FlexO-6(e)/8(e) with probabilistic constellation
+shaping, whose shaping lookup table the published vectors here do not exercise — writing one from
+memory is the thing `maiman.ofec` was careful not to do.
 
 **Three things had to exist before any of this could be wired up**, and each is its own block:
 
@@ -3548,7 +3581,7 @@ time window, and results are reproducible.
 | **3 — GUI & WDM** ✅ | Wavelength-selective filters, the ITU grids and a multiplexer/demultiplexer pair on them with crosstalk that falls out of the channel spacing, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — the OSA's trace drawn in the dock, and 400G/800G reference designs validated against the OSNR relations, and a back-end indirection the propagation kernels dispatch through — CuPy runs it where a device exists, `maiman devices` cross-checks it against NumPy, and a CI job does the same on any runner labelled `gpu` | ~6 months |
 | **4 — PIC** ✅ | Bidirectional S-matrix circuit solver, waveguide, directional coupler, all-pass and add-drop ring resonators, cross-validated against SAX; N×N MMI couplers on the self-imaging phase relations; a Mach-Zehnder interferometer assembled from them — switch, interleaver, or both; and PDK import, which reads a foundry's fitted numbers out of a JSON kit and refuses to extrapolate them past the window they were fitted in; and birefringence, with each guided polarization carrying its own indices through the same reduction | — |
 | **5 — Gratings, sensing, loops and coupling** ✅ | Fibre Bragg gratings assembled from transfer matrices — apodized, chirped, sampled and phase-shifted — a circulator with isolation and return loss, and a grating read as a strain gauge and a thermometer, by a swept laser or by broadband light on an analyser; noise that carries the spectral shape of what it passed through; loop control that runs a cavity to its fixed point, and a delay line that turns the same loop into a recirculating one lap by lap; pump depletion for four-wave mixing and Raman's measured gain shape past its peak; an erbium transient spread across the spectrum, each channel moving by the fibre's own tilt, drained per channel by its own cross section, and answered by a pump control loop with a bandwidth and a ceiling; an amplifier's own ASE, both ways, depleting its inversion; PMD applied along the span between Kerr steps, and the coherent polarization term that moves power between the axes; a scalar mode solver for core and cladding modes, and the vector HE, EH, TE and TM modes the glass-air boundary splits them into, checked against the exact characteristic equation; glass that disperses as Sellmeier's silica and germania, which makes the default fibre a G.652 one; a long-period grating built on either, alone or as a pair recoupling its cladding light, and a tilted grating whose comb of cladding resonances reads what the fibre is dipped in, split by polarization when its vector modes are solved; edge and grating couplers that put a signal into the chip's TE and TM, the edge coupler's two facets a cavity summed bounce by bounce, and the grating coupler's passband, its teeth's own reflection, its bottom mirror and its apodization computed from its geometry; a PAM4 driver with its modulator's linearity corrected, and a feed-forward and decision-feedback equaliser, fractionally spaced or blind; a laser's linewidth and intensity noise from its own Langevin forces, and the partition noise between a Fabry-Perot laser's modes, carried down a link as each mode's own arrival time and spent at the detector; a directly modulated laser whose chirp comes out of its own rate equations, with its junction's heat moving the line; and templates in the studio's File menu, including an eight-channel DWDM link | — |
-| **Open** | The W-Port framing around OFEC — its FlexO adaptation, scrambler and symbol framing | — |
+| **Open** | The W-Port's DPO path — FlexO-6(e)/8(e) with probabilistic constellation shaping, whose shaping lookup table the published test vectors do not exercise | — |
 
 ¹ One developer, part-time. Estimates, not commitments.
 

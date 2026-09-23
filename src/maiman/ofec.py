@@ -32,9 +32,10 @@ hard component decoder here is that module's. Rate 111/128, 15.3 % overhead.
 **What this module covers and what it does not.** Covered: the payload bits
 entering the four encoders (test point TP2, after the specification's scrambler)
 to the interleaved, block-merged bits leaving for the symbol mapper (TP6), and
-the reverse. Not covered: the FlexO adaptation, CRC and scrambler before TP2,
-and the symbol mapping, pilots and framing after TP6 -- those are the W-Port
-framing, not the code.
+the reverse. Not covered here, because it is the W-Port framing rather than the
+code: the FlexO adaptation, CRC and scrambler before TP2, and the symbol
+mapping, pilots and framing after TP6. Those are :mod:`maiman.wport`, which is
+held to the same vectors and joins on either side of this.
 
 The decoder is this project's, not the specification's: the specification says
 only that "any of the iterative algorithms designed for turbo decoding of
