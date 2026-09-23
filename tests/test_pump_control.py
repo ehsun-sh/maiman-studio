@@ -20,6 +20,7 @@ from maiman import (
     ErbiumSpectrum,
     PumpControl,
     controlled_gain_transient,
+    effective_time_constant,
     gain_transient,
     saturating_power,
     saturating_weights,
@@ -132,6 +133,137 @@ def test_saturating_on_the_way_is_not_the_same_as_running_out() -> None:
     assert output_dbm[-1] == pytest.approx(controlled.setpoint, abs=0.05)
 
 
+# ---------------------------------------------------------------------------
+# The loop's three imperfections, each against the linearised loop
+# ---------------------------------------------------------------------------
+#
+# About its rest point the reservoir is a first-order lag: a pump step of
+# ``dp`` nepers moves the gain by ``k dp`` over ``tau_e``, with
+# ``k = 1 / (1 + P_out / P_sat)`` and ``tau_e = k tau`` -- the effective time
+# constant. The loop integrates the error at ``1 / tau_c``, so its crossover
+# rate is ``a = k / tau_c``.
+
+LOADED = 8 * CHANNEL
+
+
+def linearised(control: PumpControl, lifetime: float) -> tuple[float, float, float]:
+    """``(k, a, tau_e)`` for the gain loop about the amplifier's rest at ``LOADED``."""
+    tau_e = effective_time_constant(amplifier(), LOADED, lifetime=lifetime)
+    k = tau_e / lifetime
+    return k, k / control.time_constant, tau_e
+
+
+def settled_run(
+    control: PumpControl, duration: float, points: int, *, lifetime: float, seed: int = 0
+) -> tuple[np.ndarray, np.ndarray]:
+    """``(times, gain error in dB)`` for a run that starts at rest and is only perturbed."""
+    times, power = step_schedule([(duration, LOADED)], points_per_segment=points)
+    run = controlled_gain_transient(
+        amplifier(), times, power, control, lifetime=lifetime, seed=seed
+    )
+    return times, run.gain_db - run.setpoint
+
+
+def test_the_imperfections_are_off_by_default_and_move_nothing() -> None:
+    """A control built without them runs bit for bit as the ideal loop always did."""
+    times, power = drop(points=300)
+    plain = controlled_gain_transient(amplifier(), times, power, PumpControl(bandwidth=1e3))
+    spelled = controlled_gain_transient(
+        amplifier(),
+        times,
+        power,
+        PumpControl(bandwidth=1e3, delay=0.0, detector_noise=0.0, dither_depth=0.0),
+        seed=99,
+    )
+    assert np.array_equal(plain.gain_db, spelled.gain_db)
+    assert np.array_equal(plain.pump_gain_db, spelled.pump_gain_db)
+
+
+@pytest.mark.parametrize(("margin", "grows"), [(0.8, False), (1.2, True)])
+def test_a_delayed_loop_is_stable_only_below_a_quarter_turn(margin: float, grows: bool) -> None:
+    """``dx/dt = -a x(t - delay)`` is stable while ``a delay < pi/2`` (Hayes, 1950).
+
+    The erbium is made fifty times faster than the loop so that it is the delay
+    and not the reservoir's own lag that sets the phase. A 1 % input step kicks
+    the loop; a fifth inside the boundary the ringing dies, a fifth outside it
+    grows.
+    """
+    base = PumpControl(bandwidth=100.0)
+    k, a, _ = linearised(base, 1e-3)
+    lifetime = 1.0 / (50.0 * a * k)  # tau_e = k tau = 1 / (50 a)
+    delay = margin * (math.pi / 2.0) / a
+    control = PumpControl(bandwidth=100.0, delay=delay)
+    times, power = step_schedule(
+        [(delay, LOADED), (14 * delay, 0.99 * LOADED)], points_per_segment=700
+    )
+    run = controlled_gain_transient(amplifier(), times, power, control, lifetime=lifetime)
+    error = run.gain_db - run.setpoint
+    after = times - delay
+    early = np.abs(error[(after > 2 * delay) & (after < 6 * delay)]).max()
+    late = np.abs(error[(after > 10 * delay) & (after < 14 * delay)]).max()
+    assert (late > 1.5 * early) if grows else (late < early / 1.5), (early, late)
+
+
+def test_at_the_edge_a_delayed_loop_rings_at_four_delays() -> None:
+    """On the boundary the root is ``s = j pi / (2 delay)``: a period of ``4 delay``."""
+    base = PumpControl(bandwidth=100.0)
+    k, a, _ = linearised(base, 1e-3)
+    lifetime = 1.0 / (50.0 * a * k)
+    delay = (math.pi / 2.0) / a
+    control = PumpControl(bandwidth=100.0, delay=delay)
+    times, power = step_schedule(
+        [(delay, LOADED), (14 * delay, 0.99 * LOADED)], points_per_segment=1400
+    )
+    run = controlled_gain_transient(amplifier(), times, power, control, lifetime=lifetime)
+    error = run.gain_db - run.setpoint
+    window = times > 4 * delay
+    crossings = times[window][1:][np.diff(np.sign(error[window])) != 0]
+    period = 2.0 * float(np.mean(np.diff(crossings)))
+    # The erbium's own lag, a fiftieth of 1/a, moves the phase by a few percent.
+    assert period == pytest.approx(4.0 * delay, rel=0.05)
+
+
+def test_detector_noise_wanders_the_gain_as_the_closed_loop_integral_says() -> None:
+    """``var(g) = k N^2 / (4 tau_c)``, whatever the erbium's own lag.
+
+    The loop and the lagging reservoir make a second-order system driven by
+    white noise, and the variance of such a system does not depend on its
+    ``s^2`` coefficient -- so the erbium runs at its real lifetime here. ``N``
+    is a one-sided density, so the two-sided one the integral wants is
+    ``N^2 / 2``.
+    """
+    control = PumpControl(bandwidth=100.0, detector_noise=4e-4)
+    k, _, _ = linearised(control, 10e-3)
+    expected = math.sqrt(k * control.detector_noise**2 / (4.0 * control.time_constant))
+    spreads = []
+    for seed in (1, 2):
+        times, error = settled_run(control, 2.0, 4000, lifetime=10e-3, seed=seed)
+        spreads.append(float(np.std(error[times > 0.1])))
+    assert float(np.mean(spreads)) == pytest.approx(expected, rel=0.08)
+
+
+def test_a_dither_reaches_the_gain_high_passed_by_the_loop() -> None:
+    """``|g / d| = k w / |a - w^2 tau_e + j w|``: the loop fights it, the erbium lags it.
+
+    A 0.01 dB tone on the pump at the loop's own crossover, with the erbium at
+    its real lifetime -- its lag is the ``w^2 tau_e`` term and it is carried
+    rather than assumed away.
+    """
+    base = PumpControl(bandwidth=100.0)
+    k, a, tau_e = linearised(base, 10e-3)
+    frequency = a / (2.0 * math.pi)
+    control = PumpControl(bandwidth=100.0, dither_depth=0.01, dither_frequency=frequency)
+    periods = 40
+    times, error = settled_run(control, periods / frequency, 64 * periods, lifetime=10e-3)
+    steady = times >= 20 / frequency
+    swing = 2.0 * abs(np.mean(error[steady] * np.exp(-2j * math.pi * frequency * times[steady])))
+    omega = 2.0 * math.pi * frequency
+    expected = 0.01 * k * omega / abs(a - omega**2 * tau_e + 1j * omega)
+    # Measured 0.9998 of it. Leaving out the erbium's lag would put it 20 % off,
+    # so this tolerance is what makes the tau_e term something the test checks.
+    assert swing == pytest.approx(expected, rel=0.005)
+
+
 def test_what_cannot_be_controlled_is_refused() -> None:
     times, power = drop(points=200)
     with pytest.raises(ValueError, match="pump ceiling"):
@@ -148,6 +280,12 @@ def test_what_cannot_be_controlled_is_refused() -> None:
         PumpControl(bandwidth=0.0)
     with pytest.raises(ValueError, match="ceiling must sit above"):
         PumpControl(max_pump_gain=5.0, min_pump_gain=10.0)
+    with pytest.raises(ValueError, match="act before it measures"):
+        PumpControl(delay=-1e-6)
+    with pytest.raises(ValueError, match="not negative"):
+        PumpControl(detector_noise=-1.0)
+    with pytest.raises(ValueError, match="needs a frequency"):
+        PumpControl(dither_depth=0.1)
 
 
 # ---------------------------------------------------------------------------

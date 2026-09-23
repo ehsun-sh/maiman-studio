@@ -70,8 +70,11 @@ the way it weighs channels -- each slice by its own cross section and photon
 energy, :func:`self_saturation_weight` -- so a coil whose short-wavelength side
 drains hardest rests where that says rather than where the centre alone would.
 
-**What this does not model.** The loop is the ideal integral one, with no
-detector noise, no delay and no dither. The ASE's own spectrum is flat, as the
+The loop is the integral one, and ideal unless told otherwise: :class:`PumpControl`
+can give it a measurement delay, white noise on what it measures, and a dither on
+the pump, each off by default.
+
+**What this does not model.** The ASE's own spectrum is flat, as the
 amplifier emits it; only how hard each part of it drains the reservoir follows
 the erbium. And without a spectrum -- :func:`gain_transient` and
 :func:`controlled_gain_transient` -- it drains at the centre wavelength's rate.
@@ -86,6 +89,7 @@ amplifier dynamics: a system perspective", J. Lightwave Technol. 16(5), 1998.
 
 from __future__ import annotations
 
+import bisect
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -723,6 +727,25 @@ class PumpControl:
     ``max_pump_gain`` is the small-signal gain the pump can reach [dB]. A loop
     that runs into it stops correcting, which is a real failure of a real
     amplifier and is reported rather than smoothed over.
+
+    **Three imperfections, each off by default and each an idealisation declared
+    rather than delivered by accident.**
+
+    * ``delay`` [s]: the loop acts on what the gain *was*, ``delay`` ago -- the
+      tap, the photodiode, the converter and the controller's own cycle. An
+      integral loop with a delay is stable only while ``a delay < pi/2``, with
+      ``a`` its crossover rate, and rings at a period of four delays at the
+      edge (Hayes, 1950). A delay that is a small fraction of ``tau_c`` costs
+      nothing; one comparable to it is why real loops are slower than their
+      erbium would allow.
+    * ``detector_noise`` [dB/sqrt(Hz)]: white noise on what the loop measures,
+      as a one-sided density. The integrator averages it, and what reaches the
+      gain is an Ornstein-Uhlenbeck wander whose variance falls with the loop's
+      bandwidth -- the other half of why a loop is not made as fast as possible.
+    * ``dither_depth`` [dB, peak] at ``dither_frequency`` [Hz]: a tone on the
+      pump, the way a line system labels an amplifier or probes its gain. The
+      loop fights it below its crossover and lets it through above, so the gain
+      carries a high-passed copy of it.
     """
 
     mode: str = "gain"
@@ -730,6 +753,10 @@ class PumpControl:
     setpoint: float | None = None
     max_pump_gain: float = 40.0
     min_pump_gain: float = 0.0
+    delay: float = 0.0
+    detector_noise: float = 0.0
+    dither_depth: float = 0.0
+    dither_frequency: float = 0.0
 
     def __post_init__(self) -> None:
         if self.mode not in ("gain", "power"):
@@ -738,6 +765,14 @@ class PumpControl:
             raise ValueError(f"the loop bandwidth must be positive, got {self.bandwidth}")
         if self.max_pump_gain <= self.min_pump_gain:
             raise ValueError("the pump's ceiling must sit above its floor")
+        if self.delay < 0.0:
+            raise ValueError(f"a loop cannot act before it measures: delay {self.delay}")
+        if self.detector_noise < 0.0:
+            raise ValueError(f"a noise density is not negative, got {self.detector_noise}")
+        if self.dither_depth < 0.0 or self.dither_frequency < 0.0:
+            raise ValueError("a dither's depth and frequency are not negative")
+        if self.dither_depth > 0.0 and self.dither_frequency <= 0.0:
+            raise ValueError("a dither needs a frequency; at zero it is a pump offset")
 
     @property
     def time_constant(self) -> float:
@@ -814,6 +849,7 @@ def controlled_gain_transient(
     control: PumpControl,
     *,
     lifetime: float = METASTABLE_LIFETIME,
+    seed: int = 0,
 ) -> ControlledTransient:
     """The same reservoir as :func:`gain_transient`, with a loop moving the pump.
 
@@ -827,6 +863,10 @@ def controlled_gain_transient(
 
     What the loop cannot do is exceed its pump. ``max_pump_gain`` is a real
     limit, and :attr:`ControlledTransient.pump_limited` says when it was reached.
+
+    ``seed`` draws the detector noise, when ``control`` has any; the same seed
+    gives the same run. :attr:`ControlledTransient.pump_gain_db` is what the
+    loop called for, without the dither riding on it.
     """
     grid = np.asarray(times, dtype=np.float64)
     drive = np.asarray(input_power, dtype=np.float64)
@@ -870,10 +910,24 @@ def controlled_gain_transient(
     fastest = min(fastest, control.time_constant)
     coarsest = float(np.diff(grid).max())
     substeps = max(1, math.ceil(coarsest / (fastest / SUBSTEPS_PER_CONSTANT)))
+    # A delay is read back out of the history by linear interpolation, and a
+    # dither is a sinusoid the integrator has to follow: both need steps well
+    # inside them, or the step becomes a parameter of the answer.
+    if control.delay > 0.0:
+        substeps = max(substeps, math.ceil(coarsest / (control.delay / SUBSTEPS_PER_CONSTANT)))
+    if control.dither_depth > 0.0:
+        period = 1.0 / control.dither_frequency
+        substeps = max(substeps, math.ceil(coarsest / (period / SUBSTEPS_PER_CONSTANT)))
 
     log_ceiling = math.log(db_to_linear(control.max_pump_gain))
     log_floor = math.log(db_to_linear(control.min_pump_gain))
     nepers = math.log(10.0) / 10.0  # one decibel, in the units the loop integrates
+    dither_nepers = nepers * control.dither_depth
+    dither_omega = 2.0 * math.pi * control.dither_frequency
+    rng = np.random.default_rng(seed)
+
+    def dither(time: float) -> float:
+        return dither_nepers * math.sin(dither_omega * time) if dither_nepers else 0.0
 
     def reservoir_slope(log_gain: float, log_pump: float, power: float) -> float:
         return (
@@ -883,47 +937,100 @@ def controlled_gain_transient(
             - own * math.exp(log_gain)
         ) / lifetime
 
-    def loop_slope(log_gain: float, power: float) -> float:
+    def loop_slope(log_gain: float, power: float, noise: float) -> float:
         if control.mode == "gain":
             measured = 10.0 * math.log10(math.exp(log_gain))
         else:
             output = math.exp(log_gain) * power
             measured = -math.inf if output <= 0.0 else 10.0 * math.log10(output * 1e3)
-        error = setpoint - measured
+        error = setpoint - (measured + noise) if noise else setpoint - measured
         return nepers * error / control.time_constant
+
+    # What the loop saw, kept at every substep so a delayed reading can be taken
+    # back out of it. Before the run the amplifier was settled, so anything
+    # asked for from before the first time is the starting point.
+    history_t = [float(grid[0])]
+    history_g = [math.log(settled_gain)]
+
+    def seen(time: float) -> tuple[float, float]:
+        """``(log gain, input power)`` as a delayed loop sees them at ``time``."""
+        when = time - control.delay
+        position = bisect.bisect_right(history_t, when)
+        if position == 0:
+            value = history_g[0]
+        elif position == len(history_t):
+            value = history_g[-1]
+        else:
+            t0, t1 = history_t[position - 1], history_t[position]
+            g0, g1 = history_g[position - 1], history_g[position]
+            value = g0 + (g1 - g0) * (when - t0) / (t1 - t0)
+        where = max(int(np.searchsorted(grid, when, "right")) - 1, 0)
+        return value, float(drive[where])
 
     gains = np.empty(grid.shape)
     pumps = np.empty(grid.shape)
     log_gain = math.log(settled_gain)
     log_pump = math.log(small_signal)
     gains[0], pumps[0] = settled_gain, amplifier.gain
+    now = float(grid[0])
     for index in range(1, grid.size):
         span = float(grid[index] - grid[index - 1])
         step = span / substeps
         power = float(drive[index - 1])
         for _ in range(substeps):
+            # White noise on the measurement, one draw per step and held across
+            # it: a one-sided density N is a two-sided N^2 / 2, which sampled
+            # over a step of h has variance N^2 / 2h.
+            noise = (
+                float(rng.normal(0.0, control.detector_noise / math.sqrt(2.0 * step)))
+                if control.detector_noise
+                else 0.0
+            )
+
+            def loop(
+                time: float, stage: float, power: float = power, noise: float = noise
+            ) -> float:
+                if control.delay == 0.0:
+                    return loop_slope(stage, power, noise)
+                value, then = seen(time)
+                return loop_slope(value, then, noise)
+
             # Two states, one Runge-Kutta: the inversion and the pump move
             # together, which is the whole point of a loop fast enough to matter.
-            k1 = (reservoir_slope(log_gain, log_pump, power), loop_slope(log_gain, power))
+            half = now + 0.5 * step
+            k1 = (
+                reservoir_slope(log_gain, log_pump + dither(now), power),
+                loop(now, log_gain),
+            )
             k2 = (
                 reservoir_slope(
-                    log_gain + 0.5 * step * k1[0], log_pump + 0.5 * step * k1[1], power
+                    log_gain + 0.5 * step * k1[0],
+                    log_pump + 0.5 * step * k1[1] + dither(half),
+                    power,
                 ),
-                loop_slope(log_gain + 0.5 * step * k1[0], power),
+                loop(half, log_gain + 0.5 * step * k1[0]),
             )
             k3 = (
                 reservoir_slope(
-                    log_gain + 0.5 * step * k2[0], log_pump + 0.5 * step * k2[1], power
+                    log_gain + 0.5 * step * k2[0],
+                    log_pump + 0.5 * step * k2[1] + dither(half),
+                    power,
                 ),
-                loop_slope(log_gain + 0.5 * step * k2[0], power),
+                loop(half, log_gain + 0.5 * step * k2[0]),
             )
             k4 = (
-                reservoir_slope(log_gain + step * k3[0], log_pump + step * k3[1], power),
-                loop_slope(log_gain + step * k3[0], power),
+                reservoir_slope(
+                    log_gain + step * k3[0], log_pump + step * k3[1] + dither(now + step), power
+                ),
+                loop(now + step, log_gain + step * k3[0]),
             )
             log_gain += step * (k1[0] + 2 * k2[0] + 2 * k3[0] + k4[0]) / 6.0
             log_pump += step * (k1[1] + 2 * k2[1] + 2 * k3[1] + k4[1]) / 6.0
             log_pump = min(max(log_pump, log_floor), log_ceiling)
+            now += step
+            if control.delay > 0.0:
+                history_t.append(now)
+                history_g.append(log_gain)
         gains[index] = math.exp(log_gain)
         pumps[index] = 10.0 * math.log10(math.exp(log_pump))
 

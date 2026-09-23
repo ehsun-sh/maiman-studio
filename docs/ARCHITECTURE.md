@@ -633,8 +633,9 @@ be finished without it, and each is validated against a result it does not share
 
 Stated in the code where each approximation is made, and collected here:
 
-* **Amplifiers.** The control loop is the ideal integral one, with no detector noise, no delay
-  and no dither. An amplifier's own ASE is emitted flat across its band; given an erbium spectrum,
+* **Amplifiers.** The control loop is an integral one; its measurement delay, detector noise and
+  pump dither are declared on `PumpControl` and off by default, and a proportional term or a
+  loop filter beyond the integrator is not modelled. An amplifier's own ASE is emitted flat across its band; given an erbium spectrum,
   the transient analysis weighs how hard each slice of it drains the reservoir by that slice's
   own cross section and photon energy, and without one -- the block itself, and the controlled
   transient -- it drains at the centre wavelength's rate.
