@@ -47,12 +47,14 @@ handled, they are not in this repository: point ``MAIMAN_WPORT_TABLES`` at a
 directory holding ``SCS_LUT10.txt``, ``SCS_LUT11.txt`` and ``rewire.json`` and
 this module works. Without them it raises and says so.
 
-**Where this stops.** At the encoder's input, test point TP4, which is where the
-specification's own vectors are checked against. What the DPO path then does to
-the *encoder* -- its output ordering differs from the DO path's, and clause
-9.2.4 permutes the last 35 bits of each codeword back through it -- is not here,
-so a DPO transmitter cannot yet be run end to end. Said plainly rather than
-approximated.
+**Where this stops.** Not short of the line. :func:`dpo_transmit` takes FlexO
+information (TP0) to the DSP frame's symbols (TP7), with clause 9.2.4's tail
+permute applied inside the encoder, and reproduces the specification's TP1 to
+TP5 and TP7 for all three shaped modes; :func:`dpo_receive`
+runs it back. What it does not do is what the DO path does not do either: error
+marking is one flag per CRC32 rather than 802.3 error blocks, and the
+receiver's ratios are a hard decision dressed as a soft one. Without the tables
+only the part past the shaper runs, as :func:`dpo_transmit_lanes`.
 """
 
 from __future__ import annotations

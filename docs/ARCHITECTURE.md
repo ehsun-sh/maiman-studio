@@ -684,10 +684,11 @@ This section used to be the list of first steps — repository, signal model, sc
 the Phase 1 chain, the validation suite. All of it is done, and the history has it. What comes
 next, in order:
 
-1. **Check the W-Port DPO path against the specification in a repeatable place.** Its vectors and
-   shaping tables are normative data loaded from the environment rather than shipped, so the tests
-   that compare against them skip in CI. Until they run somewhere on every release, that path is
-   validated against itself.
+1. **Attach a runner that holds the W-Port specification's data.** Its vectors and shaping tables
+   are normative data loaded from the environment rather than shipped, so the tests that compare
+   against them skip in CI. Past the shaper the path is held to a digest everywhere, and
+   `RELEASING.md` runs the rest with `MAIMAN_REQUIRE_SPEC=1` before each release; the shaper
+   itself is checked on every push only once the `specification` job in `ci.yml` has a runner.
 2. **Carry walk-off shape inside a band, and beat bands that have walked apart**, rather than
    summing them as powers — the largest physical approximation left under [Open](#open).
 3. **The rest of [Open](#open)**, each with the closed-form test that shows it did something.
