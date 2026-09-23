@@ -47,6 +47,10 @@ results/
 *.h5
 *.hdf5
 
+# ... except the package's own data, which is not an output. The PCS block order
+# is shipped in the wheel and the shaper cannot run without it.
+!src/maiman/data/*.npy
+
 # Node / web UI (from Phase 2 onward)
 node_modules/
 .next/
