@@ -17,10 +17,10 @@ link in this simulator descends from.*
 
 ---
 
-> ### Project status: 0.14.0 — released, and still moving.
+> ### Project status: 0.15.0 — released, and still moving.
 >
 > `pip install maiman`, then `maiman serve` — or [start from no Python at
-> all](#installing-and-running-it). Phases 0 through 5 are done: **65 components, more than 1880 tests, and
+> all](#installing-and-running-it). Phases 0 through 5 are done: **65 components, more than 1900 tests, and
 > every physics block checked against a closed-form result in CI.**
 >
 > **Links run end to end.** Direct detection — PRBS → NRZ → laser → MZM → fiber → PIN → filter →
@@ -124,7 +124,7 @@ python3 -m pip install maiman
 It takes a few seconds and ends with a line like:
 
 ```
-Successfully installed maiman-0.14.0 numpy-2.3.5
+Successfully installed maiman-0.15.0 numpy-2.3.5
 ```
 
 That is the whole installation. NumPy is the only thing it brings with it, and the interface is

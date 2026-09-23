@@ -16,7 +16,8 @@ own time, and pretending to a response time it cannot meet would be worse than s
 
 | Version | Supported |
 | :--- | :--- |
-| `0.14.x` | Yes |
+| `0.15.x` | Yes |
+| `0.14.x` | No — upgrade; there is no branch to backport to |
 | `0.13.x` | No — upgrade; there is no branch to backport to |
 | `0.12.x` | No — upgrade; there is no branch to backport to |
 | `0.11.x` | No — upgrade; there is no branch to backport to |
@@ -32,7 +33,7 @@ own time, and pretending to a response time it cannot meet would be worse than s
 | `0.1.x` | No — upgrade; there is no branch to backport to |
 | `main` | Yes |
 
-Fixes land on `main` and go out in the next `0.14.x`. While the version stays below `1.0`, a
+Fixes land on `main` and go out in the next `0.15.x`. While the version stays below `1.0`, a
 security fix may arrive alongside behavioural changes rather than on its own — pinning an exact
 version and never updating is the wrong shape of caution here, because there is no branch to
 backport to and there will not be one until the interface stops moving.
