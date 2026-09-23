@@ -3844,8 +3844,9 @@ procedure.
 
 ## Citing this
 
-[`CITATION.cff`](CITATION.cff), which GitHub turns into a "Cite this repository" button. It has no
-release date because there has been no release — cite the commit you ran. And please cite the
+[`CITATION.cff`](CITATION.cff), which GitHub turns into a "Cite this repository" button. It names
+the release it was cut with and the date that release was published. A 0.x tree moves between
+releases, so if you ran a checkout rather than a release, cite the commit as well. And please cite the
 primary sources for whichever physics you leaned on: every component's docstring names the paper
 or the standard its model comes from, and those authors did the work this only implements.
 
