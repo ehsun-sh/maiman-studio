@@ -49,8 +49,8 @@ this module works. Without them it raises and says so.
 
 **Where this stops.** Not short of the line. :func:`dpo_transmit` takes FlexO
 information (TP0) to the DSP frame's symbols (TP7), with clause 9.2.4's tail
-permute applied inside the encoder, and reproduces the specification's TP1 to
-TP5 and TP7 for all three shaped modes; :func:`dpo_receive`
+permute applied inside the encoder, and reproduces every one of the
+specification's test points, TP1 to TP7, for all three shaped modes; :func:`dpo_receive`
 runs it back. What it does not do is what the DO path does not do either: error
 marking is one flag per CRC32 rather than 802.3 error blocks, and the
 receiver's ratios are a hard decision dressed as a soft one. Without the tables

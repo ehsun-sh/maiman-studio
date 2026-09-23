@@ -30,6 +30,7 @@ from maiman.ofec import (
     TAIL_START,
     ofec_decode_stream,
     ofec_encode_stream,
+    ofec_interleave,
     untangle_tail,
 )
 from maiman.pcs import (
@@ -288,6 +289,16 @@ def test_the_specification_job_is_gated_and_cannot_skip() -> None:
 @pytest.mark.parametrize("mode", SHAPED)
 def test_the_encoder_reproduces_tp5_with_the_tail_permute(mode: str) -> None:
     assert np.array_equal(shaped_encode(vector(mode, "TP4")), vector(mode, "TP5"))
+
+
+@BOTH
+@pytest.mark.parametrize("mode", SHAPED)
+def test_the_interleavers_reproduce_tp6(mode: str) -> None:
+    """TP5 -> TP6: the DO modes' 16QAM interleavers, unchanged by the shaping."""
+    tp5 = vector(mode, "TP5")
+    assert np.array_equal(
+        ofec_interleave([tp5[:, lane] for lane in range(4)], "16qam"), vector(mode, "TP6")
+    )
 
 
 @BOTH
