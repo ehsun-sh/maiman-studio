@@ -4,7 +4,8 @@
 > communication links and photonic circuits — the tool that fills the gap between
 > low-level EM solvers (Meep) and closed commercial system simulators (OptiSystem, VPIphotonics).
 
-**Status:** design document, pre-implementation.
+**Status:** design document, now describing a running system. Phases 0 through 5 are implemented
+and released as 0.x; what each block still approximates is collected under [§10, Open](#open).
 **Revision:** 2 — restructured, corrected, and expanded from the initial concept draft.
 
 ---
@@ -659,7 +660,7 @@ Stated in the code where each approximation is made, and collected here:
 
 ## 11. Licensing & Legal
 
-* **License:** Apache-2.0 recommended for the core — permissive enough for industrial adoption,
+* **License:** Apache-2.0, adopted for the core — permissive enough for industrial adoption,
   with an explicit patent grant. GPL would guarantee contributions back but sharply limits
   commercial use, which works against the stated goal of serving startups and small companies.
 * **Dependency licenses must be checked before adoption,** not after. FFTW (GPL) is the concrete
@@ -677,17 +678,18 @@ Stated in the code where each approximation is made, and collected here:
 
 ---
 
-## 12. Immediate Action Items
+## 12. Next
 
-1. Create the repository: license, `CONTRIBUTING.md`, CI (lint, type-check, pytest), packaging.
-2. Implement `SimulationContext`, `Band` / `NoiseBin` / `OpticalSignal`, and the port type system,
-   with unit tests — before any component exists.
-3. Implement the component base class, parameter/unit system, registry, and JSON manifest
-   generation.
-4. Implement the scheduler (topological sort, type validation, memory release) and prove it on a
-   trivial pass-through graph.
-5. Define and freeze `.maiman` schema v1; round-trip test.
-6. Build the Phase 1 chain: PRBS → NRZ → CW Laser → MZM → linear fiber → PIN → BER.
-7. Stand up the validation suite from §7 in CI, with every tolerance justified in a comment.
-8. Write the first example notebook — for a scientific open-source tool, the examples are the
-   product.
+This section used to be the list of first steps — repository, signal model, scheduler, schema,
+the Phase 1 chain, the validation suite. All of it is done, and the history has it. What comes
+next, in order:
+
+1. **Check the W-Port DPO path against the specification in a repeatable place.** Its vectors and
+   shaping tables are normative data loaded from the environment rather than shipped, so the tests
+   that compare against them skip in CI. Until they run somewhere on every release, that path is
+   validated against itself.
+2. **Carry walk-off shape inside a band, and beat bands that have walked apart**, rather than
+   summing them as powers — the largest physical approximation left under [Open](#open).
+3. **The rest of [Open](#open)**, each with the closed-form test that shows it did something.
+
+Criticism of the decisions above §10 is still worth more than any of these.
