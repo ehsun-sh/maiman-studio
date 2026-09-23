@@ -63,6 +63,7 @@ __all__ = [
     "ofec_encode_stream",
     "ofec_frame_bits",
     "ofec_interleave",
+    "untangle_tail",
 ]
 
 #: Columns of the semi-infinite matrix, ``N``.
@@ -176,7 +177,13 @@ def _front_rows(row: int) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
-def ofec_encode_stream(information: np.ndarray) -> np.ndarray:
+#: Where a codeword's tail begins in its back half: the last 35 of 128, which is
+#: eighteen information bits and all seventeen parity ones. Only the DPO path
+#: touches them -- see ``tail`` below.
+TAIL_START = COLUMNS - 35
+
+
+def ofec_encode_stream(information: np.ndarray, *, tail: np.ndarray | None = None) -> np.ndarray:
     """One OFEC encoder, clause 10.1.2: input bits ``u`` to output bits ``y``.
 
     ``information`` is a whole number of 3552-bit input blocks; each makes one
@@ -185,6 +192,14 @@ def ofec_encode_stream(information: np.ndarray) -> np.ndarray:
     are undefined and the codewords are completed with the specification's
     ``H'`` -- parity over the back half alone -- so that the output is fully
     determined.
+
+    ``tail`` is clause 9.2.4's post-encode permutation, which the shaped DPO
+    modes need and the DO modes leave unset: four orderings of a codeword's last
+    35 bits, chosen by ``r % 4``. It is applied to the matrix rather than to the
+    output, so the permuted bits are what the rows twenty behind read as their
+    front halves -- which is why it changes the parity that follows and cannot be
+    undone by reordering the output afterwards. :mod:`maiman.pcs` holds the
+    table; this only applies it.
     """
     u = np.asarray(information, dtype=np.uint8).reshape(-1)
     if u.size % INFORMATION_BITS_PER_BLOCK:
@@ -203,8 +218,44 @@ def ofec_encode_stream(information: np.ndarray) -> np.ndarray:
             front = np.zeros((BLOCK, COLUMNS), dtype=np.uint8)
         parity = (np.concatenate([front, fresh], axis=1).astype(np.int64) @ _PARITY) & 1
         back = np.concatenate([fresh, parity.astype(np.uint8)], axis=1)
+        if tail is not None:
+            back = _permute_tail(back, tail)
         matrix[row * ROW_BITS + _BACK] = back
     return matrix[_output_order(rows)]
+
+
+def _permute_tail(back: np.ndarray, tail: np.ndarray) -> np.ndarray:
+    """Reorder each codeword's last 35 bits, the ordering chosen by ``r % 4``."""
+    if tail.shape != (4, 35):
+        raise ValueError(f"the tail permutation is four orderings of 35, got {tail.shape}")
+    moved = back.copy()
+    for r in range(BLOCK):
+        moved[r, TAIL_START:] = back[r, TAIL_START + tail[r % 4]]
+    return moved
+
+
+def untangle_tail(block: np.ndarray, tail: np.ndarray) -> np.ndarray:
+    """Undo :func:`ofec_encode_stream`'s ``tail`` on a stream of output blocks.
+
+    A receiver does this before it decodes: the permutation is a reordering
+    inside each square-block row, so putting it back restores exactly the layout
+    the component decoder expects. Works on bits or on log-likelihood ratios,
+    because it only moves them.
+    """
+    values = np.asarray(block)
+    if values.shape[0] % OUTPUT_BITS_PER_BLOCK:
+        raise ValueError(f"whole {OUTPUT_BITS_PER_BLOCK}-bit output blocks, got {values.shape[0]}")
+    rows = 2 * (values.shape[0] // OUTPUT_BITS_PER_BLOCK)
+    order = _output_order(rows)
+    matrix = np.empty(rows * ROW_BITS, dtype=values.dtype)
+    matrix[order] = values
+    for row in range(rows):
+        back = matrix[row * ROW_BITS + _BACK]
+        restored = back.copy()
+        for r in range(BLOCK):
+            restored[r, TAIL_START + tail[r % 4]] = back[r, TAIL_START:]
+        matrix[row * ROW_BITS + _BACK] = restored
+    return np.asarray(matrix[order])
 
 
 # ---------------------------------------------------------------------------
@@ -537,7 +588,13 @@ def ofec_decode_stream(
 def ofec_decode(
     llr: np.ndarray, *, modulation: str = "qpsk", iterations: int = 3, test_bits: int = 4
 ) -> OFECDecodeResult:
-    """Line log-likelihood ratios (TP6 order) back to payload bits (TP2 order)."""
+    """Line log-likelihood ratios (TP6 order) back to payload bits (TP2 order).
+
+    The DO path, where the four encoders' outputs multiplex back into the codec
+    payload. A shaped mode's do not -- they go back through its shaper instead --
+    so :mod:`maiman.pcs` deinterleaves, calls :func:`untangle_tail` and decodes
+    each lane itself rather than coming through here.
+    """
     lanes = ofec_deinterleave(np.asarray(llr, dtype=np.float64), modulation)
     decoded = [
         ofec_decode_stream(lane, iterations=iterations, test_bits=test_bits) for lane in lanes

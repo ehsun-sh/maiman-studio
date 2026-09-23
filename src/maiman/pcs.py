@@ -65,7 +65,15 @@ from pathlib import Path
 
 import numpy as np
 
-from .wport import SHAPED, codec_bits
+from .ofec import ofec_encode_stream, ofec_interleave
+from .wport import (
+    PAYLOAD_SYMBOLS,
+    SHAPED,
+    codec_bits,
+    codec_payload,
+    dsp_frame,
+    symbol_levels,
+)
 
 __all__ = [
     "AMPLITUDE_BITS",
@@ -73,10 +81,14 @@ __all__ = [
     "LUT_WIDTHS",
     "SIGN_BITS",
     "TABLES_ENV",
+    "TAIL_PERMUTATION",
     "ShapingTables",
     "amplitude_and_sign",
+    "dpo_decode_note",
+    "dpo_transmit",
     "group_layout",
     "load_tables",
+    "shaped_encode",
     "shaped_lanes",
     "unshape_lanes",
 ]
@@ -358,3 +370,241 @@ def unshape_lanes(
             window[encoder::4] = stream
         out[frame * span : (frame + 1) * span] = window
     return out
+
+
+# ---------------------------------------------------------------------------
+# Clause 9.2.4: the post-encode 35-bit permute
+# ---------------------------------------------------------------------------
+
+#: Clause 9.2.4's permutation of a codeword's last 35 bits -- eighteen
+#: information bits and all seventeen parity ones -- which the shaped modes
+#: apply after the parity is computed, "to preserve the bit classes through the
+#: OFCBG". Entry ``j`` says where the output's ``j``-th tail bit comes from.
+#:
+#: There are four orderings and a codeword takes the one its index selects,
+#: ``r % 4``, which is the same period the block's own ``^ r`` twist runs on.
+#: Read off the specification's TP4 and TP5 for every mode and every encoder,
+#: because Figure 27's own table did not survive the document's conversion to
+#: a page of run-together digits.
+TAIL_PERMUTATION = np.array(
+    [
+        # r % 4 == 0
+        [
+            18,
+            1,
+            2,
+            19,
+            20,
+            0,
+            3,
+            21,
+            22,
+            4,
+            5,
+            23,
+            24,
+            6,
+            7,
+            25,
+            26,
+            8,
+            9,
+            27,
+            28,
+            10,
+            11,
+            29,
+            30,
+            12,
+            13,
+            31,
+            32,
+            14,
+            15,
+            33,
+            34,
+            16,
+            17,
+        ],
+        # r % 4 == 1
+        [
+            0,
+            1,
+            18,
+            19,
+            5,
+            2,
+            20,
+            21,
+            3,
+            4,
+            22,
+            23,
+            9,
+            6,
+            24,
+            25,
+            7,
+            8,
+            26,
+            27,
+            13,
+            10,
+            28,
+            29,
+            11,
+            12,
+            30,
+            31,
+            17,
+            14,
+            32,
+            33,
+            15,
+            16,
+            34,
+        ],
+        # r % 4 == 2
+        [
+            18,
+            1,
+            2,
+            19,
+            20,
+            4,
+            5,
+            21,
+            22,
+            0,
+            3,
+            23,
+            24,
+            8,
+            9,
+            25,
+            26,
+            6,
+            7,
+            27,
+            28,
+            12,
+            13,
+            29,
+            30,
+            10,
+            11,
+            31,
+            32,
+            16,
+            17,
+            33,
+            34,
+            14,
+            15,
+        ],
+        # r % 4 == 3
+        [
+            0,
+            1,
+            18,
+            19,
+            5,
+            4,
+            20,
+            21,
+            3,
+            2,
+            22,
+            23,
+            9,
+            8,
+            24,
+            25,
+            7,
+            6,
+            26,
+            27,
+            13,
+            12,
+            28,
+            29,
+            11,
+            10,
+            30,
+            31,
+            17,
+            16,
+            32,
+            33,
+            15,
+            14,
+            34,
+        ],
+    ],
+    dtype=np.int64,
+)
+
+
+def shaped_encode(lanes: np.ndarray) -> np.ndarray:
+    """The four encoders' input (TP4) to their output (TP5), with the tail permute.
+
+    The permute is applied inside the encoder rather than to its output, because
+    the rows twenty behind read these bits as their front halves: reordering the
+    output afterwards would leave every parity bit that followed wrong. See
+    :func:`maiman.ofec.ofec_encode_stream`.
+    """
+    taken = np.asarray(lanes, dtype=np.uint8)
+    if taken.ndim != 2 or taken.shape[1] != 4:
+        raise ValueError(f"expected four encoder lanes, got {taken.shape}")
+    return np.stack(
+        [ofec_encode_stream(taken[:, lane], tail=TAIL_PERMUTATION) for lane in range(4)],
+        axis=1,
+    )
+
+
+def dpo_transmit(
+    information: np.ndarray,
+    *,
+    modulation: str,
+    directory: str | None = None,
+    reserved: np.ndarray | None = None,
+) -> np.ndarray:
+    """A shaped mode end to end: FlexO information (TP0) to the symbols (TP7).
+
+    The DO path's :func:`maiman.wport.wport_transmit` with the shaper and the
+    tail permute in the middle. Everything after the encoder -- the interleavers,
+    the symbol mapper and the DSP frame -- is the same code the DO modes use,
+    because the shaping changed which constellation points are likely and
+    nothing else.
+    """
+    payload = codec_payload(information, modulation=modulation)
+    lanes = shaped_lanes(payload, modulation=modulation, directory=directory)
+    line = ofec_interleave([shaped_encode(lanes)[:, lane] for lane in range(4)], "16qam")
+    levels = symbol_levels(line, modulation=modulation)
+    return np.concatenate(
+        [
+            dsp_frame(
+                levels[start : start + PAYLOAD_SYMBOLS], modulation=modulation, reserved=reserved
+            )
+            for start in range(0, levels.shape[0], PAYLOAD_SYMBOLS)
+        ]
+    )
+
+
+def dpo_decode_note() -> str:
+    """Why there is no ``dpo_receive`` here, in one place a reader can find it.
+
+    The shaped path's transmitter is exact; its *decoder* is not written. The
+    reason is worth stating, because it is not laziness. Clause 9.2.4's permute
+    moves bits that a later row reads as its front half, so the matrix on the
+    line is not the matrix the parity was computed over: un-permuting the whole
+    stream restores the back halves and breaks the fronts, and leaving it alone
+    breaks the backs. A decoder for it has to hold both views at once -- fronts
+    as received, backs untangled -- which is a change inside the component
+    decoder rather than a wrapper around it.
+
+    What is here instead: :func:`unshape_lanes`, which inverts the shaper
+    exactly, so a receiver that has recovered the encoders' input by any means
+    can finish the job.
+    """
+    return dpo_decode_note.__doc__ or ""

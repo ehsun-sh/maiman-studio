@@ -23,6 +23,12 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from maiman.ofec import (
+    INFORMATION_BITS_PER_BLOCK,
+    TAIL_START,
+    ofec_encode_stream,
+    untangle_tail,
+)
 from maiman.pcs import (
     AMPLITUDE_BITS,
     ARRAYS,
@@ -31,11 +37,15 @@ from maiman.pcs import (
     LUT_WIDTHS,
     SIGN_BITS,
     TABLES_ENV,
+    TAIL_PERMUTATION,
     amplitude_and_sign,
+    dpo_decode_note,
+    dpo_transmit,
     group_bits,
     group_layout,
     load_tables,
     lut_bits,
+    shaped_encode,
     shaped_lanes,
     unshape_lanes,
 )
@@ -193,3 +203,74 @@ def test_without_the_tables_it_says_what_is_missing() -> None:
     load_tables.cache_clear()
     with pytest.raises(RuntimeError, match=TABLES_ENV):
         load_tables()
+
+
+# ---------------------------------------------------------------------------
+# Clause 9.2.4: the tail permute, and the whole shaped path
+# ---------------------------------------------------------------------------
+
+
+@BOTH
+@pytest.mark.parametrize("mode", SHAPED)
+def test_the_encoder_reproduces_tp5_with_the_tail_permute(mode: str) -> None:
+    assert np.array_equal(shaped_encode(vector(mode, "TP4")), vector(mode, "TP5"))
+
+
+@BOTH
+@pytest.mark.parametrize("mode", SHAPED)
+def test_the_whole_shaped_path_reproduces_tp7(mode: str) -> None:
+    """TP0 to TP7, which is the only point the specification requires."""
+    made = dpo_transmit(vector(mode, "TP0"), modulation=mode)
+    assert np.array_equal(
+        made, np.loadtxt(Path(str(VECTORS)) / mode / f"TP7_{mode}.txt", dtype=np.int8)
+    )
+
+
+def test_the_tail_permute_is_four_orderings_of_thirty_five() -> None:
+    assert TAIL_PERMUTATION.shape == (4, 35)
+    for ordering in TAIL_PERMUTATION:
+        assert sorted(ordering.tolist()) == list(range(35))
+    assert len({tuple(row) for row in TAIL_PERMUTATION.tolist()}) == 4, "and they differ"
+
+
+def test_the_permute_moves_the_codeword_s_last_bits_and_nothing_else() -> None:
+    """Eighteen information bits and all seventeen parity ones, per codeword."""
+    rng = np.random.default_rng(2)
+    u = rng.integers(0, 2, 4 * INFORMATION_BITS_PER_BLOCK, dtype=np.uint8)
+    plain = ofec_encode_stream(u)
+    tailed = ofec_encode_stream(u, tail=TAIL_PERMUTATION)
+    assert not np.array_equal(plain, tailed)
+    # Inside the first twenty square-block rows no front half is read, so the
+    # permute is only a reordering there and untangling it restores the stream.
+    assert np.array_equal(untangle_tail(tailed, TAIL_PERMUTATION), plain)
+    assert TAIL_START == 93, "the last 35 of a back half's 128"
+
+
+def test_past_twenty_rows_the_permute_is_in_the_parity_and_cannot_be_undone() -> None:
+    """The reason it is applied to the matrix and not to the output.
+
+    A row twenty back is read as this one's front half, and by then it has been
+    permuted -- so the parity that follows is parity over permuted bits, and no
+    reordering of the output can put that right.
+    """
+    rng = np.random.default_rng(3)
+    u = rng.integers(0, 2, 16 * INFORMATION_BITS_PER_BLOCK, dtype=np.uint8)
+    plain = ofec_encode_stream(u)
+    tailed = ofec_encode_stream(u, tail=TAIL_PERMUTATION)
+    restored = untangle_tail(tailed, TAIL_PERMUTATION)
+    assert np.array_equal(restored[: 10 * 4096], plain[: 10 * 4096]), "before the reach"
+    assert not np.array_equal(restored, plain), "and after it, no longer"
+
+
+def test_what_is_not_a_permutation_is_refused() -> None:
+    with pytest.raises(ValueError, match="four orderings"):
+        ofec_encode_stream(
+            np.zeros(INFORMATION_BITS_PER_BLOCK, dtype=np.uint8),
+            tail=np.zeros((2, 35), dtype=np.int64),
+        )
+    with pytest.raises(ValueError, match="output blocks"):
+        untangle_tail(np.zeros(100, dtype=np.uint8), TAIL_PERMUTATION)
+
+
+def test_the_missing_decoder_says_why_it_is_missing() -> None:
+    assert "front" in dpo_decode_note() and "unshape_lanes" in dpo_decode_note()
