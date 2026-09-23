@@ -644,12 +644,13 @@ Stated in the code where each approximation is made, and collected here:
 * **Coupling.** The etalon sum is paraxial, good to 7e-3 at six degrees of fibre tilt, and the gap
   between fibre and chip acts on the coupling as a multiplier rather than being solved with the
   grating inside the cavity.
-* **Transceivers.** A band's arrival time is carried as one number per carrier, so a span's
-  walk-off reaches the detector but its *shape* does not: within a band the span still disperses,
-  and two bands that have walked apart are still summed as powers rather than beaten together.
-  Only the direct-detection diode spends them, which is where they can be seen: a coherent front
-  end takes the one band nearest its local oscillator, and a meter or an analyser reads powers
-  that a delay does not move.
+* **Transceivers.** Bands within half the sample rate of each other beat — on a diode, and
+  against a local oscillator — each field late by its own walk-off; farther apart they add as
+  powers, which is the rejection any receiver's bandwidth performs anyway. What is not carried is
+  the carrier phase a span adds, `beta0 L`, which differs between wavelengths and is divided out
+  with the group delay, so a beat's constant phase is the retarded frame's. Between independent
+  lasers there is no such phase to get wrong; an interferometer built from two wavelengths of one
+  source would see it.
   The shaping tables are normative data and are loaded from `MAIMAN_WPORT_TABLES` rather than
   shipped, so the DPO path needs them present to run at all. Error marking is a flag per CRC32
   rather than 802.3 error blocks, which needs a client layer this has none of. The decoder is this

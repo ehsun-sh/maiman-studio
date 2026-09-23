@@ -3680,6 +3680,9 @@ Every physics block ships with a test against a closed-form result, run in CI
 | **Signal-ASE beat** | Q on an amplified link tracks `2√(B_ref/B_e)·OSNR/(1+√(1+4·OSNR))` to 15% | ✅ |
 | ASE beat, coherent | Electrical SNR converges on `2·OSNR·B_ref/R_s` as ASE dominates — 0.23 dB | ✅ |
 | Beat is polarization-selective | Co-polarized ASE beats; orthogonal ASE does not, on both detectors | ✅ |
+| **Two carriers beat** | Tone at `Δf` of `2R√(P_a·P_b)` on a diode to 1e-6; none between orthogonal carriers; a neighbour past half the sample rate still adds as a power | ✅ |
+| **Delayed self-heterodyne** | A laser against its own delayed copy keeps `exp(−π·Δν·τ)` of the tone: 0.505 for 0.500, 1 at zero delay | ✅ |
+| A coherent receiver hears what is in its band | A second carrier 6.25 GHz from the LO lands at `R√(P·P_lo)`, where only the nearest was detected before | ✅ |
 | Filter noise bandwidth | `B_n = B·Γ(1+1/2n)/ln2^(1/2n)`, against numerical integration; order 1 is the Gaussian | ✅ |
 | Filtered ASE power | Exactly density × `B_n`; a demux passes its own equivalent noise bandwidth | ✅ |
 | Wavelength selectivity | A filter between two channels attenuates both; rejection stops at `extinction` | ✅ |

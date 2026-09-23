@@ -6,13 +6,72 @@ Model reference: G. P. Agrawal, *Fiber-Optic Communication Systems*, ch. 4
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from itertools import combinations
+
 import numpy as np
 
 from ..component import BoolParam, Component, Param, PortType
 from ..context import SimulationContext
 from ..kernels import apply_group_delay
-from ..signals import ElectricalSignal, OpticalSignal, Signal
+from ..signals import Band, ElectricalSignal, OpticalSignal, Signal, WalkoffHistory
 from ..units import K_BOLTZMANN, Q_ELECTRON
+
+
+def within_reach(offset: float, ctx: SimulationContext) -> bool:
+    """Whether a beat at ``offset`` [Hz] lands inside what the sampled grid can hold.
+
+    Half the sample rate, which is the grid's own Nyquist limit: a tone past it
+    cannot be represented, and a receiver's electrical bandwidth is narrower than
+    the grid it is simulated on anyway. On a WDM grid every neighbour is out of
+    reach by an order of magnitude; two lasers 10 GHz apart are not.
+    """
+    return abs(offset) < ctx.sample_rate / 2.0
+
+
+def delayed_field(band: Band, delay: float) -> tuple[np.ndarray, np.ndarray]:
+    """A band's two field components, late by ``delay`` [s]."""
+    return (
+        apply_group_delay(band.Ex.astype(np.complex128), band.fs, delay),
+        apply_group_delay(band.Ey.astype(np.complex128), band.fs, delay),
+    )
+
+
+def mutual_beat(
+    bands: Sequence[Band], walkoff: WalkoffHistory, ctx: SimulationContext
+) -> tuple[np.ndarray, np.ndarray]:
+    """The cross terms a square-law detector adds between bands close enough to beat [W].
+
+    ``|E_a + E_b|^2`` is the two powers plus ``2 Re(E_a E_b* exp(2j pi (f_a - f_b) t))``,
+    per polarization -- so orthogonally polarized bands do not beat, and neither
+    does a pair farther apart than :func:`within_reach`. Each field is taken late
+    by its own walk-off first, because what beats is the two fields as they
+    arrive: a laser beaten against a delayed copy of itself loses coherence as
+    ``exp(-pi linewidth |delay|)``, which is how a delayed self-heterodyne
+    measures a linewidth.
+
+    **The beat's constant phase is not modelled.** A span's carrier phase,
+    ``beta0 L``, is divided out of every band along with its group delay, and it
+    differs between wavelengths; so the phase each tone starts at is the
+    retarded frame's and not the fibre's. Two independent lasers have no fixed
+    phase to get wrong. What the walk-off *does* fix -- when each field arrives,
+    and so how much of their phase noise the two still share -- is kept.
+    """
+    beat_x = np.zeros(ctx.num_samples, dtype=np.float64)
+    beat_y = np.zeros(ctx.num_samples, dtype=np.float64)
+    pairs = [(a, b) for a, b in combinations(bands, 2) if within_reach(a.f0 - b.f0, ctx)]
+    if not pairs:
+        return beat_x, beat_y
+    fields: dict[float, tuple[np.ndarray, np.ndarray]] = {}
+    for band in {id(band): band for pair in pairs for band in pair}.values():
+        fields[band.f0] = delayed_field(band, walkoff.at(band.f0))
+    time = ctx.time_axis()
+    for a, b in pairs:
+        (ax, ay), (bx, by) = fields[a.f0], fields[b.f0]
+        tone = np.exp(2j * np.pi * (a.f0 - b.f0) * time)
+        beat_x += 2.0 * np.real(ax * np.conj(bx) * tone)
+        beat_y += 2.0 * np.real(ay * np.conj(by) * tone)
+    return beat_x, beat_y
 
 
 class PINPhotodiode(Component):
@@ -30,15 +89,13 @@ class PINPhotodiode(Component):
     * **Thermal (Johnson) noise**, variance ``4 * k * T * B / R_load``,
       independent of the received power.
 
-    Two simplifications worth stating plainly, both of which change results and
-    neither of which is hidden by the interface:
-
-    * Bands are detected incoherently — powers add. Beating between bands lands
-      at their frequency separation, far above any realistic receiver bandwidth
-      for the channel spacings this is used with, but it is genuinely absent
-      rather than merely negligible.
-    * Bands are detected incoherently, so a *band* never beats with another band.
-      ASE does beat with the signal, and that is modelled — see below.
+    **Bands beat when they are close enough to.** A square law puts the cross
+    term ``2 Re(E_a E_b*)`` at the two bands' frequency separation. On a channel
+    grid that is hundreds of gigahertz, past anything the sampled grid can hold,
+    and those bands add as powers -- genuinely rejected, not merely neglected.
+    Two carriers closer than half the sample rate beat, and the tone is in the
+    photocurrent: see :func:`mutual_beat`. ASE beats with the signal too, and
+    that is modelled separately below.
 
     **When the bands did not arrive together.** Each band is an envelope in its
     own retarded frame, so summing them as they stand assumes they all arrived
@@ -149,8 +206,9 @@ class PINPhotodiode(Component):
         power_x = np.zeros(ctx.num_samples, dtype=np.float64)
         power_y = np.zeros(ctx.num_samples, dtype=np.float64)
         for band in signal.bands:
-            # The *power* is delayed, not the field: these bands are summed
-            # incoherently, and what arrives late is the intensity envelope.
+            # The *power* is delayed, not the field: this is each band's own
+            # term, and what arrives late is its intensity envelope. The cross
+            # terms between bands, which are fields, come after.
             # It is also the same operation :func:`maiman.laser.dispersed_power`
             # applies at the laser, which is what makes the two comparable rather
             # than merely similar -- squaring a delayed field instead would put
@@ -162,6 +220,12 @@ class PINPhotodiode(Component):
             py = np.abs(band.Ey.astype(np.complex128)) ** 2
             power_x += apply_group_delay(px, band.fs, delay)
             power_y += apply_group_delay(py, band.fs, delay)
+        # The cross terms, where there are any. Fields rather than powers; on a
+        # link whose bands are all out of each other's reach they are zeros, and
+        # adding them changes no bit of what this detector returned before.
+        beat_x, beat_y = mutual_beat(signal.bands, walkoff, ctx)
+        power_x += beat_x
+        power_y += beat_y
         # The strongest band, not the first. A detector has no wavelength
         # selectivity, so "which channel is this" is decided by whatever survived
         # the last filter — and on a demultiplexed comb the first band in the list

@@ -17,6 +17,7 @@ from ..dsp import circular_filter, root_raised_cosine
 from ..modulation import blind_phase_search
 from ..signals import Band, ElectricalSignal, OpticalSignal, Signal, SymbolSignal
 from ..units import K_BOLTZMANN, Q_ELECTRON
+from .detectors import delayed_field, within_reach
 
 
 class CoherentReceiver(Component):
@@ -73,11 +74,14 @@ class CoherentReceiver(Component):
     construction. That is a real advantage of the architecture rather than a
     simplification of the model.
 
-    Only the signal band nearest the LO is detected. The others beat at their
-    frequency separation — hundreds of GHz for any realistic channel grid — which
-    is far outside the electrical bandwidth of any receiver. They are genuinely
-    rejected here rather than merely negligible, and a WDM demultiplexer in front
-    is what makes that true in hardware.
+    The signal band nearest the LO is detected, and so is any other within half
+    the sample rate of it. The rest beat at their frequency separation — hundreds
+    of GHz for any realistic channel grid — which is far outside the electrical
+    bandwidth of any receiver; they are genuinely rejected here rather than merely
+    negligible, and a WDM demultiplexer in front is what makes that true in
+    hardware. A second carrier a few gigahertz from the LO is not rejected by
+    anything, and here it is not either: it lands in the photocurrent at its
+    offset, late by whatever it walked relative to the nearest band.
     """
 
     display_name = "Coherent Receiver"
@@ -106,6 +110,37 @@ class CoherentReceiver(Component):
             return None
         return min(signal.bands, key=lambda b: abs(b.f0 - f_lo))
 
+    def _mixed_bands(
+        self, signal: OpticalSignal, f_lo: float, ctx: SimulationContext
+    ) -> list[tuple[Band, float]]:
+        """Every band that beats with the LO, each with its arrival against the nearest one [s].
+
+        The nearest band always, as before; and any other whose offset from the
+        LO lands inside the grid, because two carriers that close are both in the
+        receiver's electrical band and a hybrid cannot tell them apart. Delays are
+        taken against the nearest band, so it arrives as it did before and only
+        the others move -- the frame is arbitrary, and a single band's own
+        walk-off is unobservable against an LO that did not travel with it.
+        """
+        nearest = self._nearest_band(signal, f_lo)
+        if nearest is None:
+            return []
+        others = [
+            band
+            for band in signal.bands
+            if band is not nearest and within_reach(band.f0 - f_lo, ctx)
+        ]
+        if not others:
+            return [(nearest, 0.0)]
+        walkoff = signal.walkoff
+        if walkoff.conflict and walkoff.walked:
+            raise ValueError(
+                f"{self.label}: the bands this LO beats with do not agree on when they "
+                f"arrived: {walkoff.conflict}"
+            )
+        anchor = walkoff.at(nearest.f0)
+        return [(nearest, 0.0)] + [(band, walkoff.at(band.f0) - anchor) for band in others]
+
     def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
         signal: OpticalSignal = inputs["in"]
         lo: OpticalSignal = inputs["lo"]
@@ -121,15 +156,12 @@ class CoherentReceiver(Component):
         lo_y = reference.Ey.astype(np.complex128)
         lo_power = reference.average_power()
 
-        band = self._nearest_band(signal, reference.f0)
-        if band is None:
-            mix = np.zeros(ctx.num_samples, dtype=np.complex128)
-        else:
+        mix = np.zeros(ctx.num_samples, dtype=np.complex128)
+        for index, (band, delay) in enumerate(self._mixed_bands(signal, reference.f0, ctx)):
             beat = np.exp(2j * np.pi * (band.f0 - reference.f0) * ctx.time_axis())
-            mix = (band.Ex.astype(np.complex128) * np.conj(lo_x)) + (
-                band.Ey.astype(np.complex128) * np.conj(lo_y)
-            )
-            mix = mix * beat
+            field_x, field_y = delayed_field(band, delay)
+            term = (field_x * np.conj(lo_x)) + (field_y * np.conj(lo_y))
+            mix = term * beat if index == 0 else mix + term * beat
 
         responsivity = self.si("responsivity")
         current_i = responsivity * mix.real
@@ -243,7 +275,7 @@ class DualPolarizationReceiver(CoherentReceiver):
         lo_phase = np.exp(1j * np.angle(reference.Ex.astype(np.complex128)))
         lo_branch = lo_amplitude * lo_phase
 
-        band = self._nearest_band(signal, reference.f0)
+        mixed = self._mixed_bands(signal, reference.f0, ctx)
         responsivity = self.si("responsivity")
         bandwidth = self.noise_bandwidth(ctx)
         # Each of the two hybrids sees half the LO.
@@ -267,11 +299,12 @@ class DualPolarizationReceiver(CoherentReceiver):
 
         out: dict[str, Signal] = {}
         for axis, field in (("x", "Ex"), ("y", "Ey")):
-            if band is None:
-                mix = np.zeros(ctx.num_samples, dtype=np.complex128)
-            else:
+            mix = np.zeros(ctx.num_samples, dtype=np.complex128)
+            for index, (band, delay) in enumerate(mixed):
                 beat = np.exp(2j * np.pi * (band.f0 - reference.f0) * ctx.time_axis())
-                mix = getattr(band, field).astype(np.complex128) * np.conj(lo_branch) * beat
+                component = delayed_field(band, delay)[0 if field == "Ex" else 1]
+                term = component * np.conj(lo_branch) * beat
+                mix = term if index == 0 else mix + term
 
             for quadrature, part in (("i", mix.real), ("q", mix.imag)):
                 current = responsivity * part
