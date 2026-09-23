@@ -139,6 +139,21 @@ class FiberBraggGrating(ScatteringDevice):
         doc="Pieces the transfer-matrix model cuts the grating into",
     )
 
+    #: Writing a fringe raises the average index under it too. A compensated
+    #: exposure evens that out, and ``bragg_wavelength`` is then where the
+    #: grating reflects; an uncompensated one reflects ``dn_avg / n_eff`` of it
+    #: higher, with ``dn_avg = index_modulation / fringe_visibility`` -- 0.107 nm
+    #: at 1e-4 and full visibility -- and an apodized one chirps itself.
+    dc_compensated = BoolParam(True, doc="The writing held the average index flat")
+    fringe_visibility = Param(
+        1.0,
+        unit="",
+        min=0.01,
+        max=1.0,
+        doc="Fringe amplitude over the average index it sits on",
+        applies_when="!dc_compensated",
+    )
+
     #: A break in the periodicity, which puts a transmission window in the middle
     #: of the stop band -- the DFB laser's cavity, and the narrowest thing a
     #: grating of a given length can make. At pi, dead centre, a 2 cm grating's
@@ -286,9 +301,21 @@ class FiberBraggGrating(ScatteringDevice):
         """
         return float(np.tanh(self.coupling() * self.si("length")) ** 2)
 
+    def average_index_shift(self) -> float:
+        """How far the uncompensated pedestal moves a uniform grating's reflection [m].
+
+        ``lambda_B * dn_avg / n_eff``, zero when the writing compensated it. For
+        an apodized grating the pedestal varies along the length and this is its
+        peak value's shift, which the reflection does not reach.
+        """
+        if self.dc_compensated:
+            return 0.0
+        pedestal = self.index_modulation / self.fringe_visibility
+        return self.sensed_bragg_wavelength() * pedestal / self.n_eff
+
     def spectral_window(self) -> tuple[float, float]:
         """The Bragg line, four of its own widths across, as sensed."""
-        centre = self.sensed_bragg_wavelength()
+        centre = self.sensed_bragg_wavelength() + self.average_index_shift()
         half = 2.0 * self.bandwidth()
         return centre - half, centre + half
 
@@ -376,6 +403,7 @@ class FiberBraggGrating(ScatteringDevice):
             else None
         )
         window = "uniform" if coupling is not None else self.apodization
+        visibility = None if self.dc_compensated else self.fringe_visibility
 
         return solve_once(
             lambda f: fiber_bragg_grating(
@@ -389,6 +417,7 @@ class FiberBraggGrating(ScatteringDevice):
                 coupling_profile=coupling,
                 phase_profile=phase,
                 sections=pieces,
+                visibility=visibility,
             )
         )
 

@@ -49,17 +49,24 @@ BRAGG = 1550e-9
 
 
 def erdogan_uniform(
-    wavelengths: np.ndarray, *, length: float, index_modulation: float, n_eff: float
+    wavelengths: np.ndarray,
+    *,
+    length: float,
+    index_modulation: float,
+    n_eff: float,
+    pedestal: float = 0.0,
 ) -> np.ndarray:
     """Reflectivity of a uniform grating, from the literature rather than the model.
 
     Erdogan, *Fiber Grating Spectra*, J. Lightwave Technol. 15(8), 1997, eq. 16,
-    with the average index taken as compensated so the self-coupling term is the
-    detuning alone. Written out in full here precisely so that it shares no
-    arithmetic with :func:`maiman.photonics.fiber_bragg_grating`, which builds
-    the same answer by multiplying two hundred matrices together.
+    with the general self-coupling ``sigma-hat = delta + sigma``: ``delta`` the
+    detuning and ``sigma = 2 pi dn_avg / lambda`` the average index the writing
+    left, zero when it was compensated. Written out in full here precisely so
+    that it shares no arithmetic with :func:`maiman.photonics.fiber_bragg_grating`,
+    which builds the same answer by multiplying two hundred matrices together.
     """
     detuning = 2.0 * np.pi * n_eff * (1.0 / wavelengths - 1.0 / BRAGG)
+    detuning = detuning + 2.0 * np.pi * pedestal / wavelengths
     kappa = np.pi * index_modulation / wavelengths
     gamma = np.sqrt((kappa**2 - detuning**2).astype(np.complex128))
     numerator = -kappa * np.sinh(gamma * length)
@@ -346,6 +353,131 @@ def test_the_section_count_has_converged_by_the_default() -> None:
     assert slope(2000) == pytest.approx(predicted, rel=2e-3)
 
 
+# --------------------------------------------------------------------------
+# The average index the writing raises, when nothing compensated it
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("visibility", [1.0, 0.5])
+def test_an_uncompensated_grating_reproduces_the_closed_form_with_its_pedestal(
+    visibility: float,
+) -> None:
+    """Erdogan's eq. 16 with ``sigma = 2 pi dn_avg / lambda`` in the detuning."""
+    wavelengths = np.linspace(BRAGG - 1e-9, BRAGG + 1.5e-9, 2501)
+    matrix = fiber_bragg_grating(
+        C_LIGHT / wavelengths,
+        length=0.01,
+        index_modulation=1e-4,
+        bragg_wavelength=BRAGG,
+        visibility=visibility,
+    )
+    predicted = erdogan_uniform(
+        wavelengths,
+        length=0.01,
+        index_modulation=1e-4,
+        n_eff=SILICA_FIBER_NEFF,
+        pedestal=1e-4 / visibility,
+    )
+    assert matrix.power("in", "in") == pytest.approx(predicted, abs=1e-9)
+
+
+@pytest.mark.parametrize("visibility", [1.0, 0.5])
+def test_it_reflects_high_by_the_pedestal_over_the_index(visibility: float) -> None:
+    """``lambda_max = lambda_B (1 + dn_avg / n_eff)``: 0.107 nm at 1e-4 and full visibility."""
+    wavelengths = np.linspace(BRAGG - 0.5e-9, BRAGG + 1e-9, 150001)  # 10 fm steps
+    reflected = fiber_bragg_grating(
+        C_LIGHT / wavelengths,
+        length=0.01,
+        index_modulation=1e-4,
+        bragg_wavelength=BRAGG,
+        visibility=visibility,
+    ).power("in", "in")
+    expected = BRAGG * (1.0 + 1e-4 / visibility / SILICA_FIBER_NEFF)
+    assert wavelengths[np.argmax(reflected)] == pytest.approx(expected, abs=2e-14)
+    if visibility == 1.0:
+        assert (expected - BRAGG) * 1e9 == pytest.approx(0.107, abs=0.001)
+
+
+def test_a_pedestal_is_an_index_the_mode_sees_everywhere() -> None:
+    """Exactly a compensated grating in a fibre of index ``n_eff + dn_avg``.
+
+    ``delta + sigma = 2 pi (n_eff + dn_avg)(1 / lambda - 1 / lambda_B')`` with
+    ``lambda_B' = lambda_B (1 + dn_avg / n_eff)`` -- the pedestal is an index
+    raise the fringe period does not follow, and that identity holds matrix
+    entry for matrix entry, not only in reflected power.
+    """
+    frequencies = C_LIGHT / np.linspace(BRAGG - 1e-9, BRAGG + 1.5e-9, 1001)
+    pedestal = 1e-4
+    raw = fiber_bragg_grating(
+        frequencies, length=0.01, index_modulation=1e-4, bragg_wavelength=BRAGG, visibility=1.0
+    )
+    raised = fiber_bragg_grating(
+        frequencies,
+        length=0.01,
+        index_modulation=1e-4,
+        bragg_wavelength=BRAGG * (1.0 + pedestal / SILICA_FIBER_NEFF),
+        n_eff=SILICA_FIBER_NEFF + pedestal,
+    )
+    assert np.max(np.abs(raw.s - raised.s)) < 1e-10
+
+
+def sidelobes(wavelengths: np.ndarray, reflected: np.ndarray) -> tuple[float, float]:
+    """The largest local maximum each side of the main peak: ``(short side, long side)``."""
+    peak = int(np.argmax(reflected))
+    inner = reflected[1:-1]
+    local = np.where((inner > reflected[:-2]) & (inner > reflected[2:]))[0] + 1
+    local = local[local != peak]
+    short = reflected[local[local < peak]].max()
+    long = reflected[local[local > peak]].max()
+    return float(short), float(long)
+
+
+def test_an_uncompensated_apodized_grating_chirps_itself_short_of_its_peak() -> None:
+    """The pedestal follows the Gaussian, so the middle reflects longest and the ends shortest.
+
+    Light short of the peak is turned round by both ends and not by the middle:
+    a Fabry-Perot the apodization was meant to remove. Measured: 5.9e-3 against
+    the compensated grating's 4.2e-5 -- 140 times -- on the short side, and the
+    long side barely moves. Erdogan (1997) sec. III-C shows the same structure.
+    """
+    wavelengths = np.linspace(BRAGG - 0.7e-9, BRAGG + 0.9e-9, 32001)
+    frequencies = C_LIGHT / wavelengths
+
+    def spectrum(visibility: float | None) -> np.ndarray:
+        return fiber_bragg_grating(
+            frequencies,
+            length=0.01,
+            index_modulation=1e-4,
+            bragg_wavelength=BRAGG,
+            apodization="gaussian",
+            visibility=visibility,
+        ).power("in", "in")
+
+    clean_short, clean_long = sidelobes(wavelengths, spectrum(None))
+    short, long = sidelobes(wavelengths, spectrum(1.0))
+    assert clean_short == pytest.approx(clean_long, rel=0.02), "compensated, it is symmetric"
+    assert short > 100.0 * clean_short
+    assert long < 3.0 * clean_long
+
+
+def test_the_block_carries_the_pedestal_only_when_told_to() -> None:
+    """Compensated by default, and the window follows the reflection when it is not."""
+    compensated = FiberBraggGrating()
+    assert compensated.dc_compensated
+    assert compensated.average_index_shift() == 0.0
+    spec = FiberBraggGrating.param_specs()["fringe_visibility"]
+    assert spec.applies_when == "!dc_compensated"
+
+    raw = FiberBraggGrating(dc_compensated=False, fringe_visibility=0.5)
+    assert raw.average_index_shift() == pytest.approx(BRAGG * 2e-4 / SILICA_FIBER_NEFF, rel=1e-12)
+    low, high = raw.spectral_window()
+    wavelengths = np.linspace(low, high, 20001)
+    matrix = raw._matrix_factory()(C_LIGHT / wavelengths)
+    peak = wavelengths[np.argmax(matrix.power("in", "in"))]
+    assert peak == pytest.approx(BRAGG + raw.average_index_shift(), abs=1e-13)
+    assert low < peak < high
+
+
 def test_an_unmodulated_grating_is_a_piece_of_fibre() -> None:
     """Zero index modulation is the degenerate case, and it must not be a nan.
 
@@ -368,6 +500,8 @@ def test_an_unmodulated_grating_is_a_piece_of_fibre() -> None:
         ({"bragg_wavelength": 0.0}, "bragg_wavelength must be positive"),
         ({"sections": 0}, "sections must be at least 1"),
         ({"apodization": "hamming"}, "unknown apodization"),
+        ({"visibility": 0.0}, "fringe visibility is in"),
+        ({"visibility": 1.5}, "fringe visibility is in"),
     ],
 )
 def test_the_model_refuses_what_it_cannot_describe(kwargs: dict, message: str) -> None:

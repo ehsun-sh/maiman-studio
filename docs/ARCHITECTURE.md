@@ -642,8 +642,10 @@ Stated in the code where each approximation is made, and collected here:
 * **Fibre.** With `pump_phase`, four-wave mixing carries the pumps' Kerr phase as a phase only: the
   coherent polarization term's exchange of power between the axes is not part of it, and products
   mix again among themselves only as far as each span's own bookkeeping reaches.
-* **Gratings and modes.** The average index a writing process raises is not included, and a
-  dispersing fibre's surrounding medium stays constant.
+* **Gratings and modes.** The average index a writing process raises is carried for the fibre
+  Bragg grating, as the self-coupling Erdogan's coupled-mode equations give it, when its
+  `dc_compensated` flag is off; the long-period and tilted gratings still take it as
+  compensated. A dispersing fibre's surrounding medium stays constant.
 * **Coupling.** The etalon sum is paraxial, good to 7e-3 at six degrees of fibre tilt, and the gap
   between fibre and chip acts on the coupling as a multiplier rather than being solved with the
   grating inside the cavity.

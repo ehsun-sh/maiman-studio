@@ -858,6 +858,7 @@ def fiber_bragg_grating(
     phase_profile: np.ndarray | None = None,
     sections: int = DEFAULT_GRATING_SECTIONS,
     ports: tuple[str, str] = ("in", "out"),
+    visibility: float | None = None,
 ) -> SMatrix:
     """A periodic index modulation in a fibre core: the library's first mirror.
 
@@ -886,13 +887,20 @@ def fiber_bragg_grating(
     which is 0.58 at ``kappa L = 1`` and 0.9993 at 4.
 
     ``bragg_wavelength`` is where it reflects, ``2 * n_eff * Lambda`` for a
-    period ``Lambda``. **The average index is taken as compensated**, which is
-    what a modern writing process aims for and what makes this parameter mean
-    what it says. Writing a grating raises the average index as well, and an
-    uncompensated one reflects at ``lambda_B * (1 + delta-n / n_eff)`` — 0.107 nm
-    high at 1550 nm and ``delta-n = 1e-4``, which is two channels on a 100 GHz
-    grid. Apodizing an uncompensated grating is worse than a shift: the average
-    index then varies along the length, which is a chirp nobody asked for.
+    period ``Lambda``, **when the average index is compensated** -- which is what
+    a modern writing process aims for and what ``visibility=None``, the default,
+    means. Writing a grating raises the average index as well as modulating it:
+    Erdogan's ``delta-n(z) = dn_avg(z) [1 + v cos(2 pi z / Lambda)]``, so a fringe
+    of amplitude ``delta-n`` at visibility ``v`` sits on a pedestal
+    ``dn_avg = delta-n / v``. Pass ``visibility`` and that pedestal is carried, as
+    the self-coupling ``sigma = 2 pi dn_avg / lambda`` added to the detuning. A
+    uniform grating then reflects at ``lambda_B * (1 + dn_avg / n_eff)`` — 0.107 nm
+    high at 1550 nm and ``delta-n = 1e-4``, full visibility, which is two
+    channels on a 100 GHz grid. Apodizing it is worse than a shift: the pedestal
+    follows the exposure, so the average index varies along the length, which is
+    a chirp nobody asked for -- the local Bragg wavelength is highest in the
+    middle, and the short-wavelength skirt turns into a Fabry-Perot between the
+    two ends.
 
     ``chirp`` is the *total* change in local Bragg wavelength from the input face
     to the far one, so a positive value puts the short wavelengths at the near
@@ -948,6 +956,11 @@ def fiber_bragg_grating(
             "bragg_profile and chirp both set the local Bragg wavelength; pass one. "
             "A linear chirp is bragg_wavelength + chirp * section_positions(sections)."
         )
+    if visibility is not None and not 0.0 < visibility <= 1.0:
+        raise ValueError(
+            f"fringe visibility is in (0, 1], got {visibility}; None means the average "
+            "index is compensated"
+        )
 
     # The profiles decide the section count when they are given, because a length
     # that disagreed with them would have to be resolved by truncating or padding
@@ -997,8 +1010,14 @@ def fiber_bragg_grating(
     f21 = np.zeros_like(f11)
     f22 = np.ones_like(f11)
 
+    # The pedestal the exposure leaves under the fringe, which follows the fringe
+    # along the length: zero when the writing compensated it.
+    pedestal = np.zeros(sections) if visibility is None else strength / visibility
+
     for index in range(sections):
         detuning = 2.0 * np.pi * n_eff * (1.0 / wavelengths - 1.0 / local_bragg[index])
+        if visibility is not None:
+            detuning = detuning + 2.0 * np.pi * pedestal[index] / wavelengths
         kappa = np.pi * strength[index] / wavelengths
         # Complex on purpose. Inside the stop band the coupling exceeds the
         # detuning and gamma is real, which is the exponential decay that makes a
