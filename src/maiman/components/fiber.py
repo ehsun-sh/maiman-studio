@@ -19,12 +19,15 @@ from ..component import BoolParam, Component, Param, PortType
 from ..context import SimulationContext
 from ..kernels import (
     ORTHOGONAL_KERR_WEIGHT,
+    POLARIZED,
     RAMAN_TRIANGLE_LIMIT,
     PMDSection,
     PropagationDiagnostics,
     apply_pmd,
     attenuation_db_per_m_to_alpha,
     coherency,
+    cross_kerr_matrix,
+    degree_of_polarization,
     differential_group_delay,
     dispersion_slope_to_beta3,
     dispersion_to_beta2,
@@ -37,6 +40,8 @@ from ..kernels import (
     fwm_product_power,
     fwm_vector_drive,
     kerr_rate,
+    kerr_rate_in_state,
+    principal_state,
     propagate_coupled_ssfm,
     propagate_dispersion,
     raman_tilt,
@@ -671,6 +676,9 @@ class Fiber(Component):
         length = effective_length(alpha, self.si("length"))
         weight = ORTHOGONAL_KERR_WEIGHT if self.cross_polarization else 0.0
         coupled = self._couples_bands(signal)
+        states = self._polarized_states(signal)
+        if states is not None:
+            return self._history_in_states(signal, states, gamma=gamma, length=length)
         powers = [
             (float(np.mean(np.abs(b.Ex) ** 2)), float(np.mean(np.abs(b.Ey) ** 2)))
             for b in signal.bands
@@ -692,6 +700,72 @@ class Fiber(Component):
             carriers=tuple((f0, x, y) for f0, (x, y) in sorted(carriers.items())),
             weak=(before.weak[0] + weak_rate[0] * length, before.weak[1] + weak_rate[1] * length),
             conflict=before.conflict,
+        )
+
+    def _polarized_states(self, signal: OpticalSignal) -> list[np.ndarray] | None:
+        """Each band's coherency, when the axes are coupled and every band is in one state.
+
+        ``None`` otherwise: with the axes independent each is its own scalar
+        problem, and a band of two independent tributaries has no one state for
+        its Kerr phase to be taken in, so both keep the per-axis form.
+        """
+        if not self.cross_polarization or not signal.bands:
+            return None
+        states = [coherency(b.Ex, b.Ey) for b in signal.bands]
+        for state in states:
+            if float(np.trace(state).real) > 0.0 and degree_of_polarization(state) < POLARIZED:
+                return None
+        return states
+
+    def _history_in_states(
+        self, signal: OpticalSignal, states: list[np.ndarray], *, gamma: float, length: float
+    ) -> KerrHistory:
+        """:meth:`_nonlinear_history` with each carrier turned in its own state.
+
+        A carrier's angle is its rate in its own state times ``L_eff``, the same on
+        both axes because it is one wave; the weak carrier's is kept as the matrix
+        it accumulates, because its angle depends on the state a product lands in.
+        A carrier the history has not seen starts from the weak carrier's angle in
+        that carrier's state.
+        """
+        before = signal.nonlinear_history
+        coupled = self._couples_bands(signal)
+        coherent = self.coherent_polarization
+        added = np.zeros((2, 2), dtype=np.complex128)
+        if coupled:
+            for state in states:
+                added = added + cross_kerr_matrix(state, coherent=coherent)
+        added = gamma * length * added
+        if before.weak_matrix:
+            wxx, wyy, re, im = before.weak_matrix
+            start = np.array([[wxx, complex(re, im)], [complex(re, -im), wyy]])
+        else:
+            start = np.diag(np.array(before.weak, dtype=np.complex128))
+        weak = start + added
+        carriers = {f0: (x, y) for f0, x, y in before.carriers}
+        for index, band in enumerate(signal.bands):
+            if float(np.trace(states[index]).real) <= 0.0:
+                continue
+            state = principal_state(states[index])
+            known = [f for f in carriers if abs(f - band.f0) <= 1e-9 * band.f0]
+            begun = carriers[known[0]][0] if known else before.weak_in(state)
+            for f in known:
+                del carriers[f]
+            rate = kerr_rate_in_state(
+                gamma, states, state, own=index, coherent=coherent, cross_phase=coupled
+            )
+            angle = begun + rate * length
+            carriers[band.f0] = (angle, angle)
+        return KerrHistory(
+            carriers=tuple((f0, x, y) for f0, (x, y) in sorted(carriers.items())),
+            weak=(float(weak[0, 0].real), float(weak[1, 1].real)),
+            conflict=before.conflict,
+            weak_matrix=(
+                float(weak[0, 0].real),
+                float(weak[1, 1].real),
+                float(weak[0, 1].real),
+                float(weak[0, 1].imag),
+            ),
         )
 
     def _mix(
@@ -753,9 +827,15 @@ class Fiber(Component):
         a circular product. Before, a beam at 45 degrees mixed at a quarter of the
         strength it does on the axis.
 
-        The pumps' own Kerr phase, with ``pump_phase``, is still taken per axis
-        as a phase: exact on an axis, and 10.6 % high at 45 degrees against the
-        split-step with the coherent term. And the phases are those the
+        With ``pump_phase`` too, and every band in one state, the pumps' Kerr
+        phase is taken in each carrier's own state rather than per axis --
+        :func:`~maiman.kernels.kerr_rate_in_state`, from the same matrices the
+        split-step steps each band through -- and the signal's history keeps the
+        weak carrier's accumulated matrix, because the angle a new product's
+        carrier has reached depends on the state it lands in. Linear light at any
+        angle then adds from span to span as it does on the axis. Circular light
+        does not yet over several spans (maiman-sew). A band of two independent
+        tributaries has no one state, and keeps the per-axis form. And the phases are those the
         split-step applies, so the product's own phase runs the way its fields
         do: the flag changes which way the drawn phase and the mismatch combine,
         which is why it is off by default and moves nothing until set.
@@ -793,6 +873,9 @@ class Fiber(Component):
         # With the axes coupled, the drive is a vector: each band's coherency,
         # not only its two powers, decides what it mixes into on each axis.
         states = [coherency(b.Ex, b.Ey) for b in sources] if self.cross_polarization else []
+        # A band of two independent tributaries has no one state for its Kerr
+        # phase to be taken in; then every rate stays per axis.
+        polarized = self._polarized_states(signal) is not None
 
         def power_at(frequency: float) -> tuple[float, float]:
             for band, power in zip(sources, powers, strict=True):
@@ -850,6 +933,55 @@ class Fiber(Component):
                         # phase is the drive's, taken against its stronger axis.
                         lead = int(np.argmax([drive[0, 0].real, drive[1, 1].real]))
                         skew = [float(np.angle(drive[axis, lead])) for axis in (0, 1)]
+                        if self.pump_phase and polarized:
+                            # In each carrier's own state rather than per axis: the
+                            # drive turns at rate_i + rate_j - rate_k, the product in
+                            # the state the drive gives it, and every neighbour is
+                            # read in the state it acts on. One number, since the
+                            # product is one wave.
+                            landed = next(
+                                (
+                                    index
+                                    for index, band in enumerate(sources)
+                                    if abs(band.f0 - frequency) <= MIXING_MERGE_TOLERANCE
+                                ),
+                                None,
+                            )
+                            carriers = [
+                                kerr_rate_in_state(
+                                    gamma,
+                                    states,
+                                    principal_state(states[n]),
+                                    own=n,
+                                    coherent=self.coherent_polarization,
+                                    cross_phase=coupled,
+                                )
+                                for n in (i, j, k)
+                            ]
+                            product = kerr_rate_in_state(
+                                gamma,
+                                states,
+                                principal_state(drive),
+                                own=landed,
+                                coherent=self.coherent_polarization,
+                                cross_phase=coupled,
+                            )
+                            rate = carriers[0] + carriers[1] - carriers[2] - product
+                            rates = (rate, rate)
+                            # And between spans, from the history kept in the same
+                            # terms: the drive's walk against the angle the product's
+                            # carrier -- a channel, or the weak one in the product's
+                            # state -- had reached, and the frame it has been turned to.
+                            landing_state = principal_state(drive)
+                            history = signal.nonlinear_history
+                            reached = history.angle_in(frequency, landing_state)
+                            turned = after.angle_in(frequency, landing_state)
+                            pumped = [
+                                history.angle_in(sources[n].f0, principal_state(states[n]))
+                                for n in (i, j, k)
+                            ]
+                            step = pumped[0] + pumped[1] - pumped[2] - reached
+                            walked, frame = (step, step), (turned, turned)
                     else:
                         strengths = [
                             (powers[i][axis], powers[j][axis], powers[k][axis]) for axis in (0, 1)

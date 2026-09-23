@@ -19,9 +19,15 @@ import math
 import numpy as np
 import pytest
 
-from maiman.components import Fiber
+from maiman.components import EDFA, Fiber
 from maiman.context import SimulationContext
-from maiman.kernels import coherency, fwm_phase_mismatch, fwm_vector_drive, propagate_coupled_ssfm
+from maiman.kernels import (
+    attenuation_db_per_m_to_alpha,
+    coherency,
+    fwm_phase_mismatch,
+    fwm_vector_drive,
+    propagate_coupled_ssfm,
+)
 from maiman.signals import Band, OpticalSignal
 
 ANCHOR = 193.1e12
@@ -235,20 +241,138 @@ def test_without_cross_polarization_each_axis_stays_its_own_scalar_problem() -> 
     assert diagonal / on_axis == pytest.approx(0.25, rel=0.01)
 
 
-@pytest.mark.parametrize(
-    ("name", "measured"),
-    [("x", 1.001), ("45 degrees", 1.106), ("circular", 1.030), ("elliptical", 1.004)],
-)
-def test_what_the_pumps_phase_still_leaves_off_the_axis(name: str, measured: float) -> None:
-    """Pinned, not tuned: at 20 mW the Kerr phase is taken per axis, as a phase only.
+@pytest.mark.parametrize("coherent", [True, False])
+@pytest.mark.parametrize("name", list(STATES))
+def test_with_the_pumps_phase_the_product_is_the_split_step_s_in_every_state(
+    name: str, coherent: bool
+) -> None:
+    """20 mW, a quarter of a radian: the Kerr phase taken in each carrier's own state.
 
-    On an axis that is exact and the product lands within 0.1 %; off it, the
-    coherent term turns a state's own phase at a rate the per-axis form does not
-    see, and the product is 10.6 % high at 45 degrees. That is the part of the
-    vector problem still open (maiman-l43), and this is where it stands: a change
-    that moves these numbers should say why.
+    Measured 0.997 to 1.001 across all eight. Taken per axis, as it was, the
+    45-degree beam came out 10.6 % high with the coherent term and 6.5 % without:
+    a linear state is turned by all of its power, where each axis alone is turned
+    by five sixths of it.
     """
     ratio = modelled(
-        STATES[name], coherent=True, pump=20e-3, signal=20e-6, pump_phase=True
-    ) / reference(STATES[name], coherent=True, pump=20e-3, signal=20e-6)
-    assert ratio == pytest.approx(measured, abs=0.003)
+        STATES[name], coherent=coherent, pump=20e-3, signal=20e-6, pump_phase=True
+    ) / reference(STATES[name], coherent=coherent, pump=20e-3, signal=20e-6)
+    assert ratio == pytest.approx(1.0, abs=0.005)
+
+
+# ---------------------------------------------------------------------------
+# Four amplified spans: the history the signal carries between them
+# ---------------------------------------------------------------------------
+
+
+def reference_link(jones: tuple[complex, complex], dispersion: float, *, coherent: bool) -> float:
+    """Four 80 km spans and 16 dB amplifiers, every tone in one band [W]."""
+    n, fs = 2048, 1.6e12
+    t = np.arange(n) / fs
+    alpha = attenuation_db_per_m_to_alpha(0.2e-3)
+    b2 = Fiber(dispersion=dispersion).reference_beta2(
+        OpticalSignal(
+            bands=(
+                Band(
+                    Ex=np.ones(256, dtype=np.complex128),
+                    Ey=np.zeros(256, dtype=np.complex128),
+                    f0=ANCHOR,
+                    fs=160e9,
+                ),
+            )
+        )
+    )
+    tone = np.sqrt(20e-3) + np.sqrt(20e-6) * np.exp(2j * np.pi * SPACING * t)
+    fields = [jones[0] * tone, jones[1] * tone]
+    mismatch = abs(fwm_phase_mismatch(b2, 0.0, 0.0, SPACING))
+    for _ in range(4):
+        fields, _ = propagate_coupled_ssfm(
+            fields,
+            fs,
+            beta2=[b2, b2],
+            walkoff=[0.0, 0.0],
+            gamma=GAMMA * 1e-3,
+            polarization=[0, 1],
+            pairs=[(0, 1)],
+            coherent_polarization=coherent,
+            alpha=alpha,
+            distance=80e3,
+            max_nonlinear_phase=1e-3,
+            max_step=0.05 / mismatch,
+        )
+        fields = [field * math.exp(alpha * 80e3 / 2.0) for field in fields]
+    bin_ = -round(SPACING / (fs / n))
+    return float(sum(abs(np.fft.fft(field)[bin_] / n) ** 2 for field in fields))
+
+
+def modelled_link(jones: tuple[complex, complex], dispersion: float, *, coherent: bool) -> float:
+    """The same link through the fibre block, as two bands [W]."""
+    signal = OpticalSignal(
+        bands=tuple(
+            Band(
+                Ex=np.full(256, jones[0] * np.sqrt(power), dtype=np.complex128),
+                Ey=np.full(256, jones[1] * np.sqrt(power), dtype=np.complex128),
+                f0=ANCHOR + index * SPACING,
+                fs=160e9,
+            )
+            for index, power in enumerate((20e-3, 20e-6))
+        )
+    )
+    for index in range(4):
+        signal = Fiber(
+            length=80.0,
+            attenuation=0.2,
+            dispersion=dispersion,
+            nonlinearity=GAMMA,
+            mixing_floor=250.0,
+            pump_phase=True,
+            cross_polarization=True,
+            coherent_polarization=coherent,
+            label=f"span{index}",
+        ).run(CTX, {"in": signal})["out"]
+        signal = EDFA(gain=16.0, noise_figure=0.0, label=f"amp{index}").run(CTX, {"in": signal})[
+            "out"
+        ]
+    product = next(b for b in signal.bands if abs(b.f0 - (ANCHOR - SPACING)) < 1e3)
+    return float(np.mean(np.abs(product.Ex) ** 2) + np.mean(np.abs(product.Ey) ** 2))
+
+
+@pytest.mark.parametrize("coherent", [True, False])
+@pytest.mark.parametrize("dispersion", [4.0, -4.0])
+@pytest.mark.parametrize("name", ["x", "45 degrees"])
+def test_four_spans_add_as_the_split_step_adds_them_in_any_linear_state(
+    name: str, dispersion: float, coherent: bool
+) -> None:
+    """A linear state at 45 degrees lands exactly where the one on the axis does.
+
+    1.040 at D = +4 and 1.011 at D = -4, the same for both, and within the 5 %
+    the scalar four-span test holds. The history carries each carrier's angle in
+    its own state and the weak carrier's as a matrix, because the angle a
+    product's carrier has reached depends on the state the product lands in.
+    Taken per axis, the 45-degree link was off by up to 2.6 times.
+    """
+    ratio = modelled_link(STATES[name], dispersion, coherent=coherent) / reference_link(
+        STATES[name], dispersion, coherent=coherent
+    )
+    assert ratio == pytest.approx(1.0, abs=0.05)
+
+
+@pytest.mark.parametrize(
+    ("dispersion", "coherent", "measured"),
+    [(4.0, True, 1.686), (-4.0, True, 1.102), (4.0, False, 6.378), (-4.0, False, 0.291)],
+)
+def test_what_circular_light_still_gets_wrong_over_several_spans(
+    dispersion: float, coherent: bool, measured: float
+) -> None:
+    """Pinned, not tuned (maiman-sew): one span is right, several are not.
+
+    A circular link's product is within 0.1 % after one span, co-circular as the
+    split-step's is, with no parametric gain and nothing in the orthogonal
+    state -- and four spans still add wrongly, by a factor of 1.7 with the
+    coherent term and far more without. Linear states at any angle are right;
+    what differs for a circular one is not yet found. A change that moves these
+    numbers should say why.
+    """
+    ratio = modelled_link(STATES["circular"], dispersion, coherent=coherent) / reference_link(
+        STATES["circular"], dispersion, coherent=coherent
+    )
+    assert ratio == pytest.approx(measured, rel=0.02)

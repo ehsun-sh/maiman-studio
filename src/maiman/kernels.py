@@ -1139,6 +1139,92 @@ def kerr_rate(
     return gamma * (x + orthogonal_weight * y), gamma * (y + orthogonal_weight * x)
 
 
+#: How nearly one state of polarization a band has to be for its Kerr phase to
+#: be taken in that state. A band carrying two independent tributaries has
+#: none, and is left to the per-axis form.
+POLARIZED = 0.999
+
+
+def degree_of_polarization(state: np.ndarray) -> float:
+    """``|S| / S0`` of a 2x2 coherency matrix: one for a single state, zero for none."""
+    total = float(np.trace(state).real)
+    if total <= 0.0:
+        return 0.0
+    spread = math.sqrt(float((state[0, 0] - state[1, 1]).real) ** 2 + 4.0 * abs(state[0, 1]) ** 2)
+    return spread / total
+
+
+def principal_state(state: np.ndarray) -> np.ndarray:
+    """The unit Jones vector a coherency matrix is mostly made of."""
+    values, vectors = np.linalg.eigh(np.asarray(state, dtype=np.complex128))
+    return vectors[:, int(np.argmax(values))]
+
+
+def cross_kerr_matrix(state: np.ndarray, *, coherent: bool) -> np.ndarray:
+    """What a band of coherency ``J`` does to a carrier at another frequency [W], as a matrix.
+
+    ``(2/3)[tr(J) I + J + J*]`` with the coherent term -- ``(p^H p) + p p^H + p* p^T``
+    for a polarized ``p`` -- and, phase-only, ``2 J_aa + (2/3) J_bb`` on the
+    diagonal with ``(2/3) J_ab`` off it. The same matrices the coupled split-step
+    steps a band through (:func:`_cross_polarization_coupling`), averaged.
+    """
+    j = np.asarray(state, dtype=np.complex128)
+    if coherent:
+        return (2.0 / 3.0) * (np.trace(j) * np.eye(2) + j + np.conj(j))
+    return np.array(
+        [
+            [2.0 * j[0, 0] + (2.0 / 3.0) * j[1, 1], (2.0 / 3.0) * j[0, 1]],
+            [(2.0 / 3.0) * j[1, 0], 2.0 * j[1, 1] + (2.0 / 3.0) * j[0, 0]],
+        ]
+    )
+
+
+def self_kerr(state: np.ndarray, *, coherent: bool) -> float:
+    """A polarized band's own Kerr rate over ``gamma`` [W], in its own state.
+
+    Isotropic: ``(2/3 + |u^T u|^2 / 3) P`` -- one for linear light, two thirds
+    for circular. Phase-only: ``(|u_x|^4 + |u_y|^4 + (4/3)|u_x|^2 |u_y|^2) P``,
+    each axis turned by its own power and two thirds of the other's.
+    """
+    power = float(np.trace(state).real)
+    if power <= 0.0:
+        return 0.0
+    u = principal_state(state)
+    if coherent:
+        return (2.0 / 3.0 + abs(complex(u @ u)) ** 2 / 3.0) * power
+    x, y = abs(u[0]) ** 2, abs(u[1]) ** 2
+    return (x * x + y * y + (4.0 / 3.0) * x * y) * power
+
+
+def kerr_rate_in_state(
+    gamma: float,
+    states: Sequence[np.ndarray],
+    probe: np.ndarray,
+    *,
+    own: int | None,
+    coherent: bool,
+    cross_phase: bool,
+) -> float:
+    """How fast the split-step turns a carrier in state ``probe`` [rad/m], ``exp(-i rate z)``.
+
+    Every other band's :func:`cross_kerr_matrix` read in the probe's state, ``q^H M q``,
+    when the bands share one solve; plus ``own``'s :func:`self_kerr` when the probe
+    is that band. On an axis this is :func:`kerr_rate`'s ``2 P_same - |A|^2 + w
+    P_other`` term for term. Off it, a 45-degree beam is turned by all of its
+    power where the per-axis form turns each axis by five sixths.
+    """
+    q = np.asarray(probe, dtype=np.complex128)
+    q = q / np.linalg.norm(q)
+    rate = 0.0
+    if cross_phase:
+        for index, state in enumerate(states):
+            if index != own:
+                rate += float((np.conj(q) @ cross_kerr_matrix(state, coherent=coherent) @ q).real)
+    if own is not None:
+        rate += self_kerr(states[own], coherent=coherent)
+    return gamma * rate
+
+
 def fwm_nonlinear_rate(
     gamma: float,
     power_i: tuple[float, float],

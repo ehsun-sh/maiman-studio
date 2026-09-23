@@ -3700,7 +3700,8 @@ Every physics block ships with a test against a closed-form result, run in CI
 | **Mixing with the pumps' own phase** | Four amplified spans at 20 mW against the one-band split-step, within 5 % where the linear mismatch is off by 10× and more | ✅ |
 | **Mixing in any state of polarization** | Against the one-band vector split-step, linear, 45°, circular and elliptical, with and without the coherent term: 1.003–1.004, where taking each axis alone gave 0.28 at 45° and 0.58 circular | ✅ |
 | The drive is the Kerr tensor's | Isotropic: a linear state mixes as on the axis, a circular one at `(2/3)² = 4/9`; phase-only: `(5/6)² = 25/36` at 45° — and the split-step itself measures 0.4451 and 0.6950 | ✅ |
-| The pumps' Kerr phase off the axis | Pinned rather than tuned: per axis as a phase, exact on an axis and 10.6 % high at 45° with the coherent term at 20 mW | — |
+| **The pumps' Kerr phase in their own state** | 20 mW, every state and both tensors: 0.997–1.001 of the split-step, where per axis the 45° beam was 10.6 % high; four amplified spans at 45° land where the axial ones do, 1.040 and 1.011 | ✅ |
+| Circular light over several spans | Pinned rather than tuned: right after one span, 1.7× after four with the coherent term — the cause not yet found | — |
 | XPM swing | Peak-to-peak `2·γ·P·L_eff` on a probe beside an on/off pump, with no walk-off | ✅ |
 | Walk-off | `D·Δλ` per unit length, derived from β₂ and not declared beside it | ✅ |
 | Walk-off conserves the mean | Mean XPM phase fixed at `2·γ·⟨P⟩·L_eff` across a 16× change in slip, while its spread falls 5.7× | ✅ |

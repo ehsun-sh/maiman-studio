@@ -640,10 +640,11 @@ Stated in the code where each approximation is made, and collected here:
   own cross section and photon energy, and without one -- the block itself, and the controlled
   transient -- it drains at the centre wavelength's rate.
 * **Fibre.** With `cross_polarization` the four-wave mixing drive is a vector, from each band's
-  coherency and the Kerr tensor the split-step runs; with `pump_phase` the pumps' Kerr phase is
-  still taken per axis as a phase only, exact on an axis and 10.6 % high at 45 degrees against the
-  split-step with the coherent term. Products mix again among themselves only as far as each span's
-  own bookkeeping reaches.
+  coherency and the Kerr tensor the split-step runs, and with `pump_phase` the pumps' Kerr phase is
+  taken in each band's own state. Four amplified spans of circular light still add wrongly -- by
+  1.7 with the coherent term -- where linear light at any angle is right; and a band of two
+  independent tributaries keeps the per-axis form, having no one state. Products mix again among
+  themselves only as far as each span's own bookkeeping reaches.
 * **Gratings and modes.** The average index a writing process raises is carried for the fibre
   Bragg grating, as the self-coupling Erdogan's coupled-mode equations give it, when its
   `dc_compensated` flag is off; the long-period and tilted gratings still take it as

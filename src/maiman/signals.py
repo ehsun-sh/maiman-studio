@@ -360,11 +360,19 @@ class KerrHistory:
     ``conflict`` is set when two paths with different histories were joined. It
     is not refused there, because nothing needs the history until a span asks
     for its pumps' phase -- and that span refuses, naming the join.
+
+    ``weak_matrix``, when the polarizations are coupled and every band is in
+    one state, is the weak carrier's accumulated Kerr matrix ``W``, as
+    ``(W_xx, W_yy, Re W_xy, Im W_xy)``: a neighbour at 45 degrees turns a weak
+    carrier by an angle that depends on the carrier's own state, ``q^H W q``,
+    which two per-axis angles cannot say. Its diagonal is ``weak``. Empty
+    otherwise.
     """
 
     carriers: tuple[tuple[float, float, float], ...] = ()
     weak: tuple[float, float] = (0.0, 0.0)
     conflict: str = ""
+    weak_matrix: tuple[float, ...] = ()
 
     def at(self, f0: float, rtol: float = 1e-9) -> tuple[float, float]:
         """The ``(x, y)`` angle of the carrier at ``f0``, or the weak carrier's if none."""
@@ -372,6 +380,38 @@ class KerrHistory:
             if abs(centre - f0) <= rtol * f0:
                 return x, y
         return self.weak
+
+    def angle_in(self, f0: float, state: Any, rtol: float = 1e-9) -> float:
+        """The carrier at ``f0``'s angle when it is in one state [rad].
+
+        Its own entry if it has one -- kept the same on both axes when it was
+        turned in a state -- and otherwise the weak carrier's angle *in that
+        state*, which is what it was turned by before it existed as a band. The
+        per-axis :meth:`at` would hand back the x angle there, which is the same
+        number only for a carrier on x.
+        """
+        for centre, x, _ in self.carriers:
+            if abs(centre - f0) <= rtol * f0:
+                return x
+        return self.weak_in(state)
+
+    def weak_in(self, state: Any) -> float:
+        """The weak carrier's angle in Jones state ``state`` [rad]: ``q^H W q`` for unit ``q``.
+
+        From ``weak_matrix`` where there is one, and from the per-axis angles
+        weighted by the state's powers where there is not -- which is the same
+        number for a state on an axis, and for any state when ``W`` is diagonal.
+        """
+        x, y = complex(state[0]), complex(state[1])
+        norm = abs(x) ** 2 + abs(y) ** 2
+        if norm == 0.0:
+            return 0.0
+        if not self.weak_matrix:
+            return (abs(x) ** 2 * self.weak[0] + abs(y) ** 2 * self.weak[1]) / norm
+        wxx, wyy, re, im = self.weak_matrix
+        cross = complex(re, im)
+        value = abs(x) ** 2 * wxx + abs(y) ** 2 * wyy + 2.0 * (x.conjugate() * cross * y).real
+        return value / norm
 
 
 def _differs(first: float, second: float) -> bool:
@@ -394,11 +434,15 @@ def joined_nonlinear_history(signals: Sequence[OpticalSignal], *, where: str) ->
     if not present:
         return KerrHistory()
     weak = present[0].weak
+    matrix = present[0].weak_matrix
     conflict = next((history.conflict for history in present if history.conflict), "")
     merged: dict[float, tuple[float, float]] = {}
     for history in present:
         if not conflict and (
-            _differs(history.weak[0], weak[0]) or _differs(history.weak[1], weak[1])
+            _differs(history.weak[0], weak[0])
+            or _differs(history.weak[1], weak[1])
+            or len(history.weak_matrix) != len(matrix)
+            or any(_differs(a, b) for a, b in zip(history.weak_matrix, matrix, strict=False))
         ):
             conflict = (
                 f"{where} joined inputs that have been through different Kerr fibre -- their "
@@ -420,6 +464,7 @@ def joined_nonlinear_history(signals: Sequence[OpticalSignal], *, where: str) ->
         carriers=tuple((f0, x, y) for f0, (x, y) in sorted(merged.items())),
         weak=weak,
         conflict=conflict,
+        weak_matrix=matrix,
     )
 
 
