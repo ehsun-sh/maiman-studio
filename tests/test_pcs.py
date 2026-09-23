@@ -10,12 +10,14 @@ FlexO-6(e), FlexO-8e and FlexO-8, bit for bit.
 each mode's group is four chunks of ``4b`` and three runs of sign bits and must
 come to the block's own width, the field widths must come to ``b``, the block
 order shipped with the package must be a permutation whose sign half is in
-order, and a mode that is not shaped must be refused. The shaping itself cannot
-run without the tables, and says so rather than approximating them.
+order, and a mode that is not shaped must be refused. Everything past the shaper
+is held to a digest taken while it matched TP7. The shaping itself cannot run
+without the tables, and says so rather than approximating them.
 """
 
 from __future__ import annotations
 
+import hashlib
 import os
 from itertools import pairwise
 from pathlib import Path
@@ -42,6 +44,7 @@ from maiman.pcs import (
     amplitude_and_sign,
     dpo_receive,
     dpo_transmit,
+    dpo_transmit_lanes,
     group_bits,
     group_layout,
     load_tables,
@@ -69,6 +72,16 @@ BOTH = pytest.mark.skipif(
 #: of shaped bits has to come to.
 FRAME_AMPLITUDE = BLOCKS * AMPLITUDE_BITS
 FRAME_SIGN = BLOCKS * SIGN_BITS
+
+#: SHA-256 of the DSP frame :func:`dpo_transmit_lanes` makes from seeded encoder
+#: lanes, taken while it reproduced every shaped mode's TP7 from its TP4 symbol for
+#: symbol. One digest for all three: past the shaper the modes do not differ.
+FINGERPRINT = "d005ecab5c33aab2c275ece704a378c4e8abe42f8f831308ef3434a518edcfc8"
+
+#: SHA-256 over the two lookup tables and the rewiring, as :func:`load_tables`
+#: parses them, from the copy every bit-exact test above passed with. A digest
+#: of the data rather than the data, so it can live here.
+TABLES_FINGERPRINT = "55e28093977094b80eafc7a2c440df482b8c5ee9670e4f46510ce8a6aa4ba8ba"
 
 
 def vector(mode: str, point: str) -> np.ndarray:
@@ -144,6 +157,16 @@ def test_the_tables_are_the_shape_the_clause_describes() -> None:
     assert kit.rewire.shape == (4, 4, 128)
 
 
+@pytest.mark.skipif(not TABLES, reason=f"set {TABLES_ENV} to the specification's tables")
+def test_the_tables_are_the_ones_the_vectors_were_matched_with() -> None:
+    """A different copy of the tables is named here, before it is blamed on the shaper."""
+    kit = load_tables()
+    digest = hashlib.sha256()
+    for table, dtype in ((kit.lut10, np.uint8), (kit.lut11, np.uint8), (kit.rewire, np.int64)):
+        digest.update(np.ascontiguousarray(table, dtype=dtype).tobytes())
+    assert digest.hexdigest() == TABLES_FINGERPRINT
+
+
 # ---------------------------------------------------------------------------
 # What holds without the specification's data
 # ---------------------------------------------------------------------------
@@ -213,6 +236,49 @@ def test_without_the_tables_it_says_what_is_missing() -> None:
         load_tables()
 
 
+def test_the_release_switch_names_every_directory_the_shaped_tests_open() -> None:
+    """``MAIMAN_REQUIRE_SPEC`` checks for what these tests read, and not a subset of it.
+
+    A switch that checked for the DO folders alone would pass a directory the
+    shaped modes then fail to find -- as an error rather than a skip, but only
+    once the run is well under way.
+    """
+    from conftest import SPECIFICATION
+
+    assert set(SHAPED) <= set(SPECIFICATION["MAIMAN_OFEC_VECTORS"])
+    assert TABLES_ENV in SPECIFICATION
+
+
+def test_the_release_switch_says_what_is_absent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from conftest import SPECIFICATION, missing_specification
+
+    monkeypatch.delenv("MAIMAN_OFEC_VECTORS", raising=False)
+    monkeypatch.setenv(TABLES_ENV, str(tmp_path))
+    problems = missing_specification()
+    assert problems[0] == "MAIMAN_OFEC_VECTORS is not set"
+    assert "SCS_LUT10.txt" in problems[1] and "rewire.json" in problems[1]
+
+    for variable, entries in SPECIFICATION.items():
+        folder = tmp_path / variable
+        for entry in entries:
+            (folder / entry).mkdir(parents=True)
+        monkeypatch.setenv(variable, str(folder))
+    assert missing_specification() == []
+
+
+def test_the_specification_job_is_gated_and_cannot_skip() -> None:
+    """The CI job for these vectors waits for a runner, and fails on one without them."""
+    workflow = (
+        Path(__file__).resolve().parent.parent / ".github" / "workflows" / "ci.yml"
+    ).read_text(encoding="utf-8")
+    job = workflow[workflow.index("  specification:") :]
+    assert "runs-on: [self-hosted, spec]" in job, "the specification job lost its runner label"
+    assert "vars.HAS_SPEC_RUNNER" in job, "the specification job would queue forever"
+    assert 'MAIMAN_REQUIRE_SPEC: "1"' in job, "the specification job would pass by skipping"
+
+
 # ---------------------------------------------------------------------------
 # Clause 9.2.4: the tail permute, and the whole shaped path
 # ---------------------------------------------------------------------------
@@ -232,6 +298,31 @@ def test_the_whole_shaped_path_reproduces_tp7(mode: str) -> None:
     assert np.array_equal(
         made, np.loadtxt(Path(str(VECTORS)) / mode / f"TP7_{mode}.txt", dtype=np.int8)
     )
+
+
+@BOTH
+@pytest.mark.parametrize("mode", SHAPED)
+def test_past_the_shaper_tp4_reaches_tp7(mode: str) -> None:
+    """Where :func:`dpo_transmit` is split, checked at the split."""
+    made = dpo_transmit_lanes(vector(mode, "TP4"), modulation=mode)
+    assert np.array_equal(
+        made, np.loadtxt(Path(str(VECTORS)) / mode / f"TP7_{mode}.txt", dtype=np.int8)
+    )
+
+
+@pytest.mark.parametrize("mode", SHAPED)
+def test_the_shaped_output_has_not_moved_since_it_matched_the_vectors(mode: str) -> None:
+    """What the vector tests check when neither vectors nor tables are here.
+
+    Everything after the shaper -- the tail permute inside the encoder, the
+    interleavers, the mapper, the DSP frame -- held to one digest. The shaper
+    itself cannot run without the tables, so it is not; that is the part only
+    the release check covers.
+    """
+    lanes = np.random.default_rng(3).integers(0, 2, (BLOCKS * ENCODER_BITS, 4), dtype=np.uint8)
+    frame = dpo_transmit_lanes(lanes, modulation=mode)
+    digest = hashlib.sha256(np.ascontiguousarray(frame).tobytes()).hexdigest()
+    assert digest == FINGERPRINT
 
 
 def test_the_tail_permute_is_four_orderings_of_thirty_five() -> None:

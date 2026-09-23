@@ -77,3 +77,33 @@ jobs:
 
       - name: Test
         run: pytest
+
+  # The W-Port specification's vectors and shaping tables carry no licence to
+  # redistribute, so no hosted runner has them and every test that reads them
+  # skips there. This runs those tests on a machine that already holds them,
+  # without the data ever being uploaded.
+  #
+  # Same gate as the GPU job, for the same reason. Attach a runner labelled
+  # `spec`, set MAIMAN_OFEC_VECTORS and MAIMAN_WPORT_TABLES in its own
+  # environment (the runner's `.env` file), then set `HAS_SPEC_RUNNER` to `true`.
+  # MAIMAN_REQUIRE_SPEC makes a runner without the data fail rather than skip.
+  specification:
+    if: ${{ vars.HAS_SPEC_RUNNER == 'true' }}
+    runs-on: [self-hosted, spec]
+    env:
+      MAIMAN_REQUIRE_SPEC: "1"
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Test against the specification
+        run: pytest tests/test_ofec.py tests/test_wport.py tests/test_pcs.py

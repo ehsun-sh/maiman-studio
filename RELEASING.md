@@ -92,6 +92,26 @@ suite cannot do:
   answers every API route and 404s the page it exists to serve,
 * more than forty components register.
 
+## What the release workflow cannot verify
+
+The W-Port specification's test vectors and shaping tables are not in this repository — they
+carry no licence to redistribute — so on every hosted runner the tests that read them skip, and
+the DPO path is checked against nothing but its own arithmetic. Before cutting a release, on a
+machine that has them:
+
+```bash
+MAIMAN_REQUIRE_SPEC=1 pytest tests/test_ofec.py tests/test_wport.py tests/test_pcs.py
+```
+
+With `MAIMAN_OFEC_VECTORS` pointing at the directory holding the vectors' `qpsk/`, `16qam/`,
+`b72/`, `b106/` and `b116/` folders, and `MAIMAN_WPORT_TABLES` at the folder holding
+`SCS_LUT10.txt`, `SCS_LUT11.txt` and `rewire.json`. `MAIMAN_REQUIRE_SPEC=1` is what makes this
+worth running: without it, a mistyped path skips the same tests and the summary still reads
+green. With it, the run stops before collecting anything and names what is missing.
+
+Once a self-hosted runner labelled `spec` holds the data, the `specification` job in `ci.yml` does
+this on every push instead; see the comment there for how to switch it on.
+
 
 ## After a release
 

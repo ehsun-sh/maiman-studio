@@ -97,6 +97,7 @@ __all__ = [
     "amplitude_and_sign",
     "dpo_receive",
     "dpo_transmit",
+    "dpo_transmit_lanes",
     "group_layout",
     "load_tables",
     "shaped_encode",
@@ -590,6 +591,19 @@ def dpo_transmit(
     """
     payload = codec_payload(information, modulation=modulation)
     lanes = shaped_lanes(payload, modulation=modulation, directory=directory)
+    return dpo_transmit_lanes(lanes, modulation=modulation, reserved=reserved)
+
+
+def dpo_transmit_lanes(
+    lanes: np.ndarray, *, modulation: str, reserved: np.ndarray | None = None
+) -> np.ndarray:
+    """The encoders' input (TP4) to the symbols (TP7): the shaped path past the shaper.
+
+    Split out of :func:`dpo_transmit` because it is the part that needs no
+    tables. Everything the shaper does is normative data this repository does
+    not carry; everything here is code, so it can be held in place on a machine
+    that has never seen the specification.
+    """
     line = ofec_interleave([shaped_encode(lanes)[:, lane] for lane in range(4)], "16qam")
     levels = symbol_levels(line, modulation=modulation)
     return np.concatenate(
