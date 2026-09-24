@@ -3792,6 +3792,8 @@ Every physics block ships with a test against a closed-form result, run in CI
 | A failing point does not hang | More points than lanes, so a borrowed graph must come back — verified by deleting the `finally` and watching it deadlock | ✅ |
 | **MMI phase relations** | `SᴴS = I` at N = 1, 2, 3, 4, 5, 8 — even amplitudes with invented phases pass every other check and fail this one | ✅ |
 | **An uncompensated grating reflects high** | Erdogan's eq. 16 with the pedestal's `σ = 2π·δn̄/λ` to 1e-9; the peak at `λ_B(1 + δn̄/n_eff)`, 0.107 nm at 1e-4; and exactly a compensated grating in a fibre of index `n_eff + δn̄`, to 1e-10 | ✅ |
+| A long-period grating's pedestal moves its notches | Each mode lifted by its own self-coupling lands the notch where a mode solve of the raised core puts it: 20 and 60 nm of shift, to half a percent | ✅ |
+| A tilted grating's pedestal, two ways | The raised core solved outright against the core mode's first-order self-coupling: 409 against 402.5 pm, the difference halving with the pedestal | ✅ |
 | An uncompensated apodized grating chirps itself | The pedestal follows the Gaussian, and the short side grows a Fabry-Perot 140 times the compensated sidelobes while the long side barely moves | ✅ |
 | **A grating coupler's own reflection** | Its teeth's second order against the transfer-matrix grating to 1e-9; zero at a half duty cycle; and the fibre's gap ringing at `λ²/2nh` to 5 % | ✅ |
 | 2×2 MMI ≡ 3 dB coupler | The same matrix to 1e-15, factor of j included; self-imaging at N = 2 *is* the quadrature relation | ✅ |

@@ -31,7 +31,7 @@ from ..circuit import SMatrix
 from ..component import BoolParam, Param, PortType
 from ..context import SimulationContext
 from ..modes import StepIndexFibre
-from ..photonics import tilted_fiber_bragg_grating, tilted_grating_resonances
+from ..photonics import tilted_fiber_bragg_grating, tilted_grating_resonances, written_fibre
 from ..signals import OpticalSignal, Signal
 from ..units import C_LIGHT
 from .photonic import ScatteringDevice, apply_response, port_response, solve_once
@@ -61,8 +61,9 @@ class TiltedFiberBraggGrating(ScatteringDevice):
 
     **What it does not.** ``material_dispersion`` lets the glass disperse, which
     moves the comb by picometres since its indices hold at 1550 nm, where the
-    comb is. The average index the writing raises is not included, so a real
-    grating's comb sits a few nanometres longward of this one.
+    comb is. The average index the writing raises is compensated by default;
+    clear ``dc_compensated`` and the core carries it, which moves the Bragg line
+    and the comb long together.
 
     **Speed.** A mode solve per azimuthal order per wavelength node, and a
     tilted grating reaches dozens of cladding modes: expect seconds, and more of
@@ -80,6 +81,15 @@ class TiltedFiberBraggGrating(ScatteringDevice):
     length = Param(10.0, unit="mm", min=0.1, max=500.0, doc="Written length")
     index_modulation = Param(
         5e-4, unit="", min=0.0, max=1e-2, doc="Index modulation of the core, as for a Bragg grating"
+    )
+    dc_compensated = BoolParam(True, doc="The writing held the average index flat")
+    fringe_visibility = Param(
+        1.0,
+        unit="",
+        min=0.01,
+        max=1.0,
+        doc="Fringe amplitude over the average index it sits on",
+        applies_when="!dc_compensated",
     )
     core_radius = Param(4.1, unit="um", min=0.5, max=50.0, doc="Core radius")
     cladding_radius = Param(62.5, unit="um", min=5.0, max=500.0, doc="Cladding radius")
@@ -109,14 +119,24 @@ class TiltedFiberBraggGrating(ScatteringDevice):
     outputs = {"reflected": PortType.OPTICAL, "transmitted": PortType.OPTICAL}
 
     def fibre(self) -> StepIndexFibre:
-        """The fibre the grating is written in, in SI units."""
-        return StepIndexFibre(
+        """The fibre as the grating left it, in SI units.
+
+        With ``dc_compensated`` cleared its core carries the writing's pedestal,
+        :func:`~maiman.photonics.written_fibre`: this grating is uniform, so that
+        is every mode -- the Bragg line's and the comb's -- solved as it is.
+        """
+        drawn = StepIndexFibre(
             core_radius=self.si("core_radius"),
             cladding_radius=self.si("cladding_radius"),
             core_index=self.core_index,
             cladding_index=self.cladding_index,
             surrounding_index=self.surrounding_index,
             material_dispersion=self.material_dispersion,
+        )
+        return written_fibre(
+            drawn,
+            self.index_modulation,
+            None if self.dc_compensated else self.fringe_visibility,
         )
 
     def bragg_wavelength(self) -> float:

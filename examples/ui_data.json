@@ -2260,6 +2260,20 @@
      "max": 0.01,
      "doc": "Index modulation of the core, as for a Bragg grating"
     },
+    "dc_compensated": {
+     "type": "bool",
+     "default": true,
+     "doc": "The writing held the average index flat"
+    },
+    "fringe_visibility": {
+     "type": "float",
+     "default": 1.0,
+     "unit": "",
+     "min": 0.01,
+     "max": 1.0,
+     "doc": "Fringe amplitude over the average index it sits on",
+     "applies_when": "!dc_compensated"
+    },
     "core_radius": {
      "type": "float",
      "default": 4.1,
@@ -3472,6 +3486,20 @@
      "min": 0.0,
      "max": 0.01,
      "doc": "Index modulation of the core, as for a Bragg grating"
+    },
+    "dc_compensated": {
+     "type": "bool",
+     "default": true,
+     "doc": "The writing held the average index flat"
+    },
+    "fringe_visibility": {
+     "type": "float",
+     "default": 1.0,
+     "unit": "",
+     "min": 0.01,
+     "max": 1.0,
+     "doc": "Fringe amplitude over the average index it sits on",
+     "applies_when": "!dc_compensated"
     },
     "core_radius": {
      "type": "float",

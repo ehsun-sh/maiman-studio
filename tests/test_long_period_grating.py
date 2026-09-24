@@ -188,3 +188,71 @@ def test_what_cannot_be_a_grating_is_refused() -> None:
             index_modulation=MODULATION,
             cladding_modes=0,
         )
+    with pytest.raises(ValueError, match="fringe visibility is in"):
+        long_period_grating(
+            frequencies,
+            fibre=FIBRE,
+            period=PERIOD,
+            length=LENGTH,
+            index_modulation=MODULATION,
+            visibility=0.0,
+        )
+
+
+# ---------------------------------------------------------------------------
+# The pedestal the writing leaves
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("pedestal", [1e-4, 3e-4])
+@pytest.mark.parametrize("rank", [2, 3])
+def test_the_pedestal_moves_a_notch_as_raising_the_core_would(pedestal: float, rank: int) -> None:
+    """Against a mode solve of the same fibre with its core index raised by the pedestal.
+
+    Two independent routes to one number: here each mode is lifted by its
+    self-coupling in the unwritten fibre's modes, first order in the pedestal;
+    there the fibre is solved again with the glass itself changed. 20 and 60 nm
+    of shift agree to half a percent -- the rest is second order, and the pull
+    the other cladding modes put on a notch.
+    """
+    written = long_period_resonances(FIBRE, period=PERIOD, count=4)
+    raised = long_period_resonances(
+        StepIndexFibre(core_index=FIBRE.core_index + pedestal), period=PERIOD, count=4
+    )
+    before = dict(written)[rank]
+    after = dict(raised)[rank]
+    grid = np.linspace(after - 20e-9, after + 20e-9, 8001)
+    through = np.abs(
+        long_period_grating(
+            C_LIGHT / grid,
+            fibre=FIBRE,
+            period=PERIOD,
+            length=LENGTH,
+            index_modulation=pedestal,
+            visibility=1.0,
+        ).s[:, 1, 0]
+    )
+    notch = float(grid[np.argmin(through)])
+    assert notch - before == pytest.approx(after - before, rel=0.01)
+    assert after - before > 15e-9, "tens of nanometres, which is why exposure is watched"
+
+
+def test_a_compensated_grating_is_the_one_it_always_was() -> None:
+    """``visibility=None`` is the default, and moves nothing."""
+    frequencies = C_LIGHT / np.linspace(1.4e-6, 1.6e-6, 41)
+
+    def solved(visibility: float | None) -> np.ndarray:
+        return long_period_grating(
+            frequencies,
+            fibre=FIBRE,
+            period=PERIOD,
+            length=LENGTH,
+            index_modulation=MODULATION,
+            visibility=visibility,
+        ).s
+
+    plain = long_period_grating(
+        frequencies, fibre=FIBRE, period=PERIOD, length=LENGTH, index_modulation=MODULATION
+    ).s
+    assert np.array_equal(plain, solved(None))
+    assert not np.array_equal(plain, solved(1.0))

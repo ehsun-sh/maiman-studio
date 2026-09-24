@@ -647,10 +647,10 @@ Stated in the code where each approximation is made, and collected here:
   within the span that made them -- a second-order product is absent where the split-step has it
   39 dB under the first -- and across spans they mix as pumps with a drawn phase rather than the one
   they were made with, which put the same 20 km cut in four 4.8 times too high.
-* **Gratings and modes.** The average index a writing process raises is carried for the fibre
-  Bragg grating, as the self-coupling Erdogan's coupled-mode equations give it, when its
-  `dc_compensated` flag is off; the long-period and tilted gratings still take it as
-  compensated. A dispersing fibre's surrounding medium stays constant.
+* **Gratings and modes.** The average index a writing process raises is carried when a grating's
+  `dc_compensated` flag is off: as Erdogan's self-coupling for the Bragg and long-period gratings,
+  and for the uniform tilted one as the fibre it leaves, its core raised and every mode solved
+  again. A dispersing fibre's surrounding medium stays constant.
 * **Coupling.** The etalon sum is paraxial, good to 7e-3 at six degrees of fibre tilt. The gap
   between fibre and chip acts on a grating coupler as a multiplier whose chip-side mirror is held
   to what the grating leaves of each pass -- over a bottom mirror the bare stack would recycle 169 %

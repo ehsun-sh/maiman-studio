@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import replace
 from functools import lru_cache
 from typing import Any
 
@@ -1184,11 +1185,18 @@ def _mode_tables(
     *,
     coupling: bool = True,
     vector: bool = False,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Core index, cladding indices and per-unit-modulation couplings at each wavelength."""
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Core index, cladding indices, per-unit-modulation couplings and self-couplings.
+
+    The last is each mode coupled to itself through a unit index raise in the
+    core -- the core mode first, then the cladding modes -- which is Erdogan's
+    ``sigma`` per unit pedestal: how far writing lifts that mode's propagation
+    constant, set by how much of it sits where the glass was exposed.
+    """
     core = np.empty(len(wavelengths))
     cladding = np.empty((len(wavelengths), count))
     kappa = np.zeros((len(wavelengths), count))
+    selfs = np.zeros((len(wavelengths), count + 1))
     for row, wavelength in enumerate(wavelengths):
         guided, modes, couple = _lpg_modes(fibre, float(wavelength), count, vector)
         if not guided:
@@ -1199,11 +1207,14 @@ def _mode_tables(
                 f"has {len(modes)}"
             )
         core[row] = guided[0].effective_index
+        if coupling:
+            selfs[row, 0] = couple(guided[0], guided[0], 1.0)
         for column, mode in enumerate(modes):
             cladding[row, column] = mode.effective_index
             if coupling:
                 kappa[row, column] = couple(guided[0], mode, 1.0)
-    return core, cladding, kappa
+                selfs[row, column + 1] = couple(mode, mode, 1.0)
+    return core, cladding, kappa, selfs
 
 
 def _chebyshev_nodes(lo: float, hi: float, points: int) -> tuple[np.ndarray, np.ndarray]:
@@ -1213,15 +1224,15 @@ def _chebyshev_nodes(lo: float, hi: float, points: int) -> tuple[np.ndarray, np.
 
 def _interpolated_tables(
     fibre: StepIndexFibre, wavelengths: np.ndarray, count: int, points: int, vector: bool = False
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     unique, inverse = np.unique(wavelengths, return_inverse=True)
     if unique.size <= points:
-        core, cladding, kappa = _mode_tables(fibre, unique, count, vector=vector)
-        return core[inverse], cladding[inverse], kappa[inverse]
+        core, cladding, kappa, selfs = _mode_tables(fibre, unique, count, vector=vector)
+        return core[inverse], cladding[inverse], kappa[inverse], selfs[inverse]
 
     lo, hi = float(unique[0]), float(unique[-1])
     unit, nodes = _chebyshev_nodes(lo, hi, points)
-    core, cladding, kappa = _mode_tables(fibre, nodes, count, vector=vector)
+    core, cladding, kappa, selfs = _mode_tables(fibre, nodes, count, vector=vector)
     x = (wavelengths - 0.5 * (lo + hi)) / (0.5 * (hi - lo))
     cheb = np.polynomial.chebyshev
 
@@ -1229,7 +1240,7 @@ def _interpolated_tables(
         fitted = cheb.chebval(x, cheb.chebfit(unit, values, points - 1))
         return np.asarray(fitted).T
 
-    return through(core), through(cladding), through(kappa)
+    return through(core), through(cladding), through(kappa), through(selfs)
 
 
 def long_period_grating(
@@ -1245,6 +1256,7 @@ def long_period_grating(
     ports: tuple[str, str] = ("in", "out"),
     separation: float | None = None,
     gap_loss_db: float = 0.0,
+    visibility: float | None = None,
 ) -> SMatrix:
     """A long-period grating's transmission, from coupled modes solved exactly.
 
@@ -1292,6 +1304,18 @@ def long_period_grating(
     out. The second grating's fringes continue the first's, as from one phase
     mask with its middle left unexposed; a zero separation is one grating of
     twice the length, which the tests hold it to.
+
+    **The pedestal.** Writing raises the core's average index as well as
+    modulating it, by ``dn_avg = index_modulation / visibility``; ``None``, the
+    default, takes it as compensated. Carried, it lifts each mode by its own
+    self-coupling, Erdogan's ``sigma_mm`` -- the same overlap a coupling is made
+    of, taken with the mode itself -- so ``Delta_m`` gains ``sigma_m - sigma_0``.
+    The core mode sits mostly in the exposed glass and a cladding mode barely, so
+    the resonance moves long by ``dn_avg (Gamma_0 - Gamma_m) period`` over the
+    two modes' group-index difference: tens of nanometres at a pedestal of
+    1e-4, which is why a long-period grating's resonance is chased during the
+    exposure rather than set in advance. Erdogan, J. Lightwave Technol. 15(8),
+    1997, sec. IV.
     """
     if period <= 0.0:
         raise ValueError(f"period must be positive, got {period} m")
@@ -1305,9 +1329,14 @@ def long_period_grating(
         raise ValueError(f"separation must not be negative, got {separation} m")
     if gap_loss_db < 0.0:
         raise ValueError(f"the gap's loss must not be negative, got {gap_loss_db} dB")
+    if visibility is not None and not 0.0 < visibility <= 1.0:
+        raise ValueError(
+            f"fringe visibility is in (0, 1], got {visibility}; None means the average "
+            "index is compensated"
+        )
     grid = np.asarray(frequencies, dtype=float)
     wavelengths = C_LIGHT / grid
-    core, cladding, kappa = _interpolated_tables(
+    core, cladding, kappa, selfs = _interpolated_tables(
         fibre, wavelengths, cladding_modes, grid_points, vector
     )
 
@@ -1318,6 +1347,14 @@ def long_period_grating(
     matrix[:, 1:, 0] = kappa * index_modulation
     diagonal = np.arange(1, size)
     matrix[:, diagonal, diagonal] = k[:, None] * (cladding - core[:, None]) + 2.0 * np.pi / period
+    if visibility is not None:
+        # Each mode lifted by its own share of the pedestal, in the core mode's
+        # frame. Twice the tables' self-coupling: those are per unit *fringe*,
+        # whose cosine splits into two exponentials and puts a half in kappa,
+        # and a pedestal is not split -- Erdogan's sigma = 2 pi dn / lambda
+        # beside kappa = pi dn / lambda, exactly as in the Bragg grating.
+        pedestal = index_modulation / visibility
+        matrix[:, diagonal, diagonal] += 2.0 * pedestal * (selfs[:, 1:] - selfs[:, :1])
     values, vectors = np.linalg.eigh(matrix)
     if separation is None:
         through = np.sum(vectors[:, 0, :] ** 2 * np.exp(-1j * values * length), axis=1)
@@ -1360,7 +1397,7 @@ def long_period_resonances(
     if not 0.0 < lo < hi:
         raise ValueError(f"band must be an increasing pair of positive wavelengths, got {band}")
     unit, nodes = _chebyshev_nodes(lo, hi, grid_points)
-    core, cladding, _ = _mode_tables(fibre, nodes, count, coupling=False, vector=vector)
+    core, cladding, _, _ = _mode_tables(fibre, nodes, count, coupling=False, vector=vector)
     mismatch = core[:, None] - cladding - nodes[:, None] / period
     cheb = np.polynomial.chebyshev
     coefficients = cheb.chebfit(unit, mismatch, grid_points - 1)
@@ -1671,6 +1708,27 @@ def _tilted_interpolated(
     return through(core), through(index), through(coupling), columns
 
 
+def written_fibre(
+    fibre: StepIndexFibre, index_modulation: float, visibility: float | None
+) -> StepIndexFibre:
+    """The fibre a uniform grating leaves behind: its core raised by the writing's pedestal.
+
+    ``index_modulation / visibility`` of average index under the fringes, and a
+    grating uniform along its length, is a core whose index is that much higher
+    everywhere the grating is -- so solving the modes of that fibre is the
+    pedestal carried exactly, not to first order. ``visibility=None`` is a
+    compensated exposure and returns ``fibre`` unchanged.
+    """
+    if visibility is None:
+        return fibre
+    if not 0.0 < visibility <= 1.0:
+        raise ValueError(
+            f"fringe visibility is in (0, 1], got {visibility}; None means the average "
+            "index is compensated"
+        )
+    return replace(fibre, core_index=fibre.core_index + index_modulation / visibility)
+
+
 def _tilted_setup(
     period: float, tilt: float, length: float, index_modulation: float, max_order: int
 ) -> None:
@@ -1699,6 +1757,7 @@ def tilted_grating_spectrum(
     grid_points: int = TILTED_GRID_POINTS,
     vector: bool = False,
     polarization: str = "p",
+    visibility: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Transmission, the core's own reflection, and the power sent back into the cladding.
 
@@ -1732,8 +1791,13 @@ def tilted_grating_spectrum(
     With ``vector`` the modes are the true HE, EH, TE and TM ones and the comb is
     the one ``polarization`` sees -- ``"p"``, in the plane of the tilt, or ``"s"``
     across it: :func:`vector_tilted_coupling`.
+
+    ``visibility`` carries the average index the writing raises, as for the
+    Bragg grating; the grating is uniform, so that is the modes of
+    :func:`written_fibre`, solved outright. ``None`` takes it as compensated.
     """
     _tilted_setup(period, tilt, length, index_modulation, max_order)
+    fibre = written_fibre(fibre, index_modulation, visibility)
     if nearest is not None and nearest < 1:
         raise ValueError(f"solve at least one mode together, got {nearest}")
     grid = np.asarray(frequencies, dtype=float)
@@ -1797,6 +1861,7 @@ def tilted_fiber_bragg_grating(
     ports: tuple[str, str] = ("in", "out"),
     vector: bool = False,
     polarization: str = "p",
+    visibility: float | None = None,
 ) -> SMatrix:
     """A tilted fibre Bragg grating as a two-port: its comb of cladding notches, and its mirror.
 
@@ -1825,6 +1890,7 @@ def tilted_fiber_bragg_grating(
         grid_points=grid_points,
         vector=vector,
         polarization=polarization,
+        visibility=visibility,
     )
     grid = np.asarray(frequencies, dtype=float)
     s = np.zeros((grid.size, 2, 2), dtype=np.complex128)

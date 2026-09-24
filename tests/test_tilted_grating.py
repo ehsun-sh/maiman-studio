@@ -306,3 +306,56 @@ def test_the_block_reflects_a_carrier_and_passes_what_it_does_not() -> None:
     assert reflected == pytest.approx(0.935e-3, rel=0.02), "on the Bragg line, and it is a mirror"
     assert transmitted < 0.07e-3
     assert reflected + transmitted < 1e-3, "the cladding's share is stripped"
+
+
+# ---------------------------------------------------------------------------
+# The pedestal the writing leaves
+# ---------------------------------------------------------------------------
+
+
+def bragg_shift_against_first_order(modulation: float) -> float:
+    """Solved Bragg-line shift over the first-order one, for a pedestal of ``modulation``.
+
+    Solved: the modes of the fibre with its core raised, as this uniform grating
+    leaves it. First order: the core mode lifted by its self-coupling in the
+    unwritten fibre, ``2 lpg_coupling(core, core, dn)``, over its group index.
+    """
+    plain = TiltedFiberBraggGrating(index_modulation=modulation, label="t")
+    written = TiltedFiberBraggGrating(
+        index_modulation=modulation, dc_compensated=False, fringe_visibility=1.0, label="t"
+    )
+    before, after = plain.bragg_wavelength(), written.bragg_wavelength()
+    core = core_modes(plain.fibre(), before)[0]
+    step = 1e-12
+    slope = (
+        core_modes(plain.fibre(), before + step)[0].effective_index
+        - core_modes(plain.fibre(), before - step)[0].effective_index
+    ) / (2 * step)
+    group = core.effective_index - before * slope
+    lifted = 2 * lpg_coupling(core, core, modulation) / (2 * math.pi / before)
+    return (after - before) / (before * lifted / group)
+
+
+def test_the_pedestal_moves_the_bragg_line_as_first_order_says_it_starts_to() -> None:
+    """409 pm at 5e-4 against 402.5 first order, and what is left is second order.
+
+    Two routes to one number that share no step: the Bragg line of the fibre
+    solved again with its core raised, and the core mode's self-coupling in the
+    fibre as drawn. They differ by 1.6 % at 5e-4 and by half that at half the
+    pedestal, which is a second-order term doing what one does.
+    """
+    full = bragg_shift_against_first_order(5e-4)
+    half = bragg_shift_against_first_order(2.5e-4)
+    assert full == pytest.approx(1.0, abs=0.02)
+    assert (half - 1.0) == pytest.approx((full - 1.0) / 2.0, rel=0.1)
+
+
+def test_a_compensated_exposure_leaves_the_fibre_as_drawn() -> None:
+    grating = TiltedFiberBraggGrating(label="t")
+    assert grating.dc_compensated
+    assert grating.fibre().core_index == grating.core_index
+    raw = TiltedFiberBraggGrating(dc_compensated=False, fringe_visibility=0.5, label="t")
+    assert raw.fibre().core_index == pytest.approx(raw.core_index + 1e-3, rel=1e-12)
+    assert TiltedFiberBraggGrating.param_specs()["fringe_visibility"].applies_when == (
+        "!dc_compensated"
+    )

@@ -21,6 +21,7 @@ a fitted constant.
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 
 import numpy as np
 
@@ -57,8 +58,15 @@ class LongPeriodGrating(ScatteringDevice):
     default the indices are constants and only the waveguide disperses; set
     ``material_dispersion`` and the glass does too (silica cladding, germania-doped
     core, the quoted indices holding at 1550 nm), which moves the notches by
-    nanometres, the first cladding mode's 4.2 nm shortward. The average index the writing
-    raises is not included.
+    nanometres, the first cladding mode's 4.2 nm shortward.
+
+    **The average index the writing raises.** Compensated by default. Clear
+    ``dc_compensated`` and the pedestal ``index_modulation / fringe_visibility``
+    lifts each mode by its own share of it, which moves every notch long by tens
+    of nanometres -- 20 nm at 1e-4 -- the reason a long-period grating's
+    resonance is chased during exposure. :meth:`resonances` then reports them on
+    the fibre with its core raised by the pedestal, which the notches agree with
+    to half a percent.
 
     **Two of them.** A single grating's cladding light is taken to be lost, as it
     is under a coating. Set ``pair`` and the grating is written twice,
@@ -75,6 +83,15 @@ class LongPeriodGrating(ScatteringDevice):
     length = Param(25.0, unit="mm", min=0.1, max=500.0, doc="Written length")
     index_modulation = Param(
         3e-4, unit="", min=0.0, max=1e-2, doc="Index modulation of the core, as for a Bragg grating"
+    )
+    dc_compensated = BoolParam(True, doc="The writing held the average index flat")
+    fringe_visibility = Param(
+        1.0,
+        unit="",
+        min=0.01,
+        max=1.0,
+        doc="Fringe amplitude over the average index it sits on",
+        applies_when="!dc_compensated",
     )
     core_radius = Param(4.1, unit="um", min=0.5, max=50.0, doc="Core radius")
     cladding_radius = Param(62.5, unit="um", min=5.0, max=500.0, doc="Cladding radius")
@@ -152,10 +169,16 @@ class LongPeriodGrating(ScatteringDevice):
         """``(cladding mode rank, wavelength [m])`` for every notch inside ``band``.
 
         With ``vector`` set, the rank counts order-one modes of both families,
-        so the notch an LP0m cuts is an odd rank.
+        so the notch an LP0m cuts is an odd rank. Uncompensated, on the fibre
+        with its core raised by the pedestal.
         """
+        fibre = self.fibre()
+        if not self.dc_compensated:
+            fibre = replace(
+                fibre, core_index=fibre.core_index + self.index_modulation / self.fringe_visibility
+            )
         return long_period_resonances(
-            self.fibre(),
+            fibre,
             period=self.si("period"),
             count=self._coupled_modes(),
             band=band,
@@ -179,6 +202,7 @@ class LongPeriodGrating(ScatteringDevice):
         separation = self.si("separation") if self.pair else None
         # Raw dB: the unit machinery already turns a dB parameter into a ratio.
         gap_loss = self.gap_loss
+        visibility = None if self.dc_compensated else self.fringe_visibility
         return solve_once(
             lambda f: long_period_grating(
                 f,
@@ -190,5 +214,6 @@ class LongPeriodGrating(ScatteringDevice):
                 vector=vector,
                 separation=separation,
                 gap_loss_db=gap_loss,
+                visibility=visibility,
             )
         )
