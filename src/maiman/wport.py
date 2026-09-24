@@ -40,9 +40,16 @@ alignment and reserve, and the sum is the 175,104 a DSP frame holds.
 constellation shaping (clause 9), whose adaptation runs on 2,056-bit rows
 through a shaping LUT and a 35-bit permute. The published vectors this was
 checked against are the DO ones, and a shaping LUT written from memory would be
-the thing :mod:`maiman.ofec` was careful not to do. Error marking (clause 8.2)
-is reported here as a per-CRC32 flag rather than expanded into 802.3 error
-blocks, which is a client-layer action this project has no client layer for.
+the thing :mod:`maiman.ofec` was careful not to do.
+
+**Error marking.** Clause 8.2 is optional, and so it is here: every receiver
+reports one flag per CRC32, and with ``error_marking`` set it also overwrites
+the rows a failed CRC32 covered with Figure 9's 257-bit error marking block --
+four 802.3 error control blocks, transcoded -- which is what makes an Ethernet
+client downstream drop the frame rather than accept it. Which of those 257-bit
+blocks belong to which client is a FlexO demapping this project does not have,
+and clause 8.1 says implementations may differ on it; so the whole span is
+marked, from its first bit, in blocks of 257.
 """
 
 from __future__ import annotations
@@ -56,6 +63,8 @@ from .ofec import ofec_decode, ofec_encode
 
 __all__ = [
     "DSP_FRAME_SYMBOLS",
+    "ERROR_CONTROL_BLOCK",
+    "ERROR_MARKING_BLOCK",
     "FLEXO_ROW_BITS",
     "PAYLOAD_SYMBOLS",
     "PILOT_SPACING",
@@ -191,6 +200,43 @@ def flexo_adapt(information: np.ndarray, *, modulation: str = "qpsk") -> np.ndar
     return np.concatenate([built, np.zeros(total - built.size, dtype=np.uint8)])
 
 
+# ---------------------------------------------------------------------------
+# Clause 8.2: error marking
+# ---------------------------------------------------------------------------
+
+
+def _lsb_first(value: int, width: int) -> list[int]:
+    """``width`` bits of ``value``, least significant first: 802.3's transmission order."""
+    return [(value >> bit) & 1 for bit in range(width)]
+
+
+#: The /E/ control character and the error control block's type, both 0x1E.
+_E = 0x1E
+_BLOCK_TYPE = 0x1E
+_ERRORS = [bit for _ in range(8) for bit in _lsb_first(_E, 7)]
+
+#: A 64b/66b error control block (EBLOCK_R) in transmission order, as clause 8.2
+#: states it: sync header ``10``, block type 0x1E, eight 7-bit /E/ characters.
+ERROR_CONTROL_BLOCK = np.array([1, 0, *_lsb_first(_BLOCK_TYPE, 8), *_ERRORS], dtype=np.uint8)
+
+#: Clause 8.2's 257-bit error marking block, Figure 9, in transmission order: four
+#: error control blocks transcoded 256b/257b. A header bit of 0 says a control
+#: block is among them; the four flags that say which (all zero, all four are) share
+#: a byte with the first block's type, whose top nibble they displace; the other
+#: three keep their type byte whole. No sync headers -- the transcoding drops them.
+ERROR_MARKING_BLOCK = np.array(
+    [
+        0,
+        *_lsb_first(_BLOCK_TYPE & 0x0F, 4),
+        *_lsb_first(0b0000, 4),
+        *_ERRORS,
+        *[bit for _ in range(3) for bit in (*_lsb_first(_BLOCK_TYPE, 8), *_ERRORS)],
+    ],
+    dtype=np.uint8,
+)
+MARKING_BLOCK_BITS = 257
+
+
 @dataclass(frozen=True)
 class FlexOFrame:
     """A de-adapted frame: the information, and what its CRC32s said about it."""
@@ -206,12 +252,16 @@ class FlexOFrame:
         return bool(self.crc_ok.all())
 
 
-def flexo_deadapt(frame: np.ndarray, *, modulation: str = "qpsk") -> FlexOFrame:
+def flexo_deadapt(
+    frame: np.ndarray, *, modulation: str = "qpsk", error_marking: bool = False
+) -> FlexOFrame:
     """The inverse of :func:`flexo_adapt`, checking each CRC32 as it goes.
 
-    The flags are clause 8.2's error marking, stopping where this project stops:
-    a false flag says the four rows it covers did not survive, and what an
-    Ethernet client does about that is the client's.
+    A false flag says the rows it covers did not survive. With ``error_marking``
+    set those rows also come back as :data:`ERROR_MARKING_BLOCK` over and over,
+    clause 8.2: every CRC32 covers a whole number of 257-bit blocks -- a wide
+    row is forty, a narrow one eight -- so the span is tiled exactly, from its
+    first bit. Off, the default, the rows come back as the decoder left them.
     """
     bits = np.asarray(frame, dtype=np.uint8).reshape(-1)
     total = codec_bits(modulation)
@@ -226,8 +276,11 @@ def flexo_deadapt(frame: np.ndarray, *, modulation: str = "qpsk") -> FlexOFrame:
         span = min(group, rows - taken)
         covered = bits[cursor : cursor + span]
         carried = bits[cursor + span : cursor + span + CRC_BITS]
+        passed = bool(np.array_equal(crc32(covered), carried))
+        if error_marking and not passed:
+            covered = np.tile(ERROR_MARKING_BLOCK, span // MARKING_BLOCK_BITS)
         recovered.append(covered)
-        checks.append(bool(np.array_equal(crc32(covered), carried)))
+        checks.append(passed)
         cursor += span + CRC_BITS
         taken += span
     return FlexOFrame(np.concatenate(recovered), np.array(checks, dtype=bool))
@@ -614,7 +667,7 @@ class WPortReception:
     """The FlexO-x(e) information bits."""
 
     crc_ok: np.ndarray
-    """One flag per CRC32: clause 8.2's error marking, as far as this goes."""
+    """One flag per CRC32, in order; a false one says its rows did not survive."""
 
     corrections: int
     """Bits the OFEC decoder changed."""
@@ -628,7 +681,12 @@ class WPortReception:
 
 
 def wport_receive(
-    frame: np.ndarray, *, modulation: str = "qpsk", confidence: float = 8.0, iterations: int = 3
+    frame: np.ndarray,
+    *,
+    modulation: str = "qpsk",
+    confidence: float = 8.0,
+    iterations: int = 3,
+    error_marking: bool = False,
 ) -> WPortReception:
     """Received symbols (TP7) back to FlexO information, decoding on the way.
 
@@ -636,7 +694,8 @@ def wport_receive(
     are handed to the decoder with. It is a hard decision dressed as a soft one,
     which is what a frame of clean symbols deserves; a receiver with a real
     channel behind it should form its own ratios from its own noise and call
-    :func:`maiman.ofec.ofec_decode` itself.
+    :func:`maiman.ofec.ofec_decode` itself. ``error_marking`` is clause 8.2's,
+    as :func:`flexo_deadapt` does it.
     """
     symbols = np.asarray(frame)
     if symbols.ndim != 2 or symbols.shape[0] % DSP_FRAME_SYMBOLS:
@@ -650,7 +709,11 @@ def wport_receive(
     decoded = ofec_decode(llr, modulation=modulation, iterations=iterations)
     span = codec_bits(modulation)
     recovered = [
-        flexo_deadapt(scramble(decoded.payload[start : start + span]), modulation=modulation)
+        flexo_deadapt(
+            scramble(decoded.payload[start : start + span]),
+            modulation=modulation,
+            error_marking=error_marking,
+        )
         for start in range(0, decoded.payload.size, span)
     ]
     return WPortReception(

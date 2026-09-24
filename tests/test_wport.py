@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+from itertools import pairwise
 from pathlib import Path
 
 import numpy as np
@@ -27,6 +28,8 @@ import pytest
 
 from maiman.wport import (
     DSP_FRAME_SYMBOLS,
+    ERROR_CONTROL_BLOCK,
+    ERROR_MARKING_BLOCK,
     FAW_SYMBOLS,
     FLEXO_ROW_BITS,
     PAYLOAD_SYMBOLS,
@@ -187,6 +190,68 @@ def test_a_flipped_bit_is_marked_by_the_crc_that_covers_it() -> None:
     assert not back.clean
     assert back.crc_ok.sum() == back.crc_ok.size - 1
     assert not back.crc_ok[1], "and it is the group the bit was in"
+
+
+#: Figure 9's bottom row, "257-bit error marking block encoding (binary value)",
+#: in transmission order: copied from the figure, not built from the fields.
+FIGURE_9 = "0" + "01110000" + "0111100" * 8 + ("01111000" + "0111100" * 8) * 3
+
+
+def test_the_error_marking_block_is_figure_9() -> None:
+    """Built from clause 8.2's fields, it is the bit string the figure prints.
+
+    The figure's top row gives the fields -- header 0, flags 0000, 0xE, eight
+    /E/, then 0x1E and eight /E/ three times -- and its bottom row the bits on
+    the wire. The two agree only if every field goes out least significant bit
+    first and the flags ride in the high nibble of the first block's type byte.
+    """
+    assert "".join(map(str, ERROR_MARKING_BLOCK)) == FIGURE_9
+    assert ERROR_MARKING_BLOCK.size == len(FIGURE_9) == 257
+
+    # "sync=10, control block type=0x1E, and eight 7-bit /E/ control characters".
+    assert "".join(map(str, ERROR_CONTROL_BLOCK)) == "10" + "01111000" + "0111100" * 8
+    # The last three blocks of the 257 are three error control blocks less their sync.
+    assert np.array_equal(ERROR_MARKING_BLOCK[-192:], np.tile(ERROR_CONTROL_BLOCK[2:], 3))
+    # The first differs only where the flags displaced the top of its type byte.
+    first = ERROR_MARKING_BLOCK[1:65]
+    assert np.array_equal(first[:4], ERROR_CONTROL_BLOCK[2:6])
+    assert np.array_equal(first[8:], ERROR_CONTROL_BLOCK[10:])
+
+
+def test_every_crc_covers_whole_marking_blocks() -> None:
+    """A wide row is forty blocks of 257 and a narrow one eight, so no span is cut."""
+    assert FLEXO_ROW_BITS["qpsk"] == 40 * 257 and FLEXO_ROW_BITS["b72"] == 8 * 257
+    for modulation in FLEXO_ROW_BITS:
+        total = information_bits(modulation)
+        spans = np.diff([*range(0, total, 41120), total])
+        assert all(span % 257 == 0 for span in spans), modulation
+
+
+@pytest.mark.parametrize("modulation", ["qpsk", "b72"])
+def test_a_failed_crc_s_rows_come_back_marked(modulation: str) -> None:
+    """Clause 8.2 with ``error_marking`` set: the failed span, and only it, is overwritten.
+
+    Two hits: one inside a full span and one in the short span at the end, which
+    ends on a row boundary rather than a four-row one and still tiles exactly.
+    """
+    info = information(modulation)
+    adapted = flexo_adapt(info, modulation=modulation)
+    spoiled = adapted.copy()
+    spoiled[41120 + 32 + 100] ^= 1  # the second span, past the first span and its CRC32
+    spoiled[info.size + 32 * (info.size // 41120) - 1] ^= 1  # the last information bit
+    plain = flexo_deadapt(spoiled, modulation=modulation)
+    marked = flexo_deadapt(spoiled, modulation=modulation, error_marking=True)
+    assert np.array_equal(marked.crc_ok, plain.crc_ok), "marking does not change the verdict"
+    assert list(np.flatnonzero(~marked.crc_ok)) == [1, marked.crc_ok.size - 1]
+
+    starts = [*range(0, info.size, 41120), info.size]
+    for index, (start, stop) in enumerate(pairwise(starts)):
+        got = marked.information[start:stop]
+        if marked.crc_ok[index]:
+            assert np.array_equal(got, info[start:stop])
+        else:
+            assert np.array_equal(got, np.tile(ERROR_MARKING_BLOCK, (stop - start) // 257))
+    assert not np.array_equal(plain.information, info), "off, the damage comes through as is"
 
 
 def test_the_crc_is_the_one_802_3_specifies() -> None:
@@ -391,7 +456,7 @@ def test_the_decoder_repairs_what_the_line_did_and_the_crc_agrees() -> None:
     # Flip the sign of a few hundred payload symbols, well inside what the code holds.
     hit = rng.choice(np.arange(200, DSP_FRAME_SYMBOLS), size=300, replace=False)
     spoiled[hit, 0] *= -1
-    received = wport_receive(spoiled, modulation="qpsk")
+    received = wport_receive(spoiled, modulation="qpsk", error_marking=True)
     assert received.corrections > 0
     assert np.array_equal(received.information, info)
     assert received.clean

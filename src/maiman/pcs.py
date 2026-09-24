@@ -51,8 +51,8 @@ this module works. Without them it raises and says so.
 information (TP0) to the DSP frame's symbols (TP7), with clause 9.2.4's tail
 permute applied inside the encoder, and reproduces every one of the
 specification's test points, TP1 to TP7, for all three shaped modes; :func:`dpo_receive`
-runs it back. What it does not do is what the DO path does not do either: error
-marking is one flag per CRC32 rather than 802.3 error blocks, and the
+runs it back, with clause 8.2's error marking when asked for, exactly as the DO
+path does it. What it does not do is what the DO path does not do either: the
 receiver's ratios are a hard decision dressed as a soft one. Without the tables
 only the part past the shaper runs, as :func:`dpo_transmit_lanes`.
 """
@@ -626,7 +626,7 @@ class DPOReception:
     """The FlexO-x(e) information bits."""
 
     crc_ok: np.ndarray
-    """One flag per CRC32: clause 8.2's error marking, as far as this goes."""
+    """One flag per CRC32, in order; a false one says its rows did not survive."""
 
     corrections: int
     """Bits the decoder changed."""
@@ -643,6 +643,7 @@ def dpo_receive(
     directory: str | None = None,
     confidence: float = 8.0,
     iterations: int = 3,
+    error_marking: bool = False,
 ) -> DPOReception:
     """Received symbols (TP7) back to FlexO information: the whole shaped path, backwards.
 
@@ -673,7 +674,11 @@ def dpo_receive(
     payload = unshape_lanes(lanes, modulation=modulation, directory=directory)
     span = codec_bits(modulation)
     recovered = [
-        flexo_deadapt(scramble(payload[start : start + span]), modulation=modulation)
+        flexo_deadapt(
+            scramble(payload[start : start + span]),
+            modulation=modulation,
+            error_marking=error_marking,
+        )
         for start in range(0, payload.size, span)
     ]
     return DPOReception(

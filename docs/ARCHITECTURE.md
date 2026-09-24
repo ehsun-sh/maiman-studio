@@ -667,8 +667,9 @@ Stated in the code where each approximation is made, and collected here:
   lasers there is no such phase to get wrong; an interferometer built from two wavelengths of one
   source would see it.
   The shaping tables are normative data and are loaded from `MAIMAN_WPORT_TABLES` rather than
-  shipped, so the DPO path needs them present to run at all. Error marking is a flag per CRC32
-  rather than 802.3 error blocks, which needs a client layer this has none of. The decoder is this
+  shipped, so the DPO path needs them present to run at all. Error marking overwrites a failed
+  CRC32's whole span with 802.3 error marking blocks; which of them belong to which Ethernet
+  client is a FlexO demapping this has none of, and the specification leaves it open. The decoder is this
   project's throughout, as it is on the DO path -- the specification leaves decoding open. A
   laser's junction heats through a Foster network, its own stage and whatever the package adds
   behind it; the temperature of what that network finally sinks into is the caller's to set.

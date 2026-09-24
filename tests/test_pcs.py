@@ -430,7 +430,7 @@ def test_the_shaped_decoder_repairs_what_the_line_did() -> None:
     spoiled = frame.copy()
     hit = rng.choice(np.arange(200, DSP_FRAME_SYMBOLS), size=400, replace=False)
     spoiled[hit, 0] *= -1
-    received = dpo_receive(spoiled, modulation="b72")
+    received = dpo_receive(spoiled, modulation="b72", error_marking=True)
     assert received.corrections > 0
     assert np.array_equal(received.information, information)
     assert received.clean, "and the CRC32s agree that it is repaired"
