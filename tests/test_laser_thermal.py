@@ -206,5 +206,83 @@ def test_the_flag_is_off_by_default_and_the_knobs_hang_off_it() -> None:
         "wavelength_drift",
         "junction_voltage",
         "series_resistance",
+        "package_resistance",
+        "package_time_constant",
     ):
         assert specs[name].applies_when == "thermal", name
+    assert DirectlyModulatedLaser(thermal=True).thermal_model().stages == ()  # type: ignore[union-attr]
+    packaged = DirectlyModulatedLaser(thermal=True, package_resistance=30.0).thermal_model()
+    assert packaged is not None and packaged.total_resistance == pytest.approx(75.0)
+
+
+# ---------------------------------------------------------------------------
+# The package behind the junction: a Foster network
+# ---------------------------------------------------------------------------
+
+PACKAGED = ThermalModel(time_constant=20e-9, stages=((30.0, 200e-9),))
+
+
+def test_through_every_stage_it_settles_at_the_summed_resistance() -> None:
+    """``(R_1 + R_2) P_diss``: 75 K/W where the junction alone is 45."""
+    parameters = LaserParameters()
+    run = integrate_rate_equations(
+        parameters, np.full(40000, 0.060), 2e10, substeps=4, thermal=PACKAGED, reference_rise=0.0
+    )
+    assert run.temperature is not None
+    heat = float(PACKAGED.dissipation(0.060, parameters.power_from_photons(run.photons[-1])))
+    assert PACKAGED.total_resistance == 75.0
+    assert run.temperature[-1] == pytest.approx(75.0 * heat, rel=1e-3)
+
+
+def test_a_step_answers_fast_and_then_slowly_as_the_closed_form_says() -> None:
+    """``sum R_i dP (1 - exp(-t / tau_i))`` against the integrated network, across the step.
+
+    The junction's 20 ns stage is most of the way there when the package's
+    200 ns one has hardly begun -- a knee no single pole can draw, which is what
+    a measured step response of a packaged laser looks like.
+    """
+    parameters = LaserParameters()
+    fs, half = 2e10, 4000
+    current = np.concatenate([np.full(half, 0.020), np.full(24 * half, 0.060)])
+    run = integrate_rate_equations(
+        parameters, current, fs, substeps=4, thermal=PACKAGED, reference_rise=0.0
+    )
+    assert run.temperature is not None
+    before = float(
+        PACKAGED.dissipation(0.020, parameters.power_from_photons(run.photons[half - 1]))
+    )
+    after = float(PACKAGED.dissipation(0.060, parameters.power_from_photons(run.photons[-1])))
+    times = run.times[half:] - run.times[half]
+    measured = run.temperature[half:] - run.temperature[half]
+    expected = PACKAGED.step_response(times, after - before)
+    assert np.max(np.abs(measured - expected)) < 2e-3 * float(expected[-1])
+    # The knee: at 60 ns the junction stage has done 95 % of its share, the package 26 %.
+    at = round(60e-9 * fs)
+    single = ThermalModel(resistance=75.0, time_constant=20e-9).step_response(times[at], 1.0)
+    assert float(measured[at]) < 0.8 * float(single) * (after - before)
+
+
+def test_a_stage_with_no_resistance_is_no_stage() -> None:
+    """The network's code path, reduced to the one pole's, lands on the same trace."""
+    parameters = LaserParameters()
+    current = np.concatenate([np.full(2000, 0.020), np.full(6000, 0.060)])
+    single = integrate_rate_equations(
+        parameters, current, 2e10, substeps=4, thermal=WARM, reference_rise=0.0
+    )
+    padded = integrate_rate_equations(
+        parameters,
+        current,
+        2e10,
+        substeps=4,
+        thermal=ThermalModel(stages=((0.0, 1e-6),)),
+        reference_rise=0.0,
+    )
+    assert single.temperature is not None and padded.temperature is not None
+    assert np.allclose(padded.temperature, single.temperature, rtol=1e-12, atol=1e-12)
+
+
+def test_a_stage_that_is_not_one_is_refused() -> None:
+    with pytest.raises(ValueError, match="thermal stage"):
+        ThermalModel(stages=((10.0, 0.0),))
+    with pytest.raises(ValueError, match="thermal stage"):
+        ThermalModel(stages=((-1.0, 1e-6),))

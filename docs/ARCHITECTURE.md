@@ -669,8 +669,9 @@ Stated in the code where each approximation is made, and collected here:
   The shaping tables are normative data and are loaded from `MAIMAN_WPORT_TABLES` rather than
   shipped, so the DPO path needs them present to run at all. Error marking is a flag per CRC32
   rather than 802.3 error blocks, which needs a client layer this has none of. The decoder is this
-  project's throughout, as it is on the DO path -- the specification leaves decoding open. A laser's junction heats as one pole, so the
-  case's own temperature and the package around it are the caller's to set.
+  project's throughout, as it is on the DO path -- the specification leaves decoding open. A
+  laser's junction heats through a Foster network, its own stage and whatever the package adds
+  behind it; the temperature of what that network finally sinks into is the caller's to set.
 
 ---
 

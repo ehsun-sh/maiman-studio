@@ -119,6 +119,24 @@ class DirectlyModulatedLaser(Component):
         doc="In series with the junction",
         applies_when="thermal",
     )
+    #: The stage behind the junction's own, summed with it as a Foster network.
+    #: Zero, the default, is no second stage: the rise is then above the case.
+    package_resistance = Param(
+        0.0,
+        unit="K/W",
+        min=0.0,
+        max=1000.0,
+        doc="Case to heatsink, behind the junction's own stage; 0 leaves the case fixed",
+        applies_when="thermal",
+    )
+    package_time_constant = Param(
+        100.0,
+        unit="us",
+        min=0.001,
+        max=1e6,
+        doc="How fast the package follows",
+        applies_when="thermal",
+    )
     noise = BoolParam(
         False, doc="Spontaneous emission noise: the laser's linewidth and intensity noise"
     )
@@ -152,6 +170,11 @@ class DirectlyModulatedLaser(Component):
             drift=self.si("wavelength_drift"),
             junction_voltage=self.junction_voltage,
             series_resistance=self.series_resistance,
+            stages=(
+                ((self.package_resistance, self.si("package_time_constant")),)
+                if self.package_resistance > 0.0
+                else ()
+            ),
         )
 
     def junction_rise(self, current: float | None = None) -> float:

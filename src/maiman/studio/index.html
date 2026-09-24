@@ -2286,6 +2286,24 @@ verdict, and DESIGN.md
      "doc": "In series with the junction",
      "applies_when": "thermal"
     },
+    "package_resistance": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "K/W",
+     "min": 0.0,
+     "max": 1000.0,
+     "doc": "Case to heatsink, behind the junction's own stage; 0 leaves the case fixed",
+     "applies_when": "thermal"
+    },
+    "package_time_constant": {
+     "type": "float",
+     "default": 100.0,
+     "unit": "us",
+     "min": 0.001,
+     "max": 1000000.0,
+     "doc": "How fast the package follows",
+     "applies_when": "thermal"
+    },
     "noise": {
      "type": "bool",
      "default": false,

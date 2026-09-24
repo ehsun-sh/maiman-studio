@@ -317,6 +317,17 @@ class ThermalModel:
 
     ``junction_voltage`` and ``series_resistance`` are the diode's: the voltage
     it drops once it conducts, and the ohms in series with it.
+
+    **And the package behind the junction.** ``resistance`` and ``time_constant``
+    are the first stage, junction to case. ``stages`` adds the ones behind it --
+    case to submount, submount to heatsink -- each ``(R_i [K/W], tau_i [s])``,
+    and the rise is their sum: a Foster network, the form a datasheet fits to
+    a measured step response. Each stage follows the same dissipation at its own
+    rate, so the settled rise is ``(sum R_i) P`` and a step in ``P`` answers
+    ``sum R_i dP (1 - exp(-t / tau_i))`` -- a fast rise, then the slow ones behind
+    it, which a single pole cannot draw. Empty, the default, is the one pole
+    this always was; the rise is then above the case, and with stages above
+    whatever the last one sinks to.
     """
 
     resistance: float = 45.0
@@ -334,6 +345,9 @@ class ThermalModel:
     series_resistance: float = 5.0
     """``R_s`` [ohm]."""
 
+    stages: tuple[tuple[float, float], ...] = ()
+    """Further ``(R_i [K/W], tau_i [s])`` behind the first, summed as a Foster network."""
+
     def __post_init__(self) -> None:
         if self.time_constant <= 0.0:
             raise ValueError(
@@ -342,6 +356,22 @@ class ThermalModel:
         for name in ("resistance", "drift", "junction_voltage", "series_resistance"):
             if getattr(self, name) < 0.0:
                 raise ValueError(f"{name} must not be negative, got {getattr(self, name)}")
+        for resistance, time_constant in self.stages:
+            if resistance < 0.0 or time_constant <= 0.0:
+                raise ValueError(
+                    "a thermal stage is a non-negative resistance and a positive time "
+                    f"constant, got {resistance} K/W and {time_constant} s"
+                )
+
+    @property
+    def network(self) -> tuple[tuple[float, float], ...]:
+        """Every stage, the junction's own first: ``((R, tau), ...)``."""
+        return ((self.resistance, self.time_constant), *self.stages)
+
+    @property
+    def total_resistance(self) -> float:
+        """``sum R_i`` [K/W]: what the settled rise is per watt."""
+        return sum(resistance for resistance, _ in self.network)
 
     def dissipation(
         self, current: np.ndarray | float, optical: np.ndarray | float = 0.0
@@ -352,8 +382,15 @@ class ThermalModel:
         return np.asarray(np.maximum(electrical - np.asarray(optical, dtype=float), 0.0))
 
     def rise(self, current: np.ndarray | float, optical: np.ndarray | float = 0.0) -> np.ndarray:
-        """The settled temperature rise at this drive [K]."""
-        return np.asarray(self.resistance * self.dissipation(current, optical))
+        """The settled temperature rise at this drive [K], through every stage."""
+        return np.asarray(self.total_resistance * self.dissipation(current, optical))
+
+    def step_response(self, times: np.ndarray | float, dissipation: float) -> np.ndarray:
+        """``sum R_i dP (1 - exp(-t / tau_i))`` [K]: the rise after a step of ``dissipation``."""
+        t = np.asarray(times, dtype=float)
+        return np.asarray(
+            sum(r * dissipation * (1.0 - np.exp(-t / tau)) for r, tau in self.network)
+        )
 
     def wavelength_at(self, wavelength: float, rise: np.ndarray | float) -> np.ndarray:
         """Where the line sits [m] once the junction has warmed by ``rise``."""
@@ -486,9 +523,14 @@ def integrate_rate_equations(
     phase_track = np.empty(count)
     temperature_track = np.empty(count) if thermal is not None else None
     phase = 0.0
+    stage_temperatures: list[float] = []
     if thermal is not None:
         settled = parameters.power_from_photons(photons)
         temperature = float(thermal.rise(float(drive[0]), settled))
+        if thermal.stages:
+            # Each stage settled at its own share of the rise.
+            heat = float(thermal.dissipation(float(drive[0]), settled))
+            stage_temperatures = [r * heat for r, _ in thermal.network]
         anchor = temperature if reference_rise is None else float(reference_rise)
         # Radians per kelvin of drift, in the sense the phase already runs.
         per_kelvin = 2.0 * math.pi * float(thermal.frequency_shift(parameters.wavelength, 1.0))
@@ -525,10 +567,20 @@ def integrate_rate_equations(
                 * (carriers - threshold)
             )
             if thermal is not None:
-                # One pole, driven by what the drive leaves behind as heat. The
-                # photons leaving are light and do not warm anything.
-                target = float(thermal.rise(pump, parameters.power_from_photons(photons)))
-                temperature += step * (target - temperature) / thermal.time_constant
+                # Driven by what the drive leaves behind as heat. The photons
+                # leaving are light and do not warm anything.
+                if stage_temperatures:
+                    # A Foster network: every stage follows the same heat at its
+                    # own rate, and the junction sits at their sum.
+                    heat = float(thermal.dissipation(pump, parameters.power_from_photons(photons)))
+                    for position, (r, tau) in enumerate(thermal.network):
+                        stage_temperatures[position] += (
+                            step * (r * heat - stage_temperatures[position]) / tau
+                        )
+                    temperature = sum(stage_temperatures)
+                else:
+                    target = float(thermal.rise(pump, parameters.power_from_photons(photons)))
+                    temperature += step * (target - temperature) / thermal.time_constant
                 phase += step * per_kelvin * (temperature - anchor)
             if noise:
                 carriers, photons, phase = _langevin_kick(
