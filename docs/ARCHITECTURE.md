@@ -643,8 +643,10 @@ Stated in the code where each approximation is made, and collected here:
   coherency and the Kerr tensor the split-step runs, and with `pump_phase` the pumps' Kerr phase is
   taken in each band's own state. Four amplified spans of circular light still add wrongly -- by
   1.7 with the coherent term -- where linear light at any angle is right; and a band of two
-  independent tributaries keeps the per-axis form, having no one state. Products mix again among
-  themselves only as far as each span's own bookkeeping reaches.
+  independent tributaries keeps the per-axis form, having no one state. Products do not mix again
+  within the span that made them -- a second-order product is absent where the split-step has it
+  39 dB under the first -- and across spans they mix as pumps with a drawn phase rather than the one
+  they were made with, which put the same 20 km cut in four 4.8 times too high.
 * **Gratings and modes.** The average index a writing process raises is carried for the fibre
   Bragg grating, as the self-coupling Erdogan's coupled-mode equations give it, when its
   `dc_compensated` flag is off; the long-period and tilted gratings still take it as
