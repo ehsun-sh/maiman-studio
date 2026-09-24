@@ -650,7 +650,8 @@ Stated in the code where each approximation is made, and collected here:
 * **Gratings and modes.** The average index a writing process raises is carried when a grating's
   `dc_compensated` flag is off: as Erdogan's self-coupling for the Bragg and long-period gratings,
   and for the uniform tilted one as the fibre it leaves, its core raised and every mode solved
-  again. A dispersing fibre's surrounding medium stays constant.
+  again. The surrounding medium disperses when its Sellmeier terms are given; the library ships
+  no liquid's, because they belong to a measurement the caller has.
 * **Coupling.** The etalon sum is paraxial, good to 7e-3 at six degrees of fibre tilt. The gap
   between fibre and chip acts on a grating coupler as a multiplier whose chip-side mirror is held
   to what the grating leaves of each pass -- over a bottom mirror the bare stack would recycle 169 %

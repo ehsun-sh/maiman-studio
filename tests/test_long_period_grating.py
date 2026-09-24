@@ -256,3 +256,48 @@ def test_a_compensated_grating_is_the_one_it_always_was() -> None:
     ).s
     assert np.array_equal(plain, solved(None))
     assert not np.array_equal(plain, solved(1.0))
+
+
+# ---------------------------------------------------------------------------
+# A surrounding medium that disperses
+# ---------------------------------------------------------------------------
+
+#: A stand-in medium, one Sellmeier term, 1.333 at 1550 nm: it exercises the
+#: machinery and stands for no liquid -- the library carries none.
+STAND_IN = ((0.75, 0.10e-6),)
+
+
+def test_the_surroundings_pass_through_the_quoted_index_and_disperse_from_there() -> None:
+    fibre = StepIndexFibre(surrounding_index=1.333, surrounding_sellmeier=STAND_IN)
+    assert fibre.surrounding_at(1.55e-6) == pytest.approx(1.333, abs=1e-15)
+    assert fibre.surrounding_at(1.3e-6) > 1.333 > fibre.surrounding_at(1.6e-6)
+    assert fibre.at(1.3e-6).surrounding_index == fibre.surrounding_at(1.3e-6)
+    assert StepIndexFibre(surrounding_index=1.333).at(1.3e-6).surrounding_index == 1.333
+
+
+def test_a_notch_sits_where_the_medium_s_own_index_there_would_put_it() -> None:
+    """A fixed point: solved with the medium dispersing, every notch is where a constant
+    medium at the index the dispersing one has *at that notch* puts it -- to 1e-14 m.
+
+    And each moves the way a liquid moves a notch: short where the medium is
+    denser than at 1550 nm, long where it is thinner.
+    """
+    fibre = StepIndexFibre(surrounding_index=1.333, surrounding_sellmeier=STAND_IN)
+    plain = dict(
+        long_period_resonances(StepIndexFibre(surrounding_index=1.333), period=PERIOD, count=6)
+    )
+    for rank, notch in long_period_resonances(fibre, period=PERIOD, count=6)[:4]:
+        there = StepIndexFibre(surrounding_index=fibre.surrounding_at(notch))
+        assert dict(long_period_resonances(there, period=PERIOD, count=6))[rank] == pytest.approx(
+            notch, abs=1e-14
+        )
+        denser = fibre.surrounding_at(notch) > 1.333
+        assert (notch < plain[rank]) if denser else (notch > plain[rank])
+
+
+def test_surroundings_that_reach_the_cladding_are_refused_where_they_do() -> None:
+    fibre = StepIndexFibre(surrounding_index=1.44, surrounding_sellmeier=((1.0, 0.3e-6),))
+    with pytest.raises(ValueError, match="surroundings' index"):
+        fibre.at(1.0e-6)
+    with pytest.raises(ValueError, match="non-negative"):
+        StepIndexFibre(surrounding_index=1.333, surrounding_sellmeier=((-1.0, 0.1e-6),))

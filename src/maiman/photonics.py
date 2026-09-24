@@ -1622,7 +1622,9 @@ def _tilted_tables(
     are those ``polarization`` sees.
     """
     k_top = 2.0 * math.pi / float(wavelengths.min())
-    floor = max(lowest_index, fibre.surrounding_index + 1e-6)
+    # Above whatever surrounds the fibre anywhere in the band, if that disperses.
+    surrounding = max(fibre.at(float(wavelength)).surrounding_index for wavelength in wavelengths)
+    floor = max(lowest_index, surrounding + 1e-6)
     per_order: list[list[list[Any]]] = []
     cores: list[Any] = []
     orders = max_order + 2 if vector else max_order + 1

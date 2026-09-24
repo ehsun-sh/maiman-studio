@@ -36,7 +36,9 @@ Sellmeier equation), the core as germania-doped silica, its Sellmeier
 coefficients interpolated linearly in mole fraction between silica's and pure
 germania's (Fleming's), at the fraction that gives the quoted index step at the
 reference wavelength. The quoted indices then hold at that wavelength -- 1550 nm
-unless told otherwise -- and nowhere else; the surrounding medium stays constant.
+unless told otherwise -- and nowhere else. The surrounding medium stays constant
+unless its own Sellmeier terms are given (``surrounding_sellmeier``), from
+whatever measurement of it the caller trusts.
 
 **No SciPy.** The Bessel functions are evaluated from their integral
 representations by quadrature, which converges exponentially for the smooth,
@@ -233,6 +235,15 @@ def glass_index(wavelength: np.ndarray | float, germania: float = 0.0) -> np.nda
     return np.sqrt(total)
 
 
+def sellmeier_index(wavelength: float, terms: tuple[tuple[float, float], ...]) -> float:
+    """``sqrt(1 + sum B_i lambda^2 / (lambda^2 - lambda_i^2))``, with ``lambda_i`` in metres."""
+    square = wavelength**2
+    total = 1.0 + sum(b * square / (square - pole**2) for b, pole in terms)
+    if total <= 0.0:
+        raise ValueError(f"these Sellmeier terms give no real index at {wavelength * 1e9:.1f} nm")
+    return math.sqrt(total)
+
+
 @lru_cache(maxsize=64)
 def germania_fraction(index_step: float, wavelength: float = INDEX_WAVELENGTH) -> float:
     """The germania mole fraction that raises silica's index by ``index_step`` at ``wavelength``.
@@ -274,6 +285,14 @@ class StepIndexFibre:
     index, and the core follows the germania-doped glass whose step over silica
     is the quoted one, offset the same way. The default fibre's 1.4440 is
     Malitson's silica at 1550 nm to 2e-5, so there the offset is nothing.
+
+    **What surrounds it can disperse too.** ``surrounding_sellmeier`` is the
+    medium's Sellmeier terms, ``(B_i, lambda_i [m])``, and the surrounding index
+    then follows ``n^2 = 1 + sum B_i lambda^2 / (lambda^2 - lambda_i^2)``, offset
+    so it passes through ``surrounding_index`` at ``reference_wavelength`` -- as
+    the glass does. This library carries no liquid's coefficients: they belong
+    to a measurement, at a temperature, over a range, and the caller has them.
+    Empty, the default, is a medium that does not disperse.
     """
 
     core_radius: float = 4.1e-6
@@ -283,6 +302,7 @@ class StepIndexFibre:
     surrounding_index: float = 1.0
     material_dispersion: bool = False
     reference_wavelength: float = INDEX_WAVELENGTH
+    surrounding_sellmeier: tuple[tuple[float, float], ...] = ()
 
     def __post_init__(self) -> None:
         if not 0.0 < self.core_radius < self.cladding_radius:
@@ -295,28 +315,61 @@ class StepIndexFibre:
                 "need core index > cladding index > surrounding index > 0, got "
                 f"{self.core_index}, {self.cladding_index}, {self.surrounding_index}"
             )
+        disperses = self.material_dispersion or bool(self.surrounding_sellmeier)
+        if disperses and self.reference_wavelength <= 0.0:
+            raise ValueError(
+                f"the reference wavelength must be positive, got {self.reference_wavelength}"
+            )
         if self.material_dispersion:
-            if self.reference_wavelength <= 0.0:
-                raise ValueError(
-                    f"the reference wavelength must be positive, got {self.reference_wavelength}"
-                )
             germania_fraction(self.core_index - self.cladding_index, self.reference_wavelength)
+        for strength, pole in self.surrounding_sellmeier:
+            if strength < 0.0 or pole < 0.0:
+                raise ValueError(
+                    f"a Sellmeier term is a non-negative strength and resonance, got {strength}, "
+                    f"{pole} m"
+                )
+
+    def surrounding_at(self, wavelength: float) -> float:
+        """The surrounding medium's index at ``wavelength``, offset through the quoted one."""
+        if not self.surrounding_sellmeier:
+            return self.surrounding_index
+        return (
+            self.surrounding_index
+            + sellmeier_index(wavelength, self.surrounding_sellmeier)
+            - sellmeier_index(self.reference_wavelength, self.surrounding_sellmeier)
+        )
 
     def at(self, wavelength: float) -> StepIndexFibre:
-        """This fibre with its glass's indices at ``wavelength``, and constant from there.
+        """This fibre with its glass's and its surroundings' indices at ``wavelength``.
 
-        The identity without ``material_dispersion``, and at the reference
-        wavelength to the last bit of the indices.
+        The identity when nothing disperses, and at the reference wavelength to
+        the last bit of the indices. Refused where the surroundings would reach
+        the cladding's index, which leaves no cladding mode to solve for.
         """
-        if not self.material_dispersion:
+        if not (self.material_dispersion or self.surrounding_sellmeier):
             return self
-        reference = self.reference_wavelength
-        fraction = germania_fraction(self.core_index - self.cladding_index, reference)
-        core = self.core_index + float(
-            glass_index(wavelength, fraction) - glass_index(reference, fraction)
+        core, cladding = self.core_index, self.cladding_index
+        if self.material_dispersion:
+            reference = self.reference_wavelength
+            fraction = germania_fraction(self.core_index - self.cladding_index, reference)
+            core = self.core_index + float(
+                glass_index(wavelength, fraction) - glass_index(reference, fraction)
+            )
+            cladding = self.cladding_index + float(glass_index(wavelength) - glass_index(reference))
+        surrounding = self.surrounding_at(wavelength)
+        if not cladding > surrounding > 0.0:
+            raise ValueError(
+                f"at {wavelength * 1e9:.1f} nm the surroundings' index {surrounding:.5f} is not "
+                f"between 0 and the cladding's {cladding:.5f}"
+            )
+        return replace(
+            self,
+            core_index=core,
+            cladding_index=cladding,
+            surrounding_index=surrounding,
+            material_dispersion=False,
+            surrounding_sellmeier=(),
         )
-        cladding = self.cladding_index + float(glass_index(wavelength) - glass_index(reference))
-        return replace(self, core_index=core, cladding_index=cladding, material_dispersion=False)
 
     def v_number(self, wavelength: float) -> float:
         """Normalised frequency of the core, ``V = (2 pi a / lambda) sqrt(n1^2 - n2^2)``."""
