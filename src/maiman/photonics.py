@@ -2648,9 +2648,14 @@ def grating_coupler_stack(
 
     ``substrate_index`` may be complex, which is a bottom mirror.
 
-    Not in it: the etalon's own effect on what the grating radiates, which is
-    taken as a multiplier on the coupling rather than solved with the grating in
-    the cavity, and capped at unity.
+    **What the gap may recycle.** The etalon multiplies the coupling, and its
+    chip-side mirror is the stack's reflection held to what the grating leaves of
+    each pass, :func:`bounded_chip_reflection`: over a bottom mirror the bare stack
+    reflected 92 % of a pass the grating had already taken 77 % of, and the gap
+    turned the difference into coupling. Not in it: the phase of the grating's own
+    reflection, which only solving the grating inside the cavity would give -- so
+    this is a bound on the ripple, not its exact shape, and the coupling is still
+    capped at unity against the facet's transmission, which it does not carry.
     """
     if period <= 0.0:
         raise ValueError(f"period must be positive, got {period} m")
@@ -2747,6 +2752,7 @@ def grating_coupler_stack(
     power = power * _fibre_gap_etalon(
         wavelength,
         emission_sine=sine,
+        coupled=power,
         radius=fibre_radius,
         height=fibre_height,
         angle=angle,
@@ -2778,6 +2784,29 @@ def grating_coupler_stack(
     return SMatrix(ports=ports, frequencies=grid, s=s)
 
 
+def bounded_chip_reflection(chip: np.ndarray, coupled: np.ndarray) -> np.ndarray:
+    """The chip's specular reflection over a grating, held to what the grating leaves.
+
+    A beam coming down onto a grating coupler is partly taken into the waveguide
+    -- ``coupled``, the fraction it couples on one pass -- and only the rest can
+    be reflected. The bare stack's reflection, :func:`stack_reflection`, knows
+    nothing of the grating, and over a bottom mirror it reflects 92 % while the
+    grating takes 77 %: a pass that hands out 169 % of what arrived, which the gap
+    then recycles as coupling that does not exist. So its magnitude is held to
+    ``sqrt(1 - coupled)`` and its phase kept.
+
+    A bound, not a solution: the grating's own reflection has a phase that
+    only a solve of the grating inside the cavity would give. Where the stack
+    already leaves room -- every stack without a mirror measured here -- the
+    reflection is returned exactly as it was.
+    """
+    room = np.sqrt(np.clip(1.0 - np.asarray(coupled, dtype=float), 0.0, 1.0))
+    magnitude = np.abs(chip)
+    over = magnitude > room
+    scale = np.where(over, room / np.where(over, magnitude, 1.0), 1.0)
+    return np.asarray(np.where(over, chip * scale, chip))
+
+
 def _fibre_gap_etalon(
     wavelength: np.ndarray,
     *,
@@ -2787,22 +2816,27 @@ def _fibre_gap_etalon(
     angle: float,
     top_index: float,
     fibre_index: float,
+    coupled: np.ndarray,
     **stack: object,
 ) -> np.ndarray:
     """``|1 / (1 - rho)|^2``: what the gap between fibre and chip does to the coupling.
 
-    ``rho`` is one round trip -- off the chip's own reflection, back off the
-    fibre's facet, and onto the fibre's mode again, displaced by ``2 h
-    tan(theta)`` and diffracted over ``2 h / cos(theta)``. Zero height is no
-    cavity and no ripple.
+    ``rho`` is one round trip -- off the chip's reflection, back off the fibre's
+    facet, and onto the fibre's mode again, displaced by ``2 h tan(theta)`` and
+    diffracted over ``2 h / cos(theta)``. The chip's reflection is the stack's,
+    held by :func:`bounded_chip_reflection` to what the grating's ``coupled``
+    fraction leaves of each pass. Zero height is no cavity and no ripple.
     """
     if height <= 0.0:
         return np.ones_like(wavelength)
-    chip = stack_reflection(
-        wavelength,
-        emission_sine=emission_sine,
-        top_index=top_index,
-        **stack,  # type: ignore[arg-type]
+    chip = bounded_chip_reflection(
+        stack_reflection(
+            wavelength,
+            emission_sine=emission_sine,
+            top_index=top_index,
+            **stack,  # type: ignore[arg-type]
+        ),
+        coupled,
     )
     facet = math.sqrt(fresnel_reflectance(fibre_index, top_index))
     path = 2.0 * height / math.cos(angle)

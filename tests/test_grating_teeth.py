@@ -24,6 +24,7 @@ import pytest
 from maiman.components import GratingCoupler
 from maiman.photonics import (
     _fibre_gap_etalon,
+    bounded_chip_reflection,
     fiber_bragg_grating,
     fresnel_reflectance,
     grating_coupler_stack,
@@ -185,7 +186,50 @@ def etalon(wavelengths: np.ndarray, *, height: float, angle: float) -> np.ndarra
         box_index=1.444,
         box_thickness=2e-6,
         substrate_index=3.476,
+        # The gap alone: nothing taken into a waveguide, so the stack reflects in full.
+        coupled=np.zeros_like(wavelengths),
     )
+
+
+def test_a_pass_hands_out_no_more_than_arrived() -> None:
+    """What the grating couples plus what the chip reflects stays at or under one.
+
+    Over a bottom mirror the bare stack reflects 92 % of a pass the grating takes
+    77 % of; held, it reflects the 23 % that is left. Where there is room -- no
+    mirror, 13 % reflected beside 48 % coupled -- nothing moves at all.
+    """
+    reflected = np.array([0.920**0.5 * np.exp(0.7j), 0.132**0.5 * np.exp(-1.1j)])
+    coupled = np.array([0.774, 0.479])
+    held = bounded_chip_reflection(reflected, coupled)
+    assert np.abs(held) ** 2 + coupled == pytest.approx([1.0, 0.611], abs=1e-9)
+    assert np.angle(held) == pytest.approx(np.angle(reflected), abs=1e-12), "the phase is kept"
+    assert held[1] == reflected[1], "and room left is left alone, exactly"
+
+
+def test_over_a_mirror_the_gap_no_longer_recycles_light_the_grating_took() -> None:
+    """The peak at 10 um above a mirrored stack: 0.914 when the stack reflected in full, 0.834 held.
+
+    Still above the 0.774 the fibre gets touching the chip -- a real cavity does
+    recycle what the grating leaves -- and without a mirror the numbers are what
+    they were.
+    """
+    wavelengths = np.linspace(1.5e-6, 1.6e-6, 2001)
+
+    def peak(height: float, extinction: float) -> float:
+        coupler = GratingCoupler(
+            from_stack=True,
+            fibre_angle=10.0,
+            fibre_height=height,
+            substrate_extinction=extinction,
+            label="g",
+        )
+        matrix = coupler._matrix_factory("te")(C_LIGHT / wavelengths)
+        return float(np.max(np.abs(matrix.s[:, 1, 0]) ** 2))
+
+    assert peak(0.0, 16.0) == pytest.approx(0.774, abs=0.002)
+    assert peak(10.0, 16.0) == pytest.approx(0.834, abs=0.002)
+    assert peak(0.0, 0.0) == pytest.approx(0.479, abs=0.002)
+    assert peak(10.0, 0.0) == pytest.approx(0.515, abs=0.002)
 
 
 @pytest.mark.parametrize("height", [100e-6, 200e-6])

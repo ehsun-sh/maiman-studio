@@ -651,9 +651,11 @@ Stated in the code where each approximation is made, and collected here:
   Bragg grating, as the self-coupling Erdogan's coupled-mode equations give it, when its
   `dc_compensated` flag is off; the long-period and tilted gratings still take it as
   compensated. A dispersing fibre's surrounding medium stays constant.
-* **Coupling.** The etalon sum is paraxial, good to 7e-3 at six degrees of fibre tilt, and the gap
-  between fibre and chip acts on the coupling as a multiplier rather than being solved with the
-  grating inside the cavity.
+* **Coupling.** The etalon sum is paraxial, good to 7e-3 at six degrees of fibre tilt. The gap
+  between fibre and chip acts on a grating coupler as a multiplier whose chip-side mirror is held
+  to what the grating leaves of each pass -- over a bottom mirror the bare stack would recycle 169 %
+  of it -- but the phase of the grating's own reflection is not solved, so the ripple is bounded
+  rather than exact.
 * **Transceivers.** Bands within half the sample rate of each other beat — on a diode, and
   against a local oscillator — each field late by its own walk-off; farther apart they add as
   powers, which is the rejection any receiver's bandwidth performs anyway. What is not carried is
