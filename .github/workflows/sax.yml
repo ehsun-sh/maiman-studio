@@ -1,0 +1,40 @@
+# The circuit reduction against SAX, on request.
+#
+# maiman.circuit is a reduction written here rather than a solver taken from
+# elsewhere, and what justifies that is that it agrees with SAX to a few units in
+# the last place. SAX is not a dependency -- 37 packages including jax, and an
+# LGPL-2.0-only sparse back-end -- so this is not in the CI that runs on every
+# push. It runs when dispatched: Actions -> SAX cross-validation -> Run workflow,
+# and RELEASING.md asks for it before a release.
+#
+# SAX is installed into this job's runner and nowhere else; nothing it brings in
+# reaches the package, the wheel or the other workflows. The version is pinned so
+# a failure means the reduction moved, not SAX.
+
+name: SAX cross-validation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install maiman and SAX
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e . "sax==0.18.2"
+
+      # Exits non-zero if any transmission of the add-drop ring disagrees by
+      # more than 1e-12.
+      - name: Compare the two solves
+        run: python examples/sax_crossvalidation.py

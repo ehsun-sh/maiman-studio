@@ -40,7 +40,7 @@ link in this simulator descends from.*
 > decoded on log-likelihood ratios — which clears a line at 7.4e-3 that the hard code returns
 > untouched.
 >
-> **Photonic circuits solve** as bidirectional S-matrices, cross-validated against SAX to 7e-15,
+> **Photonic circuits solve** as bidirectional S-matrices, cross-validated against SAX to 5e-15,
 > with PDK import that reads a foundry's fitted numbers and refuses to extrapolate past the window
 > they were fitted in. Each guided polarization carries its own indices through the same
 > reduction, so a ring resonates at **two** sets of wavelengths on two free spectral ranges. And a
@@ -1662,17 +1662,22 @@ and a 66 MB jaxlib, plus matplotlib, pandas, scipy, sympy, xarray and pydantic �
 `numpy.linalg.solve`. And `klujax`, its sparse back-end, is **LGPL-2.0-only**; this project already
 refuses FFTW over exactly that question.
 
-Refusing the dependency is not refusing the reference. SAX was installed in a scratch environment and
-given the same two device models, the same wiring and the same grid:
+Refusing the dependency is not refusing the reference. SAX, installed in an environment of its own,
+is given the same two device models, the same wiring and the same grid —
+`python examples/sax_crossvalidation.py`:
 
 | add-drop ring, 4001 frequencies over 2 THz | max &#124;maiman − sax&#124; |
 | :--- | ---: |
-| in → through | 7.2e-15 |
-| in → drop | 3.2e-15 |
+| in → through | 4.8e-15 |
+| in → drop | 3.5e-15 |
+| add → through | 3.5e-15 |
+| add → drop | 2.5e-15 |
 
-Thirty-three units in the last place of double precision, across a spectrum containing three
-resonances. The comparison is not in CI — nothing that costs 70 MB and a licence review should be —
-but it is the reason those twelve lines are defensible.
+About twenty units in the last place of double precision, across a spectrum containing three
+resonances; a coupling moved by one part in a billion shows up as 7e-10. The comparison is not in
+the CI that runs on every push — nothing that costs 70 MB and a licence review should be — but it
+is a workflow of its own, *SAX cross-validation*, dispatched before each release, and it is the
+reason those twelve lines are defensible.
 
 ### What comes out of it
 
@@ -3531,7 +3536,7 @@ library, and the UI.
 | [OptiCommPy](https://github.com/edsonportosilva/OptiCommPy) | Python: SSFM, coherent DSP, BER | Reference & cross-validation target |
 | [GNPy](https://github.com/Telecominfraproject/oopt-gnpy) | Optical network planning / OSNR budgets | Complementary — network layer, not waveform layer |
 | [QAMPy](https://github.com/ChalmersPhotonicsLab/QAMpy) | Coherent DSP algorithms | Reference for Phase 3 |
-| [SAX](https://github.com/gdsfactory/sax) | S-matrix photonic circuit solver | **Cross-validation reference, not a dependency.** The reduction is twelve lines and SAX resolves to 37 packages including an LGPL sparse back-end; the two agree to 7e-15 |
+| [SAX](https://github.com/gdsfactory/sax) | S-matrix photonic circuit solver | **Cross-validation reference, not a dependency.** The reduction is twelve lines and SAX resolves to 37 packages including an LGPL sparse back-end; the two agree to 5e-15 |
 | [gdsfactory](https://github.com/gdsfactory/gdsfactory) | Photonic layout & PDK ecosystem | **Connected, and still not a dependency.** [`maiman.netlist`](src/maiman/netlist.py) reads the YAML netlists it writes and solves them against a `.pdk`. Nothing imports it: measured, it resolves to **86 packages** and requires `klayout`, which is **GPL-3.0-or-later** — the same ground FFTW and klujax are refused on. Reading a document costs none of that |
 | [Meep](https://github.com/NanoComp/meep) | FDTD / full-wave EM | Feeds component models *in*; not a competitor |
 | [GNU Radio](https://www.gnuradio.org/) | Block-based SDR | Architectural reference for dataflow scheduling |
@@ -3709,7 +3714,7 @@ Every physics block ships with a test against a closed-form result, run in CI
 | FWM phase mismatch | `Δβ = −β₂(ω_i−ω_k)(ω_j−ω_k)` — quadratic in spacing, zero at zero dispersion | ✅ |
 | FWM product power | Component reproduces `d²γ²P_iP_jP_k·L_eff²·η·e^{−αL}` to 1e-7; cubic in power; `d = 2−δ_ij` gives non-degenerate products exactly 6.02 dB | ✅ |
 | **Circuit reduction** | Eliminating internal ports agrees with summing round trips lap by lap to 1e-13 — a different algorithm, sharing no code | ✅ |
-| Reduction vs SAX | Same models, same wiring: 7.2e-15 over 4001 frequencies. Not in CI — it costs 37 packages and a licence review | — |
+| Reduction vs SAX | Same models, same wiring: 4.8e-15 over 4001 frequencies. Not in per-push CI — it costs 37 packages and a licence review — but a dispatch-only workflow runs `examples/sax_crossvalidation.py` before a release | — |
 | Non-reciprocal and reflecting devices | An isolator stays one-way and a mirror returns `r·e^{−2iβL}`; the reduction assumes neither | ✅ |
 | Dangling ports | An unwired port is `a = 0`, not a mirror — a 3 dB coupler with one port open passes exactly half | ✅ |
 | **Ring resonator** | Assembled from a coupler and two arcs, matches Yariv's all-pass and add-drop transfer functions to 1e-13 | ✅ |

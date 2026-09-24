@@ -112,6 +112,18 @@ green. With it, the run stops before collecting anything and names what is missi
 Once a self-hosted runner labelled `spec` holds the data, the `specification` job in `ci.yml` does
 this on every push instead; see the comment there for how to switch it on.
 
+The circuit reduction's cross-check against SAX is not in CI either — SAX is 37 packages and an
+LGPL sparse back-end, and it is not a dependency. Before cutting a release, dispatch it: Actions →
+SAX cross-validation → *Run workflow*. It installs SAX into its own runner and fails if the add-drop
+ring's transmissions disagree by more than 1e-12. Locally, in an environment kept apart from the
+project's:
+
+```bash
+python -m venv sax-env
+sax-env/bin/pip install -e . "sax==0.18.2"
+sax-env/bin/python examples/sax_crossvalidation.py
+```
+
 
 ## After a release
 

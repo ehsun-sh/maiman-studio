@@ -12,7 +12,8 @@ Four things are worth reading off the output.
 **The circuit solve is exact, and it is checked against a formula it does not
 contain.** The assembled ring reproduces Yariv's all-pass and add-drop transfer
 functions to fourteen digits. It also agrees with SAX — the JAX-based solver the
-roadmap said to integrate — to 7e-15 across two terahertz, which is what made
+roadmap said to integrate — to 5e-15 across two terahertz
+(``examples/sax_crossvalidation.py``, run in an environment of its own), which is what made
 writing the thirty-line reduction instead of taking on thirty-seven packages and
 an LGPL sparse back-end the defensible choice.
 
