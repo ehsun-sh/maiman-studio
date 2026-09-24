@@ -336,43 +336,62 @@ def modelled_link(jones: tuple[complex, complex], dispersion: float, *, coherent
     return float(np.mean(np.abs(product.Ex) ** 2) + np.mean(np.abs(product.Ey) ** 2))
 
 
+#: The states whose two axes carry equal power, where a product's phase used to
+#: be taken against whichever axis came out a bit stronger (maiman-sew).
+EQUAL_AXES = {
+    "45 degrees": STATES["45 degrees"],
+    "-45 degrees": (1 / math.sqrt(2), -1 / math.sqrt(2)),
+    "circular": STATES["circular"],
+}
+
+
 @pytest.mark.parametrize("coherent", [True, False])
 @pytest.mark.parametrize("dispersion", [4.0, -4.0])
-@pytest.mark.parametrize("name", ["x", "45 degrees"])
-def test_four_spans_add_as_the_split_step_adds_them_in_any_linear_state(
+@pytest.mark.parametrize("name", ["x", *EQUAL_AXES])
+def test_four_spans_add_as_the_split_step_adds_them_in_any_fixed_state(
     name: str, dispersion: float, coherent: bool
 ) -> None:
-    """A linear state at 45 degrees lands exactly where the one on the axis does.
+    """Diagonal, anti-diagonal and circular light land where light on the axis does.
 
-    1.040 at D = +4 and 1.011 at D = -4, the same for both, and within the 5 %
-    the scalar four-span test holds. The history carries each carrier's angle in
-    its own state and the weak carrier's as a matrix, because the angle a
-    product's carrier has reached depends on the state the product lands in.
-    Taken per axis, the 45-degree link was off by up to 2.6 times.
+    1.003--1.040 at D = +4 and 1.010--1.011 at D = -4, within the 5 % the scalar
+    four-span test holds. The history carries each carrier's angle in its own
+    state and the weak carrier's as a matrix, because the angle a product's
+    carrier has reached depends on the state the product lands in. Taken per
+    axis, the 45-degree link was off by up to 2.6 times.
+
+    And the product's phase is taken against the same axis every span. These
+    are the states whose two axes are equal, where it used to be taken against
+    the stronger one -- which a rounding error chose, and chose differently from
+    span to span. A circular product then changed its phase by a quarter turn
+    between spans and an anti-diagonal one by a half: 1.7 and 6.4 times the
+    split-step circular, 0.12 and 3.0 at -45 degrees.
     """
-    ratio = modelled_link(STATES[name], dispersion, coherent=coherent) / reference_link(
-        STATES[name], dispersion, coherent=coherent
+    jones = STATES.get(name) or EQUAL_AXES[name]
+    ratio = modelled_link(jones, dispersion, coherent=coherent) / reference_link(
+        jones, dispersion, coherent=coherent
     )
     assert ratio == pytest.approx(1.0, abs=0.05)
 
 
 @pytest.mark.parametrize(
     ("dispersion", "coherent", "measured"),
-    [(4.0, True, 1.686), (-4.0, True, 1.102), (4.0, False, 6.378), (-4.0, False, 0.291)],
+    [(4.0, True, 0.940), (-4.0, True, 1.092), (4.0, False, 0.998), (-4.0, False, 1.030)],
 )
-def test_what_circular_light_still_gets_wrong_over_several_spans(
+def test_what_elliptical_light_still_gets_wrong_over_several_spans(
     dispersion: float, coherent: bool, measured: float
 ) -> None:
-    """Pinned, not tuned (maiman-sew): one span is right, several are not.
+    """Pinned, not tuned (maiman-me9): an ellipse turns, and the model holds it still.
 
-    A circular link's product is within 0.1 % after one span, co-circular as the
-    split-step's is, with no parametric gain and nothing in the orthogonal
-    state -- and four spans still add wrongly, by a factor of 1.7 with the
-    coherent term and far more without. Linear states at any angle are right;
-    what differs for a circular one is not yet found. A change that moves these
-    numbers should say why.
+    Light on an axis, on a diagonal or circular keeps its state in a Kerr fibre;
+    elliptical light does not -- its ellipse rotates with its own power (Maker,
+    Terhune and Savage, Phys. Rev. Lett. 12, 507 (1964)). Here the pump's turns
+    5.95 degrees over one span with the isotropic tensor and 2.95 phase-only,
+    and the model takes each carrier's state at the span's start and holds it.
+    The error follows the rotation: up to 9 % over four spans isotropic, within
+    3 % phase-only. That the rotation is the whole of it is not yet shown. A
+    change that moves these numbers should say why.
     """
-    ratio = modelled_link(STATES["circular"], dispersion, coherent=coherent) / reference_link(
-        STATES["circular"], dispersion, coherent=coherent
+    ratio = modelled_link(STATES["elliptical"], dispersion, coherent=coherent) / reference_link(
+        STATES["elliptical"], dispersion, coherent=coherent
     )
     assert ratio == pytest.approx(measured, rel=0.02)

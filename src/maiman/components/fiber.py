@@ -57,6 +57,13 @@ from ..units import db_to_linear
 #: between floating-point noise on a 193 THz sum and a gigahertz would do.
 MIXING_MERGE_TOLERANCE = 1e3
 
+#: Below this fraction of a drive's power on x, a product's phase is taken
+#: against y instead: a drive with nothing on x has no phase there to take. Any
+#: fixed axis has such a state -- a global phase cannot be chosen continuously
+#: over every polarization -- so it is put where the light is not, rather than
+#: on the circle of equal powers where circular and diagonal light sit.
+SKEW_REFERENCE_FLOOR = 1e-9
+
 
 class Fiber(Component):
     """Single-mode fiber: attenuation, chromatic dispersion, and the Kerr effect.
@@ -833,8 +840,10 @@ class Fiber(Component):
         split-step steps each band through -- and the signal's history keeps the
         weak carrier's accumulated matrix, because the angle a new product's
         carrier has reached depends on the state it lands in. Linear light at any
-        angle then adds from span to span as it does on the axis. Circular light
-        does not yet over several spans (maiman-sew). A band of two independent
+        angle, and circular light, then add from span to span as light on the
+        axis does. Elliptical light is up to 9 % out over four spans, because its
+        ellipse rotates and each state is held from the span's start
+        (maiman-me9). A band of two independent
         tributaries has no one state, and keeps the per-axis form. And the phases are those the
         split-step applies, so the product's own phase runs the way its fields
         do: the flag changes which way the drawn phase and the mismatch combine,
@@ -930,8 +939,18 @@ class Fiber(Component):
                         )
                         strengths = [(float(drive[axis, axis].real), 1.0, 1.0) for axis in (0, 1)]
                         # The product's two axes are one wave: their relative
-                        # phase is the drive's, taken against its stronger axis.
-                        lead = int(np.argmax([drive[0, 0].real, drive[1, 1].real]))
+                        # phase is the drive's, taken against x -- the same axis
+                        # every span, because what the drawn phase and the
+                        # history supply is the phase *on that axis*, and a
+                        # product that changed axes between spans would change
+                        # its phase by the drive's skew. Taken against the
+                        # stronger axis it did, on every tie: a circular drive's
+                        # two axes are equal to the last bit, the choice flipped
+                        # span to span, and four spans added up to 1.7 times the
+                        # split-step's product -- 6.4 phase-only (maiman-sew).
+                        # Only a drive with nothing on x is taken against y.
+                        trace = float((drive[0, 0] + drive[1, 1]).real)
+                        lead = 0 if drive[0, 0].real > SKEW_REFERENCE_FLOOR * trace else 1
                         skew = [float(np.angle(drive[axis, lead])) for axis in (0, 1)]
                         if self.pump_phase and polarized:
                             # In each carrier's own state rather than per axis: the

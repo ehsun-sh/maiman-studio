@@ -642,8 +642,9 @@ Stated in the code where each approximation is made, and collected here:
   transient -- it drains at the centre wavelength's rate.
 * **Fibre.** With `cross_polarization` the four-wave mixing drive is a vector, from each band's
   coherency and the Kerr tensor the split-step runs, and with `pump_phase` the pumps' Kerr phase is
-  taken in each band's own state. Four amplified spans of circular light still add wrongly -- by
-  1.7 with the coherent term -- where linear light at any angle is right; and a band of two
+  taken in each band's own state. Four amplified spans of linear light at any angle, and of
+  circular light, add as the split-step adds them; elliptical light is up to 9 % out, because its
+  ellipse rotates with its own power and each state is held from the span's start; and a band of two
   independent tributaries keeps the per-axis form, having no one state. Products do not mix again
   within the span that made them -- a second-order product is absent where the split-step has it
   39 dB under the first -- and across spans they mix as pumps with a drawn phase rather than the one
