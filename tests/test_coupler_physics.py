@@ -7,8 +7,9 @@ is held to something that owes it nothing.
 The etalon is summed bounce by bounce from Gaussian beams, so it is checked where
 it must become the Airy function -- modes too wide to diffract across the gap --
 and, where it must not, against a brute-force propagation of the cavity: an
-angular-spectrum FFT, a tilted mirror as a phase ramp, and the bounces summed by
-hand. They agree to 2e-4 square on and 7e-3 at six degrees of tilt.
+angular-spectrum FFT, a tilted mirror reflecting each plane wave by the exact law
+of reflection, and the bounces summed by hand. They agree to 2e-4 square on and
+to 7.2e-3 anywhere across +-30 degrees of tilt.
 
 The grating's directionality is a transfer-matrix result, checked against a
 direct solve of every layer's boundary conditions with the grating as a jump in
@@ -136,36 +137,79 @@ def test_at_zero_gap_the_two_facets_are_one_interface() -> None:
     assert abs(s[0, 1, 0]) ** 2 == pytest.approx(direct, rel=0.0, abs=1e-12)
 
 
-@pytest.mark.parametrize(("degrees", "tolerance"), [(0.0, 5e-4), (3.0, 5e-4), (6.0, 1e-2)])
-def test_the_cavity_is_the_one_a_brute_force_propagation_builds(
-    degrees: float, tolerance: float
-) -> None:
+#: A coarser grid for the exact reflection, which sums each bounce back onto the
+#: grid directly: 4096 points over 300 um still resolves every propagating wave.
+XR = np.linspace(-150e-6, 150e-6, 4096)
+DXR = float(XR[1] - XR[0])
+KXR = 2.0 * math.pi * np.fft.fftfreq(XR.size, DXR)
+REACHING = np.abs(KXR) < K
+KZR = np.sqrt(np.where(REACHING, K**2 - KXR**2, 0.0))
+
+
+def propagate_exact(field: np.ndarray, distance: float) -> np.ndarray:
+    """Exact in angle on the coarse grid, carrier out, evanescent waves dropped."""
+    spectrum = np.where(REACHING, np.fft.fft(field) * np.exp(-1j * (KZR - K) * distance), 0.0)
+    return np.asarray(np.fft.ifft(spectrum))
+
+
+def reflect_off_tilted_facet(field: np.ndarray, tilt: float, through: float) -> np.ndarray:
+    """A plane mirror through ``(through, 0)``, its normal ``tilt`` from the axis, exactly.
+
+    Every plane wave the field is made of, arriving at the fibre, leaves as
+    ``k - 2 (k . n) n`` -- the law of reflection, with no small-angle step in it --
+    and the reflected field is summed back on the grid directly, because the
+    reflected wavenumbers no longer sit on it. Evanescent components never reach
+    the facet and are dropped.
+    """
+    spectrum = np.fft.fft(field) / field.size
+    kx = KXR[REACHING]
+    kz = -np.sqrt(K**2 - kx**2)  # travelling back towards the fibre
+    amplitude = spectrum[REACHING] * np.exp(1j * kx * (through - XR[0]))
+    # Tilted the way the model tilts the fibre: a positive tilt turns the
+    # beam's tangential wavenumber negative, ``exp(-i k sin(tilt) x)``.
+    normal = (-math.sin(tilt), math.cos(tilt))
+    leaving = kx - 2.0 * (kx * normal[0] + kz * normal[1]) * normal[0]
+    return np.asarray(np.exp(1j * np.outer(XR - through, leaving)) @ amplitude)
+
+
+@pytest.mark.parametrize("degrees", [0.0, 3.0, 6.0, 8.0, 10.0, 15.0, 20.0, 30.0, -8.0])
+def test_the_cavity_is_the_one_an_exact_reflection_builds(degrees: float) -> None:
     """Twelve bounces between a tilted fibre and a flat chip facet, done the long way.
 
     The fibre's facet is square to the fibre, so tilting it tilts one mirror
-    against the other; paraxially that mirror is a phase ramp of ``2 k theta x``.
-    The chip's facet is flat. Across the chip's plane the field is propagated
-    exactly in angle, and each arrival projected onto the chip mode. The model
-    unfolds the same cavity into a sum of Gaussian beams in closed form -- and
-    the difference is the paraxial approximation both make, growing with tilt.
+    against the other. Here that mirror reflects every plane wave by the exact
+    law of reflection, the field is propagated exactly in angle between the
+    facets, and each arrival is projected onto the chip mode. The model unfolds
+    the same cavity into a sum of paraxial Gaussian beams in closed form.
+
+    Measured 1.7e-4 square on, 3.8e-3 at the 8 degrees an array is polished to,
+    and no more than 7.2e-3 anywhere across the block's +-30 degrees. The last
+    reference this was held to made the facet a paraxial phase ramp, and most of
+    the 7e-3 it reported at six degrees was that ramp's own error.
     """
     tilt = math.radians(degrees)
     gap, offset = 10e-6, 0.5e-6
-    start = offset - gap * tilt
-    field = gauss(FIBRE, start) * np.exp(-1j * K * math.sin(tilt) * X)
-    norm = math.sqrt(float(np.sum(np.abs(field) ** 2)) * DX)
-    chip = gauss(CHIP)
+    start = offset - gap * math.tan(tilt)
+
+    def gauss_r(radius: float, centre: float = 0.0) -> np.ndarray:
+        return np.asarray(np.exp(-((XR - centre) ** 2) / radius**2))
+
+    field = gauss_r(FIBRE, start) * np.exp(-1j * K * math.sin(tilt) * XR)
+    norm = math.sqrt(float(np.sum(np.abs(field) ** 2)) * DXR)
+    chip = gauss_r(CHIP)
+    chip_norm = math.sqrt(float(np.sum(chip**2)) * DXR)
     total = 0j
     for n in range(12):
-        arrive = propagate(field, gap)
+        arrive = propagate_exact(field, gap)
         # Across the chip (y) nothing tilts: the same Gaussian coupling the model uses.
         across = complex(
             gaussian_coupling(FIBRE, FIBRE, wavelength=WAVELENGTH, gap=(2 * n + 1) * gap)
         )
-        total += project(arrive, chip) / norm * across * np.exp(-1j * K * gap * (2 * n + 1))
-        back = propagate(R_CHIP * arrive, gap)
-        field = R_FIBRE * back * np.exp(-2j * K * tilt * (X - start))
-    brute = math.sqrt((1 - R_FIBRE**2) * (1 - R_CHIP**2)) * total
+        projected = complex(np.sum(arrive * chip) * DXR / chip_norm)
+        total += projected / norm * across * np.exp(-1j * K * gap * (2 * n + 1))
+        back = propagate_exact(R_CHIP * arrive, gap)
+        field = R_FIBRE * reflect_off_tilted_facet(back, tilt, start)
+    exact = math.sqrt((1 - R_FIBRE**2) * (1 - R_CHIP**2)) * total
 
     s = etalon(
         np.array([C_LIGHT / WAVELENGTH]),
@@ -174,7 +218,9 @@ def test_the_cavity_is_the_one_a_brute_force_propagation_builds(
         tilt=tilt,
         gap=gap,
     )
-    assert abs(complex(s[0, 1, 0]) - brute) < tolerance
+    assert abs(complex(s[0, 1, 0]) - exact) < 1e-2
+    if abs(degrees) <= 3.0:
+        assert abs(complex(s[0, 1, 0]) - exact) < 5e-4, "and paraxial really is exact near square"
 
 
 def test_fifty_microns_of_air_ripples_by_half_a_decibel_every_three_terahertz() -> None:
@@ -456,3 +502,10 @@ def test_the_block_computes_its_passband_when_asked() -> None:
     pdk = GratingCoupler(label="gc").passband()
     assert pdk[0] == pytest.approx(3.0, abs=1e-6), "and the PDK numbers when not"
     assert peak != pdk[1]
+
+
+def test_the_etalon_is_refused_past_the_tilt_it_is_validated_to() -> None:
+    frequencies = np.array([C_LIGHT / WAVELENGTH])
+    etalon(frequencies, tilt=math.radians(30.0))
+    with pytest.raises(ValueError, match="validated to 30 degrees"):
+        etalon(frequencies, tilt=math.radians(31.0))

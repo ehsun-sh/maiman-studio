@@ -652,7 +652,9 @@ Stated in the code where each approximation is made, and collected here:
   and for the uniform tilted one as the fibre it leaves, its core raised and every mode solved
   again. The surrounding medium disperses when its Sellmeier terms are given; the library ships
   no liquid's, because they belong to a measurement the caller has.
-* **Coupling.** The etalon sum is paraxial, good to 7e-3 at six degrees of fibre tilt. The gap
+* **Coupling.** The etalon sum is paraxial, and held to a cavity whose tilted facet reflects
+  every plane wave by the exact law of reflection it agrees to 3.8e-3 at an array's 8 degrees and
+  7.2e-3 across +-30, past which it is refused. The gap
   between fibre and chip acts on a grating coupler as a multiplier whose chip-side mirror is held
   to what the grating leaves of each pass -- over a bottom mirror the bare stack would recycle 169 %
   of it -- but the phase of the grating's own reflection is not solved, so the ripple is bounded
