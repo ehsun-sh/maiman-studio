@@ -11,7 +11,7 @@ values.
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 
 import numpy as np
@@ -34,6 +34,7 @@ from ..kernels import (
     dispersion_to_beta2,
     effective_length,
     fwm_accumulated_phase,
+    fwm_cascade_amplitude,
     fwm_drive_phase,
     fwm_mixing_integral,
     fwm_nonlinear_rate,
@@ -247,6 +248,11 @@ class Fiber(Component):
         unit="dB",
         min=0.0,
         doc="Discard mixing products this far below the strongest band",
+    )
+    cascaded_fwm = BoolParam(
+        False,
+        doc="Let a first-order mixing product drive a second one within the same span",
+        applies_when="four_wave_mixing",
     )
     raman_gain_slope = Param(
         0.0,
@@ -840,6 +846,196 @@ class Fiber(Component):
                 drift -= geometric_phase(principal_state(states[landed]), last)
         return drift / length
 
+    def _mix_cascade(
+        self,
+        *,
+        sources: Sequence[Band],
+        reference: Band,
+        beta2: float,
+        powers: list[tuple[float, float]],
+        power_at: Callable[[float], tuple[float, float]],
+        coupled: bool,
+        weight: float,
+        gamma: float,
+        alpha: float,
+        distance: float,
+        floor: float,
+        occupied: Sequence[float],
+    ) -> list[tuple[float, complex, complex]]:
+        """Second-order products: a first-order one driving a further one, within this span.
+
+        The outer two loops are :meth:`_mix`'s own triad loop again -- the same
+        ``i``, ``j``, ``k`` over the *launched* bands, the same exclusion of an
+        idler that is really cross-phase modulation, the same mismatch. What is
+        new is the pair of loops inside it: ``p``, ``q`` range over the launched
+        bands again, standing in for the first product's *own* triad partners --
+        it drives a further product at ``f_i + f_j - f_k + f_p - f_q`` exactly as
+        a launched pump would, via :func:`~maiman.kernels.fwm_cascade_amplitude`,
+        which integrates both triads' build-up in one closed form
+        (:func:`~maiman.kernels.fwm_cascade_integral`). A result landing on
+        ``occupied`` -- a launched band, or a frequency the first-order pass
+        already put a product at -- is dropped. A launched band is cross-phase
+        modulation the split-step already applied; a first-order product's own
+        frequency is a *correction to that product*, not a new tone -- the
+        first product feeding back into itself through the same two pumps that
+        made it, one order further in ``gamma``, which this pass is not scoped
+        to get right (see below) and so leaves alone rather than risk half a
+        correction.
+
+        Restricted to launched bands driving both triads -- not another
+        second-order product, and not a first-order product appearing twice --
+        because those are third order and higher in ``gamma``, a further factor
+        of the same smallness that makes this correction worth adding at all.
+        ``pump_phase``'s own nonlinear-rate correction is folded into each
+        triad's mismatch only at ``alpha = 0``, where the fold is exact (see
+        :func:`~maiman.kernels.fwm_cascade_integral`); at nonzero loss it is left
+        out rather than approximated silently, so a lossy span gets the
+        dispersive mismatch corrected and not the pump phase.
+
+        Needs ``cross_polarization`` off -- the drive here is the scalar,
+        per-axis one, and :meth:`_mix` refuses the combination before this is
+        called. Runs the launched-band triads twice (outer for the first
+        product, inner for its own), so cost is ``O(N**5)`` in the number of
+        launched bands; fine for the handful of pumps this was written against,
+        not for a filled comb.
+        """
+        found: list[tuple[float, complex, complex]] = []
+        count = len(sources)
+        for i in range(count):
+            for j in range(i, count):
+                for k in range(count):
+                    if k in (i, j):
+                        continue
+                    frequency1 = sources[i].f0 + sources[j].f0 - sources[k].f0
+                    if frequency1 <= 0.0:
+                        continue
+                    mismatch1 = fwm_phase_mismatch(
+                        beta2,
+                        sources[i].f0 - reference.f0,
+                        sources[j].f0 - reference.f0,
+                        sources[k].f0 - reference.f0,
+                    )
+                    rate1 = (0.0, 0.0)
+                    if self.pump_phase and alpha == 0.0:
+                        rate1 = fwm_nonlinear_rate(
+                            gamma,
+                            powers[i],
+                            powers[j],
+                            powers[k],
+                            power_at(frequency1),
+                            cross_phase=coupled,
+                            orthogonal_weight=weight,
+                        )
+                    for p in range(count):
+                        for q in range(count):
+                            if p == q:
+                                continue
+                            frequency2 = frequency1 + sources[p].f0 - sources[q].f0
+                            if frequency2 <= 0.0:
+                                continue
+                            if any(
+                                abs(frequency2 - existing) <= MIXING_MERGE_TOLERANCE
+                                for existing in occupied
+                            ):
+                                continue
+                            mismatch2 = fwm_phase_mismatch(
+                                beta2,
+                                frequency1 - reference.f0,
+                                sources[p].f0 - reference.f0,
+                                sources[q].f0 - reference.f0,
+                            )
+                            rate2 = (0.0, 0.0)
+                            if self.pump_phase and alpha == 0.0:
+                                rate2 = fwm_nonlinear_rate(
+                                    gamma,
+                                    power_at(frequency1),
+                                    powers[p],
+                                    powers[q],
+                                    power_at(frequency2),
+                                    cross_phase=coupled,
+                                    orthogonal_weight=weight,
+                                )
+                            amplitudes = [
+                                fwm_cascade_amplitude(
+                                    powers[i][axis],
+                                    powers[j][axis],
+                                    powers[k][axis],
+                                    powers[p][axis],
+                                    powers[q][axis],
+                                    gamma=gamma,
+                                    alpha=alpha,
+                                    distance=distance,
+                                    phase_mismatch_1=mismatch1 + rate1[axis],
+                                    phase_mismatch_2=mismatch2 + rate2[axis],
+                                    degenerate_1=i == j,
+                                    degenerate_2=False,
+                                )
+                                for axis in (0, 1)
+                            ]
+                            if sum(abs(value) ** 2 for value in amplitudes) < floor:
+                                continue
+                            found.append((frequency2, amplitudes[0], amplitudes[1]))
+
+                    # The first product can also sit in the *conjugated* role,
+                    # beside two launched pumps taken un-conjugated: landing at
+                    # ``f_p + f_q - f_F`` rather than ``f_F + f_p - f_q``. Both
+                    # are genuine second-order terms -- the drive is built from
+                    # two un-conjugated factors and one conjugated one, and the
+                    # first-order product can be either -- and dropping this one
+                    # left a two-pump second-order product a third high in the
+                    # low-power limit (maiman-z8j). ``p <= q``, matching the
+                    # outer ``i <= j``: the two launched legs here are the pair
+                    # that is un-conjugated together.
+                    for p in range(count):
+                        for q in range(p, count):
+                            frequency2 = sources[p].f0 + sources[q].f0 - frequency1
+                            if frequency2 <= 0.0:
+                                continue
+                            if any(
+                                abs(frequency2 - existing) <= MIXING_MERGE_TOLERANCE
+                                for existing in occupied
+                            ):
+                                continue
+                            mismatch2 = fwm_phase_mismatch(
+                                beta2,
+                                sources[p].f0 - reference.f0,
+                                sources[q].f0 - reference.f0,
+                                frequency1 - reference.f0,
+                            )
+                            rate2 = (0.0, 0.0)
+                            if self.pump_phase and alpha == 0.0:
+                                rate2 = fwm_nonlinear_rate(
+                                    gamma,
+                                    powers[p],
+                                    powers[q],
+                                    power_at(frequency1),
+                                    power_at(frequency2),
+                                    cross_phase=coupled,
+                                    orthogonal_weight=weight,
+                                )
+                            amplitudes = [
+                                fwm_cascade_amplitude(
+                                    powers[i][axis],
+                                    powers[j][axis],
+                                    powers[k][axis],
+                                    powers[p][axis],
+                                    powers[q][axis],
+                                    gamma=gamma,
+                                    alpha=alpha,
+                                    distance=distance,
+                                    phase_mismatch_1=mismatch1 + rate1[axis],
+                                    phase_mismatch_2=mismatch2 + rate2[axis],
+                                    degenerate_1=i == j,
+                                    degenerate_2=p == q,
+                                    conjugate_first=True,
+                                )
+                                for axis in (0, 1)
+                            ]
+                            if sum(abs(value) ** 2 for value in amplitudes) < floor:
+                                continue
+                            found.append((frequency2, amplitudes[0], amplitudes[1]))
+        return found
+
     def _mix(
         self,
         ctx: SimulationContext,
@@ -929,6 +1125,12 @@ class Fiber(Component):
         distance = self.si("length")
         if len(sources) < 2 or distance <= 0.0:
             return bands, 0, 0.0
+        if self.cascaded_fwm and self.cross_polarization:
+            raise ValueError(
+                f"{self.label or 'Fiber'}: cascaded_fwm's second-order term is written for the "
+                "scalar, per-axis drive; cross_polarization's vector one would need the tensor "
+                "carried through a second mixing stage, which it is not. Turn one of them off."
+            )
 
         strongest = max((band.average_power() for band in sources), default=0.0)
         if strongest <= 0.0:
@@ -1182,6 +1384,25 @@ class Fiber(Component):
                             math.sqrt(generated[1]) * phasors[1] * np.exp(1j * skew[1]),
                         )
                     )
+
+        if self.cascaded_fwm:
+            occupied = [band.f0 for band in sources] + [entry[0] for entry in found]
+            found.extend(
+                self._mix_cascade(
+                    sources=sources,
+                    reference=reference,
+                    beta2=beta2,
+                    powers=powers,
+                    power_at=power_at,
+                    coupled=coupled,
+                    weight=weight,
+                    gamma=gamma,
+                    alpha=alpha,
+                    distance=distance,
+                    floor=floor,
+                    occupied=occupied,
+                )
+            )
 
         if not found:
             return bands, 0, 0.0

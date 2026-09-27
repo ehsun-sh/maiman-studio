@@ -1414,6 +1414,132 @@ def fwm_accumulated_phase(
     return fwm_phase_mismatch(accumulated_gvd, offset_i, offset_j, offset_k)
 
 
+def fwm_cascade_integral(
+    delta_beta1: float, delta_beta2: float, alpha: float, distance: float
+) -> complex:
+    """A product driving a further product, within the span that made it [m^2].
+
+    :func:`fwm_mixing_integral` is a single triad's build-up, ``A_i A_j A_k*``
+    against a decaying, phase-slipping product. Undepleted-pump perturbation
+    theory does not stop there: the product it makes, ``A_F(z)``, is itself a
+    wave, and while the two original pumps are still present it drives a second
+    product exactly as any other triad would -- the process the split-step
+    resolves for free and the multi-band model, projecting each span to a set
+    of final amplitudes, has always thrown away. Thompson & Roy call this
+    *multiple four-wave mixing* and give the cascade to all orders for two
+    equal pumps (Phys. Rev. A 43, 4987 (1991)); Cappellini & Trillo solve the
+    three-wave case exactly (JOSA B 8, 824 (1991)). This is the second order of
+    that cascade, generic in the two triads' mismatches and in the loss.
+
+    Writing the first product's build-up as
+    ``M1(z) = integral_0^z exp((i*delta_beta1 - alpha) z') dz'`` -- the same
+    integrand :func:`fwm_mixing_integral` integrates to ``L``, here left
+    running -- the second product obeys the same undepleted-pump equation
+    driven by ``A_F(z)`` in place of a launched pump, and its own build-up is::
+
+        integral_0^L M1(z) exp((i*delta_beta2 - alpha) z) dz
+
+    which is what this function returns. Two nested exponentials integrate in
+    closed form for any ``delta_beta1``, ``delta_beta2`` and ``alpha`` -- no
+    series or quadrature needed, unlike :func:`fwm_mixing_integral` with a
+    pump-phase rate folded in, because here the "rate" a product turns at
+    inside the integral is a second *phase mismatch*, constant along ``z``,
+    not a nonlinear rate riding the loss-shaped ``L_eff(z)``. ``delta_beta1``
+    and ``delta_beta2`` may each carry a pump-phase correction added in by the
+    caller when that correction is itself constant along ``z`` -- exact at
+    ``alpha = 0``, where :func:`fwm_mixing_integral` folds a nonlinear rate in
+    the same way for the same reason.
+
+    Each stage's integral is one of two closed forms, chosen so both limits
+    stay finite: ``phi(r, L) = (exp(rL) - 1) / r``, or ``L`` where that is
+    ``0/0``, for the outer stage and any inner stage with a nonzero rate; and
+    ``psi(r, L) = integral_0^L z exp(rz) dz``, or ``L**2/2`` at ``r = 0``, for
+    the one case ``phi`` cannot reach -- a first mismatch of exactly zero,
+    where ``M1(z) = z`` is linear rather than exponential.
+    """
+    r1 = complex(-alpha, delta_beta1)
+    r2 = complex(-alpha, delta_beta2)
+
+    def phi(rate: complex, length: float) -> complex:
+        if abs(rate) * length < 1e-9:
+            return complex(length)
+        return complex((np.exp(rate * length) - 1.0) / rate)
+
+    def psi(rate: complex, length: float) -> complex:
+        if abs(rate) * length < 1e-9:
+            return complex(length * length / 2.0)
+        return complex(((rate * length - 1.0) * np.exp(rate * length) + 1.0) / (rate * rate))
+
+    if abs(r1) * distance < 1e-9:
+        return psi(r2, distance)
+    return (phi(r1 + r2, distance) - phi(r2, distance)) / r1
+
+
+def fwm_cascade_amplitude(
+    power_i: float,
+    power_j: float,
+    power_k: float,
+    power_p: float,
+    power_q: float,
+    *,
+    gamma: float,
+    alpha: float,
+    distance: float,
+    phase_mismatch_1: float,
+    phase_mismatch_2: float,
+    degenerate_1: bool,
+    degenerate_2: bool,
+    conjugate_first: bool = False,
+) -> complex:
+    """The second-order product's own complex field amplitude [sqrt(W)].
+
+    ``i``, ``j``, ``k`` are the first triad -- the pumps that make the
+    first-order product this one is cascaded from -- and ``p``, ``q`` are the
+    second triad's other two legs, real launched carriers both. Where
+    :func:`fwm_product_power` returns a *power* built from the undepleted-pump
+    formula, this returns an *amplitude*, because the point of computing it is
+    to add it coherently to whatever else lands on its frequency -- another
+    second-order term from a different route, or, across spans, whatever the
+    ordinary first-order treatment of :meth:`Fiber._mix` puts there next.
+
+    Its squared magnitude is the power,
+    ``d1**2 d2**2 gamma**4 P_i P_j P_k P_p P_q exp(-alpha L) |Omega|**2`` with
+    ``Omega`` the cascade integral, the loss of the product's own propagation
+    and of all five legs folded into it; the sign and the
+    factor of ``gamma**2`` come from applying the single-triad field equation
+    (:func:`fwm_efficiency`'s docstring) twice, the second time with the first
+    product standing in for a launched pump. ``d1``, ``d2`` are 1 for a
+    degenerate triad (two of its three legs the same carrier) and 2 otherwise,
+    the same degeneracy :func:`fwm_product_power` takes as ``degenerate``.
+
+    **The first product can drive the second either un-conjugated or
+    conjugated**, and both have to be added: a triplet's nonlinear polarization
+    is built from two un-conjugated factors and one conjugated one, and the
+    first-order product can sit in either role. Un-conjugated (``F`` beside a
+    launched pump, landing at ``f_F + f_p - f_q``) is the default; conjugated
+    (two launched pumps beside ``F*``, landing at ``f_p + f_q - f_F``) is
+    ``conjugate_first=True``, which flips the sign the two applications of
+    ``i`` in the field equation leave (``i * i = -1`` un-conjugated,
+    ``i * (-i) = +1`` conjugated -- the second stage drives off ``A_F(z)*``,
+    and conjugating a wave conjugates its own growth rate too, which is why
+    ``phase_mismatch_1`` enters negated in that case) and negates
+    ``phase_mismatch_1`` inside the cascade integral to match. Missing this
+    term entirely -- only the un-conjugated one -- left a two-pump second-order
+    product 33% high in the ``P -> 0`` limit, where every higher-order
+    correction this truncation also drops has vanished and the shortfall can
+    only be a missing term (maiman-z8j).
+    """
+    if min(power_i, power_j, power_k, power_p, power_q) <= 0.0:
+        return 0j
+    d1 = 1.0 if degenerate_1 else 2.0
+    d2 = 1.0 if degenerate_2 else 2.0
+    first_mismatch = -phase_mismatch_1 if conjugate_first else phase_mismatch_1
+    omega = fwm_cascade_integral(first_mismatch, phase_mismatch_2, alpha, distance)
+    magnitude = d1 * d2 * gamma**2 * math.sqrt(power_i * power_j * power_k * power_p * power_q)
+    sign = 1.0 if conjugate_first else -1.0
+    return complex(sign * magnitude * math.exp(-alpha * distance / 2.0) * omega)
+
+
 #: Silica's isotropic Kerr tensor, as the drive of one mixing product:
 #: ``D^m = T^m_abc A_i^a A_j^b (A_k^c)*`` over the Jones components. From
 #: ``(2/3)(E . E*) E + (1/3)(E . E) E*`` with the degeneracy factor divided out,

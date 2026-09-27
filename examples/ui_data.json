@@ -1594,6 +1594,11 @@
      "min": 0.0,
      "doc": "Discard mixing products this far below the strongest band"
     },
+    "cascaded_fwm": {
+     "type": "bool",
+     "default": false,
+     "doc": "Let a first-order mixing product drive a second one within the same span"
+    },
     "raman_gain_slope": {
      "type": "float",
      "default": 0.0,

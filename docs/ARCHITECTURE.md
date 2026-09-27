@@ -647,10 +647,17 @@ Stated in the code where each approximation is made, and collected here:
   followed between spans by the geometric phase its moving state adds, and a finely cut span
   converges on the split-step; a whole 80 km span holds each state from its start and is up to
   9 % out; and a band of two
-  independent tributaries keeps the per-axis form, having no one state. Products do not mix again
-  within the span that made them -- a second-order product is absent where the split-step has it
-  39 dB under the first -- and across spans they mix as pumps with a drawn phase rather than the one
-  they were made with, which put the same 20 km cut in four 4.8 times too high.
+  independent tributaries keeps the per-axis form, having no one state. With `cascaded_fwm`, off by
+  default, a first-order product can drive a second before the span ends -- both the roles it can
+  play, un-conjugated beside a launched pump and conjugated beside two, integrated in one closed
+  form -- landing at 5 % of the split-step's 39-dB-under-the-first second-order product at 10 mW
+  over 20 km, where it was previously absent, and converging on it as power falls. Left off, nothing
+  moves. It does not reach across spans: there a product still mixes as a pump with a phase drawn
+  per triplet rather than the one it was made with, and `cascaded_fwm` does not fix that -- cutting
+  the same 20 km into four spans now lands 9.7 times too high, worse than the 4.8 times without it,
+  because each span's own honest second-order term adds to the drawn-phase one the next span still
+  makes from it. Carrying a product's own phase across spans instead of drawing one is unresolved
+  (maiman-z8j).
 * **Gratings and modes.** The average index a writing process raises is carried when a grating's
   `dc_compensated` flag is off: as Erdogan's self-coupling for the Bragg and long-period gratings,
   and for the uniform tilted one as the fibre it leaves, its core raised and every mode solved
