@@ -11,6 +11,7 @@ values.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import replace
 
 import numpy as np
@@ -33,14 +34,17 @@ from ..kernels import (
     dispersion_to_beta2,
     effective_length,
     fwm_accumulated_phase,
+    fwm_drive_phase,
     fwm_mixing_integral,
     fwm_nonlinear_rate,
     fwm_phase_mismatch,
     fwm_power_transfer,
     fwm_product_power,
     fwm_vector_drive,
+    geometric_phase,
     kerr_rate,
     kerr_rate_in_state,
+    phase_reference,
     principal_state,
     propagate_coupled_ssfm,
     propagate_dispersion,
@@ -56,13 +60,6 @@ from ..units import db_to_linear
 #: products are separated by channel spacings — gigahertz — so any tolerance
 #: between floating-point noise on a 193 THz sum and a gigahertz would do.
 MIXING_MERGE_TOLERANCE = 1e3
-
-#: Below this fraction of a drive's power on x, a product's phase is taken
-#: against y instead: a drive with nothing on x has no phase there to take. Any
-#: fixed axis has such a state -- a global phase cannot be chosen continuously
-#: over every polarization -- so it is put where the light is not, rather than
-#: on the circle of equal powers where circular and diagonal light sit.
-SKEW_REFERENCE_FLOOR = 1e-9
 
 
 class Fiber(Component):
@@ -388,7 +385,7 @@ class Fiber(Component):
         bands, tilt = self._raman(signal, bands, alpha=alpha, distance=distance)
         diagnostics = replace(diagnostics, raman_tilt=tilt)
 
-        history = self._nonlinear_history(signal, gamma=gamma, alpha=alpha)
+        history = self._nonlinear_history(signal, gamma=gamma, alpha=alpha, propagated=bands)
         walkoff = self._walkoff(signal, distance)
         if gamma != 0.0 and self.four_wave_mixing:
             bands, emitted, depleted = self._mix(
@@ -659,7 +656,12 @@ class Fiber(Component):
         return self.cross_phase_modulation and len(signal.bands) > 1
 
     def _nonlinear_history(
-        self, signal: OpticalSignal, *, gamma: float, alpha: float
+        self,
+        signal: OpticalSignal,
+        *,
+        gamma: float,
+        alpha: float,
+        propagated: Sequence[Band] = (),
     ) -> KerrHistory:
         """The path's Kerr history with this span added: each carrier's ``rate * L_eff``.
 
@@ -685,7 +687,9 @@ class Fiber(Component):
         coupled = self._couples_bands(signal)
         states = self._polarized_states(signal)
         if states is not None:
-            return self._history_in_states(signal, states, gamma=gamma, length=length)
+            return self._history_in_states(
+                signal, states, gamma=gamma, length=length, propagated=propagated
+            )
         powers = [
             (float(np.mean(np.abs(b.Ex) ** 2)), float(np.mean(np.abs(b.Ey) ** 2)))
             for b in signal.bands
@@ -725,7 +729,13 @@ class Fiber(Component):
         return states
 
     def _history_in_states(
-        self, signal: OpticalSignal, states: list[np.ndarray], *, gamma: float, length: float
+        self,
+        signal: OpticalSignal,
+        states: list[np.ndarray],
+        *,
+        gamma: float,
+        length: float,
+        propagated: Sequence[Band] = (),
     ) -> KerrHistory:
         """:meth:`_nonlinear_history` with each carrier turned in its own state.
 
@@ -734,6 +744,13 @@ class Fiber(Component):
         it accumulates, because its angle depends on the state a product lands in.
         A carrier the history has not seen starts from the weak carrier's angle in
         that carrier's state.
+
+        The angle is a phase on x, the carrier's Jones vector held real there
+        (:func:`~maiman.kernels.principal_state`). A state that moves over the
+        span -- an ellipse the Kerr effect turns -- adds a geometric phase in that
+        gauge as well, :func:`~maiman.kernels.geometric_phase` from the state at
+        the start to the one ``propagated`` ends in. Light on an axis, on a
+        diagonal or circular keeps its state and adds none.
         """
         before = signal.nonlinear_history
         coupled = self._couples_bands(signal)
@@ -762,6 +779,10 @@ class Fiber(Component):
                 gamma, states, state, own=index, coherent=coherent, cross_phase=coupled
             )
             angle = begun + rate * length
+            if index < len(propagated):
+                ended = coherency(propagated[index].Ex, propagated[index].Ey)
+                if degree_of_polarization(ended) >= POLARIZED:
+                    angle += geometric_phase(state, principal_state(ended))
             carriers[band.f0] = (angle, angle)
         return KerrHistory(
             carriers=tuple((f0, x, y) for f0, (x, y) in sorted(carriers.items())),
@@ -774,6 +795,50 @@ class Fiber(Component):
                 float(weak[0, 1].imag),
             ),
         )
+
+    def _drive_drift(
+        self,
+        states: list[np.ndarray],
+        propagated: Sequence[Band],
+        triplet: tuple[int, int, int],
+        landed: int | None,
+        *,
+        length: float,
+    ) -> float:
+        """How much faster than their Kerr rates a moving drive turns off its carrier [rad/m].
+
+        In the history's gauge, each Jones vector real on x: the geometric phase
+        of ``i`` and ``j`` less ``k``'s, less the change in the tensor's own phase
+        on x, less the geometric phase of the channel the product lands on --
+        each from the state at the span's start to the one it ends in, over
+        ``L_eff``. Zero for pumps whose states stay put.
+        """
+        if length <= 0.0:
+            return 0.0
+
+        def ended(index: int) -> np.ndarray | None:
+            if index >= len(propagated):
+                return None
+            state = coherency(propagated[index].Ex, propagated[index].Ey)
+            return principal_state(state) if degree_of_polarization(state) >= POLARIZED else None
+
+        start = [principal_state(states[n]) for n in triplet]
+        end = [ended(n) for n in triplet]
+        drift = 0.0
+        for sign, first, last in zip((1.0, 1.0, -1.0), start, end, strict=True):
+            if last is not None:
+                drift += sign * geometric_phase(first, last)
+        if all(vector is not None for vector in end):
+            coherent = self.coherent_polarization
+            moved = fwm_drive_phase(*end, coherent=coherent) - fwm_drive_phase(  # type: ignore[arg-type]
+                *start, coherent=coherent
+            )
+            drift -= math.remainder(moved, 2.0 * math.pi)
+        if landed is not None:
+            last = ended(landed)
+            if last is not None:
+                drift -= geometric_phase(principal_state(states[landed]), last)
+        return drift / length
 
     def _mix(
         self,
@@ -841,8 +906,10 @@ class Fiber(Component):
         weak carrier's accumulated matrix, because the angle a new product's
         carrier has reached depends on the state it lands in. Linear light at any
         angle, and circular light, then add from span to span as light on the
-        axis does. Elliptical light is up to 9 % out over four spans, because its
-        ellipse rotates and each state is held from the span's start
+        axis does. An ellipse the Kerr effect turns is followed between spans --
+        the geometric phase its moving state adds, and the tensor's phase moving
+        with it -- and a span cut finely lands on the split-step; taken whole,
+        with each state held from its start, four 80 km spans are up to 9 % out
         (maiman-me9). A band of two independent
         tributaries has no one state, and keeps the per-axis form. And the phases are those the
         split-step applies, so the product's own phase runs the way its fields
@@ -949,8 +1016,7 @@ class Fiber(Component):
                         # span to span, and four spans added up to 1.7 times the
                         # split-step's product -- 6.4 phase-only (maiman-sew).
                         # Only a drive with nothing on x is taken against y.
-                        trace = float((drive[0, 0] + drive[1, 1]).real)
-                        lead = 0 if drive[0, 0].real > SKEW_REFERENCE_FLOOR * trace else 1
+                        lead = phase_reference(np.sqrt(np.abs(np.diag(drive).real)))
                         skew = [float(np.angle(drive[axis, lead])) for axis in (0, 1)]
                         if self.pump_phase and polarized:
                             # In each carrier's own state rather than per axis: the
@@ -986,6 +1052,18 @@ class Fiber(Component):
                                 cross_phase=coupled,
                             )
                             rate = carriers[0] + carriers[1] - carriers[2] - product
+                            # Pumps whose states move turn the drive by more than
+                            # their Kerr rates: a geometric phase each, and the
+                            # tensor's phase on x changing with them. Both follow
+                            # the power down the span as the Kerr rate does, so
+                            # they join it as their change over the span / L_eff.
+                            rate += self._drive_drift(
+                                states,
+                                bands,
+                                (i, j, k),
+                                landed,
+                                length=effective_length(alpha, distance),
+                            )
                             rates = (rate, rate)
                             # And between spans, from the history kept in the same
                             # terms: the drive's walk against the angle the product's
@@ -1001,6 +1079,36 @@ class Fiber(Component):
                             ]
                             step = pumped[0] + pumped[1] - pumped[2] - reached
                             walked, frame = (step, step), (turned, turned)
+                            # The history's angles are phases on x, each pump's
+                            # Jones vector held real there; the tensor then gives
+                            # the drive a phase on x of its own, which moves when
+                            # the pumps' states do -- an ellipse turning, where
+                            # dropping it cost 6 to 9 % over four spans (maiman-me9).
+                            turn = fwm_drive_phase(
+                                *(principal_state(states[n]) for n in (i, j, k)),
+                                coherent=self.coherent_polarization,
+                            )
+                            skew = [value + turn for value in skew]
+                            # What this span makes is added at its end, where the
+                            # pumps' states have moved and taken the drive's with
+                            # them: its share goes in the drive's orientation there.
+                            # A product on a channel has that channel's geometric
+                            # phase in the history already; a new one has none, and
+                            # is given the drive's.
+                            if all(n < len(bands) for n in (i, j, k)):
+                                final = fwm_vector_drive(
+                                    *(coherency(bands[n].Ex, bands[n].Ey) for n in (i, j, k)),
+                                    coherent=self.coherent_polarization,
+                                )
+                                ahead = phase_reference(np.sqrt(np.abs(np.diag(final).real)))
+                                skew = [
+                                    float(np.angle(final[axis, ahead])) + turn for axis in (0, 1)
+                                ]
+                                if landed is None:
+                                    moved = geometric_phase(
+                                        principal_state(drive), principal_state(final)
+                                    )
+                                    frame = (frame[0] + moved, frame[1] + moved)
                     else:
                         strengths = [
                             (powers[i][axis], powers[j][axis], powers[k][axis]) for axis in (0, 1)

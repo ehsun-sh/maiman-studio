@@ -3707,7 +3707,8 @@ Every physics block ships with a test against a closed-form result, run in CI
 | The drive is the Kerr tensor's | Isotropic: a linear state mixes as on the axis, a circular one at `(2/3)² = 4/9`; phase-only: `(5/6)² = 25/36` at 45° — and the split-step itself measures 0.4451 and 0.6950 | ✅ |
 | **The pumps' Kerr phase in their own state** | 20 mW, every state and both tensors: 0.997–1.001 of the split-step, where per axis the 45° beam was 10.6 % high; four amplified spans at 45° land where the axial ones do, 1.040 and 1.011 | ✅ |
 | **Circular and diagonal light over several spans** | Four amplified spans, both tensors: circular and ±45° within 1.003–1.040, as on the axis. The product's phase used to be taken against whichever axis rounding made stronger, which flipped between spans: 1.7× (circular) and 0.12× (−45°) before | ✅ |
-| Elliptical light over several spans | Pinned rather than tuned: 0.94 and 1.09 over four spans with the coherent term, within 3 % phase-only. Its ellipse turns 6° a span and the model holds each state from the span's start | — |
+| **A turning ellipse, span by span** | Its ellipse turns 6° a span; the geometric phase that adds, and the tensor's phase moving with it, are kept between spans. Cut each span in eight and four spans land at 1.041, beside 1.040 on the axis — where before, cutting drove it from 0.94 to 0.83 | ✅ |
+| Elliptical light in one long span | Pinned rather than tuned: 1.09 at D = +4 with the coherent term, within 3 % otherwise, because each state is held along the span | — |
 | XPM swing | Peak-to-peak `2·γ·P·L_eff` on a probe beside an on/off pump, with no walk-off | ✅ |
 | Walk-off | `D·Δλ` per unit length, derived from β₂ and not declared beside it | ✅ |
 | Walk-off conserves the mean | Mean XPM phase fixed at `2·γ·⟨P⟩·L_eff` across a 16× change in slip, while its spread falls 5.7× | ✅ |

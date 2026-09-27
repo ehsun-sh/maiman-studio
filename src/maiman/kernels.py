@@ -1154,10 +1154,48 @@ def degree_of_polarization(state: np.ndarray) -> float:
     return spread / total
 
 
+#: Below this fraction of a state's power on x, its phase is taken on y: a state
+#: with nothing on x has no phase there. A global phase cannot be chosen
+#: continuously over every polarization, so the break is put where the light is
+#: not -- rather than, say, on the circle of equal powers where circular and
+#: diagonal light sit.
+PHASE_REFERENCE_FLOOR = 1e-9
+
+
+def phase_reference(vector: np.ndarray) -> int:
+    """The axis a polarization's phase is read on: x, unless there is nothing on x."""
+    v = np.asarray(vector)
+    total = float(np.sum(np.abs(v) ** 2))
+    return 0 if abs(v[0]) ** 2 > PHASE_REFERENCE_FLOOR * total else 1
+
+
 def principal_state(state: np.ndarray) -> np.ndarray:
-    """The unit Jones vector a coherency matrix is mostly made of."""
+    """The unit Jones vector a coherency matrix is mostly made of, real on x.
+
+    A coherency matrix carries no global phase, so one is chosen: the component
+    on :func:`phase_reference`'s axis is real and positive. Every angle a Kerr
+    history keeps is a phase in this gauge, which is what lets a state that
+    moves be followed from one span to the next.
+    """
     values, vectors = np.linalg.eigh(np.asarray(state, dtype=np.complex128))
-    return vectors[:, int(np.argmax(values))]
+    vector = vectors[:, int(np.argmax(values))]
+    lead = vector[phase_reference(vector)]
+    return vector * (abs(lead) / lead) if lead != 0 else vector
+
+
+def geometric_phase(start: np.ndarray, end: np.ndarray) -> float:
+    """What a state moving from ``start`` to ``end`` adds to its phase in that gauge [rad].
+
+    A wave ``exp(-i phi) u`` with ``u`` held real on x, under ``dA/dz = -i H A``,
+    turns at ``u^H H u + Im(u^H du/dz)``: the Kerr rate in its state, and a
+    geometric term that is zero for a state that stays put and is
+    ``sin^2(a) d(delta)`` for ``u = (cos a, sin a e^(i delta))`` -- Pancharatnam's
+    connection (Berry, J. Mod. Opt. 34, 1401 (1987)). Over a short move it is
+    ``arg(u_start^H u_end)``, the move taken along the shortest path; returned in
+    the history's sense, ``exp(-i angle)``.
+    """
+    overlap = complex(np.vdot(np.asarray(start), np.asarray(end)))
+    return float(np.angle(overlap)) if overlap != 0 else 0.0
 
 
 def cross_kerr_matrix(state: np.ndarray, *, coherent: bool) -> np.ndarray:
@@ -1439,6 +1477,33 @@ def fwm_vector_drive(
         np.asarray(pump_j),
         np.conj(np.asarray(pump_k)),
     )
+
+
+def fwm_drive_phase(
+    pump_i: np.ndarray,
+    pump_j: np.ndarray,
+    pump_k: np.ndarray,
+    *,
+    coherent: bool = True,
+) -> float:
+    """The phase the tensor gives a drive on its reference axis, for unit pumps [rad].
+
+    :func:`fwm_vector_drive` is a coherency and has none. But ``T(u_i, u_j, u_k*)``
+    for Jones vectors each real on x is a vector whose x component need not be
+    real -- the cross terms ``(u_i . u_k*) u_j`` carry the pumps' relative phases
+    between axes -- and a pump whose state moves moves it. Returned as the angle
+    the product's field has, ``exp(+i phase)``, on :func:`phase_reference`'s axis.
+    """
+    tensor = _FWM_TENSOR if coherent else _FWM_TENSOR_PHASE_ONLY
+    drive = np.einsum(
+        "mabc,a,b,c->m",
+        tensor,
+        np.asarray(pump_i),
+        np.asarray(pump_j),
+        np.conj(np.asarray(pump_k)),
+    )
+    lead = drive[phase_reference(drive)]
+    return float(np.angle(lead)) if lead != 0 else 0.0
 
 
 def fwm_product_power(

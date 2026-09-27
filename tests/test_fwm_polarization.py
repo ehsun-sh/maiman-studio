@@ -24,8 +24,11 @@ from maiman.context import SimulationContext
 from maiman.kernels import (
     attenuation_db_per_m_to_alpha,
     coherency,
+    fwm_drive_phase,
     fwm_phase_mismatch,
     fwm_vector_drive,
+    geometric_phase,
+    principal_state,
     propagate_coupled_ssfm,
 )
 from maiman.signals import Band, OpticalSignal
@@ -90,6 +93,78 @@ def test_the_coherency_of_a_band_is_its_jones_vector_squared() -> None:
     ex = np.full(64, jones[0] * math.sqrt(2e-3), dtype=np.complex128)
     ey = np.full(64, jones[1] * math.sqrt(2e-3), dtype=np.complex128)
     assert coherency(ex, ey) == pytest.approx(state(jones, 2e-3), rel=1e-12)
+
+
+# ---------------------------------------------------------------------------
+# The phase a state carries, in the gauge the history keeps
+# ---------------------------------------------------------------------------
+
+
+def ellipse(a: float, delta: float) -> np.ndarray:
+    return np.array([math.cos(a), math.sin(a) * np.exp(1j * delta)])
+
+
+def test_a_principal_state_is_real_on_x_and_on_y_only_with_nothing_on_x() -> None:
+    for jones in (*STATES.values(), (0.6, -0.8j), (-0.3, 0.2 + 0.9j)):
+        vector = principal_state(state(np.exp(1.1j) * np.array(jones)))
+        assert vector[0].imag == pytest.approx(0.0, abs=1e-15) and vector[0].real > 0.0
+    on_y = principal_state(state((0.0, 1j)))
+    assert on_y[1].imag == pytest.approx(0.0, abs=1e-15) and on_y[1].real > 0.0
+
+
+def test_the_geometric_phase_is_pancharatnam_s() -> None:
+    """``sin^2(a) d(delta)`` for ``u = (cos a, sin a e^(i delta))``, and nothing if it stays put.
+
+    Over a finite move the shortest path gives ``arg(cos^2 a + sin^2 a e^(i Delta))``;
+    a small one reduces to the differential form.
+    """
+    for a in (0.0, 0.3, math.pi / 4, 1.2):
+        step = 1e-4
+        assert geometric_phase(ellipse(a, 0.4), ellipse(a, 0.4 + step)) == pytest.approx(
+            math.sin(a) ** 2 * step, rel=1e-4, abs=1e-15
+        )
+        big = 0.8
+        assert geometric_phase(ellipse(a, 0.4), ellipse(a, 0.4 + big)) == pytest.approx(
+            float(np.angle(math.cos(a) ** 2 + math.sin(a) ** 2 * np.exp(1j * big))), abs=1e-14
+        )
+        assert geometric_phase(ellipse(a, 0.4), ellipse(a, 0.4)) == 0.0
+    # Turning the ellipse's major axis moves ``a`` alone, and adds nothing.
+    assert geometric_phase(ellipse(0.3, 0.0), ellipse(0.5, 0.0)) == 0.0
+
+
+@pytest.mark.parametrize("coherent", [True, False])
+def test_the_drive_s_phase_is_the_tensor_s_on_jones_vectors(coherent: bool) -> None:
+    """Against the tensor written out: ``[(u_i.u_k*) u_j + (u_j.u_k*) u_i + (u_i.u_j) u_k*] / 3``.
+
+    Phase-only drops the entries where both pumps sit on the other axis. For
+    three pumps in one linear or circular state the phase on x is zero, and for
+    one ellipse it is not -- the ``(u . u) u*`` term carries its handedness --
+    but a state that stays put keeps it constant, which is why only light whose
+    states move ever saw this term go missing.
+    """
+    u_i, u_j, u_k = ellipse(0.3, 1.0), ellipse(1.1, -0.4), ellipse(0.7, 2.2)
+
+    def written(p: np.ndarray, q: np.ndarray, r: np.ndarray) -> complex:
+        drive = (np.dot(p, np.conj(r)) * q + np.dot(q, np.conj(r)) * p) / 3.0
+        drive = drive + np.dot(p, q) * np.conj(r) / 3.0
+        if not coherent:
+            drive[0] = drive[0] - p[1] * q[1] * np.conj(r[0]) / 3.0
+        return complex(drive[0])
+
+    assert fwm_drive_phase(u_i, u_j, u_k, coherent=coherent) == pytest.approx(
+        float(np.angle(written(u_i, u_j, u_k))), abs=1e-14
+    )
+    for jones in ((1.0, 0.0), STATES["45 degrees"], (0.6, -0.8), STATES["circular"]):
+        u = principal_state(state(jones))
+        assert fwm_drive_phase(u, u, u, coherent=coherent) == pytest.approx(0.0, abs=1e-15)
+    # An ellipse on the axes has ``u . u`` real and no phase either; once it has
+    # turned off them -- as the Kerr effect turns it -- it has one.
+    upright = principal_state(state(STATES["elliptical"]))
+    assert fwm_drive_phase(upright, upright, upright, coherent=True) == pytest.approx(
+        0.0, abs=1e-15
+    )
+    tilted = ellipse(0.3, 1.0)
+    assert abs(fwm_drive_phase(tilted, tilted, tilted, coherent=True)) > 1e-2
 
 
 # ---------------------------------------------------------------------------
@@ -304,8 +379,10 @@ def reference_link(jones: tuple[complex, complex], dispersion: float, *, coheren
     return float(sum(abs(np.fft.fft(field)[bin_] / n) ** 2 for field in fields))
 
 
-def modelled_link(jones: tuple[complex, complex], dispersion: float, *, coherent: bool) -> float:
-    """The same link through the fibre block, as two bands [W]."""
+def modelled_link(
+    jones: tuple[complex, complex], dispersion: float, *, coherent: bool, pieces: int = 1
+) -> float:
+    """The same link through the fibre block, as two bands, each span in ``pieces`` [W]."""
     signal = OpticalSignal(
         bands=tuple(
             Band(
@@ -318,17 +395,18 @@ def modelled_link(jones: tuple[complex, complex], dispersion: float, *, coherent
         )
     )
     for index in range(4):
-        signal = Fiber(
-            length=80.0,
-            attenuation=0.2,
-            dispersion=dispersion,
-            nonlinearity=GAMMA,
-            mixing_floor=250.0,
-            pump_phase=True,
-            cross_polarization=True,
-            coherent_polarization=coherent,
-            label=f"span{index}",
-        ).run(CTX, {"in": signal})["out"]
+        for piece in range(pieces):
+            signal = Fiber(
+                length=80.0 / pieces,
+                attenuation=0.2,
+                dispersion=dispersion,
+                nonlinearity=GAMMA,
+                mixing_floor=250.0,
+                pump_phase=True,
+                cross_polarization=True,
+                coherent_polarization=coherent,
+                label=f"span{index}" if pieces == 1 else f"span{index}.{piece}",
+            ).run(CTX, {"in": signal})["out"]
         signal = EDFA(gain=16.0, noise_figure=0.0, label=f"amp{index}").run(CTX, {"in": signal})[
             "out"
         ]
@@ -373,23 +451,42 @@ def test_four_spans_add_as_the_split_step_adds_them_in_any_fixed_state(
     assert ratio == pytest.approx(1.0, abs=0.05)
 
 
-@pytest.mark.parametrize(
-    ("dispersion", "coherent", "measured"),
-    [(4.0, True, 0.940), (-4.0, True, 1.092), (4.0, False, 0.998), (-4.0, False, 1.030)],
-)
-def test_what_elliptical_light_still_gets_wrong_over_several_spans(
-    dispersion: float, coherent: bool, measured: float
-) -> None:
-    """Pinned, not tuned (maiman-me9): an ellipse turns, and the model holds it still.
+def test_a_turning_ellipse_converges_on_the_split_step_as_the_span_is_cut() -> None:
+    """Cut each span into eight and elliptical light lands where light on the axis does.
 
     Light on an axis, on a diagonal or circular keeps its state in a Kerr fibre;
     elliptical light does not -- its ellipse rotates with its own power (Maker,
-    Terhune and Savage, Phys. Rev. Lett. 12, 507 (1964)). Here the pump's turns
-    5.95 degrees over one span with the isotropic tensor and 2.95 phase-only,
-    and the model takes each carrier's state at the span's start and holds it.
-    The error follows the rotation: up to 9 % over four spans isotropic, within
-    3 % phase-only. That the rotation is the whole of it is not yet shown. A
-    change that moves these numbers should say why.
+    Terhune and Savage, Phys. Rev. Lett. 12, 507 (1964)), here 5.95 degrees a
+    span. A state that moves adds a geometric phase in the gauge the history
+    keeps, and moves the tensor's own phase on x; without either, cutting a span
+    into pieces *changed* the answer -- 0.94, then 0.89, 0.89, 0.83 at 2, 4 and
+    8 pieces. With both it converges: 1.09, 1.06, 1.04, 1.04, beside the 1.040
+    of light on the axis. Cutting a span must not change what it does.
+    """
+    reference = reference_link(STATES["elliptical"], 4.0, coherent=True)
+    fine = modelled_link(STATES["elliptical"], 4.0, coherent=True, pieces=8) / reference
+    axial = modelled_link(STATES["x"], 4.0, coherent=True) / reference_link(
+        STATES["x"], 4.0, coherent=True
+    )
+    assert fine == pytest.approx(axial, abs=0.01)
+
+
+@pytest.mark.parametrize(
+    ("dispersion", "coherent", "measured"),
+    [(4.0, True, 1.090), (-4.0, True, 1.002), (4.0, False, 1.030), (-4.0, False, 1.009)],
+)
+def test_what_elliptical_light_still_gets_wrong_in_one_long_span(
+    dispersion: float, coherent: bool, measured: float
+) -> None:
+    """Pinned, not tuned (maiman-me9): the state is still held fixed along a span.
+
+    Between spans the turning ellipse is followed now, and a span cut finely
+    lands on the split-step (the test above). Taken whole, what is left is
+    inside the span: the mixing integral holds each pump's state from the span's
+    start, and the product made there is added in the drive's orientation at
+    its end. 9 % over four 80 km spans at D = +4 isotropic, within 3 %
+    otherwise; it was 6 % low and 9 % high before the geometric phase was kept.
+    A change that moves these numbers should say why.
     """
     ratio = modelled_link(STATES["elliptical"], dispersion, coherent=coherent) / reference_link(
         STATES["elliptical"], dispersion, coherent=coherent
