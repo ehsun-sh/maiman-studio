@@ -52,9 +52,12 @@ information (TP0) to the DSP frame's symbols (TP7), with clause 9.2.4's tail
 permute applied inside the encoder, and reproduces every one of the
 specification's test points, TP1 to TP7, for all three shaped modes; :func:`dpo_receive`
 runs it back, with clause 8.2's error marking when asked for, exactly as the DO
-path does it. What it does not do is what the DO path does not do either: the
-receiver's ratios are a hard decision dressed as a soft one. Without the tables
-only the part past the shaper runs, as :func:`dpo_transmit_lanes`.
+path does it. By default its receiver's ratios are still a hard decision
+dressed as a soft one, as the DO path's are without ``noise_variance``; give it
+one and it calls :func:`maiman.wport.symbol_llr` instead, with a documented gap
+-- the shaper's non-uniform prior on the amplitude bit is not in that LLR, only
+the channel term is. Without the tables only the part past the shaper runs, as
+:func:`dpo_transmit_lanes`.
 """
 
 from __future__ import annotations
@@ -85,6 +88,7 @@ from .wport import (
     scramble,
     symbol_bits,
     symbol_levels,
+    symbol_llr,
 )
 
 __all__ = [
@@ -642,6 +646,8 @@ def dpo_receive(
     modulation: str,
     directory: str | None = None,
     confidence: float = 8.0,
+    noise_variance: float | None = None,
+    exact: bool = True,
     iterations: int = 3,
     error_marking: bool = False,
 ) -> DPOReception:
@@ -653,9 +659,17 @@ def dpo_receive(
     for the backs. What comes out of it is each encoder's input, which goes back
     through the shaper rather than through the DO path's multiplexer.
 
-    As on the DO path, the ratios here are a hard decision dressed as a soft
-    one; a receiver with a real channel behind it should form its own from its
-    own noise and call the decoder itself.
+    As on the DO path, leaving ``noise_variance`` at ``None`` hands the decoder
+    a hard decision dressed as a soft one (``confidence``'s magnitude, sign from
+    the sliced bit); setting it forms :func:`maiman.wport.symbol_llr`'s ratios
+    from the amplitudes instead. **What that does not do**: it is the *uniform*-
+    prior LLR, ``ln P(y|b=0)/P(y|b=1)`` with no term for the shaper's bias. The
+    sign bit is shaped close to uniform, but the amplitude bit is not -- clause
+    9's LUTs pick the inner point 0.623 to 0.8265 of the time (Table 4, and this
+    module's own docstring) -- so the amplitude bit's LLR here is the channel
+    term alone, missing the ``ln P(b=0)/P(b=1)`` prior term a receiver that
+    exploited the shaping fully would add before decoding. That is a real gap:
+    it costs some of what shaping bought, and closing it is maiman-viq.
     """
     symbols = np.asarray(frame)
     if symbols.ndim != 2 or symbols.shape[0] % DSP_FRAME_SYMBOLS:
@@ -664,8 +678,12 @@ def dpo_receive(
         dsp_deframe(symbols[start : start + DSP_FRAME_SYMBOLS], modulation=modulation).payload
         for start in range(0, symbols.shape[0], DSP_FRAME_SYMBOLS)
     ]
-    bits = symbol_bits(np.concatenate(payloads), modulation=modulation)
-    llr = np.where(bits == 1, -confidence, confidence)
+    payload = np.concatenate(payloads)
+    if noise_variance is None:
+        bits = symbol_bits(payload, modulation=modulation)
+        llr = np.where(bits == 1, -confidence, confidence)
+    else:
+        llr = symbol_llr(payload, noise_variance, modulation=modulation, exact=exact)
     decoded = [
         ofec_decode_stream(lane, iterations=iterations, tail=TAIL_PERMUTATION)
         for lane in ofec_deinterleave(llr, "16qam")

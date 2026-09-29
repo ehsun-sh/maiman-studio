@@ -87,6 +87,7 @@ __all__ = [
     "scramble",
     "symbol_bits",
     "symbol_levels",
+    "symbol_llr",
     "training_symbols",
     "wport_receive",
     "wport_transmit",
@@ -400,6 +401,118 @@ def symbol_bits(levels: np.ndarray, *, modulation: str = "qpsk") -> np.ndarray:
     return out.reshape(-1)
 
 
+@lru_cache
+def _pam_constellation(modulation: str) -> tuple[np.ndarray, np.ndarray]:
+    """The one-dimensional amplitude points a real axis carries, and their bit labels.
+
+    Both line modulations are separable: every one of ``[XI, XQ, YI, YQ]`` is an
+    independent pulse-amplitude channel, because :func:`symbol_levels` builds
+    each from bits of its own axis alone (Table 10's sign-then-magnitude
+    labelling for DP-16QAM; a single sign bit for DP-QPSK). That is what makes a
+    joint two-dimensional demapper unnecessary -- the constellation's two
+    quadratures, and its two polarizations, never share a bit.
+
+    Returns ``(points, labels)``: ``points`` the amplitudes in ascending order,
+    ``labels`` the bits ``(M, K)`` -- one row a point, one column a bit -- each
+    entry 0 or 1, ``0`` matching the level :func:`symbol_bits` reads back to a
+    0 and ``1`` to a 1.
+    """
+    if line_modulation(modulation) == "qpsk":
+        return np.array([-1.0, 1.0]), np.array([[0], [1]], dtype=np.uint8)
+    pairs = sorted((value, label) for label, value in _AMPLITUDE.items())
+    points = np.array([value for value, _ in pairs], dtype=np.float64)
+    labels = np.array([label for _, label in pairs], dtype=np.uint8)
+    return points, labels
+
+
+def _logsumexp(a: np.ndarray, *, axis: int) -> np.ndarray:
+    """``log(sum(exp(a)))`` along ``axis``, stable against the exponential overflowing."""
+    peak = np.max(a, axis=axis, keepdims=True)
+    total = peak + np.log(np.sum(np.exp(a - peak), axis=axis, keepdims=True))
+    return np.squeeze(total, axis=axis)
+
+
+def _pam_llr(
+    values: np.ndarray,
+    noise_variance: float,
+    points: np.ndarray,
+    labels: np.ndarray,
+    *,
+    exact: bool,
+) -> np.ndarray:
+    """Per-bit LLRs for one real PAM axis, ``(..., K)`` from ``values`` of any shape.
+
+    AWGN of variance ``noise_variance`` per real dimension turns each candidate
+    point into a Gaussian likelihood; the bit's LLR is the log ratio of the two
+    label classes' total likelihood (``exact``; L. Szczecinski and A. Alvarado,
+    *Bit-Interleaved Coded Modulation*, Wiley 2015, applied to one real
+    dimension) or of their single nearest points (max-log; F. Tosato and P.
+    Bisaglia, "Simplified soft-output demapper for binary interleaved COFDM with
+    application to HIPERLAN/2", IEEE ICC 2002). Positive means the bit read
+    back 0, negative means 1 -- :func:`ofec_decode`'s convention, and the one a
+    hard slice already used here.
+    """
+    d2 = (values[..., None] - points[None, None, :]) ** 2
+    bits = []
+    for column in range(labels.shape[1]):
+        zero = labels[:, column] == 0
+        one = ~zero
+        if exact:
+            log_zero = _logsumexp(-d2[..., zero] / (2.0 * noise_variance), axis=-1)
+            log_one = _logsumexp(-d2[..., one] / (2.0 * noise_variance), axis=-1)
+            bits.append(log_zero - log_one)
+        else:
+            nearest_zero = np.min(d2[..., zero], axis=-1)
+            nearest_one = np.min(d2[..., one], axis=-1)
+            bits.append((nearest_one - nearest_zero) / (2.0 * noise_variance))
+    return np.stack(bits, axis=-1)
+
+
+def symbol_llr(
+    levels: np.ndarray,
+    noise_variance: float,
+    *,
+    modulation: str = "qpsk",
+    exact: bool = True,
+) -> np.ndarray:
+    """Soft bit log-likelihood ratios (TP6 order) from noisy ``[XI, XQ, YI, YQ]`` amplitudes.
+
+    The soft counterpart of :func:`symbol_bits`: instead of reading back each
+    axis's nearest amplitude, it forms the log-likelihood ratio a receiver with
+    a real, noisy channel actually has -- one call to :func:`_pam_llr` per axis,
+    assembled into the same bit order :func:`symbol_levels` reads from and
+    :func:`symbol_bits` reads back to, so the two are drop-in alternatives
+    everywhere a hard-sliced-then-dressed LLR was used before.
+
+    ``noise_variance`` is the AWGN variance on *each* real dimension (``XI``,
+    ``XQ``, ``YI`` and ``YQ`` alike -- a single scalar because W-Port's two
+    polarizations and two quadratures share one line and one receiver front
+    end). That is **half** of what :func:`maiman.modulation.estimate_noise_variance`
+    and :class:`maiman.components.dsp.SoftDemapper` call ``noise_variance`` there,
+    because theirs is a complex symbol's total -- ``Var(I) + Var(Q)`` -- and this
+    one is a single real axis's. Pass ``estimate / 2`` if the number in hand is
+    that convention's. ``exact`` selects the log-sum-exp likelihood over
+    max-log; both are exact for DP-QPSK, where each axis carries one bit and
+    there is only one point on each side of it.
+    """
+    values = np.asarray(levels, dtype=np.float64)
+    if values.ndim != 2 or values.shape[1] != 4:
+        raise ValueError(f"levels are (symbols, 4) of [XI, XQ, YI, YQ], got {values.shape}")
+    if not noise_variance > 0.0:
+        raise ValueError(f"noise_variance must be positive, got {noise_variance}")
+    points, labels = _pam_constellation(modulation)
+    axis_llr = _pam_llr(values, noise_variance, points, labels, exact=exact)  # (symbols, 4, K)
+    if line_modulation(modulation) == "qpsk":
+        bit = axis_llr[..., 0]
+        return np.stack([bit[:, 0], bit[:, 2], bit[:, 1], bit[:, 3]], axis=1).reshape(-1)
+    out = np.empty((values.shape[0], 8), dtype=np.float64)
+    out[:, 0], out[:, 2] = axis_llr[:, 0, 0], axis_llr[:, 0, 1]
+    out[:, 4], out[:, 6] = axis_llr[:, 1, 0], axis_llr[:, 1, 1]
+    out[:, 1], out[:, 3] = axis_llr[:, 2, 0], axis_llr[:, 2, 1]
+    out[:, 5], out[:, 7] = axis_llr[:, 3, 0], axis_llr[:, 3, 1]
+    return out.reshape(-1)
+
+
 def jones(levels: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """``(X, Y)`` complex symbols from ``[XI, XQ, YI, YQ]`` amplitudes."""
     values = np.asarray(levels, dtype=np.float64)
@@ -685,17 +798,23 @@ def wport_receive(
     *,
     modulation: str = "qpsk",
     confidence: float = 8.0,
+    noise_variance: float | None = None,
+    exact: bool = True,
     iterations: int = 3,
     error_marking: bool = False,
 ) -> WPortReception:
     """Received symbols (TP7) back to FlexO information, decoding on the way.
 
-    ``confidence`` is the magnitude of the log-likelihood ratios the sliced bits
-    are handed to the decoder with. It is a hard decision dressed as a soft one,
-    which is what a frame of clean symbols deserves; a receiver with a real
-    channel behind it should form its own ratios from its own noise and call
-    :func:`maiman.ofec.ofec_decode` itself. ``error_marking`` is clause 8.2's,
-    as :func:`flexo_deadapt` does it.
+    With ``noise_variance`` left at ``None``, ``confidence`` is the magnitude of
+    the log-likelihood ratios the *sliced* bits are handed to the decoder with --
+    a hard decision dressed as a soft one, which is what a frame of clean
+    symbols deserves, and what every existing vector test still gets, bit for
+    bit. Give ``noise_variance`` -- the AWGN variance per real dimension a
+    receiver measured on its own channel -- and this forms real ratios instead,
+    with :func:`symbol_llr` (``exact`` selects log-sum-exp over max-log); the
+    ``frame`` samples need not be exact integer levels when it is set, since
+    the LLR is computed from their continuous amplitudes directly.
+    ``error_marking`` is clause 8.2's, as :func:`flexo_deadapt` does it.
     """
     symbols = np.asarray(frame)
     if symbols.ndim != 2 or symbols.shape[0] % DSP_FRAME_SYMBOLS:
@@ -704,8 +823,12 @@ def wport_receive(
         dsp_deframe(symbols[start : start + DSP_FRAME_SYMBOLS], modulation=modulation)
         for start in range(0, symbols.shape[0], DSP_FRAME_SYMBOLS)
     ]
-    bits = symbol_bits(np.concatenate([frame.payload for frame in taken]), modulation=modulation)
-    llr = np.where(bits == 1, -confidence, confidence)
+    payload = np.concatenate([frame.payload for frame in taken])
+    if noise_variance is None:
+        bits = symbol_bits(payload, modulation=modulation)
+        llr = np.where(bits == 1, -confidence, confidence)
+    else:
+        llr = symbol_llr(payload, noise_variance, modulation=modulation, exact=exact)
     decoded = ofec_decode(llr, modulation=modulation, iterations=iterations)
     span = codec_bits(modulation)
     recovered = [

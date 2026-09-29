@@ -734,6 +734,17 @@ takes a `tail` for the part that matters, and the tests measure what each single
 stream with nothing wrong with it, either one alone makes the decoder correct hundreds of bits that
 were never wrong, and both together make it correct none.
 
+**Both receivers can do better than a hard decision dressed as a soft one.** Left at their
+defaults, `wport_receive` and `dpo_receive` slice the received amplitude and hand the decoder a
+fixed confidence, sign only — which is what every test above measures, bit-identically to before.
+Given `noise_variance`, they call `symbol_llr` instead: DP-QPSK and DP-16QAM are separable, every
+one of `[XI, XQ, YI, YQ]` an independent pulse-amplitude channel under clause 11's labelling, so the
+per-bit log-likelihood ratio is a one-dimensional Gaussian sum — exact (log-sum-exp) or max-log
+(Tosato & Bisaglia, "Simplified soft-output demapper for binary interleaved COFDM with application
+to HIPERLAN/2", ICC 2002). On the DPO modes that LLR is still the *uniform*-prior one: the shaper
+biases the amplitude bit toward the inner points, and this does not yet fold that bias in, which
+costs back some of what the shaping bought (maiman-viq).
+
 **Three things had to exist before any of this could be wired up**, and each is its own block:
 
 `SoftDemapper` turns symbols into LLRs, max-log, with the noise variance estimated blind because a

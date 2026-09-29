@@ -436,6 +436,34 @@ def test_the_shaped_decoder_repairs_what_the_line_did() -> None:
     assert received.clean, "and the CRC32s agree that it is repaired"
 
 
+@BOTH
+def test_dpo_soft_decoding_cleans_up_where_hard_decoding_cannot() -> None:
+    """The DPO path's own hard-vs-soft contrast, even with the shaped prior missing.
+
+    FlexO-6(e) (``b72``, the most heavily shaped mode, ``P(inner) = 0.8265``),
+    information from the specification's own TP0 vector, AWGN of variance 0.12
+    per real dimension added with ``numpy.random.default_rng(42)``. That is a
+    pre-FEC BER of about 0.18 %. Even without the amplitude bit's shaping prior
+    folded into the LLR (the module docstring's documented gap), the real
+    channel ratio still recovers this frame where the fixed-confidence hard
+    decision does not -- the missing prior costs some margin, not correctness
+    at this operating point.
+    """
+    mode = "b72"
+    information = vector(mode, "TP0")[: information_bits(mode)]
+    frame = dpo_transmit(information, modulation=mode)
+    sigma2 = 0.12
+    noise = np.random.default_rng(42).normal(0.0, sigma2**0.5, frame.shape)
+    noisy = frame.astype(np.float64) + noise
+
+    hard = dpo_receive(noisy, modulation=mode, noise_variance=None)
+    soft = dpo_receive(noisy, modulation=mode, noise_variance=sigma2)
+
+    assert not hard.clean, "the hard-decision LLR was expected to leave this frame dirty"
+    assert soft.clean, "the soft LLR was expected to decode this frame cleanly"
+    assert np.array_equal(soft.information, information)
+
+
 def test_a_frame_that_is_not_one_is_refused() -> None:
     with pytest.raises(ValueError, match="whole DSP frames"):
         dpo_receive(np.zeros((10, 4), dtype=np.int8), modulation="b116")

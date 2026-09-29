@@ -19,6 +19,7 @@ fail on any bit that moves.
 from __future__ import annotations
 
 import hashlib
+import math
 import os
 from itertools import pairwise
 from pathlib import Path
@@ -39,6 +40,7 @@ from maiman.wport import (
     SUBFRAME_SYMBOLS,
     SUBFRAMES,
     TRAINING_SYMBOLS,
+    _pam_constellation,  # the constellation table the brute-force LLR check reads directly
     codec_bits,
     crc32,
     dsp_deframe,
@@ -54,6 +56,7 @@ from maiman.wport import (
     scramble,
     symbol_bits,
     symbol_levels,
+    symbol_llr,
     training_symbols,
     wport_receive,
     wport_transmit,
@@ -460,3 +463,178 @@ def test_the_decoder_repairs_what_the_line_did_and_the_crc_agrees() -> None:
     assert received.corrections > 0
     assert np.array_equal(received.information, info)
     assert received.clean
+
+
+# ---------------------------------------------------------------------------
+# Soft-decision demapping
+# ---------------------------------------------------------------------------
+
+
+def test_qpsk_llr_is_the_closed_form_awgn_ratio() -> None:
+    """Each axis of DP-QPSK is BPSK on amplitudes +/-1: ``LLR = -2r/sigma**2``.
+
+    Derivation, for bit=1 -> +1 and bit=0 -> -1 (the labelling
+    :func:`symbol_levels` builds): with a Gaussian channel of variance
+    ``sigma**2`` per real dimension,
+
+        LLR = ln P(bit=0|r) / P(bit=1|r)
+            = [-(r+1)**2 + (r-1)**2] / (2*sigma**2)
+            = -4r / (2*sigma**2) = -2r/sigma**2,
+
+    which is what :func:`ofec_decode` expects: positive means 0, negative
+    means 1. This is the amplitude scaling clause 11.1 actually uses (+/-1,
+    not the unit-energy +/-1/sqrt(2) a normalised BPSK reference would use), so
+    there is no extra factor of sqrt(2) here.
+    """
+    rng = np.random.default_rng(11)
+    levels = symbol_levels(rng.integers(0, 2, 4 * 64, dtype=np.uint8), modulation="qpsk")
+    noisy = levels.astype(np.float64) + rng.normal(0.0, 0.6, levels.shape)
+    sigma2 = 0.37
+    llr = symbol_llr(noisy, sigma2, modulation="qpsk")
+    axes = -2.0 * noisy / sigma2
+    expected = np.stack([axes[:, 0], axes[:, 2], axes[:, 1], axes[:, 3]], axis=1).reshape(-1)
+    np.testing.assert_allclose(llr, expected)
+
+
+def test_16qam_llr_matches_a_brute_force_log_sum_exp() -> None:
+    """The exact LLR against a plain-Python log-sum-exp over all four points.
+
+    :func:`symbol_llr` vectorises the same sum :func:`_pam_llr` documents; this
+    recomputes it with nothing but ``math.exp`` and ``math.log``, reading the
+    points and bit labels straight off :func:`_pam_constellation` so a labelling
+    mistake in the library can't also be baked into the reference.
+    """
+    points, labels = _pam_constellation("16qam")
+    rng = np.random.default_rng(12)
+    axis_values = rng.uniform(-4.0, 4.0, size=20)
+    sigma2 = 0.6
+
+    def brute(r: float, column: int) -> float:
+        def log_sum(mask: np.ndarray) -> float:
+            terms = [-((r - float(p)) ** 2) / (2.0 * sigma2) for p in points[mask]]
+            peak = max(terms)
+            return peak + math.log(sum(math.exp(term - peak) for term in terms))
+
+        zero = labels[:, column] == 0
+        return log_sum(zero) - log_sum(~zero)
+
+    # A minimal levels array that puts every sample on the XI axis (column 0),
+    # so this exercises exactly the bits the brute-force reference computes.
+    levels = np.zeros((axis_values.size, 4), dtype=np.float64)
+    levels[:, 0] = axis_values
+    llr = symbol_llr(levels, sigma2, modulation="16qam")
+    llr = llr.reshape(axis_values.size, 8)
+
+    expected_bit0 = np.array([brute(r, 0) for r in axis_values])
+    expected_bit1 = np.array([brute(r, 1) for r in axis_values])
+    np.testing.assert_allclose(llr[:, 0], expected_bit0, rtol=1e-10)
+    np.testing.assert_allclose(llr[:, 2], expected_bit1, rtol=1e-10)
+
+
+def test_max_log_agrees_with_exact_away_from_the_boundary() -> None:
+    """Tosato & Bisaglia's approximation is exact in the sign and close in value.
+
+    Far from a decision boundary one term dominates every log-sum-exp, so
+    max-log and the exact LLR should coincide to a small tolerance; and,
+    because both read off the same nearest/farthest ordering of points, neither
+    can flip a hard decision relative to the other -- tested here at the level
+    of the sign alone, since the value tolerance already implies it.
+    """
+    rng = np.random.default_rng(13)
+    bits = rng.integers(0, 2, 8 * 256, dtype=np.uint8)
+    levels = symbol_levels(bits, modulation="16qam").astype(np.float64)
+    # Well inside a decision region: sigma is a fraction of the 2-unit spacing.
+    sigma2 = 0.05
+    exact = symbol_llr(levels, sigma2, modulation="16qam", exact=True)
+    approx = symbol_llr(levels, sigma2, modulation="16qam", exact=False)
+    np.testing.assert_array_equal(np.sign(exact), np.sign(approx))
+    np.testing.assert_allclose(exact, approx, atol=1e-6)
+
+
+def test_symbol_llr_refuses_bad_shapes_and_variance() -> None:
+    with pytest.raises(ValueError, match="XI, XQ, YI, YQ"):
+        symbol_llr(np.zeros((4, 3)), 1.0)
+    with pytest.raises(ValueError, match="noise_variance"):
+        symbol_llr(np.zeros((4, 4)), 0.0)
+    with pytest.raises(ValueError, match="noise_variance"):
+        symbol_llr(np.zeros((4, 4)), -1.0)
+
+
+@pytest.mark.parametrize("modulation", MODULATIONS)
+def test_the_llr_s_sign_is_the_hard_decision_on_every_axis(modulation: str) -> None:
+    """Every bit of every axis, in TP6 order: a slightly noisy symbol's LLR says what slicing says.
+
+    The brute-force test above holds the value of one axis's two bits; this holds
+    where each of all four axes' bits lands in the stream, against
+    :func:`symbol_bits`, which the vector tests hold to the specification. A 1 is
+    a negative ratio. (Unchanged defaults need no test of their own: every
+    vector and fingerprint test above runs the receiver with none given.)
+    """
+    rng = np.random.default_rng(14)
+    width = 4 if modulation == "qpsk" else 8
+    levels = symbol_levels(rng.integers(0, 2, width * 512, dtype=np.uint8), modulation=modulation)
+    noisy = levels.astype(np.float64) + rng.normal(0.0, 0.2, levels.shape)
+    llr = symbol_llr(noisy, 0.04, modulation=modulation)
+    sliced = symbol_bits(levels, modulation=modulation)
+    assert np.array_equal((llr < 0).astype(np.uint8), sliced)
+
+
+def test_soft_decoding_cleans_up_where_hard_decoding_cannot() -> None:
+    """One frame, one seed, at an SNR chosen so the hard path fails and the soft path does not.
+
+    DP-QPSK, information seed 3 (:func:`information`'s default), AWGN of
+    variance 0.15 per real dimension added with ``numpy.random.default_rng(42)``.
+    That measures a pre-FEC BER of about 0.50 % on the sliced bits -- inside
+    what :mod:`maiman.ofec`'s own docstring table shows three passes clearing at
+    1.0 % and missing at 1.5 % raw, so a miss here is not a cherry-picked
+    surprise. The hard path hands the decoder a confidence of 8.0 regardless of
+    how close the sample sat to the boundary; the soft path hands it the real
+    ratio, and clears frames the hard path leaves dirty.
+    """
+    info = information("qpsk")
+    frame = wport_transmit(info, modulation="qpsk")
+    sigma2 = 0.15
+    noise = np.random.default_rng(42).normal(0.0, sigma2**0.5, frame.shape)
+    noisy = frame.astype(np.float64) + noise
+
+    taken = dsp_deframe(noisy, modulation="qpsk")
+    clean = dsp_deframe(frame.astype(np.float64), modulation="qpsk")
+    pre_fec_ber = float(
+        np.mean(
+            symbol_bits(taken.payload, modulation="qpsk")
+            != symbol_bits(clean.payload, modulation="qpsk")
+        )
+    )
+    assert 0.001 < pre_fec_ber < 0.02, f"pick a noisier or quieter seed, got {pre_fec_ber}"
+
+    hard = wport_receive(noisy, modulation="qpsk", noise_variance=None)
+    soft = wport_receive(noisy, modulation="qpsk", noise_variance=sigma2)
+
+    assert not hard.clean, "the hard-decision LLR was expected to leave this frame dirty"
+    assert soft.clean, "the soft LLR was expected to decode this frame cleanly"
+    assert np.array_equal(soft.information, info)
+
+
+@pytest.mark.parametrize("sigma2", [0.10, 0.15, 0.25])
+def test_pre_fec_ber_of_the_soft_demapper_matches_the_q_function(sigma2: float) -> None:
+    """DP-QPSK in AWGN: the sign of each LLR errs at Q(a / sigma), a = the level, sigma^2 per axis.
+
+    Each bit rides one real axis at amplitude ``a`` with noise of variance
+    ``sigma2``, so the raw bit error rate is ``Q(a / sigma) = erfc(a / sqrt(2 sigma2)) / 2``
+    (Proakis, *Digital Communications*, eq. 4.2-20 for antipodal signalling).
+    The measured rate over 4e6 bits sits within four binomial standard errors.
+    """
+    points, _ = _pam_constellation("qpsk")
+    amplitude = float(np.max(np.abs(points)))
+    rng = np.random.default_rng(21)
+    symbols = 1_000_000
+    sent = rng.choice([-amplitude, amplitude], size=(symbols, 4))
+    received = sent + rng.normal(0.0, sigma2**0.5, sent.shape)
+
+    llr = symbol_llr(received, sigma2, modulation="qpsk")
+    hard = symbol_llr(sent, sigma2, modulation="qpsk")  # the transmitted bits, same bit order
+    measured = float(np.mean((llr > 0) != (hard > 0)))
+
+    theory = 0.5 * math.erfc(amplitude / math.sqrt(2.0 * sigma2))
+    tolerance = 4.0 * math.sqrt(theory * (1.0 - theory) / (4 * symbols))
+    assert abs(measured - theory) < tolerance, (measured, theory)

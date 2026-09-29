@@ -681,7 +681,13 @@ Stated in the code where each approximation is made, and collected here:
   shipped, so the DPO path needs them present to run at all. Error marking overwrites a failed
   CRC32's whole span with 802.3 error marking blocks; which of them belong to which Ethernet
   client is a FlexO demapping this has none of, and the specification leaves it open. The decoder is this
-  project's throughout, as it is on the DO path -- the specification leaves decoding open. A
+  project's throughout, as it is on the DO path -- the specification leaves decoding open.
+  `wport_receive` and `dpo_receive` default to a hard decision dressed as a soft one -- the sliced
+  bit at a fixed confidence -- but given `noise_variance` they call `symbol_llr` instead and form
+  real log-likelihood ratios from the received amplitudes, exact (log-sum-exp) or max-log
+  (Tosato & Bisaglia, ICC 2002); on the DPO path that LLR still assumes a uniform bit prior, so it
+  does not draw on the shaper's own bias toward the inner constellation points -- a gap the module
+  documents rather than papers over. A
   laser's junction heats through a Foster network, its own stage and whatever the package adds
   behind it; the temperature of what that network finally sinks into is the caller's to set.
 
