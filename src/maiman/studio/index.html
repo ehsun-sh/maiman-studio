@@ -3022,6 +3022,29 @@ verdict, and DESIGN.md
      "default": false,
      "doc": "Carry each band's own group delay onward, so a detector sees the bands walk apart"
     },
+    "carry_carrier_phase": {
+     "type": "bool",
+     "default": false,
+     "doc": "Carry each band's carrier phase beta(omega) L, which a detector's beat between bands that took different paths depends on"
+    },
+    "phase_index": {
+     "type": "float",
+     "default": 1.444,
+     "unit": "",
+     "min": 1.0,
+     "max": 2.0,
+     "doc": "Phase index of the guided mode at the reference wavelength",
+     "applies_when": "carry_carrier_phase"
+    },
+    "group_index": {
+     "type": "float",
+     "default": 1.468,
+     "unit": "",
+     "min": 1.0,
+     "max": 2.0,
+     "doc": "Group index at the reference wavelength: sets the phase's slope in frequency",
+     "applies_when": "carry_carrier_phase"
+    },
     "four_wave_mixing": {
      "type": "bool",
      "default": true,

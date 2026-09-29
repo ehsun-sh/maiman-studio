@@ -58,7 +58,7 @@ from ..kernels import (
     walkoff_from_dispersion,
 )
 from ..signals import Band, KerrHistory, OpticalSignal, Signal, WalkoffHistory
-from ..units import db_to_linear
+from ..units import C_LIGHT, db_to_linear
 
 #: Two mixing products this close in frequency are the same wave [Hz]. Real
 #: products are separated by channel spacings — gigahertz — so any tolerance
@@ -239,6 +239,27 @@ class Fiber(Component):
     carry_walkoff = BoolParam(
         False,
         doc="Carry each band's own group delay onward, so a detector sees the bands walk apart",
+    )
+    carry_carrier_phase = BoolParam(
+        False,
+        doc="Carry each band's carrier phase beta(omega) L, which a detector's beat between "
+        "bands that took different paths depends on",
+    )
+    phase_index = Param(
+        1.444,
+        unit="",
+        min=1.0,
+        max=2.0,
+        doc="Phase index of the guided mode at the reference wavelength",
+        applies_when="carry_carrier_phase",
+    )
+    group_index = Param(
+        1.468,
+        unit="",
+        min=1.0,
+        max=2.0,
+        doc="Group index at the reference wavelength: sets the phase's slope in frequency",
+        applies_when="carry_carrier_phase",
     )
     four_wave_mixing = BoolParam(True, doc="Generate mixing products between bands")
     pump_phase = BoolParam(
@@ -768,19 +789,55 @@ class Fiber(Component):
         is written against too -- and since only differences are observable, any
         band would do.
         """
-        if not self.carry_walkoff or not signal.bands:
+        if not (self.carry_walkoff or self.carry_carrier_phase) or not signal.bands:
             return signal.walkoff
         before = signal.walkoff
         if before.conflict:
             raise ValueError(
-                f"{self.label}: carry_walkoff needs one set of arrival delays, "
+                f"{self.label}: carrying delays or carrier phases needs one set of them, "
                 f"and {before.conflict}"
             )
-        reference = signal.bands[0]
         delays = dict(before.carriers)
-        for band in signal.bands:
-            delays[band.f0] = before.at(band.f0) + self.walkoff_of(band, reference) * distance
-        return WalkoffHistory(carriers=tuple(sorted(delays.items())))
+        if self.carry_walkoff:
+            reference = signal.bands[0]
+            for band in signal.bands:
+                delays[band.f0] = before.at(band.f0) + self.walkoff_of(band, reference) * distance
+        phases = dict(before.phases)
+        if self.carry_carrier_phase:
+            for band in signal.bands:
+                phases[band.f0] = math.remainder(
+                    before.phase_at(band.f0) + self.carrier_phase_of(band) * distance,
+                    2.0 * math.pi,
+                )
+        return WalkoffHistory(
+            carriers=tuple(sorted(delays.items())), phases=tuple(sorted(phases.items()))
+        )
+
+    def carrier_phase_of(self, band: Band) -> float:
+        """The phase constant ``beta(omega)`` of the carrier at ``band.f0`` [rad/m].
+
+        The mode's propagation constant, absolute -- ``n_p omega_0 / c`` at the
+        reference wavelength, ``n_g / c`` for its slope in frequency, and
+        ``beta2``, ``beta3`` for the curvature, the same dispersion
+        :meth:`beta2_at` and :meth:`beta3_at` give::
+
+            beta(omega) = n_p omega_0 / c + (n_g / c) d + beta2 d^2 / 2 + beta3 d^3 / 6,
+            d = omega - omega_0
+
+        Two carriers' *difference* is what a beat sees, and it is mostly
+        ``(n_g / c) (omega_a - omega_b)``, which is why the group index matters as
+        much as the phase index; ``phase_index`` only sets where the fast phase of
+        one carrier over a length difference lands.
+        """
+        reference = self.si("reference_wavelength")
+        omega_0 = 2.0 * math.pi * C_LIGHT / reference
+        detuning = 2.0 * math.pi * band.f0 - omega_0
+        return (
+            self.phase_index * omega_0 / C_LIGHT
+            + self.group_index * detuning / C_LIGHT
+            + 0.5 * self.beta2_at(reference) * detuning**2
+            + self.beta3_at(reference) * detuning**3 / 6.0
+        )
 
     # -- propagation ------------------------------------------------------
 

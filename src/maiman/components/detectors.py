@@ -50,12 +50,17 @@ def mutual_beat(
     ``exp(-pi linewidth |delay|)``, which is how a delayed self-heterodyne
     measures a linewidth.
 
-    **The beat's constant phase is not modelled.** A span's carrier phase,
-    ``beta0 L``, is divided out of every band along with its group delay, and it
-    differs between wavelengths; so the phase each tone starts at is the
-    retarded frame's and not the fibre's. Two independent lasers have no fixed
-    phase to get wrong. What the walk-off *does* fix -- when each field arrives,
-    and so how much of their phase noise the two still share -- is kept.
+    **The beat's constant phase is the fibre's only where it was carried.** A
+    span's carrier phase, ``beta(omega) L``, is divided out of every band along
+    with its group delay, and it differs between wavelengths; so unless the spans
+    were asked to carry it (``carry_carrier_phase``) the phase each tone starts at
+    is the retarded frame's and not the fibre's. Two independent lasers have no
+    fixed phase to get wrong; two wavelengths of one source, or a tone and its
+    reference sent down different lengths, do. Carried, each field is turned by
+    ``exp(-i phase)`` before the cross term is formed, so the tone comes out at
+    ``phase_b - phase_a`` -- the difference of the two carriers' ``beta L``. What
+    the walk-off fixes -- when each field arrives, and so how much of their phase
+    noise the two still share -- is kept either way.
     """
     beat_x = np.zeros(ctx.num_samples, dtype=np.float64)
     beat_y = np.zeros(ctx.num_samples, dtype=np.float64)
@@ -68,7 +73,10 @@ def mutual_beat(
     time = ctx.time_axis()
     for a, b in pairs:
         (ax, ay), (bx, by) = fields[a.f0], fields[b.f0]
-        tone = np.exp(2j * np.pi * (a.f0 - b.f0) * time)
+        tone = np.exp(
+            2j * np.pi * (a.f0 - b.f0) * time
+            - 1j * (walkoff.phase_at(a.f0) - walkoff.phase_at(b.f0))
+        )
         beat_x += 2.0 * np.real(ax * np.conj(bx) * tone)
         beat_y += 2.0 * np.real(ay * np.conj(by) * tone)
     return beat_x, beat_y

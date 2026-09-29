@@ -490,19 +490,36 @@ class WalkoffHistory:
     where it was. If that band is later filtered away the frame jumps by a
     constant, and every difference survives it.
 
-    ``conflict`` is set when two paths carrying different delays were joined,
-    and, as :class:`KerrHistory`'s is, it is recorded here and refused where it
-    is used -- a link that never asks for the delays has no quarrel with them.
+    ``phases`` holds ``(f0, phase)``: the carrier phase ``beta(omega) L`` the path
+    has turned that carrier by [rad, modulo ``2 pi``], in the sense the library
+    applies a phase, ``exp(-i phase)``. It is the other thing a span divides out
+    of every band along with the group delay: inside one band it is a constant
+    and cancels, and *between* carriers it does not -- two tones down different
+    lengths of fibre beat at a phase that is the difference of theirs. A carrier
+    with no entry has none, and a fresh signal has no entries. Empty unless a span
+    was asked to carry it.
+
+    ``conflict`` is set when two paths carrying different delays or phases were
+    joined, and, as :class:`KerrHistory`'s is, it is recorded here and refused where
+    it is used -- a link that never asks for them has no quarrel with them.
     """
 
     carriers: tuple[tuple[float, float], ...] = ()
     conflict: str = ""
+    phases: tuple[tuple[float, float], ...] = ()
 
     def at(self, f0: float, rtol: float = 1e-9) -> float:
         """How late the carrier at ``f0`` arrives [s]; zero if it has not walked."""
         for centre, delay in self.carriers:
             if abs(centre - f0) <= rtol * f0:
                 return delay
+        return 0.0
+
+    def phase_at(self, f0: float, rtol: float = 1e-9) -> float:
+        """The carrier phase the path has turned the carrier at ``f0`` by [rad]; zero if none."""
+        for centre, phase in self.phases:
+            if abs(centre - f0) <= rtol * f0:
+                return phase
         return 0.0
 
     @property
@@ -538,6 +555,7 @@ def joined_walkoff(signals: Sequence[OpticalSignal], *, where: str) -> WalkoffHi
         return WalkoffHistory()
     conflict = next((history.conflict for history in present if history.conflict), "")
     merged: dict[float, float] = {}
+    turned: dict[float, float] = {}
     for history in present:
         for f0, delay in history.carriers:
             known = merged.get(f0)
@@ -547,7 +565,21 @@ def joined_walkoff(signals: Sequence[OpticalSignal], *, where: str) -> WalkoffHi
                     f"{abs(known - delay):.3e} s apart"
                 )
             merged[f0] = delay
-    return WalkoffHistory(carriers=tuple(sorted(merged.items())), conflict=conflict)
+        for f0, phase in history.phases:
+            seen = turned.get(f0)
+            if not conflict and seen is not None:
+                gap = abs(math.remainder(seen - phase, 2.0 * math.pi))
+                if gap > 1e-9:
+                    conflict = (
+                        f"{where} joined the carrier at {f0:.6e} Hz by two paths whose "
+                        f"carrier phases differ by {gap:.3e} rad"
+                    )
+            turned[f0] = phase
+    return WalkoffHistory(
+        carriers=tuple(sorted(merged.items())),
+        conflict=conflict,
+        phases=tuple(sorted(turned.items())),
+    )
 
 
 @dataclass(frozen=True)

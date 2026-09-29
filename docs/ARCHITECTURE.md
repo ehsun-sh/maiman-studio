@@ -701,11 +701,15 @@ Stated in the code where each approximation is made, and collected here:
   still held to what the grating leaves of each pass.
 * **Transceivers.** Bands within half the sample rate of each other beat — on a diode, and
   against a local oscillator — each field late by its own walk-off; farther apart they add as
-  powers, which is the rejection any receiver's bandwidth performs anyway. What is not carried is
-  the carrier phase a span adds, `beta0 L`, which differs between wavelengths and is divided out
-  with the group delay, so a beat's constant phase is the retarded frame's. Between independent
-  lasers there is no such phase to get wrong; an interferometer built from two wavelengths of one
-  source would see it.
+  powers, which is the rejection any receiver's bandwidth performs anyway. The carrier phase a
+  span adds, `beta(omega) L`, differs between wavelengths and is divided out with the group delay,
+  so unless a span is asked to carry it (`carry_carrier_phase`, from `phase_index`, `group_index`
+  and the dispersion it already has) a beat's constant phase is the retarded frame's. Carried, it
+  rides on the signal beside the delays, the diode turns each field by it before forming the cross
+  term, and two tones of one source down fibre beat at `-(beta_a - beta_b) L`, checked against the
+  propagation constant written out independently; a carrier joined by two paths at two phases is a
+  recorded conflict, as with the delays. Between independent lasers there is no such phase to get
+  wrong. Four-wave mixing products and a local oscillator beat do not carry one.
   The shaping tables are normative data and are loaded from `MAIMAN_WPORT_TABLES` rather than
   shipped, so the DPO path needs them present to run at all. Error marking overwrites a failed
   CRC32's whole span with 802.3 error marking blocks; which of them belong to which Ethernet
@@ -759,8 +763,7 @@ next, in order:
    (0.89 of the split-step at 10 mW over 10 km, and 1.25 over two such spans where terms nearly
    cancel), and closing that gap is the largest physical approximation under [Open](#open).
 3. **The rest of [Open](#open)**, each with the closed-form test that shows it did something: a
-   proportional term or loop filter in the amplifier's gain control; the carrier phase
-   `beta0 L` a span adds; a
+   proportional term or loop filter in the amplifier's gain control; a
    finite grating coupler in the gap -- the coupled power leaving down the waveguide -- in place of
    the infinite one `etch_depth` solves.
 
