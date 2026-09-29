@@ -21,11 +21,15 @@ from maiman.components import EDFA, Fiber
 from maiman.context import SimulationContext
 from maiman.kernels import (
     attenuation_db_per_m_to_alpha,
+    effective_length,
     fwm_cascade_amplitude,
     fwm_phase_mismatch,
     fwm_product_power,
     fwm_tone_solve,
     propagate_ssfm,
+    raman_coupling,
+    raman_tilt,
+    raman_transfer,
 )
 from maiman.signals import Band, OpticalSignal
 
@@ -277,7 +281,6 @@ def test_a_modulated_band_is_refused_by_name() -> None:
         {"cascaded_fwm": True},
         {"mixing_steps": 4.0},
         {"pmd_coefficient": 0.1},
-        {"raman_gain_slope": 0.028},
     ],
 )
 def test_it_is_refused_beside_what_it_replaces(other: dict[str, Any]) -> None:
@@ -450,3 +453,117 @@ def test_the_vector_tone_solver_agrees_with_the_perturbative_path_at_low_power(
 
 def test_the_tone_solver_takes_cross_polarization_now() -> None:
     Fiber(tone_solver=True, cross_polarization=True, coherent_polarization=True).validate()
+
+
+# -- stimulated Raman scattering ---------------------------------------------------
+
+
+def comb(frequencies: list[float], powers: list[float]) -> OpticalSignal:
+    return OpticalSignal(
+        bands=tuple(
+            Band(
+                Ex=np.full(256, math.sqrt(p), dtype=np.complex128),
+                Ey=np.zeros(256, dtype=np.complex128),
+                f0=f,
+                fs=160e9,
+            )
+            for f, p in zip(frequencies, powers, strict=True)
+        )
+    )
+
+
+SLOPE = 0.028  # 1/W/km/THz, silica's
+
+
+@pytest.mark.parametrize(
+    "frequencies",
+    [[193.6e12, 194.6e12, 195.6e12], [190e12, 200e12, 210e12]],
+    ids=["inside the gain peak's line", "across the peak"],
+)
+def test_raman_in_the_tone_solver_is_the_kernels_redistribution(frequencies: list[float]) -> None:
+    """Three 5 mW tones over 80 km: each keeps what ``raman_tilt`` / ``raman_transfer`` leave it.
+
+    The closed form inside the straight line of the gain (13.2 THz), the integrated
+    silica shape with photons conserved past it -- the rule the perturbative path
+    uses -- against kernels that share no code with the amplitude equations. Mixing
+    is off (``mixing_floor`` zero keeps no products), so it is scattering alone, to
+    the kernels' own tolerance; the loss is divided back out, as they do.
+    """
+    powers = [5e-3, 5e-3, 5e-3]
+    out = Fiber(
+        length=80.0,
+        attenuation=0.2,
+        dispersion=17.0,
+        nonlinearity=GAMMA,
+        mixing_floor=0.0,
+        raman_gain_slope=SLOPE,
+        tone_solver=True,
+        label="span",
+    ).run(CTX, {"in": comb(frequencies, powers)})["out"]
+    assert isinstance(out, OpticalSignal)
+    assert len(out.bands) == 3
+    leff = effective_length(attenuation_db_per_m_to_alpha(0.2e-3), 80e3)
+    slope = SLOPE * 1e-3 / 1e12
+    if max(frequencies) - min(frequencies) <= 13.2e12:
+        expected = raman_tilt(frequencies, powers, gain_slope=slope, effective_length=leff)
+    else:
+        expected = raman_transfer(frequencies, powers, gain_slope=slope, effective_length=leff)
+    kept = [
+        float(np.mean(np.abs(b.Ex) ** 2)) / p * 10 ** (0.2 * 80 / 10)
+        for b, p in zip(out.bands, powers, strict=True)
+    ]
+    assert kept == pytest.approx(expected, rel=2e-4)
+    assert kept[0] > 1.0 > kept[2], "the short-wavelength end loses to the long"
+
+
+def test_without_photons_the_power_is_conserved_and_with_them_it_pays_the_quantum_defect() -> None:
+    """The coupling matrix's own property: watts move without loss, photons cost ``f_n / f_m``."""
+    frequencies = [190e12, 200e12, 210e12]
+    offsets = np.array(frequencies) - frequencies[0]
+    start = np.sqrt(np.array([5e-3, 5e-3, 5e-3]))
+    for photons in (False, True):
+        coupling = raman_coupling(
+            frequencies,
+            gain_slope=SLOPE * 1e-3 / 1e12,
+            profile="triangle",
+            photon_conserving=photons,
+        )
+        end, _ = fwm_tone_solve(
+            offsets,
+            start.astype(np.complex128),
+            beta2=beta2_of(17.0),
+            gamma=0.0,
+            alpha=0.0,
+            distance=80e3,
+            raman=coupling,
+        )
+        total = float(np.sum(np.abs(end) ** 2)) / float(np.sum(start**2))
+        if photons:
+            assert total < 1.0 - 1e-3
+        else:
+            assert total == pytest.approx(1.0, abs=1e-9)
+
+
+def test_raman_moves_no_phase() -> None:
+    """Scattering is incoherent: it moves power and leaves each tone's phase to the Kerr terms."""
+    offsets, start = tones(20e-3)
+    beta2 = beta2_of(2.0)
+    coupling = raman_coupling(
+        list(ANCHOR + offsets),
+        gain_slope=SLOPE * 1e-3 / 1e12,
+        profile="triangle",
+        photon_conserving=False,
+    )
+    plain, _ = fwm_tone_solve(
+        offsets, start, beta2=beta2, gamma=GAMMA * 1e-3, alpha=0.0, distance=10e3
+    )
+    scattered, _ = fwm_tone_solve(
+        offsets, start, beta2=beta2, gamma=GAMMA * 1e-3, alpha=0.0, distance=10e3, raman=coupling
+    )
+    # A 100 GHz comb sits well inside the gain's straight line, so what scattering
+    # moves is a fraction of a percent of the power, and no phase at all.
+    assert np.angle(scattered[4] / plain[4]) == pytest.approx(0.0, abs=5e-3)
+
+
+def test_raman_is_no_longer_refused_by_the_tone_solver() -> None:
+    Fiber(tone_solver=True, raman_gain_slope=SLOPE).validate()

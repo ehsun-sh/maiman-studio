@@ -900,6 +900,31 @@ def raman_gain(separation: np.ndarray, *, gain_slope: float, profile: str) -> np
     raise ValueError(f"unknown Raman profile {profile!r}; expected 'triangle' or 'silica'")
 
 
+def raman_coupling(
+    frequencies: Sequence[float],
+    *,
+    gain_slope: float,
+    profile: str = "silica",
+    photon_conserving: bool = True,
+) -> np.ndarray:
+    """``C[n, m]``: how channel ``n``'s power grows per watt of channel ``m`` [1/(W m)].
+
+    Positive where ``m`` sits at a higher frequency than ``n`` and so pumps it,
+    negative where it sits below and is pumped by ``n`` -- with ``photon_conserving``
+    the loss carrying the factor ``f_n / f_m`` the quantum defect asks for -- and
+    zero on the diagonal. ``dP_n/dz = P_n sum_m C[n, m] P_m`` is the redistribution
+    :func:`raman_transfer` integrates and the tone solver adds to its amplitudes.
+    """
+    f = np.asarray(frequencies, dtype=float)
+    separation = f[None, :] - f[:, None]  # [n, m] = f_m - f_n
+    gain = raman_gain(separation, gain_slope=gain_slope, profile=profile)
+    coupling = np.where(separation > 0.0, gain, -gain)
+    if photon_conserving:
+        coupling = np.where(separation < 0.0, coupling * (f[:, None] / f[None, :]), coupling)
+    np.fill_diagonal(coupling, 0.0)
+    return np.asarray(coupling)
+
+
 def raman_transfer(
     frequencies: Sequence[float],
     powers: Sequence[float],
@@ -944,13 +969,9 @@ def raman_transfer(
     if gain_slope == 0.0 or total <= 0.0 or count < 2 or effective_length <= 0.0:
         return [1.0] * count
 
-    f = np.asarray(frequencies, dtype=float)
-    separation = f[None, :] - f[:, None]  # [n, m] = f_m - f_n
-    gain = raman_gain(separation, gain_slope=gain_slope, profile=profile)
-    coupling = np.where(separation > 0.0, gain, -gain)
-    if photon_conserving:
-        coupling = np.where(separation < 0.0, coupling * (f[:, None] / f[None, :]), coupling)
-    np.fill_diagonal(coupling, 0.0)
+    coupling = raman_coupling(
+        frequencies, gain_slope=gain_slope, profile=profile, photon_conserving=photon_conserving
+    )
 
     if steps is None:
         rate = float(np.abs(coupling).sum(axis=1).max()) * total * effective_length
@@ -1601,6 +1622,7 @@ def fwm_tone_solve(
     rtol: float = 1e-9,
     triples: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None = None,
     coherent: bool = True,
+    raman: np.ndarray | None = None,
 ) -> tuple[np.ndarray, int]:
     """Constant-amplitude tones through a span, every mixing order at once [sqrt(W)].
 
@@ -1637,6 +1659,14 @@ def fwm_tone_solve(
     axis, leaving the phase-only form the split-step's own default keeps,
     ``A_x A_x A_x* + (2/3)(A_y A_y*) A_x`` per axis. Power over both polarizations
     is conserved at ``alpha = 0``, either way.
+
+    **Raman.** ``raman`` is the ``(tones, tones)`` matrix :func:`raman_coupling`
+    gives, and adds ``(1/2) (C P)_n a_n`` to each amplitude -- the power equation
+    ``dP_n/dz = P_n sum_m C[n, m] P_m`` written for a field, which has no phase of
+    its own to add: scattering is incoherent, so it moves power and leaves the
+    mixing and cross-phase terms as they were. ``P_m`` is a tone's power over both
+    polarizations. With photons conserved the total power falls by the quantum
+    defect; without, it is conserved.
     """
     f = np.asarray(offsets, dtype=np.float64)
     y0 = np.asarray(amplitudes, dtype=np.complex128)
@@ -1663,6 +1693,14 @@ def fwm_tone_solve(
         return y0.copy(), 0
     atol = 1e-14 * scale
 
+    def scattering(a: np.ndarray) -> np.ndarray:
+        """``(1/2) (C P)_n a_n``: the Raman gain each tone's amplitude feels."""
+        if raman is None:
+            return np.zeros_like(a)
+        power = np.abs(a) ** 2 if not vector else np.sum(np.abs(a) ** 2, axis=1)
+        gain = 0.5 * (raman @ power)
+        return gain * a if not vector else gain[:, None] * a
+
     def rhs(z: float, a: np.ndarray) -> np.ndarray:
         phase = np.exp(1j * (delta * z + start))
         if not vector:
@@ -1670,7 +1708,7 @@ def fwm_tone_solve(
             out = np.bincount(tq, weights=drive.real, minlength=n) + 1j * np.bincount(
                 tq, weights=drive.imag, minlength=n
             )
-            return out - 0.5 * alpha * a
+            return out - 0.5 * alpha * a + scattering(a)
         first, second, third = a[ti], a[tj], np.conj(a[tk])
         if coherent:
             term = (2.0 / 3.0) * np.sum(first * third, axis=1)[:, None] * second + (
@@ -1687,7 +1725,7 @@ def fwm_tone_solve(
             ],
             axis=1,
         )
-        return out - 0.5 * alpha * a
+        return out - 0.5 * alpha * a + scattering(a)
 
     z, a = 0.0, y0.copy()
     # One nonlinear or dispersive length, whichever is shorter, opens the step.

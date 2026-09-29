@@ -52,6 +52,7 @@ from ..kernels import (
     principal_state,
     propagate_coupled_ssfm,
     propagate_dispersion,
+    raman_coupling,
     raman_tilt,
     raman_transfer,
     random_pmd_sections,
@@ -411,7 +412,6 @@ class Fiber(Component):
                 ("cascaded_fwm", self.cascaded_fwm),
                 ("mixing_steps", self.mixing_steps > 1.0),
                 ("pmd_coefficient", self.pmd_coefficient > 0.0),
-                ("raman_gain_slope", self.raman_gain_slope > 0.0),
             ):
                 if on:
                     raise ValueError(
@@ -616,6 +616,21 @@ class Fiber(Component):
         triples = fwm_tone_triples(offsets)
         finish = np.zeros_like(start)
         steps = 0
+        # Stimulated Raman scattering is a power exchange, so it joins the amplitudes
+        # as a gain each tone feels from the others' power. The shape follows
+        # :meth:`_raman`: a comb inside the gain peak's straight line is the triangle
+        # the closed form is written in, a wider one silica's measured shape with the
+        # quantum defect taken.
+        coupling = None
+        slope = self.si("raman_gain_slope")
+        if slope > 0.0 and frequencies.size > 1:
+            narrow = max(f0) - min(f0) <= RAMAN_TRIANGLE_LIMIT
+            coupling = raman_coupling(
+                [float(value) for value in frequencies],
+                gain_slope=slope,
+                profile="triangle" if narrow else "silica",
+                photon_conserving=not narrow,
+            )
         if self.cross_polarization:
             # One problem: each tone a Jones vector, the two axes coupled by the
             # isotropic Kerr tensor -- or its phase-only form without the coherent
@@ -630,6 +645,7 @@ class Fiber(Component):
                 accumulated_gvd=signal.accumulated_gvd,
                 triples=triples,
                 coherent=self.coherent_polarization,
+                raman=coupling,
             )
         else:
             for axis in (0, 1):
@@ -643,6 +659,7 @@ class Fiber(Component):
                         distance=distance,
                         accumulated_gvd=signal.accumulated_gvd,
                         triples=triples,
+                        raman=coupling,
                     )
                     steps = max(steps, taken)
         finish = np.conj(finish)
