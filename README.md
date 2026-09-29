@@ -1107,6 +1107,17 @@ reference it gains on one side what it loses on the other, 3e-4 at 0.2 dB/nm —
 peak on the short side, which is where erbium's sits, puts the load 11 % above the centre's. The
 flag is off by default, because it moves every saturated amplifier's gain.
 
+The `EDFA` block itself still emits that ASE flat, in every run — it is the component, not the
+analysis, that knows no cross sections. `transient.spectral_ase_noise_bin` reshapes the same total
+power (the noise figure's, unchanged) into the standard steady-state spectrum instead,
+`n_sp(λ)·hν·(G(λ)−1)` per slice (Giles and Desurvire, *J. Lightwave Technol.* 9(2), 271, 1991;
+Desurvire, *Erbium-Doped Fiber Amplifiers*, Wiley, 1994) — an offline reshaping of the block's own
+output, carried as a `NoiseShape` so total power is untouched and only where in the band it sits
+moves. A flat spectrum gives a shape of exactly one and the reshaped bin is bit-identical to the
+unshaped one. `spectral_gain_transient(..., spectral_ase=True)` makes the reservoir's own drain
+consistent with that same shape, through `self_saturation_weight_spectral`, rather than the cross
+section alone. Both off by default.
+
 ### What RIN is for
 
 Every noise in this project until now got *quieter*, relative to the signal, as the launch power

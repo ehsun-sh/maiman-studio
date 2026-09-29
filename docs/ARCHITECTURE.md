@@ -398,6 +398,7 @@ Golden analytical cases:
 | PIN detector | `I = R·P`; shot noise `σ² = 2qIB`; thermal `σ² = 4kTB/R_L` |
 | Ideal OOK, Gaussian noise | `BER = ½·erfc(Q/√2)` |
 | EDFA | `P_ASE = 2·n_sp·hν·(G−1)·B_o`; OSNR degradation matches noise figure |
+| EDFA ASE, spectrally shaped | `S_ASE(λ) = n_sp(λ)·hν(λ)·(G(λ)−1)` per slice; a flat spectrum reproduces the unshaped bin exactly; slices integrate to the same total the noise figure gives |
 
 Plus: end-to-end regression tests with pinned seeds, and cross-checks against OptiCommPy for
 scenarios where an analytical result does not exist.
@@ -636,10 +637,14 @@ Stated in the code where each approximation is made, and collected here:
 
 * **Amplifiers.** The control loop is an integral one; its measurement delay, detector noise and
   pump dither are declared on `PumpControl` and off by default, and a proportional term or a
-  loop filter beyond the integrator is not modelled. An amplifier's own ASE is emitted flat across its band; given an erbium spectrum,
-  the transient analysis weighs how hard each slice of it drains the reservoir by that slice's
-  own cross section and photon energy, and without one -- the block itself, and the controlled
-  transient -- it drains at the centre wavelength's rate.
+  loop filter beyond the integrator is not modelled. The `EDFA` block itself always emits its ASE
+  flat across its band, because it knows no cross sections; `transient.spectral_ase_noise_bin`
+  reshapes that same total power to the standard steady-state form -- `n_sp(λ)·hν·(G(λ)−1)` per
+  slice, from an `ErbiumSpectrum` and the amplifier's own gain -- as an offline step over the
+  block's output, and `spectral_gain_transient(..., spectral_ase=True)` weighs how hard each slice
+  of it drains the reservoir by that same shape rather than by cross section alone. Both are off by
+  default, and without a spectrum at all -- the block itself, and the controlled transient -- the
+  reservoir still drains at the centre wavelength's rate.
 * **Fibre.** With `cross_polarization` the four-wave mixing drive is a vector, from each band's
   coherency and the Kerr tensor the split-step runs, and with `pump_phase` the pumps' Kerr phase is
   taken in each band's own state. Four amplified spans of linear light at any angle, and of

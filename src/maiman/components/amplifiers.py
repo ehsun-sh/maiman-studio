@@ -36,6 +36,14 @@ class EDFA(Component):
     spectral density and only converted to samples where a detector or a
     nonlinearity actually needs it.
 
+    **This block itself emits it flat.** It knows no cross sections, so every
+    hertz of ``bandwidth`` gets the same density. Given an
+    :class:`~maiman.transient.ErbiumSpectrum`, :func:`~maiman.transient.spectral_ase_noise_bin`
+    reshapes that same total power the way a real coil would — more of it where
+    the erbium's own gain curve is higher, none of it moved into or out of the
+    band — as an offline step over this component's output, not something the
+    component does on every run.
+
     The spontaneous emission factor follows from the noise figure::
 
         n_sp = NF * G / (2 * (G - 1))

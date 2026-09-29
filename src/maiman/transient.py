@@ -70,14 +70,32 @@ the way it weighs channels -- each slice by its own cross section and photon
 energy, :func:`self_saturation_weight` -- so a coil whose short-wavelength side
 drains hardest rests where that says rather than where the centre alone would.
 
+**And the ASE itself need not be flat.** The block that emits it,
+:class:`~maiman.components.EDFA`, knows no cross sections, so what leaves it is
+one number spread evenly across ``bandwidth``. Given a spectrum, it need not be:
+:func:`spectral_ase_psd` is the standard steady-state shape -- ``n_sp(lambda) h
+nu (G(lambda) - 1)`` per polarization, Giles and Desurvire, J. Lightwave
+Technol. 9(2), 271, 1991; Desurvire, *Erbium-Doped Fiber Amplifiers*, Wiley,
+1994 -- and :func:`spectral_ase_noise_bin` carries it as a
+:class:`~maiman.signals.NoiseBin` shaped by a
+:class:`~maiman.signals.NoiseShape`, mean-normalised so the total power stays
+exactly what the noise figure already said it was. Passing ``spectral_ase`` to
+:func:`spectral_gain_transient` makes the reservoir's own drain consistent with
+that shape too, through :func:`self_saturation_weight_spectral`, in place of the
+cross-section-only proxy. Off by default in both places -- this changes nothing
+about a run that does not ask for it, and the amplifier itself still emits flat,
+because it is the block, not the analysis, that knows no cross sections.
+
 The loop is the integral one, and ideal unless told otherwise: :class:`PumpControl`
 can give it a measurement delay, white noise on what it measures, and a dither on
 the pump, each off by default.
 
-**What this does not model.** The ASE's own spectrum is flat, as the
-amplifier emits it; only how hard each part of it drains the reservoir follows
-the erbium. And without a spectrum -- :func:`gain_transient` and
-:func:`controlled_gain_transient` -- it drains at the centre wavelength's rate.
+**What this does not model.** :class:`~maiman.components.EDFA` itself always
+emits ASE flat across its band -- wiring a spectrum into the live, per-window
+component is not something this module does, only the offline analyses above
+it, :func:`spectral_ase_psd` and :func:`spectral_ase_noise_bin`. And without a
+spectrum at all -- :func:`gain_transient` and :func:`controlled_gain_transient`
+-- the reservoir still drains at the centre wavelength's rate.
 
 Model references: A. A. M. Saleh, R. M. Jopson, J. D. Evankow and J. Aspell,
 "Modeling of gain in erbium-doped fiber amplifiers", IEEE Photon. Technol. Lett.
@@ -97,6 +115,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from .components.amplifiers import EDFA
+from .signals import NoiseBin, NoiseShape
 from .units import C_LIGHT, H_PLANCK, db_to_linear
 
 #: Metastable (4I13/2) lifetime of Er3+ in silica, in seconds. Reported between
@@ -544,6 +563,7 @@ def spectral_gain_transient(
     lifetime: float = METASTABLE_LIFETIME,
     initial_gain: float | None = None,
     channel_powers: np.ndarray | None = None,
+    spectral_ase: bool = False,
 ) -> SpectralTransient:
     """The same transient as :func:`gain_transient`, spread across the spectrum.
 
@@ -560,6 +580,18 @@ def spectral_gain_transient(
     photon energy. Dropping the short-wavelength half of a comb then costs more
     than dropping the long-wavelength half of equal power, which a single total
     cannot express. Without it the total is used, exactly as before.
+
+    **The amplifier's own ASE load.** Off, ``self_saturation_weight`` weighs each
+    slice of the ASE band by its cross section alone -- the same proxy the block
+    itself would use if it knew one. Set ``spectral_ase`` and it is weighed by
+    what that slice actually emits instead -- its cross section times its share
+    of :func:`spectral_ase_psd`'s ``n_sp(lambda) (G(lambda) - 1)``, via
+    :func:`self_saturation_weight_spectral`. The two agree to rounding when the
+    spectrum's ``A + G*`` is flat, because then neither ``n_sp`` nor the local
+    gain varies across the band, and generally differ, because both move with
+    the same curvature. Off by default: this is a second load on the
+    same reservoir, already itself off by ``self_saturation``, and it changes
+    nothing else about the run.
 
     Refused if the amplifier's small-signal gain at its centre wavelength needs
     more than full inversion by this spectrum, which would be an amplifier this
@@ -589,11 +621,14 @@ def spectral_gain_transient(
     # than at the centre wavelength's rate. Only asked for when there is a load
     # to weigh, so a spectrum narrower than the ASE band is not refused for an
     # amplifier that never saturates on its own noise.
-    weight = (
-        self_saturation_weight(amplifier, spectrum)
-        if amplifier.self_saturation_load() > 0.0
-        else 1.0
-    )
+    if amplifier.self_saturation_load() > 0.0:
+        weight = (
+            self_saturation_weight_spectral(amplifier, spectrum)
+            if spectral_ase
+            else self_saturation_weight(amplifier, spectrum)
+        )
+    else:
+        weight = 1.0
     reservoir = gain_transient(
         amplifier,
         times,
@@ -697,6 +732,204 @@ def self_saturation_weight(amplifier: EDFA, spectrum: ErbiumSpectrum) -> float:
     step = float(frequencies[1] - frequencies[0])
     area = step * (float(weights.sum()) - (float(weights[0]) + float(weights[-1])) / 2.0)
     return area / bandwidth
+
+
+# --------------------------------------------------------------------------
+# The ASE band's own shape, not flat, once a spectrum says what it should be
+# --------------------------------------------------------------------------
+
+
+def spectral_n_sp(
+    spectrum: ErbiumSpectrum, wavelength: np.ndarray | float, inversion: np.ndarray | float
+) -> np.ndarray:
+    """Local spontaneous-emission factor at each wavelength, from the erbium curves.
+
+    The standard definition is a ratio of populations and cross sections (Giles
+    and Desurvire, "Modeling erbium-doped fiber amplifiers", J. Lightwave
+    Technol. 9(2), 271, 1991, Sec. II; Desurvire, *Erbium-Doped Fiber
+    Amplifiers*, Wiley, 1994, ch. 2)::
+
+        n_sp(lambda) = sigma_e(lambda) N2 / (sigma_e(lambda) N2 - sigma_a(lambda) N1)
+
+    ``absorption_db`` and ``full_inversion_gain_db`` carry the same
+    ``Gamma * L * N`` scaling the cross sections do -- it is what turns a cross
+    section into a whole coil's worth of dB -- so it cancels when it appears in
+    both the numerator and the denominator, and the Giles curves stand in for
+    the cross sections directly, with ``N2 = n N`` and ``N1 = (1-n) N``::
+
+        n_sp(lambda) = G*(lambda) n / (n (A(lambda) + G*(lambda)) - A(lambda))
+                     = G*(lambda) n / gain_db(lambda, n)
+
+    which is exactly :meth:`ErbiumSpectrum.gain_db` in the denominator. Floored
+    at 1 wherever that local gain is not positive -- the same floor
+    :meth:`~maiman.components.EDFA.spontaneous_emission_factor` uses at unity
+    gain, since net absorption at a wavelength and inversion is not a regime
+    "excess noise above the quantum limit" describes.
+    """
+    _, emission = spectrum._curves(wavelength)
+    n = np.asarray(inversion, dtype=np.float64)
+    local_gain_db = spectrum.gain_db(wavelength, n)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        n_sp = emission * n / local_gain_db
+    return np.where(local_gain_db > 0.0, np.maximum(n_sp, 1.0), 1.0)
+
+
+def spectral_ase_psd(
+    spectrum: ErbiumSpectrum, wavelength: np.ndarray | float, inversion: np.ndarray | float
+) -> np.ndarray:
+    """One-sided steady-state ASE power spectral density at each wavelength [W/Hz per pol].
+
+    The standard spontaneous-emission spectrum, the same reference as
+    :func:`spectral_n_sp`::
+
+        S_ASE(lambda) = n_sp(lambda) h nu(lambda) (G(lambda, n) - 1)
+
+    with ``G`` the local gain :meth:`ErbiumSpectrum.gain_db` gives at ``n`` and
+    ``n_sp`` :func:`spectral_n_sp`'s. Where the local gain is not positive this
+    is zero rather than negative -- the coil is not emitting there, whatever the
+    floored ``n_sp`` would otherwise multiply.
+    """
+    n = np.asarray(inversion, dtype=np.float64)
+    gain_linear = 10.0 ** (spectrum.gain_db(wavelength, n) / 10.0)
+    frequency = C_LIGHT / np.asarray(wavelength, dtype=np.float64)
+    n_sp = spectral_n_sp(spectrum, wavelength, n)
+    return n_sp * H_PLANCK * frequency * np.maximum(gain_linear - 1.0, 0.0)
+
+
+def _spectral_ase_relative(
+    spectrum: ErbiumSpectrum, wavelength: np.ndarray | float, inversion: np.ndarray | float
+) -> np.ndarray:
+    """``n_sp(lambda) (G(lambda) - 1)``: :func:`spectral_ase_psd` without ``h nu(lambda)``.
+
+    What sets *where in the band* the ASE sits is the erbium spectrum, through
+    ``n_sp`` and ``G``; the photon energy also varies across a several-terahertz
+    band, by a fraction of a percent, but nothing else in this component's own
+    accounting carries that variation -- :meth:`~maiman.components.EDFA.ase_psd`
+    and :meth:`~maiman.components.EDFA.self_saturation_load` both use one
+    ``h nu`` for the whole band, at ``center_wavelength``. :func:`spectral_ase_shape`
+    and :func:`self_saturation_weight_spectral` layer the erbium curves on top of
+    that same single-photon-energy accounting rather than adding a second,
+    finer effect nothing else here models -- which is also what keeps a flat
+    ``A + G*`` spectrum's shape exactly flat, not flat to a part in a thousand.
+    """
+    n = np.asarray(inversion, dtype=np.float64)
+    gain_linear = 10.0 ** (spectrum.gain_db(wavelength, n) / 10.0)
+    n_sp = spectral_n_sp(spectrum, wavelength, n)
+    return n_sp * np.maximum(gain_linear - 1.0, 0.0)
+
+
+def spectral_ase_shape(
+    amplifier: EDFA,
+    spectrum: ErbiumSpectrum,
+    gain_linear: float,
+    *,
+    points: int = SELF_LOAD_POINTS,
+) -> NoiseShape:
+    """How the amplifier's ASE actually varies across ``bandwidth``, mean normalised to one.
+
+    The inversion is read off the amplifier's own gain at its centre wavelength
+    -- :meth:`ErbiumSpectrum.inversion`, the same lookup
+    :func:`spectral_gain_transient` uses to place every channel -- and
+    :func:`_spectral_ase_relative` evaluated at every frequency in the band, at
+    that one inversion, is the steady-state shape a real coil emits: ``n_sp``
+    and the local gain the erbium curves say, without also introducing the
+    photon-energy variation nothing else in this component's own accounting
+    carries. Dividing by its own mean is what lets a
+    :class:`~maiman.signals.NoiseBin` carry it as a
+    :class:`~maiman.signals.NoiseShape`: total power stays whatever the bin's
+    ``psd_x``/``psd_y`` already say, and only where in the band it sits moves.
+
+    A spectrum whose ``A + G*`` does not depend on wavelength gives a shape of
+    exactly one everywhere, because :func:`spectral_n_sp` and the local gain are
+    then both constant across the band too.
+    """
+    centre_wavelength = amplifier.si("center_wavelength")
+    bandwidth = amplifier.si("bandwidth")
+    if bandwidth <= 0.0:
+        raise ValueError("a shape needs a positive bandwidth")
+    if gain_linear <= 1.0:
+        raise ValueError("a shape needs gain above unity")
+    gain_db = 10.0 * math.log10(gain_linear)
+    inversion = float(spectrum.inversion(centre_wavelength, gain_db))
+    centre = C_LIGHT / centre_wavelength
+    frequencies = np.linspace(centre - bandwidth / 2.0, centre + bandwidth / 2.0, points)
+    relative = _spectral_ase_relative(spectrum, C_LIGHT / frequencies, inversion)
+    mean_relative = float(np.mean(relative))
+    if mean_relative <= 0.0:
+        raise ValueError("the spectrum emits no ASE across this band at this gain")
+    weight = relative / mean_relative
+    return NoiseShape(centre=centre, offsets=frequencies - centre, weight_x=weight, weight_y=weight)
+
+
+def spectral_ase_noise_bin(
+    amplifier: EDFA, spectrum: ErbiumSpectrum, gain_linear: float
+) -> NoiseBin:
+    """The amplifier's ASE as one :class:`~maiman.signals.NoiseBin`, shaped by the erbium spectrum.
+
+    :meth:`~maiman.components.EDFA.ase_psd` -- built from the noise figure a
+    datasheet publishes -- still sets how much noise this amplifier adds in
+    total; that number does not move, because the noise figure is the measured
+    quantity and stays the source of truth for it. What was flat across the band
+    now follows where in the band an erbium coil actually puts it:
+    :func:`spectral_ase_shape`, mean-normalised so the bin's ``psd_x``/``psd_y``
+    keep meaning exactly what :meth:`~maiman.components.EDFA.ase_psd` computed.
+
+    For a spectrum whose ``A + G*`` is flat this is bit-identical to the
+    unshaped bin :class:`~maiman.components.EDFA` emits on its own: the shape is
+    one everywhere, and a :class:`~maiman.signals.NoiseBin` with a shape of one
+    reads, integrates and clips exactly as one with no shape at all.
+    """
+    bandwidth = amplifier.si("bandwidth")
+    centre = C_LIGHT / amplifier.si("center_wavelength")
+    psd = amplifier.ase_psd(gain_linear)
+    shape = spectral_ase_shape(amplifier, spectrum, gain_linear)
+    return NoiseBin(
+        f_start=centre - bandwidth / 2.0,
+        f_end=centre + bandwidth / 2.0,
+        psd_x=psd,
+        psd_y=psd,
+        shape=shape,
+    )
+
+
+def self_saturation_weight_spectral(amplifier: EDFA, spectrum: ErbiumSpectrum) -> float:
+    """How hard the amplifier's own *emitted* ASE drains its reservoir, against the centre's rate.
+
+    Built on :func:`self_saturation_weight` rather than beside it: the same
+    cross-section-and-photon-energy ratio, :func:`saturating_weights`, weighted
+    by where in the band the power actually is -- :func:`spectral_ase_shape`,
+    ``n_sp(lambda) (G(lambda) - 1)`` normalised to a mean of one, the very shape
+    :func:`spectral_ase_noise_bin` gives the emitted bin. The total the load
+    carries is the noise figure's, unchanged; only which slices it sits in
+    moves, so the reservoir drains by what the coil emits and not by a second,
+    different guess at it. A spectrum whose ``A + G*`` is flat has a shape of
+    one, and this is then :func:`self_saturation_weight` to rounding. Used by
+    :func:`spectral_gain_transient` in place of :func:`self_saturation_weight`
+    when it is asked for ``spectral_ase``. Refused nowhere it would not be: the
+    same band coverage :func:`self_saturation_weight` already needs, checked the
+    same way.
+    """
+    centre_wavelength = amplifier.si("center_wavelength")
+    bandwidth = amplifier.si("bandwidth")
+    if bandwidth <= 0.0 or amplifier.gain <= 0.0:
+        return self_saturation_weight(amplifier, spectrum)
+    centre = C_LIGHT / centre_wavelength
+    frequencies = np.linspace(centre - bandwidth / 2.0, centre + bandwidth / 2.0, SELF_LOAD_POINTS)
+    wavelengths = (C_LIGHT / frequencies)[::-1]  # ascending wavelength, for the interpolation
+    cross_section = saturating_weights(spectrum, wavelengths, centre_wavelength)[::-1]
+    inversion = float(spectrum.inversion(centre_wavelength, amplifier.gain))
+    emitted = _spectral_ase_relative(spectrum, C_LIGHT / frequencies, inversion)
+    step = float(frequencies[1] - frequencies[0])
+
+    def trapezoid(values: np.ndarray) -> float:
+        return step * (float(values.sum()) - (float(values[0]) + float(values[-1])) / 2.0)
+
+    # The share each slice emits, normalised by the same rule the drain is
+    # integrated with, so a flat spectrum's share is one to rounding.
+    total = trapezoid(emitted)
+    if total <= 0.0:
+        return self_saturation_weight(amplifier, spectrum)
+    return trapezoid(cross_section * emitted) / total
 
 
 # --------------------------------------------------------------------------

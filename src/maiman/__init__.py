@@ -42,6 +42,7 @@ from .signals import (
     EyeHistogram,
     EyeMeasurement,
     NoiseBin,
+    NoiseShape,
     OpticalSignal,
     PowerReading,
 )
@@ -58,7 +59,13 @@ from .transient import (
     gain_transient,
     saturating_power,
     saturating_weights,
+    self_saturation_weight,
+    self_saturation_weight_spectral,
+    spectral_ase_noise_bin,
+    spectral_ase_psd,
+    spectral_ase_shape,
     spectral_gain_transient,
+    spectral_n_sp,
     step_schedule,
 )
 
@@ -86,6 +93,7 @@ __all__ = [
     "Netlist",
     "NetlistError",
     "NoiseBin",
+    "NoiseShape",
     "OpticalSignal",
     "PDKError",
     "Param",
@@ -118,7 +126,13 @@ __all__ = [
     "saturating_power",
     "saturating_weights",
     "save",
+    "self_saturation_weight",
+    "self_saturation_weight_spectral",
+    "spectral_ase_noise_bin",
+    "spectral_ase_psd",
+    "spectral_ase_shape",
     "spectral_gain_transient",
+    "spectral_n_sp",
     "step_schedule",
     "sweep",
 ]
