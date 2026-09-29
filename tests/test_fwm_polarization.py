@@ -380,7 +380,12 @@ def reference_link(jones: tuple[complex, complex], dispersion: float, *, coheren
 
 
 def modelled_link(
-    jones: tuple[complex, complex], dispersion: float, *, coherent: bool, pieces: int = 1
+    jones: tuple[complex, complex],
+    dispersion: float,
+    *,
+    coherent: bool,
+    pieces: int = 1,
+    steps: int = 1,
 ) -> float:
     """The same link through the fibre block, as two bands, each span in ``pieces`` [W]."""
     signal = OpticalSignal(
@@ -405,6 +410,7 @@ def modelled_link(
                 pump_phase=True,
                 cross_polarization=True,
                 coherent_polarization=coherent,
+                mixing_steps=steps,
                 label=f"span{index}" if pieces == 1 else f"span{index}.{piece}",
             ).run(CTX, {"in": signal})["out"]
         signal = EDFA(gain=16.0, noise_figure=0.0, label=f"amp{index}").run(CTX, {"in": signal})[
@@ -492,3 +498,21 @@ def test_what_elliptical_light_still_gets_wrong_in_one_long_span(
         STATES["elliptical"], dispersion, coherent=coherent
     )
     assert ratio == pytest.approx(measured, rel=0.02)
+
+
+def test_mixing_steps_is_the_span_cut_by_hand() -> None:
+    """``mixing_steps=8`` is eight fibres of a tenth the length in a row, and lands where they do.
+
+    The convergence test above cuts each span by hand; the setting does the same
+    inside the block, so the two must agree to the last digit and the setting
+    inherits that test's result: elliptical light within 1 % of light on the axis
+    (maiman-me9).
+    """
+    by_hand = modelled_link(STATES["elliptical"], 4.0, coherent=True, pieces=8)
+    inside = modelled_link(STATES["elliptical"], 4.0, coherent=True, steps=8)
+    assert inside == pytest.approx(by_hand, rel=1e-9)
+
+
+def test_mixing_steps_refuses_pmd() -> None:
+    with pytest.raises(ValueError, match="PMD"):
+        Fiber(mixing_steps=4, pmd_coefficient=0.1).validate()

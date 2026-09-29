@@ -3044,6 +3044,15 @@ verdict, and DESIGN.md
      "default": false,
      "doc": "Let a first-order mixing product drive a second one within the same span"
     },
+    "mixing_steps": {
+     "type": "float",
+     "default": 1.0,
+     "unit": "",
+     "min": 1.0,
+     "max": 64.0,
+     "doc": "Cut the span into this many equal pieces, each mixed on its own",
+     "applies_when": "four_wave_mixing"
+    },
     "raman_gain_slope": {
      "type": "float",
      "default": 0.0,

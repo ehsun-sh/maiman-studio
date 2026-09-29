@@ -254,6 +254,14 @@ class Fiber(Component):
         doc="Let a first-order mixing product drive a second one within the same span",
         applies_when="four_wave_mixing",
     )
+    mixing_steps = Param(
+        1.0,
+        unit="",
+        min=1.0,
+        max=64.0,
+        doc="Cut the span into this many equal pieces, each mixed on its own",
+        applies_when="four_wave_mixing",
+    )
     raman_gain_slope = Param(
         0.0,
         unit="1/W/km/THz",
@@ -345,7 +353,68 @@ class Fiber(Component):
         beta2 = 0.5 * (self.beta2_at(band.wavelength) + self.beta2_at(reference.wavelength))
         return walkoff_from_dispersion(beta2, band.f0 - reference.f0)
 
+    def validate(self) -> None:
+        if self.mixing_steps > 1.0 and self.pmd_coefficient > 0.0:
+            raise ValueError(
+                f"{self.label or 'Fiber'}: mixing_steps cuts the span into pieces, and each "
+                "piece would draw its own PMD realisation -- a different statistic from one "
+                "span's. Set pmd_coefficient to 0, or mixing_steps to 1."
+            )
+
+    def _run_in_pieces(
+        self, ctx: SimulationContext, inputs: dict[str, Signal]
+    ) -> dict[str, Signal]:
+        """The span as ``mixing_steps`` equal fibres in a row, each mixed on its own.
+
+        The mixing integral holds each pump's state of polarization from the
+        start of the span it is taken over. Light that stays in its state -- on
+        an axis, on a diagonal, circular -- loses nothing by that. An ellipse
+        turns with its own power (Maker, Terhune and Savage, Phys. Rev. Lett.
+        12, 507 (1964)), and over 80 km the held state was up to 9 % out where
+        the split-step followed it. A shorter piece holds it over less; the
+        history carries each carrier's phase from piece to piece exactly as it
+        does from span to span, so the answer converges as the pieces shorten
+        (maiman-me9) instead of drifting the way it did before the geometric
+        phase was kept. It costs ``mixing_steps`` times the work, which is why
+        it is a setting and not the default.
+        """
+        pieces = round(self.mixing_steps)
+        length, _ = self.display("length")
+        params = {
+            **self._values,
+            "length": length / pieces,
+            "mixing_steps": 1.0,
+        }
+        signal = inputs["in"]
+        out: dict[str, Signal] = {}
+        parts: list[PropagationDiagnostics] = []
+        for piece in range(pieces):
+            fibre = Fiber(label=f"{self.label}.{piece}", **params)
+            out = fibre.run(ctx, {"in": signal})
+            signal = out["out"]
+            diagnostics = out["diagnostics"]
+            assert isinstance(diagnostics, PropagationDiagnostics)
+            parts.append(diagnostics)
+        moved = 1.0
+        for part in parts:
+            moved *= 1.0 - part.fwm_depletion
+        out["diagnostics"] = PropagationDiagnostics(
+            steps=sum(p.steps for p in parts),
+            distance=sum(p.distance for p in parts),
+            shortest_step=min(p.shortest_step for p in parts),
+            longest_step=max(p.longest_step for p in parts),
+            peak_nonlinear_phase=max(p.peak_nonlinear_phase for p in parts),
+            walkoff_span=sum(p.walkoff_span for p in parts),
+            peak_walkoff_slip=max(p.peak_walkoff_slip for p in parts),
+            mixing_products=parts[-1].mixing_products,
+            fwm_depletion=1.0 - moved,
+            raman_tilt=sum(p.raman_tilt for p in parts),
+        )
+        return out
+
     def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
+        if self.mixing_steps > 1.0 and self.four_wave_mixing and self.si("nonlinearity") != 0.0:
+            return self._run_in_pieces(ctx, inputs)
         signal: OpticalSignal = inputs["in"]
         distance = self.si("length")
         gamma = self.si("nonlinearity")
@@ -1106,7 +1175,7 @@ class Fiber(Component):
         the geometric phase its moving state adds, and the tensor's phase moving
         with it -- and a span cut finely lands on the split-step; taken whole,
         with each state held from its start, four 80 km spans are up to 9 % out
-        (maiman-me9). A band of two independent
+        (maiman-me9) -- ``mixing_steps`` cuts the span and closes that. A band of two independent
         tributaries has no one state, and keeps the per-axis form. And the phases are those the
         split-step applies, so the product's own phase runs the way its fields
         do: the flag changes which way the drawn phase and the mismatch combine,

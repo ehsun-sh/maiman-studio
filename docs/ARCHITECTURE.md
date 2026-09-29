@@ -651,7 +651,8 @@ Stated in the code where each approximation is made, and collected here:
   circular light, add as the split-step adds them. An ellipse, which turns with its own power, is
   followed between spans by the geometric phase its moving state adds, and a finely cut span
   converges on the split-step; a whole 80 km span holds each state from its start and is up to
-  9 % out; and a band of two
+  9 % out, which `mixing_steps` closes by cutting the span into pieces (that many times the work,
+  and refused beside PMD); and a band of two
   independent tributaries keeps the per-axis form, having no one state. With `cascaded_fwm`, off by
   default, a first-order product can drive a second before the span ends -- both the roles it can
   play, un-conjugated beside a launched pump and conjugated beside two, integrated in one closed
