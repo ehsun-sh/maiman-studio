@@ -735,8 +735,15 @@ next, in order:
    against them skip in CI. Past the shaper the path is held to a digest everywhere, and
    `RELEASING.md` runs the rest with `MAIMAN_REQUIRE_SPEC=1` before each release; the shaper
    itself is checked on every push only once the `specification` job in `ci.yml` has a runner.
-2. **Carry walk-off shape inside a band, and beat bands that have walked apart**, rather than
-   summing them as powers — the largest physical approximation left under [Open](#open).
-3. **The rest of [Open](#open)**, each with the closed-form test that shows it did something.
+2. **Find out where four-wave mixing still misses.** `carry_phase` lands the second order within
+   10 % of the split-step on the cases it is pinned to and up to about twice off at other span
+   lengths and powers; whether that is the triplet-local nonlinear rate, the truncation, or the
+   reference's own accuracy at 1e-15 W decides what to fix, and is the largest open question under
+   [Open](#open).
+3. **The rest of [Open](#open)**, each with the closed-form test that shows it did something: a
+   proportional term or loop filter in the amplifier's gain control; the spectral ASE shape
+   against Giles and Desurvire's published numbers; the carrier phase `beta0 L` a span adds; the
+   phase of a grating coupler's own reflection in the fibre-chip gap; the shaper's prior in the
+   DPO receiver's log-likelihood ratios.
 
 Criticism of the decisions above §10 is still worth more than any of these.
