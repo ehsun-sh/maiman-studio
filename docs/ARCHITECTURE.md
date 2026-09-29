@@ -664,11 +664,14 @@ Stated in the code where each approximation is made, and collected here:
   the drawn-phase one the next span makes from it. `carry_phase`, which needs `cascaded_fwm` and
   `pump_phase`, takes the phase a constant band or a product has in place of the drawn one, gives
   the cascade term its five legs' phases and the mismatch already accumulated, and lets it land
-  on a band an earlier span made: the same four spans come out 0.91 of the split-step at 10 mW
-  and 0.98 at 1 mW, and with the mismatch nil the second order grows as the square of the length,
-  as it should. It is not right everywhere: at some span lengths and powers the second order is
-  up to about twice the split-step's (10 mW over two 10 km spans), and why is not known. Scalar
-  drive only; a modulated channel, whose phase nobody knows, is still drawn.
+  on a band an earlier span made -- turned, like every product, by the landing carrier's own Kerr
+  phase over the span: the same four spans come out 0.98 of the split-step at 10 mW and 0.99 at
+  1 mW, and with the mismatch nil the second order grows as the square of the length, as it
+  should. The series stops at second order, and what it leaves out grows as the nonlinear phase
+  over a span does: one 10 km span is 0.99, 0.97 and 0.89 of the split-step at 1, 3 and 10 mW.
+  Where the carried and the in-span terms nearly cancel -- a dispersive span some kilometres long
+  -- that few percent in each shows as more in the sum: 1.25 of it at 10 mW over two 10 km spans.
+  Scalar drive only; a modulated channel, whose phase nobody knows, is still drawn.
 * **Gratings and modes.** The average index a writing process raises is carried when a grating's
   `dc_compensated` flag is off: as Erdogan's self-coupling for the Bragg and long-period gratings,
   and for the uniform tilted one as the fibre it leaves, its core raised and every mode solved
@@ -735,11 +738,11 @@ next, in order:
    against them skip in CI. Past the shaper the path is held to a digest everywhere, and
    `RELEASING.md` runs the rest with `MAIMAN_REQUIRE_SPEC=1` before each release; the shaper
    itself is checked on every push only once the `specification` job in `ci.yml` has a runner.
-2. **Find out where four-wave mixing still misses.** `carry_phase` lands the second order within
-   10 % of the split-step on the cases it is pinned to and up to about twice off at other span
-   lengths and powers; whether that is the triplet-local nonlinear rate, the truncation, or the
-   reference's own accuracy at 1e-15 W decides what to fix, and is the largest open question under
-   [Open](#open).
+2. **Carry four-wave mixing past second order.** `carry_phase` is exact to the split-step's own
+   accuracy at low power and falls short as the nonlinear phase over a span grows -- 0.89 of it
+   at 10 mW over 10 km, and 1.25 over two such spans where terms nearly cancel -- because the
+   third-order mixing and the pumps' depletion beyond the first order are left out; they are the
+   largest physical approximation under [Open](#open).
 3. **The rest of [Open](#open)**, each with the closed-form test that shows it did something: a
    proportional term or loop filter in the amplifier's gain control; the spectral ASE shape
    against Giles and Desurvire's published numbers; the carrier phase `beta0 L` a span adds; the

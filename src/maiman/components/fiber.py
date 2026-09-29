@@ -963,6 +963,8 @@ class Fiber(Component):
         occupied: Sequence[float],
         phases: Sequence[tuple[float | None, float | None]],
         travelled: float,
+        history: KerrHistory,
+        after: KerrHistory,
     ) -> list[tuple[float, complex, complex]]:
         """Second-order products: a first-order one driving a further one, within this span.
 
@@ -1040,10 +1042,7 @@ class Fiber(Component):
                                 for existing in (
                                     *occupied,
                                     *(
-                                        (
-                                            frequency1,
-                                            *(sources[n].f0 for n in (i, j, k, p, q)),
-                                        )
+                                        self._own_products([sources[n].f0 for n in (i, j, k, p, q)])
                                         if self.carry_phase
                                         else ()
                                     ),
@@ -1103,6 +1102,10 @@ class Fiber(Component):
                                         sources[p].f0 - reference.f0,
                                         sources[q].f0 - reference.f0,
                                     ),
+                                    frame=(
+                                        after.at(frequency2)[0] - history.at(frequency2)[0],
+                                        after.at(frequency2)[1] - history.at(frequency2)[1],
+                                    ),
                                 )
                             found.append((frequency2, amplitudes[0], amplitudes[1]))
 
@@ -1126,10 +1129,7 @@ class Fiber(Component):
                                 for existing in (
                                     *occupied,
                                     *(
-                                        (
-                                            frequency1,
-                                            *(sources[n].f0 for n in (i, j, k, p, q)),
-                                        )
+                                        self._own_products([sources[n].f0 for n in (i, j, k, p, q)])
                                         if self.carry_phase
                                         else ()
                                     ),
@@ -1190,9 +1190,29 @@ class Fiber(Component):
                                         sources[q].f0 - reference.f0,
                                         frequency1 - reference.f0,
                                     ),
+                                    frame=(
+                                        after.at(frequency2)[0] - history.at(frequency2)[0],
+                                        after.at(frequency2)[1] - history.at(frequency2)[1],
+                                    ),
                                 )
                             found.append((frequency2, amplitudes[0], amplitudes[1]))
         return found
+
+    @staticmethod
+    def _own_products(legs: Sequence[float]) -> set[float]:
+        """Every ``f_a + f_b - f_c`` the frequencies ``legs`` can make between themselves.
+
+        Where a second-order term lands on one of these it is a correction to a
+        first-order product of its own pumps -- the first product feeding back
+        into itself, or into the other one, one order further in ``gamma`` -- and
+        the pass does not carry the other terms of that order (the product's own
+        depletion of its pumps, its cross-phase on itself), so adding this one
+        alone moves the first order away from the split-step rather than toward
+        it: 10 mW over 20 km went from 0.988 to 0.962 of it. It includes the legs
+        themselves (``c = b``), which are cross-phase modulation the split-step
+        already applied.
+        """
+        return {a + b - c for a in legs for b in legs for c in legs}
 
     @staticmethod
     def _carried_cascade(
@@ -1201,6 +1221,7 @@ class Fiber(Component):
         *,
         legs: tuple[tuple[int, float], ...],
         linear: float,
+        frame: tuple[float, float],
     ) -> list[complex]:
         """A second-order amplitude in the phase its five launched legs give it.
 
@@ -1208,8 +1229,12 @@ class Fiber(Component):
         phase and a span that starts at zero: its field is the physical one. The
         bands here are stored conjugated -- a first-order product leaves
         :meth:`_mix` as ``exp(-i (...))`` -- so the amplitude is conjugated, turned
-        by the legs' own phases, and turned back by what both triads have
-        accumulated over the fibre behind this span. A leg with no phase of its
+        by the legs' own phases, turned back by what both triads have
+        accumulated over the fibre behind this span, and turned on by the
+        landing carrier's own Kerr phase over this one -- ``frame``, its history's
+        change across the span, as the
+        ordinary triads add it -- which the mismatch the integral folds in has
+        taken out of the drive. A leg with no phase of its
         own (a modulated band) leaves the amplitude as it was.
         """
         out = []
@@ -1219,7 +1244,7 @@ class Fiber(Component):
                 out.append(amplitude)
                 continue
             total = sum(sign * leg for leg, sign in own if leg is not None)
-            out.append(complex(np.conj(amplitude) * np.exp(1j * (total - linear))))
+            out.append(complex(np.conj(amplitude) * np.exp(1j * (total - linear - frame[axis]))))
         return out
 
     def _mix(
@@ -1605,9 +1630,10 @@ class Fiber(Component):
                     )
 
         if self.cascaded_fwm:
-            # With carry_phase a term is only refused where it lands on one of its
-            # own five legs or on the product it cascades from -- those are the
-            # cross-phase and self-feedback terms the split-step already carries.
+            # With carry_phase a term is only refused where it lands on a first-order
+            # product of its own five legs (:meth:`_own_products`) -- the cross-phase
+            # and self-feedback terms the split-step already carries, and
+            # corrections to the first order this pass does not carry whole.
             # Landing on a band an earlier span made, or on one the ordinary pass
             # reached from a carried product, is a second-order term the reference
             # has, and adds to it like any other (maiman-z8j).
@@ -1628,6 +1654,8 @@ class Fiber(Component):
                     occupied=occupied,
                     phases=phases,
                     travelled=travelled,
+                    history=signal.nonlinear_history,
+                    after=after,
                 )
             )
 

@@ -268,21 +268,62 @@ def test_carried_phase_with_the_cascade_lands_on_the_split_step_when_phase_match
 
 
 def test_carried_phase_and_cascade_fix_the_four_span_pump_pair() -> None:
-    """The case pinned above at 9.7 times the split-step, ``carry_phase`` on: 0.91.
+    """The case pinned above at 9.7 times the split-step, ``carry_phase`` on: 0.98.
 
-    10 mW, D = 2, four 5 km spans; the first order is 0.951 of the split-step
-    (0.969 before). Pinned, not tuned: within 10 % where the drawn phase was 9.7
+    10 mW, D = 2, four 5 km spans; the first order is 0.976 of the split-step
+    (0.969 before). Pinned, not tuned: within 3 % where the drawn phase was 9.7
     times out, and a change that moves it should say why.
     """
     reference, model = products(10e-3, 2.0, 5e3, 4, cascaded=True, carry=True)
-    assert model[1] / reference[1] == pytest.approx(0.951, abs=0.01)
-    assert model[2] / reference[2] == pytest.approx(0.914, rel=0.02)
+    assert model[1] / reference[1] == pytest.approx(0.976, abs=0.01)
+    assert model[2] / reference[2] == pytest.approx(0.980, rel=0.02)
+
+
+@pytest.mark.parametrize(
+    ("span", "measured"),
+    [(8e3, 0.986), (10e3, 1.014)],
+)
+def test_carried_phase_follows_the_landing_carrier_s_kerr_turn_across_two_spans(
+    span: float, measured: float
+) -> None:
+    """1 mW, D = 2, two spans: the second order is 0.986 and 1.014 of the split-step.
+
+    Here the carried and the in-span terms are each three times the sum, which
+    is their difference, so a phase error in either shows up threefold in the
+    power. The cascade term was left out of the landing carrier's own Kerr turn
+    over the span -- the ``frame`` the ordinary triads add -- and those same
+    spans came out 1.09 and 0.85 of the split-step; single-span it was a phase
+    of ``4 gamma P L`` and no more, invisible in the power. The tone-space
+    equations (undepleted pumps and all their cross-phase) solved to 1e-11
+    agree with the split-step to five digits at this power, so what is left is
+    the second-order truncation: 0.6 % in amplitude here.
+    """
+    reference, model = products(1e-3, 2.0, span, 2, cascaded=True, carry=True)
+    assert model[2] / reference[2] == pytest.approx(measured, abs=0.01)
+
+
+def test_the_residual_grows_with_power_as_a_truncated_perturbation_series_does() -> None:
+    """One 10 km span, D = 2: the second order falls short of the split-step as ``gamma P L`` grows.
+
+    0.987 of it at 1 mW, 0.965 at 3 mW and 0.891 at 10 mW, where the nonlinear
+    phase over the span is 0.13 rad and the terms the second-order truncation
+    leaves out -- the pumps' depletion beyond the first order, the third-order
+    mixing -- are a few percent each. Not a bug to fix by tuning; the bound
+    the model's regime is written to.
+    """
+    ratios = []
+    for pump in (1e-3, 3e-3, 10e-3):
+        reference, model = products(pump, 2.0, 10e3, 1, cascaded=True, carry=True)
+        ratios.append(model[2] / reference[2])
+    assert ratios[0] > ratios[1] > ratios[2]
+    assert ratios[0] == pytest.approx(0.987, abs=0.01)
+    assert ratios[2] == pytest.approx(0.891, abs=0.02)
 
 
 def test_carried_phase_at_low_power_over_four_dispersive_spans() -> None:
-    """1 mW, D = 2, four 5 km spans: 0.976, where the third-order terms are smallest."""
+    """1 mW, D = 2, four 5 km spans: 0.99, where the third-order terms are smallest."""
     reference, model = products(1e-3, 2.0, 5e3, 4, cascaded=True, carry=True)
-    assert model[2] / reference[2] == pytest.approx(0.976, abs=0.02)
+    assert model[2] / reference[2] == pytest.approx(0.990, abs=0.02)
 
 
 def test_carry_phase_is_refused_without_the_cascade_it_pairs_with() -> None:
