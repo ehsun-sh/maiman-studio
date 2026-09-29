@@ -291,6 +291,15 @@ class GratingCoupler(_ChipCoupler):
         doc="Gap between the fibre's facet and the chip: widens the beam, and rings",
         applies_when="from_stack",
     )
+    etch_depth = Param(
+        0.0,
+        unit="nm",
+        min=0.0,
+        max=220.0,
+        doc="How far the teeth are cut into the silicon: solves their own reflection in the gap. "
+        "0 keeps the bare stack's",
+        applies_when="from_stack",
+    )
     fibre_index = Param(
         1.444, unit="", min=1.0, max=2.0, doc="The fibre's own index, for its facet's reflection"
     )
@@ -427,6 +436,7 @@ class GratingCoupler(_ChipCoupler):
             "fibre_radius": self.si("fibre_mfd") / 2.0,
             "grating_radius_y": self.si("grating_width") / 2.0,
             "fibre_height": self.si("fibre_height"),
+            "etch_depth": self.si("etch_depth") or None,
             "fibre_index": self.fibre_index,
             "index_contrast": self.index_contrast if self.from_teeth else None,
             "duty": self.duty,

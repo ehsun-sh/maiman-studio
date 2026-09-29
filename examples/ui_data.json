@@ -2057,6 +2057,15 @@
      "doc": "Gap between the fibre's facet and the chip: widens the beam, and rings",
      "applies_when": "from_stack"
     },
+    "etch_depth": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "nm",
+     "min": 0.0,
+     "max": 220.0,
+     "doc": "How far the teeth are cut into the silicon: solves their own reflection in the gap. 0 keeps the bare stack's",
+     "applies_when": "from_stack"
+    },
     "fibre_index": {
      "type": "float",
      "default": 1.444,

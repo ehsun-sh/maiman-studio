@@ -509,3 +509,54 @@ def test_the_etalon_is_refused_past_the_tilt_it_is_validated_to() -> None:
     etalon(frequencies, tilt=math.radians(30.0))
     with pytest.raises(ValueError, match="validated to 30 degrees"):
         etalon(frequencies, tilt=math.radians(31.0))
+
+
+# -- the teeth's own reflection in the fibre-chip gap (maiman-gz7) -------------------
+
+GAP = {**GRATING, "fibre_height": 15e-6, "duty": 0.5}
+GAP_BAND = C_LIGHT / np.linspace(1.53e-6, 1.56e-6, 121)
+
+
+def gap_power(**changes: Any) -> np.ndarray:
+    return np.abs(grating_coupler_stack(GAP_BAND, **{**GAP, **changes}).s[:, 1, 0]) ** 2
+
+
+def test_the_teeth_reflection_needs_a_gap_to_act_in() -> None:
+    """With the fibre touching the chip there is no cavity, so no etch changes anything."""
+    flat = np.abs(grating_coupler_stack(GAP_BAND, **{**GRATING, "duty": 0.5}).s[:, 1, 0])
+    etched = np.abs(
+        grating_coupler_stack(GAP_BAND, **{**GRATING, "duty": 0.5}, etch_depth=70e-9).s[:, 1, 0]
+    )
+    assert np.array_equal(flat, etched)
+
+
+def test_a_vanishing_etch_is_the_bare_stack_up_to_the_angle_it_is_seen_at() -> None:
+    """Depth zero is the stack :func:`stack_reflection` folds -- the RCWA tests hold that exactly.
+
+    The two differ here by 3e-3 in power, and not because of the solve: the bare
+    stack is taken at each wavelength's emission angle and the teeth's at the
+    fibre's, which is the angle the beam in the gap actually travels at.
+    """
+    assert np.max(np.abs(gap_power(etch_depth=1e-12) - gap_power())) < 5e-3
+
+
+def test_the_etched_teeth_change_the_gap_ripple_and_keep_the_coupling_physical() -> None:
+    """A 70 nm etch moves the ripple by 0.026 in power at most, where the bare stack's is 0.70 dB.
+
+    The etched ripple is 1.02 dB peak to peak: the grating's own reflection is
+    not the plain slab's, in phase as well as size. Coupling never passes unity.
+    """
+    bare, etched = gap_power(), gap_power(etch_depth=70e-9)
+    assert np.max(np.abs(etched - bare)) == pytest.approx(0.026, abs=0.004)
+    assert 10 * np.log10(bare.max() / bare.min()) == pytest.approx(0.70, abs=0.05)
+    assert 10 * np.log10(etched.max() / etched.min()) == pytest.approx(1.02, abs=0.05)
+    assert etched.max() <= 1.0
+
+
+def test_the_teeth_are_refused_a_depth_the_silicon_cannot_have() -> None:
+    with pytest.raises(ValueError, match="etch_depth"):
+        grating_coupler_stack(GAP_BAND, **GAP, etch_depth=300e-9)
+    with pytest.raises(ValueError, match="etch_depth"):
+        grating_coupler_stack(GAP_BAND, **GAP, etch_depth=0.0)
+    with pytest.raises(ValueError, match="teeth_harmonics"):
+        grating_coupler_stack(GAP_BAND, **GAP, etch_depth=70e-9, teeth_harmonics=0)

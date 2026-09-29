@@ -692,8 +692,13 @@ Stated in the code where each approximation is made, and collected here:
   7.2e-3 across +-30, past which it is refused. The gap
   between fibre and chip acts on a grating coupler as a multiplier whose chip-side mirror is held
   to what the grating leaves of each pass -- over a bottom mirror the bare stack would recycle 169 %
-  of it -- but the phase of the grating's own reflection is not solved, so the ripple is bounded
-  rather than exact.
+  of it. With `etch_depth` the chip's reflection there is the grating's own, solved by
+  `maiman.rcwa` (rigorous coupled waves, TE, Moharam et al. 1995): it is exactly the bare stack's
+  with no grating, conserves power to rounding, and finer than the wavelength is Rytov's average
+  permittivity to `(period / lambda)^2`. It is the zeroth order of an *infinite* grating, so its
+  guided-mode resonance is narrower than a real coupler's and takes no power away down the
+  waveguide -- the ripple's phase is the grating's, its detail at the passband's peak a bound,
+  still held to what the grating leaves of each pass.
 * **Transceivers.** Bands within half the sample rate of each other beat — on a diode, and
   against a local oscillator — each field late by its own walk-off; farther apart they add as
   powers, which is the rejection any receiver's bandwidth performs anyway. What is not carried is
@@ -755,7 +760,8 @@ next, in order:
    cancel), and closing that gap is the largest physical approximation under [Open](#open).
 3. **The rest of [Open](#open)**, each with the closed-form test that shows it did something: a
    proportional term or loop filter in the amplifier's gain control; the spectral ASE shape
-   against Giles and Desurvire's published numbers; the carrier phase `beta0 L` a span adds; the
-   phase of a grating coupler's own reflection in the fibre-chip gap.
+   against Giles and Desurvire's published numbers; the carrier phase `beta0 L` a span adds; a
+   finite grating coupler in the gap -- the coupled power leaving down the waveguide -- in place of
+   the infinite one `etch_depth` solves.
 
 Criticism of the decisions above §10 is still worth more than any of these.

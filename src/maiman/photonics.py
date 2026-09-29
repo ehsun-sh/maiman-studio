@@ -45,6 +45,7 @@ from .modes import (
     core_modes,
     lpg_coupling,
 )
+from .rcwa import GratingLayer, UniformLayer, diffract_te
 from .units import C_LIGHT, frequency_to_wavelength
 from .vector_modes import VectorMode, vector_cladding_modes, vector_core_modes, vector_coupling
 
@@ -2678,6 +2679,8 @@ def grating_coupler_stack(
     duty: float = 0.5,
     back_reflection_db: float = 20.0,
     extinction_db: float = 0.0,
+    etch_depth: float | None = None,
+    teeth_harmonics: int = 10,
     ports: tuple[str, str] = ("in", "out"),
 ) -> SMatrix:
     """A grating coupler's passband computed from its vertical stack, not declared.
@@ -2735,11 +2738,32 @@ def grating_coupler_stack(
     chip-side mirror is the stack's reflection held to what the grating leaves of
     each pass, :func:`bounded_chip_reflection`: over a bottom mirror the bare stack
     reflected 92 % of a pass the grating had already taken 77 % of, and the gap
-    turned the difference into coupling. Not in it: the phase of the grating's own
-    reflection, which only solving the grating inside the cavity would give -- so
-    this is a bound on the ripple, not its exact shape, and the coupling is still
-    capped at unity against the facet's transmission, which it does not carry.
+    turned the difference into coupling. Not in it, unless ``etch_depth`` is
+    given: the phase of the grating's own reflection.
+
+    **The teeth's own reflection.** With ``etch_depth`` -- how far the teeth are
+    cut into the silicon, ``duty`` the fraction of each period left standing, the
+    grooves filled with the top medium -- the chip's reflection in the gap is the
+    zeroth order of that grating on the stack, solved rigorously by
+    :func:`maiman.rcwa.diffract_te` at the fibre's angle, ``teeth_harmonics``
+    orders either side. Its phase is the grating's own, which the bare stack's is
+    not, and it still passes through :func:`bounded_chip_reflection`. What it is
+    not: a finite coupler. The solve is of an infinite grating, whose guided-mode
+    resonance shows as a narrow feature at the wavelength that phase-matches the
+    fibre's angle, where the real one -- a few tens of periods, the light leaving
+    down the waveguide -- is broader and takes the coupled power away; away from
+    it the two agree. So the ripple's phase is the grating's, and its detail at
+    the passband's peak is a bound. Only with ``fibre_height`` above zero is
+    there a gap for it to act in. The coupling is capped at unity against the
+    facet's transmission, which it does not carry.
     """
+    if etch_depth is not None and not 0.0 < etch_depth <= silicon_thickness:
+        raise ValueError(
+            f"etch_depth lies between zero and the silicon's {silicon_thickness} m, "
+            f"got {etch_depth}"
+        )
+    if teeth_harmonics < 1:
+        raise ValueError(f"teeth_harmonics is at least one, got {teeth_harmonics}")
     if period <= 0.0:
         raise ValueError(f"period must be positive, got {period} m")
     if strength <= 0.0 or length <= 0.0:
@@ -2846,6 +2870,17 @@ def grating_coupler_stack(
         box_index=box_index,
         box_thickness=box_thickness,
         substrate_index=substrate_index,
+        teeth=(
+            None
+            if etch_depth is None
+            else {
+                "etch_depth": etch_depth,
+                "period": period,
+                "duty": duty,
+                "harmonics": teeth_harmonics,
+                "sine": fibre_sine,
+            }
+        ),
     )
 
     s = np.zeros((grid.size, 2, 2), dtype=np.complex128)
@@ -2890,6 +2925,46 @@ def bounded_chip_reflection(chip: np.ndarray, coupled: np.ndarray) -> np.ndarray
     return np.asarray(np.where(over, chip * scale, chip))
 
 
+def _teeth_reflection(
+    wavelength: np.ndarray,
+    *,
+    top_index: float,
+    teeth: dict[str, float],
+    **stack: object,
+) -> np.ndarray:
+    """The zeroth order of the etched silicon on the oxide, seen from the fibre [amplitude].
+
+    The stack :func:`stack_reflection` folds, with the top of the silicon cut into
+    teeth of ``duty`` and ``etch_depth`` and filled with the top medium:
+    :func:`maiman.rcwa.diffract_te` at the fibre's ``sine``. With no depth it is
+    exactly the bare stack's, which the RCWA tests hold it to.
+    """
+    silicon_index = float(stack["silicon_index"])  # type: ignore[arg-type]
+    silicon_thickness = float(stack["silicon_thickness"])  # type: ignore[arg-type]
+    depth = float(teeth["etch_depth"])
+    layers: list[GratingLayer | UniformLayer] = [
+        GratingLayer(depth, silicon_index, top_index, float(teeth["duty"])),
+        UniformLayer(silicon_thickness - depth, silicon_index),
+        UniformLayer(float(stack["box_thickness"]), float(stack["box_index"])),  # type: ignore[arg-type]
+    ]
+    substrate = _passive(stack["substrate_index"], "the substrate's index")  # type: ignore[arg-type]
+    return np.array(
+        [
+            diffract_te(
+                float(lam),
+                sine=float(teeth["sine"]),
+                period=float(teeth["period"]),
+                top_index=top_index,
+                layers=layers,
+                substrate_index=substrate,
+                harmonics=int(teeth["harmonics"]),
+            ).reflection
+            for lam in wavelength
+        ],
+        dtype=np.complex128,
+    )
+
+
 def _fibre_gap_etalon(
     wavelength: np.ndarray,
     *,
@@ -2900,6 +2975,7 @@ def _fibre_gap_etalon(
     top_index: float,
     fibre_index: float,
     coupled: np.ndarray,
+    teeth: dict[str, float] | None = None,
     **stack: object,
 ) -> np.ndarray:
     """``|1 / (1 - rho)|^2``: what the gap between fibre and chip does to the coupling.
@@ -2912,15 +2988,16 @@ def _fibre_gap_etalon(
     """
     if height <= 0.0:
         return np.ones_like(wavelength)
-    chip = bounded_chip_reflection(
-        stack_reflection(
+    if teeth is None:
+        bare = stack_reflection(
             wavelength,
             emission_sine=emission_sine,
             top_index=top_index,
             **stack,  # type: ignore[arg-type]
-        ),
-        coupled,
-    )
+        )
+    else:
+        bare = _teeth_reflection(wavelength, top_index=top_index, teeth=teeth, **stack)
+    chip = bounded_chip_reflection(bare, coupled)
     facet = math.sqrt(fresnel_reflectance(fibre_index, top_index))
     path = 2.0 * height / math.cos(angle)
     returning = gaussian_coupling(
