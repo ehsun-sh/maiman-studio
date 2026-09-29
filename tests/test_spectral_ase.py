@@ -358,3 +358,66 @@ def test_without_a_spectrum_the_flag_has_nothing_to_reach() -> None:
     plain = gain_transient(amp, times, power)
     flagged = spectral_gain_transient(amp, spectrum, times, power, [1550e-9], spectral_ase=True)
     assert flagged.reference.gain == pytest.approx(plain.gain, rel=1e-12)
+
+
+# ---------------------------------------------------------------------------
+# Against the paper's own relations (maiman-66t)
+# ---------------------------------------------------------------------------
+#
+# Giles and Desurvire's figures and tables are for particular fibres, whose
+# absorption and gain spectra are curves in Fig. 2 and are not tabulated, so no
+# number of theirs can be reproduced without those curves -- and this library
+# ships none, since a curve invented to look plausible is a number nobody can
+# back. What the paper does state in closed form can be held to: Sec. VIII's
+# noise factor of a highly pumped amplifier, eq. (31), its ASE power, eq. (32),
+# and the sentence that with no stimulated emission at the pump the quantum
+# limit n_sp = 1 is reached. Those are written in cross sections; the curves
+# stand in for them because ``sigma_e / sigma_a = G* / A`` (the coil's length
+# and doping cancel in the ratio).
+
+
+@pytest.mark.parametrize("pump_ratio", [0.0, 0.1, 0.28, 0.6])
+def test_a_highly_pumped_amplifier_has_the_papers_excess_noise_factor(pump_ratio: float) -> None:
+    """Eq. (31): ``n_sp = 1 / (1 - (sigma_a / sigma_e)(sigma_ep / sigma_ap))``, at every wavelength.
+
+    Fully pumped, the inversion is ``n = sigma_ap / (sigma_ap + sigma_ep) =
+    1 / (1 + r)`` for ``r = sigma_ep / sigma_ap`` the pump's emission-to-absorption
+    ratio, and the noise factor at each signal wavelength is the paper's -- here
+    against :func:`spectral_n_sp`, which is written from the populations instead, so
+    the two agree only if the paper's chain does. ``r = 0`` is a 980 nm pump.
+    """
+    spectrum = curved_spectrum()
+    grid = np.linspace(1535e-9, 1565e-9, 61)
+    absorption, emission = spectrum._curves(grid)
+    inversion = 1.0 / (1.0 + pump_ratio)
+    got = spectral_n_sp(spectrum, grid, inversion)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        paper = 1.0 / (1.0 - (absorption / emission) * pump_ratio)
+    usable = (spectrum.gain_db(grid, inversion) > 0.0) & np.isfinite(paper) & (paper > 0.0)
+    assert usable.any()
+    assert np.allclose(got[usable], paper[usable], rtol=1e-12)
+
+
+def test_with_no_stimulated_emission_at_the_pump_the_quantum_limit_is_reached() -> None:
+    """The paper's 980 nm sentence: complete inversion, ``n_sp = 1`` at every signal wavelength."""
+    spectrum = curved_spectrum()
+    grid = np.linspace(1520e-9, 1565e-9, 46)
+    assert np.allclose(spectral_n_sp(spectrum, grid, 1.0), 1.0, rtol=0, atol=1e-12)
+
+
+def test_the_ase_power_is_the_papers_eq_32_in_a_bandwidth() -> None:
+    """Eq. (32): ``P_ASE = 2 n_sp (G - 1) h nu d_nu`` per bandwidth, both polarizations.
+
+    :func:`spectral_ase_psd` is the one-sided density per polarization, so twice it
+    times the bandwidth is the paper's power; checked at a wavelength where the
+    coil has gain.
+    """
+    spectrum = curved_spectrum()
+    wavelength, inversion = 1550e-9, 0.8
+    bandwidth = 125e9  # the paper's 1 nm resolution
+    gain = float(db_to_linear(float(np.ravel(spectrum.gain_db(wavelength, inversion))[0])))
+    n_sp = float(np.ravel(spectral_n_sp(spectrum, wavelength, inversion))[0])
+    photon = H_PLANCK * C_LIGHT / wavelength
+    paper = 2.0 * n_sp * (gain - 1.0) * photon * bandwidth
+    density = float(np.ravel(spectral_ase_psd(spectrum, wavelength, inversion))[0])
+    assert 2.0 * density * bandwidth == pytest.approx(paper, rel=1e-12)

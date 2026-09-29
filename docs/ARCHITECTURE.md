@@ -759,8 +759,8 @@ next, in order:
    (0.89 of the split-step at 10 mW over 10 km, and 1.25 over two such spans where terms nearly
    cancel), and closing that gap is the largest physical approximation under [Open](#open).
 3. **The rest of [Open](#open)**, each with the closed-form test that shows it did something: a
-   proportional term or loop filter in the amplifier's gain control; the spectral ASE shape
-   against Giles and Desurvire's published numbers; the carrier phase `beta0 L` a span adds; a
+   proportional term or loop filter in the amplifier's gain control; the carrier phase
+   `beta0 L` a span adds; a
    finite grating coupler in the gap -- the coupled power leaving down the waveguide -- in place of
    the infinite one `etch_depth` solves.
 
