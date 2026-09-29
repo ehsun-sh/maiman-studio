@@ -671,7 +671,17 @@ Stated in the code where each approximation is made, and collected here:
   over a span does: one 10 km span is 0.99, 0.97 and 0.89 of the split-step at 1, 3 and 10 mW.
   Where the carried and the in-span terms nearly cancel -- a dispersive span some kilometres long
   -- that few percent in each shows as more in the sum: 1.25 of it at 10 mW over two 10 km spans.
-  Scalar drive only; a modulated channel, whose phase nobody knows, is still drawn.
+  Scalar drive only; a modulated channel, whose phase nobody knows, is still drawn. For bands
+  that are one complex amplitude per axis -- launched tones, unmodulated carriers, the products
+  earlier spans made -- `tone_solver` drops the series: it integrates the coupled equations of the
+  launched tones and every product above `mixing_floor`, `tone_order` rounds deep, through the
+  span, with cross-phase, depletion and every order of mixing in them
+  (`kernels.fwm_tone_solve`, a Dormand-Prince pair in NumPy). It lands on the split-step to five
+  digits where the series was 25 % off (30 mW over 20 km) or 2.3 times (20 mW, D = 4, four
+  spans), over lossy amplified spans too, and holds the total power to 1e-9 without loss. It
+  replaces the split-step's Kerr step on those bands, is refused beside `pump_phase`,
+  `carry_phase`, `cascaded_fwm`, `cross_polarization`, `mixing_steps`, PMD and Raman, and refuses
+  a modulated band by name rather than treat its mean as its phase.
 * **Gratings and modes.** The average index a writing process raises is carried when a grating's
   `dc_compensated` flag is off: as Erdogan's self-coupling for the Bragg and long-period gratings,
   and for the uniform tilted one as the fibre it leaves, its core raised and every mode solved
@@ -738,11 +748,11 @@ next, in order:
    against them skip in CI. Past the shaper the path is held to a digest everywhere, and
    `RELEASING.md` runs the rest with `MAIMAN_REQUIRE_SPEC=1` before each release; the shaper
    itself is checked on every push only once the `specification` job in `ci.yml` has a runner.
-2. **Carry four-wave mixing past second order.** `carry_phase` is exact to the split-step's own
-   accuracy at low power and falls short as the nonlinear phase over a span grows -- 0.89 of it
-   at 10 mW over 10 km, and 1.25 over two such spans where terms nearly cancel -- because the
-   third-order mixing and the pumps' depletion beyond the first order are left out; they are the
-   largest physical approximation under [Open](#open).
+2. **Give the tone solver what it cannot yet take.** It is exact for constant tones and refuses a
+   modulated channel, a vector drive, PMD and Raman; a channel's phase is not one number, so the
+   perturbative series still serves the modulated case at the powers it is good to
+   (0.89 of the split-step at 10 mW over 10 km, and 1.25 over two such spans where terms nearly
+   cancel), and closing that gap is the largest physical approximation under [Open](#open).
 3. **The rest of [Open](#open)**, each with the closed-form test that shows it did something: a
    proportional term or loop filter in the amplifier's gain control; the spectral ASE shape
    against Giles and Desurvire's published numbers; the carrier phase `beta0 L` a span adds; the

@@ -22,6 +22,7 @@ from ..kernels import (
     ORTHOGONAL_KERR_WEIGHT,
     POLARIZED,
     RAMAN_TRIANGLE_LIMIT,
+    TONE_TOLERANCE,
     PMDSection,
     PropagationDiagnostics,
     apply_pmd,
@@ -41,6 +42,8 @@ from ..kernels import (
     fwm_phase_mismatch,
     fwm_power_transfer,
     fwm_product_power,
+    fwm_tone_solve,
+    fwm_tone_triples,
     fwm_vector_drive,
     geometric_phase,
     kerr_rate,
@@ -267,6 +270,19 @@ class Fiber(Component):
         doc="Cut the span into this many equal pieces, each mixed on its own",
         applies_when="four_wave_mixing",
     )
+    tone_solver = BoolParam(
+        False,
+        doc="Integrate the coupled equations of every constant tone across the span, all orders",
+        applies_when="four_wave_mixing",
+    )
+    tone_order = Param(
+        3.0,
+        unit="",
+        min=1.0,
+        max=8.0,
+        doc="Highest order of mixing product the tone solver keeps, when it is above the floor",
+        applies_when="tone_solver",
+    )
     raman_gain_slope = Param(
         0.0,
         unit="1/W/km/THz",
@@ -367,6 +383,22 @@ class Fiber(Component):
                 "for pump_phase's bookkeeping. Turn on cascaded_fwm and pump_phase, or turn "
                 "carry_phase off."
             )
+        if self.tone_solver:
+            for name, on in (
+                ("pump_phase", self.pump_phase),
+                ("carry_phase", self.carry_phase),
+                ("cascaded_fwm", self.cascaded_fwm),
+                ("cross_polarization", self.cross_polarization),
+                ("mixing_steps", self.mixing_steps > 1.0),
+                ("pmd_coefficient", self.pmd_coefficient > 0.0),
+                ("raman_gain_slope", self.raman_gain_slope > 0.0),
+            ):
+                if on:
+                    raise ValueError(
+                        f"{self.label or 'Fiber'}: tone_solver integrates every tone's coupled "
+                        f"equations itself -- cross-phase, mixing to every order, depletion -- "
+                        f"and has nothing for {name} to do or no way to carry it. Turn one off."
+                    )
         if self.mixing_steps > 1.0 and self.pmd_coefficient > 0.0:
             raise ValueError(
                 f"{self.label or 'Fiber'}: mixing_steps cuts the span into pieces, and each "
@@ -425,7 +457,215 @@ class Fiber(Component):
         )
         return out
 
+    def _tone_set(
+        self,
+        f0: np.ndarray,
+        amplitude: np.ndarray,
+        *,
+        beta2: float,
+        gamma: float,
+        alpha: float,
+        distance: float,
+        reference: float,
+    ) -> np.ndarray:
+        """The launched tones and every product above the floor, ``tone_order`` rounds deep.
+
+        A round takes every ordered ``(i, j, k)`` of the tones so far and estimates
+        the product at ``f_i + f_j - f_k`` from the first-order build-up
+        (:func:`fwm_mixing_integral`'s magnitude, ``|(e^{rL} - 1) / r|`` for
+        ``r = i delta_beta - alpha``): the tones so far drive it, so a product of a
+        product is found in the next round. One whose power estimate is under the
+        floor -- ``mixing_floor`` dB below the strongest tone -- is left out, and so
+        is one at or below zero frequency. The estimate ignores what the other
+        tones do to it, and the solver then finds the true amplitude, so the floor
+        is a bound on what is kept, not on what is computed.
+        """
+        f = f0.copy()
+        a = np.abs(amplitude)
+        floor = float(np.max(a) ** 2) * db_to_linear(-self.mixing_floor)
+        for _ in range(round(self.tone_order)):
+            i, j, k = (
+                index.ravel() for index in np.meshgrid(*(np.arange(f.size),) * 3, indexing="ij")
+            )
+            q = f[i] + f[j] - f[k]
+            fresh = (q > 0.0) & (np.abs(q - f[k]) > TONE_TOLERANCE)
+            fresh &= (np.abs(q - f[i]) > TONE_TOLERANCE) & (np.abs(q - f[j]) > TONE_TOLERANCE)
+            i, j, k, q = i[fresh], j[fresh], k[fresh], q[fresh]
+            if q.size == 0:
+                break
+            rate = np.array(
+                [
+                    complex(
+                        -alpha,
+                        fwm_phase_mismatch(
+                            beta2, f[x] - reference, f[y] - reference, f[w] - reference
+                        ),
+                    )
+                    for x, y, w in zip(i, j, k, strict=True)
+                ]
+            )
+            build = np.where(
+                np.abs(rate) * distance < 1e-9,
+                distance,
+                np.abs(np.expm1(rate * distance) / np.where(rate == 0, 1.0, rate)),
+            )
+            estimate = 2.0 * gamma * a[i] * a[j] * a[k] * build
+            keep = estimate**2 >= floor
+            known = {round(v / TONE_TOLERANCE) for v in f}
+            added: dict[int, tuple[float, float]] = {}
+            for value, size in zip(q[keep], estimate[keep], strict=True):
+                key = round(value / TONE_TOLERANCE)
+                if key in known:
+                    continue
+                if key not in added or size > added[key][1]:
+                    added[key] = (float(value), float(size))
+            if not added:
+                break
+            new = sorted(added.values())
+            f = np.concatenate([f, [v for v, _ in new]])
+            a = np.concatenate([a, [size for _, size in new]])
+        return np.sort(f)
+
+    def _run_tones(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
+        """One span with every constant tone's coupled equations integrated, mixing to all orders.
+
+        The series :meth:`_mix` sums stops at second order and assumes undepleted
+        pumps; what it leaves out grows as ``gamma P L`` (0.89 of the split-step at
+        10 mW over 10 km, 0.75 at 30 mW over 20 km). Here the tones are the
+        unknowns -- the launched bands and the products that clear the floor, found
+        by :meth:`_tone_set` -- and :func:`~maiman.kernels.fwm_tone_solve` carries
+        them through the span, cross-phase modulation, depletion and every order
+        included, matching the split-step to the digits its own steps allow. It
+        replaces the split-step's Kerr step on these bands, so cross-phase is not
+        applied twice.
+
+        Only for bands that are one complex number per axis -- a launched tone, an
+        unmodulated carrier, a product an earlier span made -- because the
+        equations are for amplitudes, and a modulated channel's phase is not one.
+        Such a band is refused, by name, rather than treated as if it were. Each
+        polarization is its own scalar problem, the same model
+        ``cross_polarization`` off gives the perturbative path. The bands are
+        stored conjugated against the equations' convention -- this library turns
+        a field by ``exp(-i angle)`` -- so amplitudes are conjugated on the way in
+        and out. The history the perturbative path keeps for its pumps' phase is
+        left as it was: the amplitudes carry their own.
+        """
+        signal: OpticalSignal = inputs["in"]
+        distance = self.si("length")
+        gamma = self.si("nonlinearity")
+        alpha = attenuation_db_per_m_to_alpha(self.si("attenuation"))
+        power_factor = db_to_linear(-self.loss_db())
+        beta2 = self.reference_beta2(signal)
+        bands = signal.bands
+        if not bands:
+            raise ValueError(f"{self.label or 'Fiber'}: the tone solver needs at least one band")
+        launched = np.zeros((len(bands), 2), dtype=np.complex128)
+        for index, band in enumerate(bands):
+            for axis, field in enumerate((band.Ex, band.Ey)):
+                mean = complex(np.mean(field))
+                power = float(np.mean(np.abs(field) ** 2))
+                if power > 0.0 and abs(mean) ** 2 < (1.0 - 1e-9) * power:
+                    raise ValueError(
+                        f"{self.label or 'Fiber'}: tone_solver needs every band to be one complex "
+                        f"amplitude per polarization, and the band at {band.f0 / 1e12:.4f} THz is "
+                        "modulated. Its phase is not one number; use the perturbative path "
+                        "(tone_solver off) for it."
+                    )
+                launched[index, axis] = np.conj(mean)
+        reference = bands[0].f0
+        f0 = np.array([band.f0 for band in bands])
+        strength = np.max(np.abs(launched), axis=1)
+        if float(np.max(strength)) <= 0.0:
+            raise ValueError(f"{self.label or 'Fiber'}: every band is dark; nothing to solve")
+        frequencies = self._tone_set(
+            f0,
+            strength,
+            beta2=beta2,
+            gamma=gamma,
+            alpha=alpha,
+            distance=distance,
+            reference=reference,
+        )
+        offsets = frequencies - reference
+        start = np.zeros((frequencies.size, 2), dtype=np.complex128)
+        for index in range(len(bands)):
+            start[int(np.argmin(np.abs(frequencies - f0[index])))] = launched[index]
+        triples = fwm_tone_triples(offsets)
+        finish = np.zeros_like(start)
+        steps = 0
+        for axis in (0, 1):
+            if np.any(start[:, axis] != 0.0):
+                finish[:, axis], taken = fwm_tone_solve(
+                    offsets,
+                    start[:, axis],
+                    beta2=beta2,
+                    gamma=gamma,
+                    alpha=alpha,
+                    distance=distance,
+                    accumulated_gvd=signal.accumulated_gvd,
+                    triples=triples,
+                )
+                steps = max(steps, taken)
+        finish = np.conj(finish)
+        present = [band.f0 for band in bands]
+
+        def is_launched(frequency: float) -> bool:
+            return any(abs(frequency - f) <= TONE_TOLERANCE for f in present)
+
+        dtype = ctx.complex_dtype
+        launched_bands: list[Band] = []
+        for band in bands:
+            slot = int(np.argmin(np.abs(frequencies - band.f0)))
+            launched_bands.append(
+                replace(
+                    band,
+                    Ex=np.full(band.num_samples, finish[slot, 0], dtype=dtype),
+                    Ey=np.full(band.num_samples, finish[slot, 1], dtype=dtype),
+                )
+            )
+        products = [
+            Band(
+                Ex=np.full(bands[0].num_samples, finish[slot, 0], dtype=dtype),
+                Ey=np.full(bands[0].num_samples, finish[slot, 1], dtype=dtype),
+                f0=float(frequency),
+                fs=bands[0].fs,
+            )
+            for slot, frequency in enumerate(frequencies)
+            if not is_launched(float(frequency))
+        ]
+        total = float(np.sum(np.abs(finish) ** 2))
+        made = float(
+            sum(
+                np.sum(np.abs(finish[slot]) ** 2)
+                for slot, frequency in enumerate(frequencies)
+                if not is_launched(float(frequency))
+            )
+        )
+        diagnostics = PropagationDiagnostics(
+            steps=steps,
+            distance=distance,
+            shortest_step=distance / max(steps, 1),
+            longest_step=distance / max(steps, 1),
+            peak_nonlinear_phase=float(
+                gamma * np.max(np.abs(launched)) ** 2 * effective_length(alpha, distance)
+            ),
+            mixing_products=len(products),
+            fwm_depletion=made / total if total > 0.0 else 0.0,
+        )
+        return {
+            "out": OpticalSignal(
+                bands=tuple(launched_bands + products),
+                noise=tuple(n.scale_power(power_factor) for n in signal.noise),
+                accumulated_gvd=signal.accumulated_gvd + beta2 * distance,
+                nonlinear_history=signal.nonlinear_history,
+                walkoff=self._walkoff(signal, distance),
+            ),
+            "diagnostics": diagnostics,
+        }
+
     def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
+        if self.tone_solver and self.four_wave_mixing and self.si("nonlinearity") != 0.0:
+            return self._run_tones(ctx, inputs)
         if self.mixing_steps > 1.0 and self.four_wave_mixing and self.si("nonlinearity") != 0.0:
             return self._run_in_pieces(ctx, inputs)
         signal: OpticalSignal = inputs["in"]

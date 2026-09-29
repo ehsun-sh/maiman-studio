@@ -1540,6 +1540,146 @@ def fwm_cascade_amplitude(
     return complex(sign * magnitude * math.exp(-alpha * distance / 2.0) * omega)
 
 
+#: Butcher tableau of the Dormand-Prince 5(4) pair, the embedded Runge-Kutta the
+#: tone solver steps with (Dormand and Prince, J. Comput. Appl. Math. 6, 19 (1980)).
+_DP_A = (
+    (),
+    (1 / 5,),
+    (3 / 40, 9 / 40),
+    (44 / 45, -56 / 15, 32 / 9),
+    (19372 / 6561, -25360 / 2187, 64448 / 6561, -212 / 729),
+    (9017 / 3168, -355 / 33, 46732 / 5247, 49 / 176, -5103 / 18656),
+    (35 / 384, 0.0, 500 / 1113, 125 / 192, -2187 / 6784, 11 / 84),
+)
+_DP_C = (0.0, 1 / 5, 3 / 10, 4 / 5, 8 / 9, 1.0, 1.0)
+_DP_B5 = (35 / 384, 0.0, 500 / 1113, 125 / 192, -2187 / 6784, 11 / 84, 0.0)
+_DP_B4 = (5179 / 57600, 0.0, 7571 / 16695, 393 / 640, -92097 / 339200, 187 / 2100, 1 / 40)
+
+#: Two offsets closer than this [Hz] are the same tone.
+TONE_TOLERANCE = 1e3
+
+
+def fwm_tone_triples(offsets: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Every ordered ``(i, j, k, q)`` of tones with ``f_i + f_j - f_k = f_q``.
+
+    Ordered, so a pair of different tones appears twice -- the factor of two a
+    cross term has in ``|A|^2 A`` -- and a cross-phase or self-phase term
+    (``k = i`` or ``k = j``) is in the list too, with no mismatch. Only the
+    triples whose product is one of ``offsets`` are kept.
+    """
+    f = np.asarray(offsets, dtype=np.float64)
+    n = f.size
+    keys = np.round(f / TONE_TOLERANCE).astype(np.int64)
+    index = {int(key): position for position, key in enumerate(keys)}
+    ti, tj, tk, tq = [], [], [], []
+    for i in range(n):
+        for j in range(n):
+            for k in range(n):
+                q = index.get(round((f[i] + f[j] - f[k]) / TONE_TOLERANCE))
+                if q is not None:
+                    ti.append(i)
+                    tj.append(j)
+                    tk.append(k)
+                    tq.append(q)
+    return (
+        np.array(ti, dtype=np.intp),
+        np.array(tj, dtype=np.intp),
+        np.array(tk, dtype=np.intp),
+        np.array(tq, dtype=np.intp),
+    )
+
+
+def fwm_tone_solve(
+    offsets: np.ndarray,
+    amplitudes: np.ndarray,
+    *,
+    beta2: float,
+    gamma: float,
+    alpha: float,
+    distance: float,
+    accumulated_gvd: float = 0.0,
+    rtol: float = 1e-9,
+    triples: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None = None,
+) -> tuple[np.ndarray, int]:
+    """Constant-amplitude tones through a span, every mixing order at once [sqrt(W)].
+
+    The coupled-mode equations for tones ``a_n`` at frequency offsets ``f_n``, with
+    the linear phase ``beta(omega_n) z`` taken out of each::
+
+        da_q/dz = -alpha/2 a_q + i gamma sum a_i a_j a_k* exp(i delta_beta z)
+
+    over the ordered triples with ``f_i + f_j - f_k = f_q`` (Agrawal, *Nonlinear
+    Fiber Optics*, ch. 10). Self- and cross-phase modulation are the terms with
+    ``k = i`` or ``k = j``, which have no mismatch; every other term is mixing.
+    Nothing is undepleted, nothing truncated in order: a product drives whatever
+    it can, the pumps give up what the products take, and the fields are exact
+    to the integrator's tolerance. Total power is conserved to it at ``alpha = 0``.
+
+    ``accumulated_gvd`` is what the fibre behind this span has added, so that the
+    phase a mismatch has already turned through is not lost from one span to the
+    next (:func:`fwm_accumulated_phase`). The amplitudes are in the convention
+    of the equation above, ``exp(+i beta z)``; a caller whose fields turn the
+    other way conjugates on the way in and out. Returns the amplitudes at the end
+    of the span and the number of steps taken.
+    """
+    f = np.asarray(offsets, dtype=np.float64)
+    y0 = np.asarray(amplitudes, dtype=np.complex128)
+    if f.shape != y0.shape or f.ndim != 1:
+        raise ValueError("offsets and amplitudes must be one-dimensional and the same length")
+    if distance <= 0.0 or f.size == 0:
+        return y0.copy(), 0
+    ti, tj, tk, tq = triples if triples is not None else fwm_tone_triples(f)
+    delta = np.array(
+        [fwm_phase_mismatch(beta2, f[i], f[j], f[k]) for i, j, k in zip(ti, tj, tk, strict=True)]
+    )
+    start = np.array(
+        [
+            fwm_accumulated_phase(accumulated_gvd, f[i], f[j], f[k])
+            for i, j, k in zip(ti, tj, tk, strict=True)
+        ]
+    )
+    n = f.size
+    scale = float(np.max(np.abs(y0))) if y0.size else 0.0
+    if scale == 0.0:
+        return y0.copy(), 0
+    atol = 1e-14 * scale
+
+    def rhs(z: float, a: np.ndarray) -> np.ndarray:
+        drive = 1j * gamma * a[ti] * a[tj] * np.conj(a[tk]) * np.exp(1j * (delta * z + start))
+        out = np.bincount(tq, weights=drive.real, minlength=n) + 1j * np.bincount(
+            tq, weights=drive.imag, minlength=n
+        )
+        return out - 0.5 * alpha * a
+
+    z, a = 0.0, y0.copy()
+    # One nonlinear or dispersive length, whichever is shorter, opens the step.
+    rate = max(float(np.max(np.abs(delta))) if delta.size else 0.0, gamma * scale**2 * n, 1e-30)
+    h = min(distance, 0.1 / rate)
+    steps = 0
+    k1 = rhs(z, a)
+    while z < distance:
+        h = min(h, distance - z)
+        ks = [k1]
+        for stage in range(1, 7):
+            increment = sum(
+                coefficient * k for coefficient, k in zip(_DP_A[stage], ks, strict=True)
+            )
+            ks.append(rhs(z + _DP_C[stage] * h, a + h * increment))
+        high = a + h * sum(b * k for b, k in zip(_DP_B5, ks, strict=True))
+        low = a + h * sum(b * k for b, k in zip(_DP_B4, ks, strict=True))
+        error = float(
+            np.max(np.abs(high - low) / (atol + rtol * np.maximum(np.abs(a), np.abs(high))))
+        )
+        if error <= 1.0:
+            z, a = z + h, high
+            k1 = ks[6]  # first same as last: the pair's own next stage
+            steps += 1
+        h *= min(5.0, max(0.2, 0.9 * error ** (-0.2))) if error > 0.0 else 5.0
+        if h < 1e-12 * distance:
+            raise ValueError("the tone solver's step collapsed: the equations are too stiff here")
+    return a, steps
+
+
 #: Silica's isotropic Kerr tensor, as the drive of one mixing product:
 #: ``D^m = T^m_abc A_i^a A_j^b (A_k^c)*`` over the Jones components. From
 #: ``(2/3)(E . E*) E + (1/3)(E . E) E*`` with the degeneracy factor divided out,

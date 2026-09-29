@@ -1613,6 +1613,20 @@
      "doc": "Cut the span into this many equal pieces, each mixed on its own",
      "applies_when": "four_wave_mixing"
     },
+    "tone_solver": {
+     "type": "bool",
+     "default": false,
+     "doc": "Integrate the coupled equations of every constant tone across the span, all orders"
+    },
+    "tone_order": {
+     "type": "float",
+     "default": 3.0,
+     "unit": "",
+     "min": 1.0,
+     "max": 8.0,
+     "doc": "Highest order of mixing product the tone solver keeps, when it is above the floor",
+     "applies_when": "tone_solver"
+    },
     "raman_gain_slope": {
      "type": "float",
      "default": 0.0,
