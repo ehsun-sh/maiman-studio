@@ -353,3 +353,149 @@ def test_channel_powers_have_to_match_the_channels() -> None:
             np.array([1550e-9, 1560e-9]),
             channel_powers=np.ones((times.size, 3)) * CHANNEL,
         )
+
+
+# ---------------------------------------------------------------------------
+# A proportional term and a loop filter (maiman-9ox)
+# ---------------------------------------------------------------------------
+#
+# Linearised about a working point, the reservoir is ``tau d(dg)/dt = dp - a dg``
+# with ``a = 1 + G (P / P_sat + b)`` and the loop's PI acts on ``r - dg``, all in
+# nepers. A step in the setpoint therefore has the closed-form response of
+#
+#     (kp s + w_i) / (tau s^2 + (a + kp) s + w_i)                    (no filter)
+#     (kp s + w_i) / (tau tau_f s^3 + (tau + a tau_f) s^2 + (a + kp) s + w_i)
+#
+# with ``w_i = 1 / tau_c`` -- a second-order system, then a third. The transient
+# is integrated in full; a step small enough that the nonlinearity is invisible
+# is compared to it.
+
+
+def linearised_step(
+    numerator: list[float], denominator: list[float], times: np.ndarray
+) -> np.ndarray:
+    """Unit-step response of ``N(s) / D(s)`` by partial fractions, from ``D``'s roots."""
+    poles = np.roots(denominator)
+    full = np.polymul(denominator, [1.0, 0.0])  # the step's own pole at zero
+    slope = np.polyder(full)
+    residues = [np.polyval(numerator, r) / np.polyval(slope, r) for r in poles]
+    final = np.polyval(numerator, 0.0) / np.polyval(denominator, 0.0)
+    response = final + sum(res * np.exp(r * times) for res, r in zip(residues, poles, strict=True))
+    return np.asarray(np.real(response))
+
+
+def loop_constants(control: PumpControl) -> tuple[float, float]:
+    """``(a, tau)`` of the linearised reservoir at the run's settled point."""
+    from maiman.transient import METASTABLE_LIFETIME
+
+    edfa = amplifier()
+    saturation = edfa.intrinsic_saturation_power(10 ** (edfa.gain / 10.0))
+    own = edfa.self_saturation_load() / saturation
+    settled = edfa.effective_gain(CHANNEL)
+    return 1.0 + settled * (CHANNEL / saturation + own), METASTABLE_LIFETIME
+
+
+def setpoint_step(control: PumpControl, size_db: float = 0.02) -> tuple[np.ndarray, np.ndarray]:
+    """The gain's move [dB] after a setpoint step of ``size_db``, and the times it is at."""
+    edfa = amplifier()
+    settled_db = 10.0 * math.log10(edfa.effective_gain(CHANNEL))
+    times = np.linspace(0.0, 0.05, 2501)
+    held = np.full_like(times, CHANNEL)
+    run = controlled_gain_transient(
+        edfa,
+        times,
+        held,
+        PumpControl(**{**control.__dict__, "setpoint": settled_db + size_db}),
+    )
+    return times, run.gain_db - settled_db
+
+
+@pytest.mark.parametrize("proportional", [0.0, 4.0, 20.0])
+def test_the_pi_loop_follows_the_second_order_step_response(proportional: float) -> None:
+    """Underdamped without the proportional term, critical near 16, overdamped past it.
+
+    ``zeta = (a + kp) / (2 sqrt(tau / tau_c))``: 0.07 at ``kp = 0``, where the loop
+    rings for tens of milliseconds, 0.3 at 4 and 1.3 at 20 -- where the PI's zero still
+    leaves a 5 % overshoot. Integrated against the
+    closed form to 2 % of the step.
+    """
+    control = PumpControl(mode="gain", bandwidth=1e3, proportional=proportional)
+    a, tau = loop_constants(control)
+    w_i = 1.0 / control.time_constant
+    times, moved = setpoint_step(control)
+    expected = 0.02 * linearised_step([proportional, w_i], [tau, a + proportional, w_i], times)
+    assert np.max(np.abs(moved - expected)) < 0.02 * 0.02
+    zeta = (a + proportional) / (2.0 * math.sqrt(tau / control.time_constant))
+    if proportional == 0.0:
+        assert zeta < 0.1 and moved.max() > 0.02 * 1.7, "and it overshoots by more than half"
+    if proportional == 20.0:
+        # Overdamped, but the PI's zero at ``-1 / (kp tau_c)`` still overshoots a little.
+        assert zeta > 1.0 and 0.02 < moved.max() < 0.02 * 1.06
+
+
+def test_the_proportional_term_takes_the_ringing_out_of_the_loop() -> None:
+    """Overshoot falls monotonically as ``kp`` rises: 0.07 damping, then 0.3, then critical."""
+    peaks = [
+        setpoint_step(PumpControl(mode="gain", bandwidth=1e3, proportional=kp))[1].max() / 0.02
+        for kp in (0.0, 2.0, 6.0, 16.0)
+    ]
+    assert peaks[0] > peaks[1] > peaks[2] > peaks[3]
+    assert peaks[0] == pytest.approx(1.79, abs=0.03)
+
+
+@pytest.mark.parametrize("filter_time", [2e-4, 1e-3])
+def test_a_loop_filter_follows_the_third_order_step_response(filter_time: float) -> None:
+    """A first-order low-pass on the error: the closed form is a cubic."""
+    control = PumpControl(mode="gain", bandwidth=1e3, proportional=6.0, filter_time=filter_time)
+    a, tau = loop_constants(control)
+    w_i = 1.0 / control.time_constant
+    kp = control.proportional
+    times, moved = setpoint_step(control)
+    expected = 0.02 * linearised_step(
+        [kp, w_i],
+        [
+            tau * filter_time,
+            tau + a * filter_time,
+            a + kp,
+            w_i,
+        ],
+        times,
+    )
+    assert np.max(np.abs(moved - expected)) < 0.02 * 0.03
+
+
+def test_a_filter_costs_the_loop_phase_and_it_rings_more() -> None:
+    """The same PI, a slower low-pass in front of it: more overshoot, not less."""
+    peaks = [
+        setpoint_step(PumpControl(mode="gain", bandwidth=1e3, proportional=6.0, filter_time=tf))[
+            1
+        ].max()
+        / 0.02
+        for tf in (0.0, 2e-4, 1e-3)
+    ]
+    assert peaks[0] < peaks[1] < peaks[2]
+
+
+def test_neither_term_moves_anything_at_zero() -> None:
+    """Both default to zero, and then the loop is the integrator it always was."""
+    times, power = drop(300)
+    plain = controlled_gain_transient(amplifier(), times, power, PumpControl(bandwidth=1e3))
+    zeros = controlled_gain_transient(
+        amplifier(), times, power, PumpControl(bandwidth=1e3, proportional=0.0, filter_time=0.0)
+    )
+    assert np.array_equal(plain.gain_db, zeros.gain_db)
+    assert np.array_equal(plain.pump_gain_db, zeros.pump_gain_db)
+
+
+def test_the_proportional_term_still_leaves_no_steady_state_error() -> None:
+    times, power = drop()
+    control = PumpControl(mode="gain", bandwidth=1e3, proportional=6.0, filter_time=2e-4)
+    run = controlled_gain_transient(amplifier(), times, power, control)
+    assert run.gain_db[-1] == pytest.approx(run.setpoint, abs=0.02)
+
+
+def test_the_gains_must_not_be_negative() -> None:
+    with pytest.raises(ValueError, match="proportional"):
+        PumpControl(proportional=-1.0)
+    with pytest.raises(ValueError, match="filter"):
+        PumpControl(filter_time=-1e-3)

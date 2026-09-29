@@ -979,6 +979,22 @@ class PumpControl:
       pump, the way a line system labels an amplifier or probes its gain. The
       loop fights it below its crossover and lets it through above, so the gain
       carries a high-passed copy of it.
+
+    **Beyond the integrator.** ``proportional`` adds a term to the pump that
+    follows the error at once, ``kp`` nepers of pump per neper of error, so the
+    controller is a PI: ``ln G_0 = kp e + (1 / tau_c) integral e dt``. Around a
+    working point where the reservoir's own restoring rate is ``a / tau`` -- ``a =
+    1 + G (P / P_sat + b)`` from the rate equation -- a step in the setpoint sees
+    the second-order loop
+    ``(kp s + 1 / tau_c) / (tau s^2 + (a + kp) s + 1 / tau_c)``, natural frequency
+    ``1 / sqrt(tau tau_c)`` and damping ``(a + kp) / (2 sqrt(tau / tau_c))``: the
+    proportional term is damping the integrator alone gives only through ``a``,
+    and a loop faster than the erbium overshoots without it. ``filter_time`` [s]
+    puts a first-order low-pass on the error before either term acts, the way a
+    real loop's electronics do: it costs phase, so a filter slower than
+    ``tau_c`` makes the loop ring, and it smooths detector noise before the
+    proportional term can pass it to the pump. Both default to zero, and then the
+    loop is the integrator it always was, bit for bit.
     """
 
     mode: str = "gain"
@@ -990,6 +1006,8 @@ class PumpControl:
     detector_noise: float = 0.0
     dither_depth: float = 0.0
     dither_frequency: float = 0.0
+    proportional: float = 0.0
+    filter_time: float = 0.0
 
     def __post_init__(self) -> None:
         if self.mode not in ("gain", "power"):
@@ -1006,6 +1024,10 @@ class PumpControl:
             raise ValueError("a dither's depth and frequency are not negative")
         if self.dither_depth > 0.0 and self.dither_frequency <= 0.0:
             raise ValueError("a dither needs a frequency; at zero it is a pump offset")
+        if self.proportional < 0.0:
+            raise ValueError(f"a proportional gain is not negative, got {self.proportional}")
+        if self.filter_time < 0.0:
+            raise ValueError(f"a filter's time constant is not negative, got {self.filter_time}")
 
     @property
     def time_constant(self) -> float:
@@ -1141,6 +1163,8 @@ def controlled_gain_transient(
         for power in (float(drive.max()), float(drive.min()))
     )
     fastest = min(fastest, control.time_constant)
+    if control.filter_time > 0.0:
+        fastest = min(fastest, control.filter_time)
     coarsest = float(np.diff(grid).max())
     substeps = max(1, math.ceil(coarsest / (fastest / SUBSTEPS_PER_CONSTANT)))
     # A delay is read back out of the history by linear interpolation, and a
@@ -1151,6 +1175,12 @@ def controlled_gain_transient(
     if control.dither_depth > 0.0:
         period = 1.0 / control.dither_frequency
         substeps = max(substeps, math.ceil(coarsest / (period / SUBSTEPS_PER_CONSTANT)))
+    # A filter is a state with a time constant of its own; the integrator has to
+    # resolve it as it does the erbium's and the loop's.
+    if control.filter_time > 0.0:
+        substeps = max(
+            substeps, math.ceil(coarsest / (control.filter_time / SUBSTEPS_PER_CONSTANT))
+        )
 
     log_ceiling = math.log(db_to_linear(control.max_pump_gain))
     log_floor = math.log(db_to_linear(control.min_pump_gain))
@@ -1170,14 +1200,14 @@ def controlled_gain_transient(
             - own * math.exp(log_gain)
         ) / lifetime
 
-    def loop_slope(log_gain: float, power: float, noise: float) -> float:
+    def loop_error(log_gain: float, power: float, noise: float) -> float:
+        """What the loop is told, ``setpoint - measured`` [dB], noise included."""
         if control.mode == "gain":
             measured = 10.0 * math.log10(math.exp(log_gain))
         else:
             output = math.exp(log_gain) * power
             measured = -math.inf if output <= 0.0 else 10.0 * math.log10(output * 1e3)
-        error = setpoint - (measured + noise) if noise else setpoint - measured
-        return nepers * error / control.time_constant
+        return setpoint - (measured + noise) if noise else setpoint - measured
 
     # What the loop saw, kept at every substep so a delayed reading can be taken
     # back out of it. Before the run the amplifier was settled, so anything
@@ -1200,10 +1230,49 @@ def controlled_gain_transient(
         where = max(int(np.searchsorted(grid, when, "right")) - 1, 0)
         return value, float(drive[where])
 
+    proportional = control.proportional * nepers
+    filtering = control.filter_time > 0.0
+
+    def stage(
+        time: float, gain: float, pump: float, held: float, power: float, noise: float
+    ) -> tuple[float, float, float]:
+        """The three slopes at one Runge-Kutta stage: gain, pump, and the filter's state.
+
+        ``pump`` is the integrator's state; what the reservoir is given is that
+        plus the proportional term on the error the loop is acting on -- the
+        filtered one where there is a filter -- and the dither, held to the
+        pump's range once a proportional term can push it past.
+        """
+        if control.delay == 0.0:
+            error = loop_error(gain, power, noise)
+        else:
+            value, then = seen(time)
+            error = loop_error(value, then, noise)
+        used = held if filtering else error
+        applied = pump + proportional * used if proportional else pump
+        if proportional:
+            applied = min(max(applied, log_floor), log_ceiling)
+        return (
+            reservoir_slope(gain, applied + dither(time), power),
+            nepers * used / control.time_constant,
+            (error - held) / control.filter_time if filtering else 0.0,
+        )
+
+    def applied_pump(gain: float, pump: float, held: float, power: float) -> float:
+        """What the loop called for at the end of a step, without the dither."""
+        if not proportional:
+            return pump
+        error = loop_error(gain, power, 0.0)
+        return min(
+            max(pump + proportional * (held if filtering else error), log_floor), log_ceiling
+        )
+
     gains = np.empty(grid.shape)
     pumps = np.empty(grid.shape)
     log_gain = math.log(settled_gain)
     log_pump = math.log(small_signal)
+    # The loop was settled when the run began, so its error was zero and so is the filter's.
+    held = 0.0
     gains[0], pumps[0] = settled_gain, amplifier.gain
     now = float(grid[0])
     for index in range(1, grid.size):
@@ -1220,52 +1289,47 @@ def controlled_gain_transient(
                 else 0.0
             )
 
-            def loop(
-                time: float, stage: float, power: float = power, noise: float = noise
-            ) -> float:
-                if control.delay == 0.0:
-                    return loop_slope(stage, power, noise)
-                value, then = seen(time)
-                return loop_slope(value, then, noise)
-
-            # Two states, one Runge-Kutta: the inversion and the pump move
-            # together, which is the whole point of a loop fast enough to matter.
+            # Three states, one Runge-Kutta: the inversion, the pump and the
+            # filter move together, which is the whole point of a loop fast
+            # enough to matter.
             half = now + 0.5 * step
-            k1 = (
-                reservoir_slope(log_gain, log_pump + dither(now), power),
-                loop(now, log_gain),
+            k1 = stage(now, log_gain, log_pump, held, power, noise)
+            k2 = stage(
+                half,
+                log_gain + 0.5 * step * k1[0],
+                log_pump + 0.5 * step * k1[1],
+                held + 0.5 * step * k1[2],
+                power,
+                noise,
             )
-            k2 = (
-                reservoir_slope(
-                    log_gain + 0.5 * step * k1[0],
-                    log_pump + 0.5 * step * k1[1] + dither(half),
-                    power,
-                ),
-                loop(half, log_gain + 0.5 * step * k1[0]),
+            k3 = stage(
+                half,
+                log_gain + 0.5 * step * k2[0],
+                log_pump + 0.5 * step * k2[1],
+                held + 0.5 * step * k2[2],
+                power,
+                noise,
             )
-            k3 = (
-                reservoir_slope(
-                    log_gain + 0.5 * step * k2[0],
-                    log_pump + 0.5 * step * k2[1] + dither(half),
-                    power,
-                ),
-                loop(half, log_gain + 0.5 * step * k2[0]),
-            )
-            k4 = (
-                reservoir_slope(
-                    log_gain + step * k3[0], log_pump + step * k3[1] + dither(now + step), power
-                ),
-                loop(now + step, log_gain + step * k3[0]),
+            k4 = stage(
+                now + step,
+                log_gain + step * k3[0],
+                log_pump + step * k3[1],
+                held + step * k3[2],
+                power,
+                noise,
             )
             log_gain += step * (k1[0] + 2 * k2[0] + 2 * k3[0] + k4[0]) / 6.0
             log_pump += step * (k1[1] + 2 * k2[1] + 2 * k3[1] + k4[1]) / 6.0
+            held += step * (k1[2] + 2 * k2[2] + 2 * k3[2] + k4[2]) / 6.0
             log_pump = min(max(log_pump, log_floor), log_ceiling)
             now += step
             if control.delay > 0.0:
                 history_t.append(now)
                 history_g.append(log_gain)
         gains[index] = math.exp(log_gain)
-        pumps[index] = 10.0 * math.log10(math.exp(log_pump))
+        pumps[index] = 10.0 * math.log10(
+            math.exp(applied_pump(log_gain, log_pump, held, float(drive[index])))
+        )
 
     return ControlledTransient(
         transient=GainTransient(

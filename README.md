@@ -3774,6 +3774,7 @@ Every physics block ships with a test against a closed-form result, run in CI
 | **A delayed pump loop is stable below a quarter turn** | `a·delay < π/2`: rings down at 0.8 of it, grows at 1.2, and at the edge rings at 1.008 × four delays | ✅ |
 | Detector noise wanders the gain by `k·N²/(4τ_c)` | Measured 0.992 of it; the erbium's own lag drops out of a second-order system's variance, so it runs at its real lifetime | ✅ |
 | A pump dither is high-passed by the loop | `k·ω/\|a − ω²τ_e + jω\|` to 0.9998 — the quasi-static answer, without the erbium's lag, is 20 % off | ✅ |
+| **A PI pump loop follows the linearised step response** | `(kp·s + 1/τ_c)/(τ·s² + (a + kp)·s + 1/τ_c)`: rings at damping 0.07 with no proportional term, near critical by kp = 16, and a first-order loop filter makes it third order — each integrated against its closed form to 2–3 % of the step. Both terms zero, the loop is the old integrator bit for bit | ✅ |
 | **An amplifier in the dark holds Lambert's gain** | `W(βG₀)/β` by Halley's iteration against the component's Newton, to 1e-12; its own ASE load is the ASE it emits, both ends; the transient comes to rest there | ✅ |
 | **The default fibre is a G.652 fibre once its glass disperses** | Zero dispersion at 1308.3 nm and 16.7 ps/(nm·km) at 1550 from Malitson and Fleming alone; silica's own zero at 1272.7 nm | ✅ |
 | A transient is far longer than a window | 25,000 windows at the most saturated point — the measurement the decision to keep it out of the component rests on | ✅ |

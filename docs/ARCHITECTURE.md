@@ -636,8 +636,13 @@ be finished without it, and each is validated against a result it does not share
 Stated in the code where each approximation is made, and collected here:
 
 * **Amplifiers.** The control loop is an integral one; its measurement delay, detector noise and
-  pump dither are declared on `PumpControl` and off by default, and a proportional term or a
-  loop filter beyond the integrator is not modelled. The `EDFA` block itself always emits its ASE
+  pump dither are declared on `PumpControl` and off by default, and so are a proportional term
+  (`proportional`, nepers of pump per neper of error) and a first-order loop filter
+  (`filter_time`) on the error before either acts: zero, the loop is the integrator bit for bit,
+  and set, a setpoint step follows the closed-form second-order response -- third-order with the
+  filter -- of the reservoir linearised about its working point. Nothing beyond a PI and one
+  pole is modelled: no derivative term, no gain scheduling, no anti-windup beyond the pump's own
+  limits. The `EDFA` block itself always emits its ASE
   flat across its band, because it knows no cross sections; `transient.spectral_ase_noise_bin`
   reshapes that same total power to the standard steady-state form -- `n_sp(λ)·hν·(G(λ)−1)` per
   slice, from an `ErbiumSpectrum` and the amplifier's own gain -- as an offline step over the
@@ -763,7 +768,6 @@ next, in order:
    (0.89 of the split-step at 10 mW over 10 km, and 1.25 over two such spans where terms nearly
    cancel), and closing that gap is the largest physical approximation under [Open](#open).
 3. **The rest of [Open](#open)**, each with the closed-form test that shows it did something: a
-   proportional term or loop filter in the amplifier's gain control; a
    finite grating coupler in the gap -- the coupled power leaving down the waveguide -- in place of
    the infinite one `etch_depth` solves.
 
