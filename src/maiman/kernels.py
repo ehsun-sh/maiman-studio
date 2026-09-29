@@ -1600,6 +1600,7 @@ def fwm_tone_solve(
     accumulated_gvd: float = 0.0,
     rtol: float = 1e-9,
     triples: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None = None,
+    coherent: bool = True,
 ) -> tuple[np.ndarray, int]:
     """Constant-amplitude tones through a span, every mixing order at once [sqrt(W)].
 
@@ -1621,11 +1622,29 @@ def fwm_tone_solve(
     of the equation above, ``exp(+i beta z)``; a caller whose fields turn the
     other way conjugates on the way in and out. Returns the amplitudes at the end
     of the span and the number of steps taken.
+
+    **With two polarizations.** Give ``amplitudes`` as ``(tones, 2)`` -- each tone a
+    Jones vector -- and the Kerr drive is silica's isotropic tensor, the cubic
+    expansion of ``(2/3)(E . E*) E + (1/3)(E . E) E*``::
+
+        da_q/dz = ... + i gamma sum [(2/3)(a_i . a_k*) a_j + (1/3)(a_i . a_j) a_k*] e^{i db z}
+
+    over the same ordered triples, so one polarization reduces to the scalar
+    equation identically, circular light turns at two thirds of the rate linear
+    light does, and a tone's cross-phase on another is ``(2/3)[tr J + J + J*]``, the
+    matrix :func:`cross_kerr_matrix` gives. With ``coherent`` false the coherent
+    term ``(1/3)(a_i . a_j) a_k*`` is dropped where both pumps sit on the other
+    axis, leaving the phase-only form the split-step's own default keeps,
+    ``A_x A_x A_x* + (2/3)(A_y A_y*) A_x`` per axis. Power over both polarizations
+    is conserved at ``alpha = 0``, either way.
     """
     f = np.asarray(offsets, dtype=np.float64)
     y0 = np.asarray(amplitudes, dtype=np.complex128)
-    if f.shape != y0.shape or f.ndim != 1:
-        raise ValueError("offsets and amplitudes must be one-dimensional and the same length")
+    vector = y0.ndim == 2
+    if f.ndim != 1 or y0.shape not in ((f.size,), (f.size, 2)):
+        raise ValueError(
+            "offsets are one-dimensional, and amplitudes one number a tone or a Jones vector each"
+        )
     if distance <= 0.0 or f.size == 0:
         return y0.copy(), 0
     ti, tj, tk, tq = triples if triples is not None else fwm_tone_triples(f)
@@ -1645,9 +1664,28 @@ def fwm_tone_solve(
     atol = 1e-14 * scale
 
     def rhs(z: float, a: np.ndarray) -> np.ndarray:
-        drive = 1j * gamma * a[ti] * a[tj] * np.conj(a[tk]) * np.exp(1j * (delta * z + start))
-        out = np.bincount(tq, weights=drive.real, minlength=n) + 1j * np.bincount(
-            tq, weights=drive.imag, minlength=n
+        phase = np.exp(1j * (delta * z + start))
+        if not vector:
+            drive = 1j * gamma * a[ti] * a[tj] * np.conj(a[tk]) * phase
+            out = np.bincount(tq, weights=drive.real, minlength=n) + 1j * np.bincount(
+                tq, weights=drive.imag, minlength=n
+            )
+            return out - 0.5 * alpha * a
+        first, second, third = a[ti], a[tj], np.conj(a[tk])
+        if coherent:
+            term = (2.0 / 3.0) * np.sum(first * third, axis=1)[:, None] * second + (
+                1.0 / 3.0
+            ) * np.sum(first * second, axis=1)[:, None] * third
+        else:
+            term = first * second * third + (2.0 / 3.0) * (first[:, ::-1] * third[:, ::-1]) * second
+        drive = 1j * gamma * term * phase[:, None]
+        out = np.stack(
+            [
+                np.bincount(tq, weights=drive[:, axis].real, minlength=n)
+                + 1j * np.bincount(tq, weights=drive[:, axis].imag, minlength=n)
+                for axis in (0, 1)
+            ],
+            axis=1,
         )
         return out - 0.5 * alpha * a
 

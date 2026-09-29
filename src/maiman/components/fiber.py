@@ -409,7 +409,6 @@ class Fiber(Component):
                 ("pump_phase", self.pump_phase),
                 ("carry_phase", self.carry_phase),
                 ("cascaded_fwm", self.cascaded_fwm),
-                ("cross_polarization", self.cross_polarization),
                 ("mixing_steps", self.mixing_steps > 1.0),
                 ("pmd_coefficient", self.pmd_coefficient > 0.0),
                 ("raman_gain_slope", self.raman_gain_slope > 0.0),
@@ -563,9 +562,12 @@ class Fiber(Component):
         Only for bands that are one complex number per axis -- a launched tone, an
         unmodulated carrier, a product an earlier span made -- because the
         equations are for amplitudes, and a modulated channel's phase is not one.
-        Such a band is refused, by name, rather than treated as if it were. Each
-        polarization is its own scalar problem, the same model
-        ``cross_polarization`` off gives the perturbative path. The bands are
+        Such a band is refused, by name, rather than treated as if it were. With
+        ``cross_polarization`` off each polarization is its own scalar problem, the
+        same model that gives the perturbative path; with it on the tones are Jones
+        vectors and the two axes are coupled by silica's isotropic Kerr tensor
+        (``coherent_polarization`` off drops its coherent term, as the split-step's
+        default does). The bands are
         stored conjugated against the equations' convention -- this library turns
         a field by ``exp(-i angle)`` -- so amplitudes are conjugated on the way in
         and out. The history the perturbative path keeps for its pumps' phase is
@@ -614,19 +616,35 @@ class Fiber(Component):
         triples = fwm_tone_triples(offsets)
         finish = np.zeros_like(start)
         steps = 0
-        for axis in (0, 1):
-            if np.any(start[:, axis] != 0.0):
-                finish[:, axis], taken = fwm_tone_solve(
-                    offsets,
-                    start[:, axis],
-                    beta2=beta2,
-                    gamma=gamma,
-                    alpha=alpha,
-                    distance=distance,
-                    accumulated_gvd=signal.accumulated_gvd,
-                    triples=triples,
-                )
-                steps = max(steps, taken)
+        if self.cross_polarization:
+            # One problem: each tone a Jones vector, the two axes coupled by the
+            # isotropic Kerr tensor -- or its phase-only form without the coherent
+            # term, as the split-step's own default has it.
+            finish, steps = fwm_tone_solve(
+                offsets,
+                start,
+                beta2=beta2,
+                gamma=gamma,
+                alpha=alpha,
+                distance=distance,
+                accumulated_gvd=signal.accumulated_gvd,
+                triples=triples,
+                coherent=self.coherent_polarization,
+            )
+        else:
+            for axis in (0, 1):
+                if np.any(start[:, axis] != 0.0):
+                    finish[:, axis], taken = fwm_tone_solve(
+                        offsets,
+                        start[:, axis],
+                        beta2=beta2,
+                        gamma=gamma,
+                        alpha=alpha,
+                        distance=distance,
+                        accumulated_gvd=signal.accumulated_gvd,
+                        triples=triples,
+                    )
+                    steps = max(steps, taken)
         finish = np.conj(finish)
         present = [band.f0 for band in bands]
 

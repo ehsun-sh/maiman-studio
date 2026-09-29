@@ -685,8 +685,13 @@ Stated in the code where each approximation is made, and collected here:
   digits where the series was 25 % off (30 mW over 20 km) or 2.3 times (20 mW, D = 4, four
   spans), over lossy amplified spans too, and holds the total power to 1e-9 without loss. It
   replaces the split-step's Kerr step on those bands, is refused beside `pump_phase`,
-  `carry_phase`, `cascaded_fwm`, `cross_polarization`, `mixing_steps`, PMD and Raman, and refuses
-  a modulated band by name rather than treat its mean as its phase.
+  `carry_phase`, `cascaded_fwm`, `mixing_steps`, PMD and Raman, and refuses a modulated band by
+  name rather than treat its mean as its phase. With `cross_polarization` the tones are Jones
+  vectors and the two axes are coupled by silica's isotropic Kerr tensor -- circular light turns
+  at two thirds of linear's rate, an orthogonal neighbour cross-phase modulates at two thirds,
+  and `coherent_polarization` off keeps the phase-only form the split-step defaults to -- each
+  checked in closed form, with total power conserved over both axes, and against the perturbative
+  vector drive to 1 % in power at 1 mW.
 * **Gratings and modes.** The average index a writing process raises is carried when a grating's
   `dc_compensated` flag is off: as Erdogan's self-coupling for the Bragg and long-period gratings,
   and for the uniform tilted one as the fibre it leaves, its core raised and every mode solved
@@ -762,8 +767,9 @@ next, in order:
    against them skip in CI. Past the shaper the path is held to a digest everywhere, and
    `RELEASING.md` runs the rest with `MAIMAN_REQUIRE_SPEC=1` before each release; the shaper
    itself is checked on every push only once the `specification` job in `ci.yml` has a runner.
-2. **Give the tone solver what it cannot yet take.** It is exact for constant tones and refuses a
-   modulated channel, a vector drive, PMD and Raman; a channel's phase is not one number, so the
+2. **Give the tone solver what it cannot yet take.** It is exact for constant tones, scalar or
+   with two polarizations, and refuses a modulated channel, PMD and Raman; a channel's phase is not
+   one number, so the
    perturbative series still serves the modulated case at the powers it is good to
    (0.89 of the split-step at 10 mW over 10 km, and 1.25 over two such spans where terms nearly
    cancel), and closing that gap is the largest physical approximation under [Open](#open).

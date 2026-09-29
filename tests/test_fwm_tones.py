@@ -275,7 +275,6 @@ def test_a_modulated_band_is_refused_by_name() -> None:
     [
         {"pump_phase": True},
         {"cascaded_fwm": True},
-        {"cross_polarization": True},
         {"mixing_steps": 4.0},
         {"pmd_coefficient": 0.1},
         {"raman_gain_slope": 0.028},
@@ -285,3 +284,169 @@ def test_it_is_refused_beside_what_it_replaces(other: dict[str, Any]) -> None:
     with pytest.raises(ValueError, match="tone_solver"):
         Fiber(tone_solver=True, **other).validate()
     Fiber(tone_solver=True).validate()
+
+
+# -- two polarizations ------------------------------------------------------------
+
+
+def jones_pumps(power: float, jones: tuple[complex, complex]) -> OpticalSignal:
+    return OpticalSignal(
+        bands=tuple(
+            Band(
+                Ex=np.full(256, jones[0] * np.sqrt(power), dtype=np.complex128),
+                Ey=np.full(256, jones[1] * np.sqrt(power), dtype=np.complex128),
+                f0=ANCHOR + index * SPACING,
+                fs=160e9,
+            )
+            for index in range(2)
+        )
+    )
+
+
+ONE_TONE = np.array([0.0])
+RATE_LENGTH = 5e3
+
+
+def turned(amplitude: np.ndarray, power: float, *, coherent: bool = True) -> np.ndarray:
+    return fwm_tone_solve(
+        ONE_TONE,
+        amplitude,
+        beta2=0.0,
+        gamma=GAMMA * 1e-3,
+        alpha=0.0,
+        distance=RATE_LENGTH,
+        coherent=coherent,
+    )[0]
+
+
+@pytest.mark.parametrize(
+    ("name", "jones", "coherent", "rate"),
+    [
+        ("linear", (1.0, 0.0), True, 1.0),
+        ("diagonal", (1 / math.sqrt(2), 1 / math.sqrt(2)), True, 1.0),
+        ("circular", (1 / math.sqrt(2), 1j / math.sqrt(2)), True, 2.0 / 3.0),
+        ("circular, phase only", (1 / math.sqrt(2), 1j / math.sqrt(2)), False, 5.0 / 6.0),
+        ("diagonal, phase only", (1 / math.sqrt(2), 1 / math.sqrt(2)), False, 5.0 / 6.0),
+    ],
+)
+def test_one_tone_turns_at_the_kerr_rate_its_polarization_has(
+    name: str, jones: tuple[complex, complex], coherent: bool, rate: float
+) -> None:
+    """``gamma P L`` for linear light, two thirds of it for circular, in the isotropic tensor.
+
+    The isotropic form of ``(2/3)(E . E*) E + (1/3)(E . E) E*`` has ``(2/3 + |u^T u|^2 / 3)``
+    for a state ``u``: one for linear light, ``2/3`` for circular. Phase-only, the
+    coherent term is gone and diagonal light turns at ``(x^2 + y^2 + 4/3 x y)`` --
+    five sixths, with ``x = y = 1/2`` -- and circular the same, since the phase-only
+    form does not see the relative phase. The tone stays in its state, and power is
+    untouched.
+    """
+    power = 0.02
+    start = np.array([jones]) * math.sqrt(power)
+    end = turned(start, power, coherent=coherent)
+    assert end.shape == start.shape
+    assert np.angle(end[0, 0] / start[0, 0]) == pytest.approx(
+        rate * GAMMA * 1e-3 * power * RATE_LENGTH, abs=1e-6
+    )
+    assert abs(end[0, 1] / end[0, 0]) == pytest.approx(abs(start[0, 1] / start[0, 0]), abs=1e-9)
+
+
+def test_a_single_polarization_is_the_scalar_problem_exactly() -> None:
+    """Jones vectors with nothing on y are the scalar solve: the extra axis changes no number."""
+    offsets, start = tones(20e-3)
+    beta2 = beta2_of(2.0)
+    scalar, _ = fwm_tone_solve(
+        offsets, start, beta2=beta2, gamma=GAMMA * 1e-3, alpha=0.0, distance=10e3
+    )
+    vector, _ = fwm_tone_solve(
+        offsets,
+        np.stack([start, np.zeros_like(start)], axis=1),
+        beta2=beta2,
+        gamma=GAMMA * 1e-3,
+        alpha=0.0,
+        distance=10e3,
+    )
+    assert np.allclose(vector[:, 0], scalar, rtol=0, atol=1e-12)
+    assert np.allclose(vector[:, 1], 0.0, atol=1e-15)
+
+
+def test_an_orthogonal_tone_cross_phase_modulates_at_two_thirds() -> None:
+    """A tone on x beside one on y, far apart: it turns by ``gamma (P_x + (2/3) P_y) L``.
+
+    Isotropic silica: a neighbour polarized the other way still turns a tone, at two
+    thirds of what a parallel one does -- the ``(2/3)[tr J + J + J*]`` matrix's
+    entry. The tones are a terahertz apart, so nothing mixes, and there is nothing
+    else in the tone set for it to.
+    """
+    p_x, p_y = 0.02, 0.05
+    offsets = np.array([0.0, 1e12])
+    start = np.array([[math.sqrt(p_x), 0.0], [0.0, math.sqrt(p_y)]], dtype=np.complex128)
+    end, _ = fwm_tone_solve(
+        offsets, start, beta2=beta2_of(2.0), gamma=GAMMA * 1e-3, alpha=0.0, distance=RATE_LENGTH
+    )
+    wanted = GAMMA * 1e-3 * (p_x + (2.0 / 3.0) * p_y) * RATE_LENGTH
+    assert np.angle(end[0, 0] / start[0, 0]) == pytest.approx(wanted, abs=2e-4)
+
+
+@pytest.mark.parametrize("coherent", [True, False])
+def test_power_over_both_polarizations_is_conserved(coherent: bool) -> None:
+    offsets, _ = tones(30e-3)
+    start = np.zeros((offsets.size, 2), dtype=np.complex128)
+    start[4] = [math.cos(0.3), 1j * math.sin(0.3)]
+    start[5] = [math.cos(1.1), math.sin(1.1)]
+    start *= math.sqrt(30e-3)
+    end, _ = fwm_tone_solve(
+        offsets,
+        start,
+        beta2=beta2_of(2.0),
+        gamma=GAMMA * 1e-3,
+        alpha=0.0,
+        distance=20e3,
+        coherent=coherent,
+    )
+    assert np.sum(np.abs(end) ** 2) == pytest.approx(np.sum(np.abs(start) ** 2), rel=1e-9)
+
+
+@pytest.mark.parametrize(
+    "jones",
+    [(math.cos(0.3), 1j * math.sin(0.3)), (1 / math.sqrt(2), 1 / math.sqrt(2)), (1, 0)],
+)
+@pytest.mark.parametrize("coherent", [True, False])
+def test_the_vector_tone_solver_agrees_with_the_perturbative_path_at_low_power(
+    jones: tuple[complex, complex], coherent: bool
+) -> None:
+    """1 mW over 10 km: the first product's Jones vector against ``_mix``'s vector drive.
+
+    The perturbative path has its own tensor, its own pump phases and its own
+    mixing integral; at 1 mW the terms it leaves out are half a percent, and the two
+    agree to that: total power within 1 %, each axis within 2 %.
+    """
+
+    def product(**settings: object) -> tuple[complex, complex]:
+        out = Fiber(
+            length=10.0,
+            attenuation=0.0,
+            dispersion=2.0,
+            nonlinearity=GAMMA,
+            mixing_floor=250.0,
+            cross_polarization=True,
+            coherent_polarization=coherent,
+            label="f",
+            **settings,  # type: ignore[arg-type]
+        ).run(CTX, {"in": jones_pumps(1e-3, jones)})["out"]
+        assert isinstance(out, OpticalSignal)
+        band = next(b for b in out.bands if abs(b.f0 - (ANCHOR - SPACING)) < 1e3)
+        return complex(np.mean(band.Ex)), complex(np.mean(band.Ey))
+
+    series = product(pump_phase=True)
+    solved = product(tone_solver=True)
+    power_series = abs(series[0]) ** 2 + abs(series[1]) ** 2
+    power_solved = abs(solved[0]) ** 2 + abs(solved[1]) ** 2
+    assert power_solved / power_series == pytest.approx(1.0, abs=0.01)
+    for axis in (0, 1):
+        if abs(series[axis]) > 1e-9:
+            assert abs(solved[axis]) / abs(series[axis]) == pytest.approx(1.0, abs=0.02)
+
+
+def test_the_tone_solver_takes_cross_polarization_now() -> None:
+    Fiber(tone_solver=True, cross_polarization=True, coherent_polarization=True).validate()
