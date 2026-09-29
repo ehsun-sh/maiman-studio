@@ -793,10 +793,12 @@ class Fiber(Component):
             return signal.walkoff
         before = signal.walkoff
         if before.conflict:
-            raise ValueError(
-                f"{self.label}: carrying delays or carrier phases needs one set of them, "
-                f"and {before.conflict}"
+            what = (
+                "carry_walkoff needs one set of arrival delays"
+                if self.carry_walkoff
+                else "carry_carrier_phase needs one set of carrier phases"
             )
+            raise ValueError(f"{self.label}: {what}, and {before.conflict}")
         delays = dict(before.carriers)
         if self.carry_walkoff:
             reference = signal.bands[0]
