@@ -439,6 +439,7 @@ def _pam_llr(
     labels: np.ndarray,
     *,
     exact: bool,
+    log_prior: np.ndarray | None = None,
 ) -> np.ndarray:
     """Per-bit LLRs for one real PAM axis, ``(..., K)`` from ``values`` of any shape.
 
@@ -451,20 +452,27 @@ def _pam_llr(
     application to HIPERLAN/2", IEEE ICC 2002). Positive means the bit read
     back 0, negative means 1 -- :func:`ofec_decode`'s convention, and the one a
     hard slice already used here.
+
+    ``log_prior``, ``(M,)``, is ``ln P(point)`` for each candidate, and adds to each
+    point's log-likelihood before the classes are summed -- the MAP form
+    ``ln P(y | b = 0) P(b = 0) / P(y | b = 1) P(b = 1)`` -- so a bit whose points
+    are not equally likely is pulled toward the likelier class. Left ``None`` the
+    points are taken as equally likely, and nothing here changes.
     """
     d2 = (values[..., None] - points[None, None, :]) ** 2
+    energy = d2 / (2.0 * noise_variance)
+    if log_prior is not None:
+        energy = energy - log_prior[None, None, :]
     bits = []
     for column in range(labels.shape[1]):
         zero = labels[:, column] == 0
         one = ~zero
         if exact:
-            log_zero = _logsumexp(-d2[..., zero] / (2.0 * noise_variance), axis=-1)
-            log_one = _logsumexp(-d2[..., one] / (2.0 * noise_variance), axis=-1)
+            log_zero = _logsumexp(-energy[..., zero], axis=-1)
+            log_one = _logsumexp(-energy[..., one], axis=-1)
             bits.append(log_zero - log_one)
         else:
-            nearest_zero = np.min(d2[..., zero], axis=-1)
-            nearest_one = np.min(d2[..., one], axis=-1)
-            bits.append((nearest_one - nearest_zero) / (2.0 * noise_variance))
+            bits.append(np.min(energy[..., one], axis=-1) - np.min(energy[..., zero], axis=-1))
     return np.stack(bits, axis=-1)
 
 
@@ -474,6 +482,7 @@ def symbol_llr(
     *,
     modulation: str = "qpsk",
     exact: bool = True,
+    inner_probability: float | None = None,
 ) -> np.ndarray:
     """Soft bit log-likelihood ratios (TP6 order) from noisy ``[XI, XQ, YI, YQ]`` amplitudes.
 
@@ -494,6 +503,15 @@ def symbol_llr(
     that convention's. ``exact`` selects the log-sum-exp likelihood over
     max-log; both are exact for DP-QPSK, where each axis carries one bit and
     there is only one point on each side of it.
+
+    ``inner_probability`` is the prior a shaper leaves on DP-16QAM: the chance an
+    axis sits on the inner amplitude, ``|1|``, rather than ``|3|`` -- what clause
+    9's shaping sets (0.623, 0.681 or 0.8265; :data:`maiman.pcs.INNER_PROBABILITY`).
+    The sign is taken as equally likely either way, and the two axes and the two
+    polarizations as independent, so the prior over the four points is
+    ``(1 - p) / 2, p / 2, p / 2, (1 - p) / 2`` and the magnitude bit's ratio gains
+    ``ln (1 - p) / p``, sign bit's none. Unset, or ``0.5``, the ratios are the
+    uniform-prior ones. Only DP-16QAM has an amplitude bit to shape.
     """
     values = np.asarray(levels, dtype=np.float64)
     if values.ndim != 2 or values.shape[1] != 4:
@@ -501,7 +519,19 @@ def symbol_llr(
     if not noise_variance > 0.0:
         raise ValueError(f"noise_variance must be positive, got {noise_variance}")
     points, labels = _pam_constellation(modulation)
-    axis_llr = _pam_llr(values, noise_variance, points, labels, exact=exact)  # (symbols, 4, K)
+    log_prior = None
+    if inner_probability is not None:
+        if line_modulation(modulation) == "qpsk":
+            raise ValueError("DP-QPSK has no amplitude bit for a shaping prior to act on")
+        if not 0.0 < inner_probability < 1.0:
+            raise ValueError(
+                f"inner_probability is a probability in (0, 1), got {inner_probability}"
+            )
+        p = float(inner_probability)
+        log_prior = np.log(np.array([(1.0 - p) / 2.0, p / 2.0, p / 2.0, (1.0 - p) / 2.0]))
+    axis_llr = _pam_llr(
+        values, noise_variance, points, labels, exact=exact, log_prior=log_prior
+    )  # (symbols, 4, K)
     if line_modulation(modulation) == "qpsk":
         bit = axis_llr[..., 0]
         return np.stack([bit[:, 0], bit[:, 2], bit[:, 1], bit[:, 3]], axis=1).reshape(-1)

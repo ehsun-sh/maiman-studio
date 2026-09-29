@@ -38,6 +38,7 @@ from maiman.pcs import (
     ARRAYS,
     BLOCKS,
     ENCODER_BITS,
+    INNER_PROBABILITY,
     LUT_WIDTHS,
     SIGN_BITS,
     TABLES_ENV,
@@ -467,3 +468,41 @@ def test_dpo_soft_decoding_cleans_up_where_hard_decoding_cannot() -> None:
 def test_a_frame_that_is_not_one_is_refused() -> None:
     with pytest.raises(ValueError, match="whole DSP frames"):
         dpo_receive(np.zeros((10, 4), dtype=np.int8), modulation="b116")
+
+
+def test_the_shaping_prior_needs_the_channel_it_adds_to() -> None:
+    with pytest.raises(ValueError, match="noise_variance"):
+        dpo_receive(
+            np.zeros((DSP_FRAME_SYMBOLS, 4), dtype=np.int8), modulation="b72", shaping_prior=True
+        )
+
+
+def test_every_dpo_mode_has_its_inner_probability() -> None:
+    assert INNER_PROBABILITY == {"b72": 0.8265, "b106": 0.681, "b116": 0.623}
+
+
+@BOTH
+def test_the_shaping_prior_does_not_cost_the_frame_the_channel_ratio_recovers() -> None:
+    """One noisy b72 frame, decoded three ways: hard, uniform-prior soft, shaped-prior soft.
+
+    The frame of :func:`test_dpo_soft_decoding_cleans_up_where_hard_decoding_cannot`
+    (variance 0.12, seed 42). The hard path leaves it dirty and the uniform-prior
+    soft path clears it; the shaped prior clears it too, with no more corrections,
+    since it only adds what the amplitude bit's distribution says. Runs only where
+    the specification's tables are.
+    """
+    mode = "b72"
+    information = vector(mode, "TP0")[: information_bits(mode)]
+    frame = dpo_transmit(information, modulation=mode)
+    sigma2 = 0.12
+    noisy = frame.astype(np.float64) + np.random.default_rng(42).normal(
+        0.0, sigma2**0.5, frame.shape
+    )
+    hard = dpo_receive(noisy, modulation=mode)
+    uniform = dpo_receive(noisy, modulation=mode, noise_variance=sigma2)
+    shaped = dpo_receive(noisy, modulation=mode, noise_variance=sigma2, shaping_prior=True)
+    assert not hard.clean
+    assert uniform.clean
+    assert shaped.clean
+    assert np.array_equal(shaped.information, information)
+    assert shaped.corrections <= uniform.corrections

@@ -638,3 +638,64 @@ def test_pre_fec_ber_of_the_soft_demapper_matches_the_q_function(sigma2: float) 
     theory = 0.5 * math.erfc(amplitude / math.sqrt(2.0 * sigma2))
     tolerance = 4.0 * math.sqrt(theory * (1.0 - theory) / (4 * symbols))
     assert abs(measured - theory) < tolerance, (measured, theory)
+
+
+def brute_force_llr(levels: np.ndarray, sigma2: float, prior: np.ndarray, bit: int) -> np.ndarray:
+    """``ln P(b=0 | y) / P(b=1 | y)`` for one axis's bit, summed over the four 16QAM points."""
+    points, labels = _pam_constellation("16qam")
+    likelihood = np.exp(-((levels[:, None] - points[None, :]) ** 2) / (2.0 * sigma2)) * prior
+    zero = likelihood[:, labels[:, bit] == 0].sum(axis=1)
+    one = likelihood[:, labels[:, bit] == 1].sum(axis=1)
+    return np.log(zero / one)
+
+
+@pytest.mark.parametrize("inner", [0.623, 0.681, 0.8265])
+def test_the_shaped_prior_is_the_brute_force_map_ratio(inner: float) -> None:
+    """The ratio with ``inner_probability`` is Bayes' rule over the four points, written out.
+
+    Prior ``(1 - p) / 2, p / 2, p / 2, (1 - p) / 2`` on ``-3, -1, 1, 3``: sign
+    uniform, magnitude ``p`` on the inner pair. Checked on the first axis's two
+    bits, which the symbol order puts at positions 0 and 2 of each row of eight.
+    """
+    rng = np.random.default_rng(31)
+    levels = rng.normal(0.0, 2.0, size=(500, 4))
+    sigma2 = 0.4
+    prior = np.array([(1 - inner) / 2, inner / 2, inner / 2, (1 - inner) / 2])
+    got = symbol_llr(levels, sigma2, modulation="b72", inner_probability=inner).reshape(-1, 8)
+    assert np.allclose(got[:, 0], brute_force_llr(levels[:, 0], sigma2, prior, 0))
+    assert np.allclose(got[:, 2], brute_force_llr(levels[:, 0], sigma2, prior, 1))
+
+
+def test_an_even_prior_is_the_uniform_one() -> None:
+    levels = np.random.default_rng(32).normal(0.0, 2.0, size=(200, 4))
+    even = symbol_llr(levels, 0.3, modulation="b72", inner_probability=0.5)
+    assert np.allclose(even, symbol_llr(levels, 0.3, modulation="b72"), rtol=0, atol=1e-12)
+
+
+@pytest.mark.parametrize("inner", [0.623, 0.8265])
+def test_with_no_information_in_the_sample_the_ratio_is_the_prior(inner: float) -> None:
+    """Noise so large the amplitude carries nothing: the magnitude ratio is ``ln (1 - p) / p``.
+
+    The sign bit's stays at 0, the shaper leaving it even -- and the ratio is
+    positive where the bit is likelier a 0, the outer amplitude, which is the
+    shaping's rarer one.
+    """
+    levels = np.zeros((10, 4))
+    got = symbol_llr(levels, 1e8, modulation="b72", inner_probability=inner).reshape(-1, 8)
+    assert np.allclose(got[:, 2], math.log((1 - inner) / inner), atol=1e-6)
+    assert np.allclose(got[:, 0], 0.0, atol=1e-6)
+
+
+def test_max_log_carries_the_prior_too() -> None:
+    """Away from a decision boundary max-log and exact agree with a prior as without one."""
+    levels = np.array([[2.9, -1.05, 0.98, -3.1]])
+    exact = symbol_llr(levels, 0.05, modulation="b72", inner_probability=0.8)
+    approx = symbol_llr(levels, 0.05, modulation="b72", inner_probability=0.8, exact=False)
+    assert np.allclose(exact, approx, rtol=1e-3)
+
+
+def test_a_prior_needs_an_amplitude_bit_and_a_probability() -> None:
+    with pytest.raises(ValueError, match="no amplitude bit"):
+        symbol_llr(np.zeros((1, 4)), 0.1, modulation="qpsk", inner_probability=0.6)
+    with pytest.raises(ValueError, match="probability"):
+        symbol_llr(np.zeros((1, 4)), 0.1, modulation="b72", inner_probability=1.0)

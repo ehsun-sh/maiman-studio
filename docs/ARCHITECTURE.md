@@ -709,9 +709,9 @@ Stated in the code where each approximation is made, and collected here:
   `wport_receive` and `dpo_receive` default to a hard decision dressed as a soft one -- the sliced
   bit at a fixed confidence -- but given `noise_variance` they call `symbol_llr` instead and form
   real log-likelihood ratios from the received amplitudes, exact (log-sum-exp) or max-log
-  (Tosato & Bisaglia, ICC 2002); on the DPO path that LLR still assumes a uniform bit prior, so it
-  does not draw on the shaper's own bias toward the inner constellation points -- a gap the module
-  documents rather than papers over. A
+  (Tosato & Bisaglia, ICC 2002); on the DPO path that LLR assumes a uniform bit prior unless
+  `shaping_prior` is set, which adds the shaper's bias toward the inner constellation points to the
+  amplitude bit -- the marginal's prior, the two axes and polarizations taken as independent. A
   laser's junction heats through a Foster network, its own stage and whatever the package adds
   behind it; the temperature of what that network finally sinks into is the caller's to set.
 
@@ -756,7 +756,6 @@ next, in order:
 3. **The rest of [Open](#open)**, each with the closed-form test that shows it did something: a
    proportional term or loop filter in the amplifier's gain control; the spectral ASE shape
    against Giles and Desurvire's published numbers; the carrier phase `beta0 L` a span adds; the
-   phase of a grating coupler's own reflection in the fibre-chip gap; the shaper's prior in the
-   DPO receiver's log-likelihood ratios.
+   phase of a grating coupler's own reflection in the fibre-chip gap.
 
 Criticism of the decisions above §10 is still worth more than any of these.

@@ -54,10 +54,10 @@ specification's test points, TP1 to TP7, for all three shaped modes; :func:`dpo_
 runs it back, with clause 8.2's error marking when asked for, exactly as the DO
 path does it. By default its receiver's ratios are still a hard decision
 dressed as a soft one, as the DO path's are without ``noise_variance``; give it
-one and it calls :func:`maiman.wport.symbol_llr` instead, with a documented gap
--- the shaper's non-uniform prior on the amplitude bit is not in that LLR, only
-the channel term is. Without the tables only the part past the shaper runs, as
-:func:`dpo_transmit_lanes`.
+one and it calls :func:`maiman.wport.symbol_llr` instead, and ``shaping_prior``
+adds the shaper's non-uniform prior on the amplitude bit to that ratio, which the
+channel term alone leaves out. Without the tables only the part past the shaper
+runs, as :func:`dpo_transmit_lanes`.
 """
 
 from __future__ import annotations
@@ -94,6 +94,7 @@ from .wport import (
 __all__ = [
     "AMPLITUDE_BITS",
     "ENCODER_BITS",
+    "INNER_PROBABILITY",
     "LUT_WIDTHS",
     "SIGN_BITS",
     "TABLES_ENV",
@@ -126,6 +127,12 @@ LUT_WIDTHS = {
     "b106": [8, 8] + [9] * 10,
     "b116": [9] * 4 + [10] * 8,
 }
+
+#: How often the shaper puts an axis on the inner amplitude, ``|1|`` rather than
+#: ``|3|``, per mode: Table 4's figure, and what the tests measure coming out of
+#: the tables. It is the prior a receiver that uses the shaping adds to its
+#: amplitude bit (:func:`dpo_receive`'s ``shaping_prior``).
+INNER_PROBABILITY = {"b72": 0.8265, "b106": 0.681, "b116": 0.623}
 
 #: Bits one encoder takes for one coder block, and what they are made of.
 ENCODER_BITS = 3552
@@ -648,6 +655,7 @@ def dpo_receive(
     confidence: float = 8.0,
     noise_variance: float | None = None,
     exact: bool = True,
+    shaping_prior: bool = False,
     iterations: int = 3,
     error_marking: bool = False,
 ) -> DPOReception:
@@ -662,15 +670,19 @@ def dpo_receive(
     As on the DO path, leaving ``noise_variance`` at ``None`` hands the decoder
     a hard decision dressed as a soft one (``confidence``'s magnitude, sign from
     the sliced bit); setting it forms :func:`maiman.wport.symbol_llr`'s ratios
-    from the amplitudes instead. **What that does not do**: it is the *uniform*-
-    prior LLR, ``ln P(y|b=0)/P(y|b=1)`` with no term for the shaper's bias. The
-    sign bit is shaped close to uniform, but the amplitude bit is not -- clause
-    9's LUTs pick the inner point 0.623 to 0.8265 of the time (Table 4, and this
-    module's own docstring) -- so the amplitude bit's LLR here is the channel
-    term alone, missing the ``ln P(b=0)/P(b=1)`` prior term a receiver that
-    exploited the shaping fully would add before decoding. That is a real gap:
-    it costs some of what shaping bought, and closing it is maiman-viq.
+    from the amplitudes instead. On its own that is the *uniform*-prior LLR,
+    ``ln P(y|b=0)/P(y|b=1)``, with no term for the shaper's bias. The sign bit is
+    shaped close to uniform, but the amplitude bit is not -- clause 9's LUTs pick
+    the inner point 0.623 to 0.8265 of the time (Table 4, :data:`INNER_PROBABILITY`)
+    -- so a receiver that uses the shaping adds ``ln P(b=0)/P(b=1)`` to that bit
+    before decoding, and ``shaping_prior=True`` does: :func:`maiman.wport.symbol_llr`
+    with the mode's ``inner_probability``. It takes the two axes and two
+    polarizations as independent, which the shaper's marginals are not quite --
+    each 128-bit word is a bijection's output -- so it is the prior of the marginal
+    and not of the joint. It needs ``noise_variance``, and refuses to run without.
     """
+    if shaping_prior and noise_variance is None:
+        raise ValueError("shaping_prior adds to the channel's ratio; give noise_variance")
     symbols = np.asarray(frame)
     if symbols.ndim != 2 or symbols.shape[0] % DSP_FRAME_SYMBOLS:
         raise ValueError(f"whole DSP frames of {DSP_FRAME_SYMBOLS} symbols, got {symbols.shape}")
@@ -683,7 +695,13 @@ def dpo_receive(
         bits = symbol_bits(payload, modulation=modulation)
         llr = np.where(bits == 1, -confidence, confidence)
     else:
-        llr = symbol_llr(payload, noise_variance, modulation=modulation, exact=exact)
+        llr = symbol_llr(
+            payload,
+            noise_variance,
+            modulation=modulation,
+            exact=exact,
+            inner_probability=INNER_PROBABILITY[modulation] if shaping_prior else None,
+        )
     decoded = [
         ofec_decode_stream(lane, iterations=iterations, tail=TAIL_PERMUTATION)
         for lane in ofec_deinterleave(llr, "16qam")

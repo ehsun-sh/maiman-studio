@@ -741,9 +741,12 @@ Given `noise_variance`, they call `symbol_llr` instead: DP-QPSK and DP-16QAM are
 one of `[XI, XQ, YI, YQ]` an independent pulse-amplitude channel under clause 11's labelling, so the
 per-bit log-likelihood ratio is a one-dimensional Gaussian sum — exact (log-sum-exp) or max-log
 (Tosato & Bisaglia, "Simplified soft-output demapper for binary interleaved COFDM with application
-to HIPERLAN/2", ICC 2002). On the DPO modes that LLR is still the *uniform*-prior one: the shaper
-biases the amplitude bit toward the inner points, and this does not yet fold that bias in, which
-costs back some of what the shaping bought (maiman-viq).
+to HIPERLAN/2", ICC 2002). On the DPO modes that LLR is by default the *uniform*-prior one: the
+shaper biases the amplitude bit toward the inner points (0.623, 0.681, 0.8265 by mode), which the
+channel term alone does not use. `dpo_receive(..., shaping_prior=True)` adds it -- `ln (1 - p) / p`
+to the magnitude bit, nothing to the sign -- and the ratio is checked against Bayes' rule summed
+over the four points, and against the prior itself when the sample says nothing. It takes the axes
+as independent, so it is the marginal's prior and not the joint's.
 
 **Three things had to exist before any of this could be wired up**, and each is its own block:
 
