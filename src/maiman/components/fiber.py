@@ -249,6 +249,11 @@ class Fiber(Component):
         min=0.0,
         doc="Discard mixing products this far below the strongest band",
     )
+    carry_phase = BoolParam(
+        False,
+        doc="Mix a constant band or a product in the phase it has, not one drawn for its triplet",
+        applies_when="cascaded_fwm",
+    )
     cascaded_fwm = BoolParam(
         False,
         doc="Let a first-order mixing product drive a second one within the same span",
@@ -354,6 +359,14 @@ class Fiber(Component):
         return walkoff_from_dispersion(beta2, band.f0 - reference.f0)
 
     def validate(self) -> None:
+        if self.carry_phase and not (self.pump_phase and self.cascaded_fwm):
+            raise ValueError(
+                f"{self.label or 'Fiber'}: carry_phase carries a product's own phase from span "
+                "to span, and the second-order term it feeds has an in-span companion only "
+                "with cascaded_fwm -- alone it overshoots by several times -- and is written "
+                "for pump_phase's bookkeeping. Turn on cascaded_fwm and pump_phase, or turn "
+                "carry_phase off."
+            )
         if self.mixing_steps > 1.0 and self.pmd_coefficient > 0.0:
             raise ValueError(
                 f"{self.label or 'Fiber'}: mixing_steps cuts the span into pieces, and each "
@@ -481,6 +494,24 @@ class Fiber(Component):
             ),
             "diagnostics": diagnostics,
         }
+
+    @staticmethod
+    def _carrier_phase(band: Band) -> tuple[float | None, float | None]:
+        """Each axis's phase if the band is a constant amplitude there, else ``None``.
+
+        A launched tone or a mixing product is one complex number per axis and has a
+        phase; a modulated channel's mean says nothing about it, and stays drawn.
+        """
+        out: list[float | None] = []
+        for field in (band.Ex, band.Ey):
+            mean = complex(np.mean(field))
+            power = float(np.mean(np.abs(field) ** 2))
+            out.append(
+                float(np.angle(mean))
+                if power > 0.0 and abs(mean) ** 2 >= (1.0 - 1e-9) * power
+                else None
+            )
+        return out[0], out[1]
 
     def _walkoff(self, signal: OpticalSignal, distance: float) -> WalkoffHistory:
         """Each band's group delay after this span, against the first band's [s].
@@ -930,6 +961,8 @@ class Fiber(Component):
         distance: float,
         floor: float,
         occupied: Sequence[float],
+        phases: Sequence[tuple[float | None, float | None]],
+        travelled: float,
     ) -> list[tuple[float, complex, complex]]:
         """Second-order products: a first-order one driving a further one, within this span.
 
@@ -1004,7 +1037,17 @@ class Fiber(Component):
                                 continue
                             if any(
                                 abs(frequency2 - existing) <= MIXING_MERGE_TOLERANCE
-                                for existing in occupied
+                                for existing in (
+                                    *occupied,
+                                    *(
+                                        (
+                                            frequency1,
+                                            *(sources[n].f0 for n in (i, j, k, p, q)),
+                                        )
+                                        if self.carry_phase
+                                        else ()
+                                    ),
+                                )
                             ):
                                 continue
                             mismatch2 = fwm_phase_mismatch(
@@ -1043,6 +1086,24 @@ class Fiber(Component):
                             ]
                             if sum(abs(value) ** 2 for value in amplitudes) < floor:
                                 continue
+                            if self.carry_phase and self.pump_phase:
+                                amplitudes = self._carried_cascade(
+                                    amplitudes,
+                                    phases,
+                                    legs=((i, 1.0), (j, 1.0), (k, -1.0), (p, 1.0), (q, -1.0)),
+                                    linear=fwm_accumulated_phase(
+                                        travelled,
+                                        sources[i].f0 - reference.f0,
+                                        sources[j].f0 - reference.f0,
+                                        sources[k].f0 - reference.f0,
+                                    )
+                                    + fwm_accumulated_phase(
+                                        travelled,
+                                        frequency1 - reference.f0,
+                                        sources[p].f0 - reference.f0,
+                                        sources[q].f0 - reference.f0,
+                                    ),
+                                )
                             found.append((frequency2, amplitudes[0], amplitudes[1]))
 
                     # The first product can also sit in the *conjugated* role,
@@ -1062,7 +1123,17 @@ class Fiber(Component):
                                 continue
                             if any(
                                 abs(frequency2 - existing) <= MIXING_MERGE_TOLERANCE
-                                for existing in occupied
+                                for existing in (
+                                    *occupied,
+                                    *(
+                                        (
+                                            frequency1,
+                                            *(sources[n].f0 for n in (i, j, k, p, q)),
+                                        )
+                                        if self.carry_phase
+                                        else ()
+                                    ),
+                                )
                             ):
                                 continue
                             mismatch2 = fwm_phase_mismatch(
@@ -1102,8 +1173,54 @@ class Fiber(Component):
                             ]
                             if sum(abs(value) ** 2 for value in amplitudes) < floor:
                                 continue
+                            if self.carry_phase and self.pump_phase:
+                                amplitudes = self._carried_cascade(
+                                    amplitudes,
+                                    phases,
+                                    legs=((p, 1.0), (q, 1.0), (i, -1.0), (j, -1.0), (k, 1.0)),
+                                    linear=-fwm_accumulated_phase(
+                                        travelled,
+                                        sources[i].f0 - reference.f0,
+                                        sources[j].f0 - reference.f0,
+                                        sources[k].f0 - reference.f0,
+                                    )
+                                    + fwm_accumulated_phase(
+                                        travelled,
+                                        sources[p].f0 - reference.f0,
+                                        sources[q].f0 - reference.f0,
+                                        frequency1 - reference.f0,
+                                    ),
+                                )
                             found.append((frequency2, amplitudes[0], amplitudes[1]))
         return found
+
+    @staticmethod
+    def _carried_cascade(
+        amplitudes: list[complex],
+        phases: Sequence[tuple[float | None, float | None]],
+        *,
+        legs: tuple[tuple[int, float], ...],
+        linear: float,
+    ) -> list[complex]:
+        """A second-order amplitude in the phase its five launched legs give it.
+
+        :func:`~maiman.kernels.fwm_cascade_amplitude` is written for legs at zero
+        phase and a span that starts at zero: its field is the physical one. The
+        bands here are stored conjugated -- a first-order product leaves
+        :meth:`_mix` as ``exp(-i (...))`` -- so the amplitude is conjugated, turned
+        by the legs' own phases, and turned back by what both triads have
+        accumulated over the fibre behind this span. A leg with no phase of its
+        own (a modulated band) leaves the amplitude as it was.
+        """
+        out = []
+        for axis, amplitude in enumerate(amplitudes):
+            own = [(phases[index][axis], sign) for index, sign in legs]
+            if any(leg is None for leg, _ in own):
+                out.append(amplitude)
+                continue
+            total = sum(sign * leg for leg, sign in own if leg is not None)
+            out.append(complex(np.conj(amplitude) * np.exp(1j * (total - linear))))
+        return out
 
     def _mix(
         self,
@@ -1181,6 +1298,20 @@ class Fiber(Component):
         do: the flag changes which way the drawn phase and the mismatch combine,
         which is why it is off by default and moves nothing until set.
 
+        **With** ``carry_phase`` **a band that has a phase is mixed in it.** A launched tone,
+        or a product an earlier span made, is one complex amplitude per axis, and its
+        phase is used where the drawn one stood -- and where the history's angle did,
+        since a constant band's phase already holds the Kerr angle it has turned
+        through. A product leaves the field equation's ``i`` behind it, so a second-order
+        one has it twice, and the cascade term is turned by its five legs' phases and by
+        the mismatch both its triads have accumulated over the fibre behind the span.
+        That is what makes the second order add across spans the way the split-step's
+        does: with the mismatch nil it grows as the length squared, ``N (N - 1) / 2``
+        units from the products carried across the spans and ``N / 2`` from those made
+        inside them. A modulated channel has no phase to carry and stays drawn.
+        Scalar drive only, and paired with ``cascaded_fwm``: without the in-span half the
+        carried terms overshoot by several times (maiman-z8j).
+
         **And the pumps are depleted.** Every product's photons are taken from
         the pumps that made it and one is given to its idler, per
         :func:`maiman.kernels.fwm_power_transfer`, so a lossless span conserves
@@ -1223,6 +1354,7 @@ class Fiber(Component):
         # A band of two independent tributaries has no one state for its Kerr
         # phase to be taken in; then every rate stays per axis.
         polarized = self._polarized_states(signal) is not None
+        phases = [self._carrier_phase(b) for b in sources]
 
         def power_at(frequency: float) -> tuple[float, float]:
             for band, power in zip(sources, powers, strict=True):
@@ -1415,6 +1547,24 @@ class Fiber(Component):
                     # the same phase in every span, which is what lets the spans
                     # add rather than average.
                     drawn = float(ctx.rng("Fiber", "fwm", *offsets).random())
+                    draws = [drawn, drawn]
+                    if self.carry_phase and self.pump_phase and not states:
+                        turns = list(walked)
+                        for axis in (0, 1):
+                            first, second, third = (phases[n][axis] for n in (i, j, k))
+                            if first is None or second is None or third is None:
+                                continue
+                            # A phase the bands have is used, not drawn: a constant
+                            # band's phase already holds the Kerr angle it has turned
+                            # through, so it replaces the history's angle for the
+                            # three carriers as well as the draw. And the product
+                            # leaves the field equation's ``i`` behind it, a quarter
+                            # turn a first-order product has and a second-order one
+                            # has twice, which the cascade's amplitude carries too.
+                            kerr = histories[i][axis] + histories[j][axis] - histories[k][axis]
+                            turns[axis] += -kerr - (first + second - third) - math.pi / 2.0
+                            draws[axis] = 0.0
+                        walked = (turns[0], turns[1])
                     linear = fwm_accumulated_phase(travelled, *offsets)
                     if self.pump_phase:
                         # In the split-step's own sense, exp(-i angle): the drive's
@@ -1422,7 +1572,7 @@ class Fiber(Component):
                         # the frame that carrier has been turned into since.
                         phasors = [
                             np.exp(
-                                2j * np.pi * drawn
+                                2j * np.pi * draws[axis]
                                 - 1j
                                 * (
                                     linear
@@ -1455,7 +1605,13 @@ class Fiber(Component):
                     )
 
         if self.cascaded_fwm:
-            occupied = [band.f0 for band in sources] + [entry[0] for entry in found]
+            # With carry_phase a term is only refused where it lands on one of its
+            # own five legs or on the product it cascades from -- those are the
+            # cross-phase and self-feedback terms the split-step already carries.
+            # Landing on a band an earlier span made, or on one the ordinary pass
+            # reached from a carried product, is a second-order term the reference
+            # has, and adds to it like any other (maiman-z8j).
+            occupied = [] if self.carry_phase else [b.f0 for b in sources] + [e[0] for e in found]
             found.extend(
                 self._mix_cascade(
                     sources=sources,
@@ -1470,6 +1626,8 @@ class Fiber(Component):
                     distance=distance,
                     floor=floor,
                     occupied=occupied,
+                    phases=phases,
+                    travelled=travelled,
                 )
             )
 

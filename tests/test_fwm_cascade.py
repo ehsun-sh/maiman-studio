@@ -12,10 +12,13 @@ integrates both triads' build-up in closed form, in both the role a first-order
 product can play (un-conjugated beside a launched pump, or conjugated beside
 two). Off by default, so every span's result is exactly what it was.
 
-**Across spans** the gap is still open: a product mixes again as a pump in the
-next span, but with a phase drawn on its frequencies rather than the one it was
-made with, so the spans do not add the way the split-step's do. What that costs
-is written down here too, as numbers a change has to explain.
+**Across spans**, by default, a product mixes again as a pump in the next span
+with a phase drawn on its frequencies rather than the one it was made with, so
+the spans do not add the way the split-step's do. What that costs is written
+down here as numbers a change has to explain. ``carry_phase`` (with
+``cascaded_fwm``) takes the phase the bands have instead -- a launched tone's, a
+product's -- and gives the cascade term the phase and the accumulated mismatch
+of its five legs; the tests at the end pin what that recovers.
 """
 
 from __future__ import annotations
@@ -37,7 +40,12 @@ CTX = SimulationContext(
 
 
 def products(
-    pump: float, dispersion: float, span: float, spans: int, cascaded: bool = False
+    pump: float,
+    dispersion: float,
+    span: float,
+    spans: int,
+    cascaded: bool = False,
+    carry: bool = False,
 ) -> tuple[dict[int, float], dict[int, float]]:
     """``(split-step, model)`` power at ``m`` spacings below the lower pump [W], for m = 1, 2."""
     probe = Band(
@@ -85,6 +93,7 @@ def products(
             mixing_floor=250.0,
             pump_phase=True,
             cascaded_fwm=cascaded,
+            carry_phase=carry,
             label=f"span{index}",
         ).run(CTX, {"in": signal})["out"]
     model = {}
@@ -220,3 +229,65 @@ def test_cascade_integral_matches_direct_numerical_quadrature() -> None:
         numerical = np.trapezoid(outer_integrand, z)
         closed_form = fwm_cascade_integral(delta_beta1, delta_beta2, alpha, length)
         assert closed_form == pytest.approx(complex(numerical), rel=1e-4, abs=1e-6)
+
+
+# -- carry_phase: a product keeps the phase it was made with ------------------
+
+
+@pytest.mark.parametrize("spans", [2, 4])
+def test_carried_phase_alone_adds_the_spans_a_product_drives_across(spans: int) -> None:
+    """Phase matched, low power, no in-span cascade: ``((N - 1) / N)**2`` of the split-step.
+
+    With the mismatch nearly nil the second order grows as ``L**2`` (Thompson and
+    Roy's cascade integral at zero mismatch is ``L**2 / 2``), so N spans of a
+    fibre hold ``N**2 / 2`` in units of one span's ``L**2``. A first-order
+    product carried into span ``n`` drives the next stage over that span, ``n - 1``
+    units, and the sum over the spans is ``N (N - 1) / 2`` -- the in-span half,
+    ``N / 2``, is the cascade's and is left out here. Carrying the product's own
+    phase reproduces that; drawn, the same spans came out 1.2 and 2.8 times the
+    split-step.
+    """
+    reference, model = products(1e-3, 0.02, 5e3, spans, cascaded=False, carry=True)
+    expected = ((spans - 1) / spans) ** 2
+    assert model[2] / reference[2] == pytest.approx(expected, rel=0.03)
+
+
+@pytest.mark.parametrize("spans", [2, 4])
+def test_carried_phase_with_the_cascade_lands_on_the_split_step_when_phase_matched(
+    spans: int,
+) -> None:
+    """The same spans with ``cascaded_fwm`` on: the carried and the in-span halves make the whole.
+
+    ``N (N - 1) / 2 + N / 2 = N**2 / 2``, the split-step's, to 1 % for two spans
+    and 4 % for four (the third-order terms and the pump's own phase drift are
+    what is left). Before, with ``cascaded_fwm`` on and the phase drawn, 1.7 and
+    2.9 times.
+    """
+    reference, model = products(1e-3, 0.02, 5e3, spans, cascaded=True, carry=True)
+    assert model[2] / reference[2] == pytest.approx(1.0, abs=0.05)
+
+
+def test_carried_phase_and_cascade_fix_the_four_span_pump_pair() -> None:
+    """The case pinned above at 9.7 times the split-step, ``carry_phase`` on: 0.91.
+
+    10 mW, D = 2, four 5 km spans; the first order is 0.951 of the split-step
+    (0.969 before). Pinned, not tuned: within 10 % where the drawn phase was 9.7
+    times out, and a change that moves it should say why.
+    """
+    reference, model = products(10e-3, 2.0, 5e3, 4, cascaded=True, carry=True)
+    assert model[1] / reference[1] == pytest.approx(0.951, abs=0.01)
+    assert model[2] / reference[2] == pytest.approx(0.914, rel=0.02)
+
+
+def test_carried_phase_at_low_power_over_four_dispersive_spans() -> None:
+    """1 mW, D = 2, four 5 km spans: 0.976, where the third-order terms are smallest."""
+    reference, model = products(1e-3, 2.0, 5e3, 4, cascaded=True, carry=True)
+    assert model[2] / reference[2] == pytest.approx(0.976, abs=0.02)
+
+
+def test_carry_phase_is_refused_without_the_cascade_it_pairs_with() -> None:
+    with pytest.raises(ValueError, match="cascaded_fwm"):
+        Fiber(carry_phase=True, pump_phase=True).validate()
+    with pytest.raises(ValueError, match="pump_phase"):
+        Fiber(carry_phase=True, cascaded_fwm=True).validate()
+    Fiber(carry_phase=True, pump_phase=True, cascaded_fwm=True).validate()

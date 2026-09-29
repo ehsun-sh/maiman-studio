@@ -1594,6 +1594,11 @@
      "min": 0.0,
      "doc": "Discard mixing products this far below the strongest band"
     },
+    "carry_phase": {
+     "type": "bool",
+     "default": false,
+     "doc": "Mix a constant band or a product in the phase it has, not one drawn for its triplet"
+    },
     "cascaded_fwm": {
      "type": "bool",
      "default": false,
