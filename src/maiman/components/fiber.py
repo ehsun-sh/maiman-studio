@@ -813,9 +813,11 @@ class Fiber(Component):
         ``factor`` times the samples; carriers must sit on its frequency bins,
         ``1 / window`` apart, or the window's ends would be a discontinuity to the
         Fourier transform (refused otherwise, with the sequence length that would
-        do). A band is taken to lie within half the distance to its nearest
-        neighbour, the filter that cuts it out: a product that lands on a channel is
-        that channel's crosstalk and joins it. The axes are independent scalar
+        do). The grid is cut back into slots that tile it: each band's reaches the
+        midpoints to its neighbours, and the outermost two reach out to a band's own
+        window, so nothing is dropped between or beyond them. A product, or the skirt
+        of one wider than its slot, that lands on a channel is that channel's
+        crosstalk and joins it, as it would a receiver's filter. The axes are independent scalar
         problems, as ``cross_polarization`` off makes them.
         """
         signal: OpticalSignal = inputs["in"]
@@ -861,9 +863,14 @@ class Fiber(Component):
                 f"{float(misfit.max()) / window:.4g} Hz off; choose a sequence length whose "
                 "window holds a whole number of cycles of the carrier spacings"
             )
-        gaps = np.diff(np.sort(frequencies))
+        ordered = np.sort(frequencies)
+        gaps = np.diff(ordered)
         half_width = min(0.5 * rate, 0.5 * float(gaps.min())) if gaps.size else 0.5 * rate
-        reach = float(np.abs(offsets).max()) + half_width
+        # The slots the grid is cut back into tile it: each reaches the midpoints to its
+        # neighbours, and the two at the ends reach as far as a band's window does, so a
+        # product wider than its slot hands its skirt to the next slot instead of dropping
+        # it, and nothing past the outer carriers falls between slots.
+        reach = float(np.abs(offsets).max()) + 0.5 * rate
         factor = max(1, math.ceil(2.0 * reach / rate))
         grid_rate = factor * rate
         grid = np.arange(samples * factor) / grid_rate
@@ -960,8 +967,15 @@ class Fiber(Component):
         def is_launched(frequency: float) -> bool:
             return any(abs(frequency - f) <= TONE_TOLERANCE for f in present)
 
+        def slot(frequency: float) -> tuple[float, float]:
+            index = int(np.argmin(np.abs(ordered - frequency)))
+            below = 0.5 * float(gaps[index - 1]) if index > 0 else 0.5 * rate
+            above = 0.5 * float(gaps[index]) if index < gaps.size else 0.5 * rate
+            return min(below, 0.5 * rate), min(above, 0.5 * rate)
+
         def cut(frequency: float) -> tuple[np.ndarray, np.ndarray]:
             offset = frequency - centre_of
+            below, above = slot(frequency)
             delay = beta2 * 2.0 * math.pi * offset * distance
             turned = np.exp(
                 0.5j * (signal.accumulated_gvd + beta2 * distance) * (2.0 * math.pi * offset) ** 2
@@ -974,6 +988,8 @@ class Fiber(Component):
                     sample_rate=grid_rate,
                     offset=offset,
                     half_width=half_width,
+                    below=below,
+                    above=above,
                 )
                 cut_out.append(apply_group_delay(piece, rate, -delay) * turned)
             return cut_out[0], cut_out[1]

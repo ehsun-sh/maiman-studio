@@ -135,6 +135,39 @@ def test_a_dispersion_free_fibre_makes_the_time_domain_product_of_the_modulation
     assert np.std(np.abs(product.Ex)) > 0.3 * np.mean(np.abs(product.Ex)), "and it is modulated"
 
 
+def test_a_product_wider_than_its_slot_keeps_its_outer_skirt() -> None:
+    """25 GHz of modulation makes a product 75 GHz either side, past its 50 GHz slot.
+
+    The outermost product has no neighbour below it, so its slot reaches down to the
+    band's window, and what lies more than 50 GHz below its carrier -- about 2 % of
+    its power, which a slot of half the spacing dropped -- is the time-domain
+    ``-i gamma L E_b^2 E_a*`` there, to 1 %. At 0.05 mW per tone, where that product
+    is all there is: at ten times the power its own cross-phase moves the thin skirt
+    by 5 %. The skirt on the other side is the channel's crosstalk.
+    """
+    generator = np.random.default_rng(5)
+    lower = modulated(0.05e-3, ANCHOR, generator, 25e9)
+    upper = modulated(0.05e-3, ANCHOR + SPACING, generator, 25e9)
+    length = 10.0
+    out = Fiber(
+        length=length,
+        attenuation=0.0,
+        dispersion=0.0,
+        nonlinearity=GAMMA,
+        mixing_floor=250.0,
+        composite_fwm=True,
+        label="span",
+    ).run(CTX, {"in": OpticalSignal(bands=(lower, upper))})["out"]
+    assert isinstance(out, OpticalSignal)
+    product = next(b for b in out.bands if abs(b.f0 - (ANCHOR - SPACING)) < 1e3)
+    expected = -1j * GAMMA * 1e-3 * length * 1e3 * lower.Ex**2 * np.conj(upper.Ex)
+    skirt = np.fft.fftfreq(product.Ex.size, 1.0 / product.fs) < -0.5 * SPACING
+    wanted = np.fft.fft(expected)[skirt]
+    got = np.fft.fft(product.Ex)[skirt]
+    assert np.linalg.norm(wanted) ** 2 > 0.01 * np.linalg.norm(np.fft.fft(expected)) ** 2
+    assert np.linalg.norm(got - wanted) < 0.01 * np.linalg.norm(wanted)
+
+
 def test_without_a_nonlinearity_each_band_is_its_own_dispersed_self() -> None:
     """Linear limit: every band comes out as ``propagate_dispersion`` gives it alone, to 1e-9.
 

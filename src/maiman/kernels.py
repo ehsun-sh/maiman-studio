@@ -1017,20 +1017,30 @@ def grid_to_band(
     sample_rate: float,
     offset: float,
     half_width: float,
+    below: float | None = None,
+    above: float | None = None,
 ) -> np.ndarray:
     """The band ``offset`` [Hz] from the grid's centre, ``half_width`` [Hz] either side, cut out.
 
     The inverse of :func:`band_to_grid` for one band: shifted down by ``offset``,
     everything past ``half_width`` of it dropped (an ideal filter, so neighbours that
     are further apart than twice it do not leak), and the rest brought back to
-    ``samples`` points over the same span of time, amplitudes kept.
+    ``samples`` points over the same span of time, amplitudes kept. ``below`` and
+    ``above``, where given, set the two edges apart, so that slots of unequal width
+    can tile a spectrum with no gap between them. The lower edge is kept and the
+    upper one dropped, so that two slots sharing an edge do not both take its bin.
     """
     total = int(field.shape[-1])
     factor = total // samples
     time = np.arange(total) / sample_rate
     spectrum = np.fft.fft(field * np.exp(-2j * np.pi * offset * time))
     frequency = np.fft.fftfreq(total, d=1.0 / sample_rate)
-    spectrum = np.where(np.abs(frequency) <= half_width, spectrum, 0.0)
+    if below is None and above is None:
+        spectrum = np.where(np.abs(frequency) <= half_width, spectrum, 0.0)
+    else:
+        low = half_width if below is None else below
+        high = half_width if above is None else above
+        spectrum = np.where((frequency >= -low) & (frequency < high), spectrum, 0.0)
     half = samples // 2
     small = np.concatenate([spectrum[:half], spectrum[-half:]])
     return np.asarray(np.fft.ifft(small) / factor)
