@@ -2052,6 +2052,24 @@ def pmd_jones_matrix(sections: tuple[PMDSection, ...], omega: float) -> np.ndarr
     return total
 
 
+def pmd_sections_from(sections: tuple[PMDSection, ...], omega: float) -> tuple[PMDSection, ...]:
+    """The same chain with its frequencies measured from ``omega`` [rad/s] rather than zero.
+
+    A section's delay is diagonal, so at ``w + omega`` it is the delay at ``w`` times
+    the fixed ``diag(exp(i omega dgd / 2), exp(-i omega dgd / 2))``, which folds into
+    the section's unitary: ``pmd_jones_matrix(shifted, w)`` is
+    ``pmd_jones_matrix(sections, w + omega)``. The delays, and so the DGD, are
+    untouched. This is how a chain applied on a grid centred elsewhere is made to
+    meet a carrier as it meets that carrier's own band.
+    """
+    shifted = []
+    for section in sections:
+        phase = np.exp(0.5j * omega * section.dgd)
+        delay = np.array([[phase, 0.0], [0.0, np.conj(phase)]], dtype=np.complex128)
+        shifted.append(PMDSection(unitary=section.unitary @ delay, dgd=section.dgd))
+    return tuple(shifted)
+
+
 def differential_group_delay(
     sections: tuple[PMDSection, ...], *, probe_spacing: float = 2.0 * np.pi * 1e9
 ) -> float:

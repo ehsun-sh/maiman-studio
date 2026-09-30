@@ -22,7 +22,13 @@ import numpy as np
 import pytest
 
 from maiman.components import Fiber
-from maiman.kernels import apply_pmd, differential_group_delay, propagate_dispersion
+from maiman.kernels import (
+    apply_pmd,
+    differential_group_delay,
+    pmd_jones_matrix,
+    pmd_sections_from,
+    propagate_dispersion,
+)
 from maiman.signals import Band, OpticalSignal
 from test_fwm_tones import (
     ANCHOR,
@@ -313,9 +319,10 @@ def test_one_band_meets_the_chain_as_apply_pmd_gives_it(interleave: bool) -> Non
 def test_two_carriers_meet_the_chain_at_their_own_frequencies() -> None:
     """Unlike the tone solver's, a chain on the grid rotates each carrier by what it does there.
 
-    100 GHz apart, a 2 ps chain turns their phases by half a radian more between them,
-    so the two bands do not come out rotated alike: each differs from the rest-frame
-    rotation by tenths, where at the grid's centre it would not.
+    The chain is measured from the first band's carrier, so that band comes out as
+    ``apply_pmd`` gives it alone, to rounding. The second, 100 GHz on, meets the
+    chain 100 GHz on: a 2 ps chain turns it by half a radian more, and it differs
+    from the rest-frame rotation by tenths.
     """
     signal = jones_pumps(1e-6, JONES)
     out = pmd_span().run(CTX, {"in": signal})["out"]
@@ -325,7 +332,41 @@ def test_two_carriers_meet_the_chain_at_their_own_frequencies() -> None:
     for source, result in zip(signal.bands, out.bands, strict=False):
         ex, _ = apply_pmd(source.Ex, source.Ey, source.fs, chain)
         gaps.append(np.linalg.norm(result.Ex - ex) / np.linalg.norm(ex))
-    assert min(gaps) > 0.05
+    assert gaps[0] < 1e-9
+    assert gaps[1] > 0.05
+
+
+def test_a_band_meets_the_chain_whatever_else_is_on_the_grid() -> None:
+    """Faint bands beside the first move the grid's centre and must not turn the first.
+
+    Measured from the grid's centre, one to three bands at a millionth of the field
+    turned the first band's state of polarization by 46 to 83 %.
+    """
+    first, second = jones_pumps(1e-6, JONES).bands
+    ex, ey = apply_pmd(first.Ex, first.Ey, first.fs, pmd_chain("pmd-span", 0.5, 20.0, 12))
+    for count in (1, 3):
+        beside = tuple(
+            Band(Ex=1e-6 * second.Ex, Ey=1e-6 * second.Ey, f0=first.f0 + k * SPACING, fs=first.fs)
+            for k in range(1, count + 1)
+        )
+        out = pmd_span().run(CTX, {"in": OpticalSignal(bands=(first, *beside))})["out"]
+        assert isinstance(out, OpticalSignal)
+        assert np.linalg.norm(out.bands[0].Ex - ex) < 1e-9 * np.linalg.norm(ex)
+        assert np.linalg.norm(out.bands[0].Ey - ey) < 1e-9 * np.linalg.norm(ey)
+
+
+def test_a_chain_measured_from_elsewhere_is_the_chain_shifted() -> None:
+    """The chain shifted by ``w0`` is, at ``w``, the chain itself at ``w + w0``; same DGD."""
+    chain = pmd_chain("pmd-span", 0.5, 20.0, 12)
+    w0 = 2.0 * math.pi * 137e9
+    shifted = pmd_sections_from(chain, w0)
+    for w in (0.0, 2.0 * math.pi * -40e9, 2.0 * math.pi * 5e9):
+        assert np.allclose(
+            pmd_jones_matrix(shifted, w), pmd_jones_matrix(chain, w + w0), atol=1e-12
+        )
+    assert differential_group_delay(shifted) == pytest.approx(
+        differential_group_delay(chain), rel=1e-9
+    )
 
 
 def test_the_composite_reports_the_dgd_it_drew_and_keeps_the_power() -> None:

@@ -52,6 +52,7 @@ from ..kernels import (
     kerr_rate,
     kerr_rate_in_state,
     phase_reference,
+    pmd_sections_from,
     principal_state,
     propagate_coupled_ssfm,
     propagate_dispersion,
@@ -891,6 +892,12 @@ class Fiber(Component):
                 self.mean_dgd(), int(self.pmd_sections), ctx.rng("Fiber", self.label, "pmd")
             )
             realised_dgd = differential_group_delay(sections)
+            # Measured from the first band's carrier, as the walk-off and the reference
+            # beta2 are, and not from the grid's centre: that moves whenever a band is
+            # added anywhere in the comb, and would turn every other band's state of
+            # polarization with it. The first band meets the chain as ``apply_pmd``
+            # gives it alone, and each other carrier as it differs from that one.
+            sections = pmd_sections_from(sections, -2.0 * math.pi * (bands[0].f0 - centre_of))
 
         def combine(axis: int) -> np.ndarray:
             fields = [np.asarray(b.Ex if axis == 0 else b.Ey, dtype=np.complex128) for b in bands]
