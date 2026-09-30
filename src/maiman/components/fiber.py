@@ -25,8 +25,10 @@ from ..kernels import (
     TONE_TOLERANCE,
     PMDSection,
     PropagationDiagnostics,
+    apply_group_delay,
     apply_pmd,
     attenuation_db_per_m_to_alpha,
+    band_to_grid,
     coherency,
     cross_kerr_matrix,
     degree_of_polarization,
@@ -46,6 +48,7 @@ from ..kernels import (
     fwm_tone_triples,
     fwm_vector_drive,
     geometric_phase,
+    grid_to_band,
     kerr_rate,
     kerr_rate_in_state,
     phase_reference,
@@ -305,6 +308,19 @@ class Fiber(Component):
         doc="Highest order of mixing product the tone solver keeps, when it is above the floor",
         applies_when="tone_solver",
     )
+    composite_fwm = BoolParam(
+        False,
+        doc="Split-step every band on one wide grid, modulation and mixing included",
+        applies_when="four_wave_mixing",
+    )
+    composite_order = Param(
+        1.0,
+        unit="",
+        min=1.0,
+        max=3.0,
+        doc="Highest order of mixing product the composite grid has room for",
+        applies_when="composite_fwm",
+    )
     raman_gain_slope = Param(
         0.0,
         unit="1/W/km/THz",
@@ -405,6 +421,23 @@ class Fiber(Component):
                 "for pump_phase's bookkeeping. Turn on cascaded_fwm and pump_phase, or turn "
                 "carry_phase off."
             )
+        if self.composite_fwm:
+            for name, on in (
+                ("tone_solver", self.tone_solver),
+                ("pump_phase", self.pump_phase),
+                ("carry_phase", self.carry_phase),
+                ("cascaded_fwm", self.cascaded_fwm),
+                ("cross_polarization", self.cross_polarization),
+                ("mixing_steps", self.mixing_steps > 1.0),
+                ("pmd_coefficient", self.pmd_coefficient > 0.0),
+                ("raman_gain_slope", self.raman_gain_slope > 0.0),
+            ):
+                if on:
+                    raise ValueError(
+                        f"{self.label or 'Fiber'}: composite_fwm split-steps the whole comb on one "
+                        f"grid itself, per polarization, and has nothing for {name} to do or no "
+                        "way to carry it. Turn one off."
+                    )
         if self.tone_solver:
             for name, on in (
                 ("pump_phase", self.pump_phase),
@@ -491,6 +524,7 @@ class Fiber(Component):
         alpha: float,
         distance: float,
         reference: float,
+        rounds: int | None = None,
     ) -> np.ndarray:
         """The launched tones and every product above the floor, ``tone_order`` rounds deep.
 
@@ -507,7 +541,7 @@ class Fiber(Component):
         f = f0.copy()
         a = np.abs(amplitude)
         floor = float(np.max(a) ** 2) * db_to_linear(-self.mixing_floor)
-        for _ in range(round(self.tone_order)):
+        for _ in range(round(self.tone_order) if rounds is None else rounds):
             i, j, k = (
                 index.ravel() for index in np.meshgrid(*(np.arange(f.size),) * 3, indexing="ij")
             )
@@ -757,9 +791,191 @@ class Fiber(Component):
             "diagnostics": diagnostics,
         }
 
+    def _run_composite(
+        self, ctx: SimulationContext, inputs: dict[str, Signal]
+    ) -> dict[str, Signal]:
+        """One span with every band, modulation and all, split-stepped on one wide grid.
+
+        The perturbative series :meth:`_mix` sums works from each band's mean power
+        and stops at second order, and the tone solver needs constants. Here the
+        bands are put on a single grid wide enough for the whole comb and the
+        products it makes, at their carriers' offsets, and the scalar split-step is
+        run on the sum -- so mixing, cross-phase, depletion, walk-off and dispersion
+        of each band's own modulation are all in the propagation, which is the
+        one-band split-step the tests already take as the reference. Each band, and
+        each product above the floor, is then cut back out into its own window and
+        retarded frame.
+
+        The grid's window is the bands' own, so the same span of time at
+        ``factor`` times the samples; carriers must sit on its frequency bins,
+        ``1 / window`` apart, or the window's ends would be a discontinuity to the
+        Fourier transform (refused otherwise, with the sequence length that would
+        do). A band is taken to lie within half the distance to its nearest
+        neighbour, the filter that cuts it out: a product that lands on a channel is
+        that channel's crosstalk and joins it. The axes are independent scalar
+        problems, as ``cross_polarization`` off makes them.
+        """
+        signal: OpticalSignal = inputs["in"]
+        distance = self.si("length")
+        gamma = self.si("nonlinearity")
+        alpha = attenuation_db_per_m_to_alpha(self.si("attenuation"))
+        power_factor = db_to_linear(-self.loss_db())
+        beta2 = self.reference_beta2(signal)
+        bands = signal.bands
+        if not bands:
+            raise ValueError(
+                f"{self.label or 'Fiber'}: the composite solver needs at least one band"
+            )
+        samples, rate = bands[0].num_samples, bands[0].fs
+        if any(b.num_samples != samples or b.fs != rate for b in bands):
+            raise ValueError(
+                f"{self.label or 'Fiber'}: composite_fwm needs every band on one window and rate"
+            )
+        window = samples / rate
+        f0 = np.array([band.f0 for band in bands])
+        amplitude = np.array(
+            [math.sqrt(float(np.mean(np.abs(b.Ex) ** 2 + np.abs(b.Ey) ** 2))) for b in bands]
+        )
+        if float(amplitude.max()) <= 0.0:
+            raise ValueError(f"{self.label or 'Fiber'}: every band is dark; nothing to solve")
+        centre_of = 0.5 * (float(f0.min()) + float(f0.max()))
+        frequencies = self._tone_set(
+            f0,
+            amplitude,
+            beta2=beta2,
+            gamma=gamma,
+            alpha=alpha,
+            distance=distance,
+            reference=bands[0].f0,
+            rounds=round(self.composite_order),
+        )
+        offsets = frequencies - centre_of
+        misfit = np.abs(offsets * window - np.round(offsets * window))
+        if float(misfit.max()) > 1e-6:
+            raise ValueError(
+                f"{self.label or 'Fiber'}: composite_fwm needs every carrier on the window's "
+                f"frequency bins, {1.0 / window:.4g} Hz apart, and one is "
+                f"{float(misfit.max()) / window:.4g} Hz off; choose a sequence length whose "
+                "window holds a whole number of cycles of the carrier spacings"
+            )
+        gaps = np.diff(np.sort(frequencies))
+        half_width = min(0.5 * rate, 0.5 * float(gaps.min())) if gaps.size else 0.5 * rate
+        reach = float(np.abs(offsets).max()) + half_width
+        factor = max(1, math.ceil(2.0 * reach / rate))
+        grid_rate = factor * rate
+        grid = np.arange(samples * factor) / grid_rate
+
+        def carrier(offset: float) -> np.ndarray:
+            return np.asarray(np.exp(2j * np.pi * offset * grid))
+
+        mismatch = abs(fwm_phase_mismatch(beta2, 0.0, 0.0, float(gaps.min()) if gaps.size else 0.0))
+        step = 0.05 / mismatch if mismatch > 0.0 else None
+        finished: list[np.ndarray] = []
+        steps = 0
+        peak = 0.0
+        for axis in (0, 1):
+            fields = [np.asarray(b.Ex if axis == 0 else b.Ey, dtype=np.complex128) for b in bands]
+            if not any(np.any(field != 0.0) for field in fields):
+                finished.append(np.zeros(samples * factor, dtype=np.complex128))
+                continue
+            combined = np.zeros(samples * factor, dtype=np.complex128)
+            for band, field in zip(bands, fields, strict=True):
+                # A band is stored without the phase its carrier has turned through --
+                # ``beta(omega) z`` -- so the phases the four-wave sums need are put
+                # back for the propagation and taken out again after it. The part of
+                # ``beta`` that matters is the curvature, ``G d^2 / 2`` for the
+                # dispersion ``G`` the path has accumulated: the rest is a delay, or
+                # cancels in any four-wave combination.
+                behind = np.exp(
+                    -0.5j * signal.accumulated_gvd * (2.0 * math.pi * (band.f0 - centre_of)) ** 2
+                )
+                filtered = grid_to_band(
+                    band_to_grid(field, factor) * carrier(band.f0 - centre_of),
+                    samples,
+                    sample_rate=grid_rate,
+                    offset=band.f0 - centre_of,
+                    half_width=half_width,
+                )
+                combined += band_to_grid(filtered * behind, factor) * carrier(band.f0 - centre_of)
+            (out,), diagnostics = propagate_coupled_ssfm(
+                (combined,),
+                grid_rate,
+                beta2=(beta2,),
+                walkoff=(0.0,),
+                gamma=gamma,
+                alpha=alpha,
+                distance=distance,
+                max_step=step,
+            )
+            finished.append(out)
+            steps = max(steps, diagnostics.steps)
+            peak = max(peak, diagnostics.peak_nonlinear_phase)
+
+        dtype = ctx.complex_dtype
+        present = [band.f0 for band in bands]
+
+        def is_launched(frequency: float) -> bool:
+            return any(abs(frequency - f) <= TONE_TOLERANCE for f in present)
+
+        def cut(frequency: float) -> tuple[np.ndarray, np.ndarray]:
+            offset = frequency - centre_of
+            delay = beta2 * 2.0 * math.pi * offset * distance
+            turned = np.exp(
+                0.5j * (signal.accumulated_gvd + beta2 * distance) * (2.0 * math.pi * offset) ** 2
+            )
+            cut_out = []
+            for axis_field in finished:
+                piece = grid_to_band(
+                    axis_field,
+                    samples,
+                    sample_rate=grid_rate,
+                    offset=offset,
+                    half_width=half_width,
+                )
+                cut_out.append(apply_group_delay(piece, rate, -delay) * turned)
+            return cut_out[0], cut_out[1]
+
+        launched_bands = []
+        for band in bands:
+            ex, ey = cut(band.f0)
+            launched_bands.append(replace(band, Ex=ex.astype(dtype), Ey=ey.astype(dtype)))
+        products = []
+        for frequency in frequencies:
+            if is_launched(float(frequency)):
+                continue
+            ex, ey = cut(float(frequency))
+            products.append(
+                Band(Ex=ex.astype(dtype), Ey=ey.astype(dtype), f0=float(frequency), fs=rate)
+            )
+        made = sum(float(np.mean(np.abs(b.Ex) ** 2 + np.abs(b.Ey) ** 2)) for b in products)
+        total = made + sum(
+            float(np.mean(np.abs(b.Ex) ** 2 + np.abs(b.Ey) ** 2)) for b in launched_bands
+        )
+        diagnostics_out = PropagationDiagnostics(
+            steps=steps,
+            distance=distance,
+            shortest_step=distance / max(steps, 1),
+            longest_step=distance / max(steps, 1),
+            peak_nonlinear_phase=peak,
+            mixing_products=len(products),
+            fwm_depletion=made / total if total > 0.0 else 0.0,
+        )
+        return {
+            "out": OpticalSignal(
+                bands=tuple(launched_bands + products),
+                noise=tuple(n.scale_power(power_factor) for n in signal.noise),
+                accumulated_gvd=signal.accumulated_gvd + beta2 * distance,
+                nonlinear_history=signal.nonlinear_history,
+                walkoff=self._walkoff(signal, distance),
+            ),
+            "diagnostics": diagnostics_out,
+        }
+
     def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
         if self.tone_solver and self.four_wave_mixing and self.si("nonlinearity") != 0.0:
             return self._run_tones(ctx, inputs)
+        if self.composite_fwm and self.four_wave_mixing and self.si("nonlinearity") != 0.0:
+            return self._run_composite(ctx, inputs)
         if self.mixing_steps > 1.0 and self.four_wave_mixing and self.si("nonlinearity") != 0.0:
             return self._run_in_pieces(ctx, inputs)
         signal: OpticalSignal = inputs["in"]

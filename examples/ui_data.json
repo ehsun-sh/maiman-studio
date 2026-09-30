@@ -1650,6 +1650,20 @@
      "doc": "Highest order of mixing product the tone solver keeps, when it is above the floor",
      "applies_when": "tone_solver"
     },
+    "composite_fwm": {
+     "type": "bool",
+     "default": false,
+     "doc": "Split-step every band on one wide grid, modulation and mixing included"
+    },
+    "composite_order": {
+     "type": "float",
+     "default": 1.0,
+     "unit": "",
+     "min": 1.0,
+     "max": 3.0,
+     "doc": "Highest order of mixing product the composite grid has room for",
+     "applies_when": "composite_fwm"
+    },
     "raman_gain_slope": {
      "type": "float",
      "default": 0.0,

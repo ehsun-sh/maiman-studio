@@ -992,6 +992,50 @@ def raman_transfer(
     return [float(q[n] / launched[n]) if launched[n] > 0.0 else 1.0 for n in range(count)]
 
 
+def band_to_grid(field: np.ndarray, factor: int) -> np.ndarray:
+    """A band-limited window resampled ``factor`` times finer, amplitudes kept.
+
+    Zero-padding the spectrum, which is exact for a window that is periodic and
+    band-limited, as the simulated ones are taken to be. ``factor`` times the samples
+    over the same span of time, so the sample rate rises by ``factor`` too.
+    """
+    n = int(field.shape[-1])
+    if factor == 1:
+        return np.asarray(field, dtype=np.complex128)
+    spectrum = np.fft.fft(np.asarray(field, dtype=np.complex128))
+    padded = np.zeros(n * factor, dtype=np.complex128)
+    half = n // 2
+    padded[:half] = spectrum[:half]
+    padded[-half:] = spectrum[-half:]
+    return np.asarray(np.fft.ifft(padded) * factor)
+
+
+def grid_to_band(
+    field: np.ndarray,
+    samples: int,
+    *,
+    sample_rate: float,
+    offset: float,
+    half_width: float,
+) -> np.ndarray:
+    """The band ``offset`` [Hz] from the grid's centre, ``half_width`` [Hz] either side, cut out.
+
+    The inverse of :func:`band_to_grid` for one band: shifted down by ``offset``,
+    everything past ``half_width`` of it dropped (an ideal filter, so neighbours that
+    are further apart than twice it do not leak), and the rest brought back to
+    ``samples`` points over the same span of time, amplitudes kept.
+    """
+    total = int(field.shape[-1])
+    factor = total // samples
+    time = np.arange(total) / sample_rate
+    spectrum = np.fft.fft(field * np.exp(-2j * np.pi * offset * time))
+    frequency = np.fft.fftfreq(total, d=1.0 / sample_rate)
+    spectrum = np.where(np.abs(frequency) <= half_width, spectrum, 0.0)
+    half = samples // 2
+    small = np.concatenate([spectrum[:half], spectrum[-half:]])
+    return np.asarray(np.fft.ifft(small) / factor)
+
+
 def walkoff_from_dispersion(beta2: float, frequency_offset: float) -> float:
     """Inverse-group-velocity offset ``d`` [s/m] of a channel ``frequency_offset`` [Hz] away.
 
