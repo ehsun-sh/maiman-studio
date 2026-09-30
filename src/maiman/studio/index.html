@@ -3534,6 +3534,11 @@ verdict, and DESIGN.md
      "doc": "How far the teeth are cut into the silicon: solves their own reflection in the gap. 0 keeps the bare stack's",
      "applies_when": "from_stack"
     },
+    "finite_teeth": {
+     "type": "bool",
+     "default": false,
+     "doc": "Solve the etched teeth as the finite grating they are, the guided light absorbed down the waveguide: seconds a wavelength. Needs an etch depth"
+    },
     "fibre_index": {
      "type": "float",
      "default": 1.444,

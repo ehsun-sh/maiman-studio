@@ -38,7 +38,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-__all__ = ["Diffraction", "GratingLayer", "UniformLayer", "diffract_te"]
+__all__ = ["Diffraction", "GratingLayer", "PatternedLayer", "UniformLayer", "diffract_te"]
 
 
 @dataclass(frozen=True)
@@ -65,11 +65,29 @@ class GratingLayer:
 
 
 @dataclass(frozen=True)
-class Diffraction:
-    """What a plane wave does to the stack.
+class PatternedLayer:
+    """A layer whose index steps through ``segments`` across one period.
 
-    ``reflection`` is the zeroth order's amplitude, referenced to the top
-    interface, and ``orders`` the integers it was computed for. ``reflectance`` and
+    ``segments`` is a tuple of ``(width, index)`` from ``x = offset`` on, the widths
+    adding to the period, the indices complex if a segment absorbs. It is what a
+    lamellar :class:`GratingLayer` cannot say: a supercell -- a run of teeth and a
+    stretch of plain waveguide in one period, which is a *finite* grating repeated
+    far enough apart that the copies do not see each other.
+    """
+
+    thickness: float
+    segments: tuple[tuple[float, complex], ...]
+    offset: float = 0.0
+
+
+@dataclass(frozen=True)
+class Diffraction:
+    """What a plane wave, or a beam of them, does to the stack.
+
+    ``reflection`` is the amplitude the reflected field returns into the incident
+    one -- ``<incident, reflected> / <incident, incident>``, which for a plane wave
+    is the zeroth order's amplitude -- referenced to the top interface, and
+    ``orders`` the integers it was computed for. ``reflectance`` and
     ``transmittance`` are each order's share of the incident power, zero for an
     evanescent one. ``transmittance`` is what crosses into the substrate, so under
     an absorbing substrate it is what that substrate takes; ``absorbed`` is what a
@@ -87,12 +105,35 @@ class Diffraction:
         return float(1.0 - self.reflectance.sum() - self.transmittance.sum())
 
 
-def _harmonics(layer: UniformLayer | GratingLayer, count: int) -> np.ndarray:
+def _harmonics(
+    layer: UniformLayer | GratingLayer | PatternedLayer, count: int, period: float
+) -> np.ndarray:
     """The permittivity's Fourier harmonics ``eps_h`` for ``h = -count .. count``."""
     h = np.arange(-count, count + 1)
     if isinstance(layer, UniformLayer):
         out = np.zeros(h.size, dtype=np.complex128)
         out[count] = layer.index**2
+        return out
+    if isinstance(layer, PatternedLayer):
+        widths = np.array([width for width, _ in layer.segments], dtype=float)
+        if np.any(widths < 0.0) or abs(widths.sum() - period) > 1e-9 * period:
+            raise ValueError(
+                f"a patterned layer's segments add to {widths.sum()} m, not the period {period} m"
+            )
+        edges = layer.offset + np.concatenate([[0.0], np.cumsum(widths)])
+        out = np.zeros(h.size, dtype=np.complex128)
+        nonzero = h != 0
+        for (width, index), start, end in zip(layer.segments, edges[:-1], edges[1:], strict=True):
+            eps = complex(index) ** 2
+            out[count] += eps * width / period
+            out[nonzero] += (
+                eps
+                * (
+                    np.exp(-2j * np.pi * h[nonzero] * start / period)
+                    - np.exp(-2j * np.pi * h[nonzero] * end / period)
+                )
+                / (2j * np.pi * h[nonzero])
+            )
         return out
     if not 0.0 <= layer.duty <= 1.0:
         raise ValueError(f"the duty cycle lies between 0 and 1, got {layer.duty}")
@@ -117,9 +158,10 @@ def diffract_te(
     sine: float,
     period: float,
     top_index: float,
-    layers: Sequence[UniformLayer | GratingLayer],
+    layers: Sequence[UniformLayer | GratingLayer | PatternedLayer],
     substrate_index: complex,
     harmonics: int = 15,
+    incident: np.ndarray | None = None,
 ) -> Diffraction:
     """Diffraction of a TE plane wave by a layered stack with lamellar grating layers.
 
@@ -127,6 +169,12 @@ def diffract_te(
     number ``M`` of diffraction orders kept either side of the zeroth (``2 M + 1`` in
     all): the answer converges as it grows, and the tests show how fast. The top
     medium must be lossless.
+
+    ``incident`` is the amplitude in each order, ``2 M + 1`` of them, for a beam
+    rather than a plane wave: a beam on a period long enough that its copies do not
+    overlap is a sum of the orders, and the stack is linear. Left ``None`` it is the
+    zeroth order alone. Power is reckoned against the beam's own, so reflectance,
+    transmittance and what a lossy layer kept still add to one.
     """
     if wavelength <= 0.0 or period <= 0.0:
         raise ValueError("the wavelength and the period must both be positive")
@@ -147,12 +195,14 @@ def diffract_te(
     def uniform_modes(index: complex) -> tuple[np.ndarray, np.ndarray]:
         return identity, _forward(kx**2 - index**2)
 
-    def toeplitz(layer: UniformLayer | GratingLayer) -> np.ndarray:
-        eps = _harmonics(layer, 2 * count)
+    def toeplitz(layer: UniformLayer | GratingLayer | PatternedLayer) -> np.ndarray:
+        eps = _harmonics(layer, 2 * count, period)
         idx = orders[:, None] - orders[None, :]
         return eps[idx + 2 * count]
 
-    def modes(layer: UniformLayer | GratingLayer) -> tuple[np.ndarray, np.ndarray]:
+    def modes(
+        layer: UniformLayer | GratingLayer | PatternedLayer,
+    ) -> tuple[np.ndarray, np.ndarray]:
         if isinstance(layer, UniformLayer):
             return uniform_modes(layer.index)
         values, vectors = np.linalg.eig(kx2 - toeplitz(layer))
@@ -189,23 +239,36 @@ def diffract_te(
             reflected = bottom
     passes.reverse()
     zero = int(np.flatnonzero(orders == 0)[0])
-    incident = np.zeros(size, dtype=np.complex128)
-    incident[zero] = 1.0
-    back = reflected @ incident
+    if incident is None:
+        beam = np.zeros(size, dtype=np.complex128)
+        beam[zero] = 1.0
+    else:
+        beam = np.asarray(incident, dtype=np.complex128)
+        if beam.shape != (size,):
+            raise ValueError(f"incident is one amplitude per order, {size}, got {beam.shape}")
+    back = reflected @ beam
 
     # The transmitted amplitudes: pass down through every interface and layer.
-    forward = incident
+    forward = beam
     for i in range(len(joins)):
         forward = passes[i] @ forward
         if i + 1 < len(joins):
             forward = np.exp(-k0 * stack[i + 1][1] * thickness[i + 1]) * forward
     wave_top = np.sqrt(top_index**2 - (kx * 1.0) ** 2 + 0j)
     wave_sub = np.sqrt(substrate_index**2 - kx**2 + 0j)
-    kz0 = float(wave_top[zero].real)
-    reflectance = np.where(wave_top.real > 1e-12, np.abs(back) ** 2 * wave_top.real / kz0, 0.0)
-    transmittance = np.where(wave_sub.real > 1e-12, np.abs(forward) ** 2 * wave_sub.real / kz0, 0.0)
+    delivered = float(
+        np.sum(np.abs(beam) ** 2 * np.where(wave_top.real > 1e-12, wave_top.real, 0.0))
+    )
+    if delivered <= 0.0:
+        raise ValueError("the incident beam carries no propagating power")
+    reflectance = np.where(
+        wave_top.real > 1e-12, np.abs(back) ** 2 * wave_top.real / delivered, 0.0
+    )
+    transmittance = np.where(
+        wave_sub.real > 1e-12, np.abs(forward) ** 2 * wave_sub.real / delivered, 0.0
+    )
     return Diffraction(
-        reflection=complex(back[zero]),
+        reflection=complex(np.vdot(beam, back) / np.vdot(beam, beam)),
         orders=orders,
         reflectance=np.asarray(reflectance, dtype=float),
         transmittance=np.asarray(transmittance, dtype=float),

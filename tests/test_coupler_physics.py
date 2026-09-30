@@ -30,6 +30,7 @@ from maiman.components import EdgeCoupler, GratingCoupler
 from maiman.photonics import (
     _grating_mode_overlap,
     edge_coupler,
+    finite_coupler_response,
     gaussian_coupling,
     gaussian_overlap,
     grating_coupler_centre,
@@ -560,3 +561,107 @@ def test_the_teeth_are_refused_a_depth_the_silicon_cannot_have() -> None:
         grating_coupler_stack(GAP_BAND, **GAP, etch_depth=0.0)
     with pytest.raises(ValueError, match="teeth_harmonics"):
         grating_coupler_stack(GAP_BAND, **GAP, etch_depth=70e-9, teeth_harmonics=0)
+
+
+# -- a finite coupler: the light that leaves down the waveguide (maiman-af0) --------
+
+FINITE: dict[str, Any] = {
+    "sine": math.sin(math.radians(10.0)),
+    "pitch": 611e-9,
+    "duty": 0.5,
+    "etch_depth": 70e-9,
+}
+
+
+def test_a_finite_coupler_accounts_for_every_watt() -> None:
+    """Reflected, transmitted and taken by the absorber sum to one.
+
+    The balance an infinite grating cannot write, since what it couples into the
+    waveguide comes back out of it as a resonance.
+    """
+    result = finite_coupler_response(1.55e-6, periods=12, beam_radius=3e-6, **FINITE)
+    assert result.reflected + result.transmitted + result.coupled == pytest.approx(1.0, abs=1e-9)
+    assert 0.2 < result.coupled < 0.5, "a 220 nm on 2 um oxide coupler takes a third of a beam"
+
+
+def test_the_power_that_leaves_does_not_depend_on_how_it_is_absorbed() -> None:
+    """Move the absorber's length and strength: the coupled power stays within half a percent.
+
+    Past 30 micrometres of waveguide and an extinction of 0.05 the guided light is
+    gone before it can return, so what the absorber took is what left: 0.3562 at
+    30 um and 0.05, 0.3545 at 0.10, 0.3549 at 45 um.
+    """
+    taken = [
+        finite_coupler_response(
+            1.55e-6,
+            periods=15,
+            beam_radius=4e-6,
+            absorber_length=length,
+            absorber_extinction=extinction,
+            **FINITE,
+        ).coupled
+        for length, extinction in ((30e-6, 0.05), (30e-6, 0.10), (45e-6, 0.05))
+    ]
+    assert max(taken) - min(taken) < 0.005
+    assert taken[0] == pytest.approx(0.356, abs=0.01)
+
+
+def test_light_coupled_in_is_radiated_out_again_by_the_grating_it_crosses() -> None:
+    """A fixed 3 um beam: the more grating between it and the end, the less leaves.
+
+    0.37, 0.29, 0.056 for 8, 16 and 32 periods. An infinite grating has no end, so all
+    of what it couples in comes back as radiation -- the resonance the infinite
+    solve shows -- and a finite one lets out only what reaches the end first.
+    """
+    taken = [
+        finite_coupler_response(1.55e-6, periods=periods, beam_radius=3e-6, **FINITE).coupled
+        for periods in (8, 16, 32)
+    ]
+    assert taken[0] > taken[1] > taken[2]
+    assert taken == pytest.approx([0.367, 0.292, 0.056], abs=0.01)
+
+
+def test_a_long_grating_under_a_wide_beam_reflects_what_the_infinite_one_does() -> None:
+    """60 teeth under a 20 um beam: the power sent back is the infinite grating's, to 5 %.
+
+    0.139 against 0.133 -- the infinite solve's whole reflectance, from
+    :func:`maiman.rcwa.diffract_te` by a route that shares only its linear algebra.
+    """
+    from maiman.rcwa import GratingLayer, UniformLayer, diffract_te
+
+    plane = diffract_te(
+        1.55e-6,
+        sine=FINITE["sine"],
+        period=611e-9,
+        top_index=1.0,
+        layers=[
+            GratingLayer(70e-9, 3.476, 1.0, 0.5),
+            UniformLayer(150e-9, 3.476),
+            UniformLayer(2e-6, 1.444),
+        ],
+        substrate_index=3.476,
+        harmonics=20,
+    )
+    finite = finite_coupler_response(1.55e-6, periods=60, beam_radius=20e-6, **FINITE)
+    assert finite.reflected == pytest.approx(float(plane.reflectance.sum()), rel=0.05)
+
+
+def test_the_finite_teeth_reach_the_gap_and_keep_the_coupling_physical() -> None:
+    """Three wavelengths through the coupler with ``finite_teeth``: a real, bounded passband."""
+    wavelengths = np.array([1.545e-6, 1.550e-6, 1.555e-6])
+    common = {**GAP, "length": 10e-6, "etch_depth": 70e-9}
+    finite_s = grating_coupler_stack(C_LIGHT / wavelengths, finite_teeth=True, **common)
+    infinite_s = grating_coupler_stack(C_LIGHT / wavelengths, **common)
+    finite = np.abs(finite_s.s[:, 1, 0]) ** 2
+    infinite = np.abs(infinite_s.s[:, 1, 0]) ** 2
+    assert np.all(finite > 0.0) and np.all(finite <= 1.0)
+    assert not np.allclose(finite, infinite, rtol=0, atol=1e-4), "the finite teeth were used"
+
+
+def test_finite_teeth_need_an_etch_and_a_sensible_cell() -> None:
+    with pytest.raises(ValueError, match="etch_depth"):
+        grating_coupler_stack(GAP_BAND, finite_teeth=True, **GAP)
+    with pytest.raises(ValueError, match="tooth"):
+        finite_coupler_response(1.55e-6, periods=0, beam_radius=3e-6, **FINITE)
+    with pytest.raises(ValueError, match="duty"):
+        finite_coupler_response(1.55e-6, periods=4, beam_radius=3e-6, **{**FINITE, "duty": 1.0})

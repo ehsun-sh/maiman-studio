@@ -300,6 +300,12 @@ class GratingCoupler(_ChipCoupler):
         "0 keeps the bare stack's",
         applies_when="from_stack",
     )
+    finite_teeth = BoolParam(
+        False,
+        doc="Solve the etched teeth as the finite grating they are, the guided light absorbed "
+        "down the waveguide: seconds a wavelength. Needs an etch depth",
+        applies_when="from_stack",
+    )
     fibre_index = Param(
         1.444, unit="", min=1.0, max=2.0, doc="The fibre's own index, for its facet's reflection"
     )
@@ -437,6 +443,7 @@ class GratingCoupler(_ChipCoupler):
             "grating_radius_y": self.si("grating_width") / 2.0,
             "fibre_height": self.si("fibre_height"),
             "etch_depth": self.si("etch_depth") or None,
+            "finite_teeth": self.finite_teeth,
             "fibre_index": self.fibre_index,
             "index_contrast": self.index_contrast if self.from_teeth else None,
             "duty": self.duty,

@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
 import pytest
 
 from maiman.photonics import stack_reflection
-from maiman.rcwa import GratingLayer, UniformLayer, diffract_te
+from maiman.rcwa import GratingLayer, PatternedLayer, UniformLayer, diffract_te
 
 WAVELENGTH = 1.55e-6
 SINE = math.sin(math.radians(8.0))
@@ -262,4 +263,117 @@ def test_it_refuses_what_it_cannot_solve() -> None:
             WAVELENGTH,
             sine=0.1,
             **{**kwargs, "layers": [GratingLayer(70e-9, SILICON, 1.0, 1.5)]},  # type: ignore[arg-type]
+        )
+
+
+# -- patterned layers and beams ---------------------------------------------------
+
+
+def test_a_patterned_layer_of_one_ridge_is_the_lamellar_layer() -> None:
+    """Groove half, ridge, groove half: the ridge centred on zero, as ``GratingLayer`` has it."""
+    period, duty = 630e-9, 0.55
+    lamellar = diffract_te(
+        WAVELENGTH,
+        sine=SINE,
+        period=period,
+        top_index=1.0,
+        layers=[GratingLayer(70e-9, SILICON, 1.0, duty), *teeth()[1:]],
+        substrate_index=SILICON,
+        harmonics=12,
+    )
+    patterned = diffract_te(
+        WAVELENGTH,
+        sine=SINE,
+        period=period,
+        top_index=1.0,
+        layers=[
+            PatternedLayer(
+                70e-9,
+                (
+                    (duty * period / 2.0, SILICON),
+                    ((1.0 - duty) * period, 1.0),
+                    (duty * period / 2.0, SILICON),
+                ),
+            ),
+            *teeth()[1:],
+        ],
+        substrate_index=SILICON,
+        harmonics=12,
+    )
+    assert patterned.reflection == pytest.approx(lamellar.reflection, abs=1e-12)
+
+
+def test_a_patterned_layer_whose_segments_miss_the_period_is_refused() -> None:
+    with pytest.raises(ValueError, match="period"):
+        diffract_te(
+            WAVELENGTH,
+            sine=SINE,
+            period=630e-9,
+            top_index=1.0,
+            layers=[PatternedLayer(70e-9, ((300e-9, SILICON), (200e-9, 1.0)))],
+            substrate_index=SILICON,
+            harmonics=4,
+        )
+
+
+def test_a_beam_of_one_order_is_the_plane_wave() -> None:
+    spike = np.zeros(17, dtype=complex)
+    spike[8] = 1.0
+    plane = diffract_te(
+        WAVELENGTH,
+        sine=SINE,
+        period=630e-9,
+        top_index=1.0,
+        layers=teeth(),
+        substrate_index=SILICON,
+        harmonics=8,
+    )
+    beam = diffract_te(
+        WAVELENGTH,
+        sine=SINE,
+        period=630e-9,
+        top_index=1.0,
+        layers=teeth(),
+        substrate_index=SILICON,
+        harmonics=8,
+        incident=spike,
+    )
+    assert beam.reflection == pytest.approx(plane.reflection, abs=1e-14)
+    assert np.allclose(beam.reflectance, plane.reflectance, atol=1e-14)
+
+
+def test_a_beam_keeps_all_the_power_and_a_lossy_layer_takes_its_share() -> None:
+    """Reflected, transmitted and kept sum to one for a beam as for a plane wave."""
+    orders = np.arange(-10, 11)
+    beam = np.exp(-0.05 * orders**2)
+    result = diffract_te(
+        WAVELENGTH,
+        sine=SINE,
+        period=5e-6,
+        top_index=1.0,
+        layers=[
+            PatternedLayer(70e-9, ((2e-6, SILICON + 0.1j), (3e-6, 1.0))),
+            UniformLayer(150e-9, SILICON),
+            UniformLayer(2e-6, OXIDE),
+        ],
+        substrate_index=SILICON,
+        harmonics=10,
+        incident=beam,
+    )
+    assert 0.0 < result.absorbed < 1.0
+    total = result.reflectance.sum() + result.transmittance.sum() + result.absorbed
+    assert total == pytest.approx(1.0, abs=1e-12)
+
+
+def test_a_beam_needs_one_amplitude_per_order() -> None:
+    with pytest.raises(ValueError, match="one amplitude per order"):
+        diffract_te(
+            WAVELENGTH,
+            sine=SINE,
+            period=630e-9,
+            top_index=1.0,
+            layers=teeth(),
+            substrate_index=SILICON,
+            harmonics=4,
+            incident=np.ones(3),
         )

@@ -716,10 +716,18 @@ Stated in the code where each approximation is made, and collected here:
   of it. With `etch_depth` the chip's reflection there is the grating's own, solved by
   `maiman.rcwa` (rigorous coupled waves, TE, Moharam et al. 1995): it is exactly the bare stack's
   with no grating, conserves power to rounding, and finer than the wavelength is Rytov's average
-  permittivity to `(period / lambda)^2`. It is the zeroth order of an *infinite* grating, so its
-  guided-mode resonance is narrower than a real coupler's and takes no power away down the
-  waveguide -- the ripple's phase is the grating's, its detail at the passband's peak a bound,
-  still held to what the grating leaves of each pass.
+  permittivity to `(period / lambda)^2`. By default it is the zeroth order of an *infinite*
+  grating, so its guided-mode resonance is narrower than a real coupler's and takes no power away
+  down the waveguide -- the ripple's phase is the grating's, its detail at the passband's peak a
+  bound, still held to what the grating leaves of each pass. With `finite_teeth` the grating is
+  the `length / period` teeth it has: a supercell of them and a waveguide whose loss rises and
+  falls as `sin^2`, lit by the fibre's own beam (`finite_coupler_response`, layers that step
+  through segments and an incident beam of orders in `maiman.rcwa`). Reflected, transmitted and
+  absorbed sum to one exactly, and the absorbed *is* what left down the waveguide: it holds to
+  half a percent as the absorber's length and strength move, falls from 0.37 to 0.06 as a fixed
+  beam is given 8 to 32 periods to be radiated out again, and a long grating under a wide beam
+  sends back the infinite grating's power to 5 %. Its reflection is converged to about 3 %, not
+  exact; a solve is seconds a wavelength, and the guided mode is TE.
 * **Transceivers.** Bands within half the sample rate of each other beat — on a diode, and
   against a local oscillator — each field late by its own walk-off; farther apart they add as
   powers, which is the rejection any receiver's bandwidth performs anyway. The carrier phase a
@@ -784,8 +792,6 @@ next, in order:
    powers it is good to
    (0.89 of the split-step at 10 mW over 10 km, and 1.25 over two such spans where terms nearly
    cancel), and closing that gap is the largest physical approximation under [Open](#open).
-3. **The rest of [Open](#open)**, each with the closed-form test that shows it did something: a
-   finite grating coupler in the gap -- the coupled power leaving down the waveguide -- in place of
-   the infinite one `etch_depth` solves.
+3. **The rest of [Open](#open)**, each with the closed-form test that shows it did something.
 
 Criticism of the decisions above §10 is still worth more than any of these.

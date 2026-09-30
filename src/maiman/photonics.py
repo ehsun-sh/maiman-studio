@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from typing import Any
 
@@ -45,7 +45,7 @@ from .modes import (
     core_modes,
     lpg_coupling,
 )
-from .rcwa import GratingLayer, UniformLayer, diffract_te
+from .rcwa import GratingLayer, PatternedLayer, UniformLayer, diffract_te
 from .units import C_LIGHT, frequency_to_wavelength
 from .vector_modes import VectorMode, vector_cladding_modes, vector_core_modes, vector_coupling
 
@@ -2681,6 +2681,7 @@ def grating_coupler_stack(
     extinction_db: float = 0.0,
     etch_depth: float | None = None,
     teeth_harmonics: int = 10,
+    finite_teeth: bool = False,
     ports: tuple[str, str] = ("in", "out"),
 ) -> SMatrix:
     """A grating coupler's passband computed from its vertical stack, not declared.
@@ -2756,6 +2757,18 @@ def grating_coupler_stack(
     the passband's peak is a bound. Only with ``fibre_height`` above zero is
     there a gap for it to act in. The coupling is capped at unity against the
     facet's transmission, which it does not carry.
+
+    **A finite coupler.** With ``finite_teeth`` the grating is the ``length /
+    period`` teeth it has, not an infinite run of them: a supercell of those teeth
+    and a stretch of waveguide whose loss rises and falls smoothly, so the guided
+    light leaving down the waveguide is absorbed instead of coming back round, and
+    the fibre's beam -- its footprint, at its position -- is what lights it.
+    :func:`finite_coupler_response` says what comes of that: the beam's
+    reflection, and the power the absorber took, which *is* the power that
+    left down the waveguide. Reflected, transmitted and taken sum to one exactly,
+    so the mirror the gap sees no longer needs holding to what the grating leaves
+    (it still is, as a check). It costs a solve of a few hundred orders per
+    wavelength, seconds each, which is why it is a setting.
     """
     if etch_depth is not None and not 0.0 < etch_depth <= silicon_thickness:
         raise ValueError(
@@ -2764,6 +2777,8 @@ def grating_coupler_stack(
         )
     if teeth_harmonics < 1:
         raise ValueError(f"teeth_harmonics is at least one, got {teeth_harmonics}")
+    if finite_teeth and etch_depth is None:
+        raise ValueError("finite_teeth solves the etched teeth, so it needs an etch_depth")
     if period <= 0.0:
         raise ValueError(f"period must be positive, got {period} m")
     if strength <= 0.0 or length <= 0.0:
@@ -2879,6 +2894,15 @@ def grating_coupler_stack(
                 "duty": duty,
                 "harmonics": teeth_harmonics,
                 "sine": fibre_sine,
+                **(
+                    {
+                        "periods": max(1, round(length / period)),
+                        "radius": footprint,
+                        "centre": fibre_position,
+                    }
+                    if finite_teeth
+                    else {}
+                ),
             }
         ),
     )
@@ -2925,11 +2949,121 @@ def bounded_chip_reflection(chip: np.ndarray, coupled: np.ndarray) -> np.ndarray
     return np.asarray(np.where(over, chip * scale, chip))
 
 
+@dataclass(frozen=True)
+class FiniteCoupler:
+    """What a beam does to a grating coupler of finitely many teeth."""
+
+    reflection: complex
+    """The amplitude the reflected field returns into the incident beam."""
+    reflected: float
+    """Power the stack sends back up, all orders, of the beam's."""
+    transmitted: float
+    """Power that crosses into the substrate."""
+    coupled: float
+    """Power the absorber took, which is the power that left down the waveguide."""
+
+
+def finite_coupler_response(
+    wavelength: float,
+    *,
+    sine: float,
+    pitch: float,
+    periods: int,
+    duty: float,
+    etch_depth: float,
+    beam_radius: float,
+    beam_centre: float | None = None,
+    top_index: float = 1.0,
+    silicon_index: float = 3.476,
+    silicon_thickness: float = 220e-9,
+    box_index: float = 1.444,
+    box_thickness: float = 2e-6,
+    substrate_index: complex = 3.476,
+    absorber_length: float = 30e-6,
+    absorber_extinction: float = 0.05,
+    harmonics: int | None = None,
+) -> FiniteCoupler:
+    """A beam on a grating coupler of ``periods`` teeth, what leaves down the waveguide taken.
+
+    A supercell: ``periods`` etched teeth, then ``absorber_length`` of plain waveguide
+    whose loss rises and falls as ``sin^2`` -- smoothly, because a step in loss is a
+    mirror -- repeated far enough apart that neighbours do not talk. A beam on it,
+    Gaussian of amplitude radius ``beam_radius`` at ``beam_centre`` from the first
+    tooth (the grating's middle if not given), is a sum of the supercell's orders,
+    and :func:`maiman.rcwa.diffract_te` gives what the stack does to each. Where an
+    infinite grating (:func:`~maiman.rcwa.diffract_te` alone) has no way to lose the
+    light it couples into the waveguide -- it comes back out as a resonance -- here it
+    is carried off and taken, so ``coupled`` is a number and the power balances:
+    ``reflected + transmitted + coupled = 1``.
+
+    Converged, not exact: ``coupled`` holds to about 1.5 % and the reflection to
+    about 3 % as the absorber's length and strength are changed (the tests move
+    both), and ``harmonics`` defaults to enough orders for the silicon's own
+    propagating ones with margin. The guided mode is TE and the teeth are cut a
+    fixed ``etch_depth`` into the silicon, the grooves filled with the top medium.
+    """
+    if periods < 1:
+        raise ValueError(f"a grating has at least one tooth, got {periods}")
+    if not 0.0 < duty < 1.0:
+        raise ValueError(f"the duty cycle lies strictly between 0 and 1, got {duty}")
+    if not 0.0 < etch_depth <= silicon_thickness:
+        raise ValueError("the etch cannot be deeper than the silicon, or nothing")
+    if beam_radius <= 0.0 or absorber_length <= 0.0 or absorber_extinction < 0.0:
+        raise ValueError("the beam and the absorber need positive sizes")
+    grating = periods * pitch
+    cell = grating + absorber_length
+    segments = max(8, round(absorber_length / 2e-6))
+    step = absorber_length / segments
+    ramp = tuple(
+        (
+            step,
+            complex(
+                silicon_index,
+                absorber_extinction * math.sin(math.pi * (i + 0.5) / segments) ** 2,
+            ),
+        )
+        for i in range(segments)
+    )
+    teeth: list[tuple[float, complex]] = []
+    for _ in range(periods):
+        teeth += [(duty * pitch, silicon_index), ((1.0 - duty) * pitch, top_index)]
+    layers: list[GratingLayer | PatternedLayer | UniformLayer] = [
+        PatternedLayer(etch_depth, (*teeth, *ramp)),
+        PatternedLayer(silicon_thickness - etch_depth, ((grating, silicon_index), *ramp)),
+        UniformLayer(box_thickness, box_index),
+    ]
+    order = harmonics or (
+        math.ceil(1.4 * max(silicon_index, abs(substrate_index)) * cell / wavelength) + 8
+    )
+    orders = np.arange(-order, order + 1)
+    spacing = 2.0 * math.pi / cell
+    centre = grating / 2.0 if beam_centre is None else beam_centre
+    beam = np.exp(-0.25 * (orders * spacing * beam_radius) ** 2) * np.exp(
+        -1j * orders * spacing * centre
+    )
+    result = diffract_te(
+        wavelength,
+        sine=sine,
+        period=cell,
+        top_index=top_index,
+        layers=layers,
+        substrate_index=substrate_index,
+        harmonics=order,
+        incident=beam,
+    )
+    return FiniteCoupler(
+        reflection=result.reflection,
+        reflected=float(result.reflectance.sum()),
+        transmitted=float(result.transmittance.sum()),
+        coupled=result.absorbed,
+    )
+
+
 def _teeth_reflection(
     wavelength: np.ndarray,
     *,
     top_index: float,
-    teeth: dict[str, float],
+    teeth: dict[str, Any],
     **stack: object,
 ) -> np.ndarray:
     """The zeroth order of the etched silicon on the oxide, seen from the fibre [amplitude].
@@ -2942,6 +3076,30 @@ def _teeth_reflection(
     silicon_index = float(stack["silicon_index"])  # type: ignore[arg-type]
     silicon_thickness = float(stack["silicon_thickness"])  # type: ignore[arg-type]
     depth = float(teeth["etch_depth"])
+    if "periods" in teeth:
+        beyond = _passive(stack["substrate_index"], "the substrate's index")  # type: ignore[arg-type]
+        return np.array(
+            [
+                finite_coupler_response(
+                    float(lam),
+                    sine=float(teeth["sine"]),
+                    pitch=float(teeth["period"]),
+                    periods=int(teeth["periods"]),
+                    duty=float(teeth["duty"]),
+                    etch_depth=depth,
+                    beam_radius=float(np.asarray(teeth["radius"])[index]),
+                    beam_centre=float(teeth["centre"]),
+                    top_index=top_index,
+                    silicon_index=silicon_index,
+                    silicon_thickness=silicon_thickness,
+                    box_index=float(stack["box_index"]),  # type: ignore[arg-type]
+                    box_thickness=float(stack["box_thickness"]),  # type: ignore[arg-type]
+                    substrate_index=beyond,
+                ).reflection
+                for index, lam in enumerate(wavelength)
+            ],
+            dtype=np.complex128,
+        )
     layers: list[GratingLayer | UniformLayer] = [
         GratingLayer(depth, silicon_index, top_index, float(teeth["duty"])),
         UniformLayer(silicon_thickness - depth, silicon_index),
@@ -2975,7 +3133,7 @@ def _fibre_gap_etalon(
     top_index: float,
     fibre_index: float,
     coupled: np.ndarray,
-    teeth: dict[str, float] | None = None,
+    teeth: dict[str, Any] | None = None,
     **stack: object,
 ) -> np.ndarray:
     """``|1 / (1 - rho)|^2``: what the gap between fibre and chip does to the coupling.
