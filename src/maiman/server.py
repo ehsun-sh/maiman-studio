@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import socket
 import sys
 import threading
 import time
@@ -397,8 +398,48 @@ class StudioHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        if self._unread():
+            # The body this request declared was never read, so where the next
+            # request starts is lost: on a kept-alive connection its first bytes
+            # would be the tail of this one. Say so, and hang up after the reply.
+            self.send_header("Connection", "close")
+            self.close_connection = True
         self.end_headers()
         self.wfile.write(body)
+        if self.close_connection and self._unread():
+            self._linger()
+
+    def _unread(self) -> bool:
+        """Whether the request declared a body that has not been read."""
+        if getattr(self, "_body_read", False):
+            return False
+        try:
+            return int(self.headers.get("Content-Length", "0")) > 0
+        except ValueError:
+            return False
+
+    def _linger(self) -> None:
+        """Hang up without a reset: finish the reply, then drain what the client is still sending.
+
+        Closing a socket with unread data in its buffer sends a reset, and a reset can
+        reach the client before the reply does -- it sees the connection aborted, not the
+        413. So the write side is shut first, which sends the reply and an end of stream,
+        and what arrives after is read and thrown away, for a short while and up to a
+        limit, until the client closes its end.
+        """
+        try:
+            self.wfile.flush()
+            self.connection.shutdown(socket.SHUT_WR)
+            self.connection.settimeout(0.5)
+            deadline = time.monotonic() + 0.5
+            drained = 0
+            while drained < 1 << 20 and time.monotonic() < deadline:
+                chunk = self.connection.recv(65536)
+                if not chunk:
+                    break
+                drained += len(chunk)
+        except OSError:
+            pass
 
     def _fail(self, error: RequestError) -> None:
         payload: dict[str, Any] = {"error": error.message}
@@ -426,6 +467,7 @@ class StudioHandler(BaseHTTPRequestHandler):
                 f"request body of {length} bytes exceeds the limit of {MAX_BODY}",
             )
         raw = self.rfile.read(length)
+        self._body_read = True
         try:
             return json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -530,6 +572,7 @@ class StudioHandler(BaseHTTPRequestHandler):
         self.wfile.flush()
 
     def do_POST(self) -> None:
+        self._body_read = False
         route = self.path.split("?", 1)[0].rstrip("/")
         try:
             if route == "/api/run":

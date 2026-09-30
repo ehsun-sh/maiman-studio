@@ -13,6 +13,7 @@ import argparse
 import itertools
 import json
 import math
+import socket
 import urllib.error
 import urllib.request
 from collections.abc import Iterator
@@ -1103,3 +1104,98 @@ def test_the_bare_command_asks_for_a_subcommand(capsys: pytest.CaptureFixture[st
         cli.main([])
     assert caught.value.code == 2
     assert "command" in capsys.readouterr().err
+
+
+# -- a reply that leaves a request's body unread closes the connection (maiman-2d0) --
+
+
+def raw_reply(
+    session: str, request: bytes, *, wait: float = 3.0
+) -> tuple[int, dict[str, str], bool]:
+    """Send raw bytes; return the status, the headers, and whether the server then hung up.
+
+    Reads the reply as its Content-Length says, then waits for what a server that
+    is done with the connection does: send EOF. A server that keeps it open leaves
+    ``recv`` to time out, which is the answer ``False`` records.
+    """
+    host, port = session.removeprefix("http://").split(":")
+    with socket.create_connection((host, int(port)), timeout=wait) as connection:
+        connection.sendall(request)
+        received = b""
+        while b"\r\n\r\n" not in received:
+            chunk = connection.recv(4096)
+            if not chunk:
+                break
+            received += chunk
+        head, _, body = received.partition(b"\r\n\r\n")
+        lines = head.decode("latin-1").split("\r\n")
+        status = int(lines[0].split()[1])
+        headers = {
+            name.strip().lower(): value.strip()
+            for name, _, value in (line.partition(":") for line in lines[1:])
+        }
+        while len(body) < int(headers.get("content-length", "0")):
+            body += connection.recv(4096)
+        try:
+            hung_up = connection.recv(4096) == b""
+        except TimeoutError:
+            hung_up = False
+        return status, headers, hung_up
+
+
+def post_request(path: str, *, declared: int, sent: bytes = b"{}") -> bytes:
+    head = (
+        f"POST {path} HTTP/1.1\r\nHost: test\r\nContent-Type: application/json\r\n"
+        f"Content-Length: {declared}\r\n\r\n"
+    )
+    return head.encode("ascii") + sent
+
+
+def test_an_oversized_body_is_answered_and_the_connection_closed(session: str) -> None:
+    """413 from the declared length, ``Connection: close``, then EOF -- not a keep-alive left
+    open with a body that will never be read, where the next request would be misparsed."""
+    status, headers, hung_up = raw_reply(session, post_request("/api/run", declared=MAX_BODY + 1))
+    assert status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+    assert headers.get("connection", "").lower() == "close"
+    assert hung_up
+
+
+def test_an_unknown_route_with_a_body_closes_the_connection_too(session: str) -> None:
+    """The body was not read here either, so the same holds for any error on a POST."""
+    status, headers, hung_up = raw_reply(session, post_request("/api/nothing", declared=2))
+    assert status == HTTPStatus.NOT_FOUND
+    assert headers.get("connection", "").lower() == "close"
+    assert hung_up
+
+
+def test_a_request_whose_body_was_read_keeps_the_connection(session: str) -> None:
+    """A normal exchange is untouched: no ``Connection: close``, and the socket stays open."""
+    body = json.dumps({"nodes": [], "connections": []}).encode("utf-8")
+    status, headers, hung_up = raw_reply(
+        session, post_request("/api/run", declared=len(body), sent=body), wait=1.0
+    )
+    assert status in (HTTPStatus.OK, HTTPStatus.BAD_REQUEST)
+    assert headers.get("connection", "").lower() != "close"
+    assert not hung_up
+
+
+def test_two_requests_share_one_connection_after_a_clean_exchange(session: str) -> None:
+    host, port = session.removeprefix("http://").split(":")
+    request = b"GET /api/health HTTP/1.1\r\nHost: test\r\n\r\n"
+    with socket.create_connection((host, int(port)), timeout=5.0) as connection:
+        for _ in range(2):
+            connection.sendall(request)
+            received = b""
+            while b"\r\n\r\n" not in received:
+                received += connection.recv(4096)
+            head, _, body = received.partition(b"\r\n\r\n")
+            length = int(
+                next(
+                    line.split(":")[1]
+                    for line in head.decode("latin-1").split("\r\n")
+                    if line.lower().startswith("content-length")
+                )
+            )
+            while len(body) < length:
+                body += connection.recv(4096)
+            assert head.startswith(b"HTTP/1.1 200")
