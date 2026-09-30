@@ -22,9 +22,18 @@ import numpy as np
 import pytest
 
 from maiman.components import Fiber
-from maiman.kernels import propagate_dispersion
+from maiman.kernels import apply_pmd, differential_group_delay, propagate_dispersion
 from maiman.signals import Band, OpticalSignal
-from test_fwm_tones import ANCHOR, CTX, GAMMA, SPACING, split_step, two_pumps
+from test_fwm_tones import (
+    ANCHOR,
+    CTX,
+    GAMMA,
+    SPACING,
+    jones_pumps,
+    pmd_chain,
+    split_step,
+    two_pumps,
+)
 
 
 def link(
@@ -191,9 +200,7 @@ def test_carriers_off_the_windows_bins_are_refused_with_the_reason() -> None:
         {"tone_solver": True},
         {"pump_phase": True},
         {"cascaded_fwm": True},
-        {"cross_polarization": True},
         {"mixing_steps": 4.0},
-        {"pmd_coefficient": 0.1},
         {"raman_gain_slope": 0.028},
     ],
 )
@@ -201,3 +208,113 @@ def test_it_is_refused_beside_what_it_replaces(other: dict[str, object]) -> None
     with pytest.raises(ValueError, match="composite_fwm"):
         Fiber(composite_fwm=True, **other).validate()  # type: ignore[arg-type]
     Fiber(composite_fwm=True).validate()
+
+
+# -- two polarizations and PMD on the grid -------------------------------------------
+
+JONES = (math.cos(0.4), 1j * math.sin(0.4))
+
+
+@pytest.mark.parametrize("coherent", [True, False])
+@pytest.mark.parametrize("pump", [1e-3, 20e-3])
+def test_two_polarizations_land_on_the_vector_tone_solver(coherent: bool, pump: float) -> None:
+    """Elliptical pumps, the first product's Jones vector, composite against tone solver: 2e-3.
+
+    The coupled split-step's phase-only form, or with ``coherent_polarization`` its
+    circular-basis step, against the isotropic tensor written out over the tones.
+    """
+
+    def product(**settings: object) -> tuple[complex, complex]:
+        out = Fiber(
+            length=10.0,
+            attenuation=0.0,
+            dispersion=2.0,
+            nonlinearity=GAMMA,
+            mixing_floor=250.0,
+            cross_polarization=True,
+            coherent_polarization=coherent,
+            label="span",
+            **settings,  # type: ignore[arg-type]
+        ).run(CTX, {"in": jones_pumps(pump, JONES)})["out"]
+        assert isinstance(out, OpticalSignal)
+        band = next(b for b in out.bands if abs(b.f0 - (ANCHOR - SPACING)) < 1e3)
+        return complex(np.mean(band.Ex)), complex(np.mean(band.Ey))
+
+    grid = product(composite_fwm=True)
+    tones = product(tone_solver=True)
+    for axis in (0, 1):
+        assert abs(grid[axis]) == pytest.approx(abs(tones[axis]), rel=2e-3)
+
+
+def pmd_span(nonlinearity: float = 1e-12, floor: float = 0.0, **settings: object) -> Fiber:
+    return Fiber(
+        label="pmd-span",
+        length=20.0,
+        attenuation=0.0,
+        dispersion=0.0,
+        nonlinearity=nonlinearity,
+        mixing_floor=floor,
+        composite_fwm=True,
+        cross_polarization=True,
+        pmd_coefficient=0.5,
+        pmd_sections=12.0,
+        **settings,  # type: ignore[arg-type]
+    )
+
+
+@pytest.mark.parametrize("interleave", [False, True])
+def test_one_band_meets_the_chain_as_apply_pmd_gives_it(interleave: bool) -> None:
+    """A band at the grid's centre through the chain: ``apply_pmd``, to rounding.
+
+    With nothing nonlinear the chain is the same whether it sits after the Kerr effect
+    or between pieces of the span, and the same as the kernel gives the band alone.
+    """
+    band = jones_pumps(1e-6, JONES).bands[0]
+    out = pmd_span(interleave_pmd=interleave).run(CTX, {"in": OpticalSignal(bands=(band,))})["out"]
+    assert isinstance(out, OpticalSignal)
+    ex, ey = apply_pmd(band.Ex, band.Ey, band.fs, pmd_chain("pmd-span", 0.5, 20.0, 12))
+    assert np.linalg.norm(out.bands[0].Ex - ex) < 1e-9 * np.linalg.norm(ex)
+    assert np.linalg.norm(out.bands[0].Ey - ey) < 1e-9 * np.linalg.norm(ey)
+
+
+def test_two_carriers_meet_the_chain_at_their_own_frequencies() -> None:
+    """Unlike the tone solver's, a chain on the grid rotates each carrier by what it does there.
+
+    100 GHz apart, a 2 ps chain turns their phases by half a radian more between them,
+    so the two bands do not come out rotated alike: each differs from the rest-frame
+    rotation by tenths, where at the grid's centre it would not.
+    """
+    signal = jones_pumps(1e-6, JONES)
+    out = pmd_span().run(CTX, {"in": signal})["out"]
+    assert isinstance(out, OpticalSignal)
+    chain = pmd_chain("pmd-span", 0.5, 20.0, 12)
+    gaps = []
+    for source, result in zip(signal.bands, out.bands, strict=False):
+        ex, _ = apply_pmd(source.Ex, source.Ey, source.fs, chain)
+        gaps.append(np.linalg.norm(result.Ex - ex) / np.linalg.norm(ex))
+    assert min(gaps) > 0.05
+
+
+def test_the_composite_reports_the_dgd_it_drew_and_keeps_the_power() -> None:
+    generator = np.random.default_rng(9)
+    bands = (
+        modulated(5e-3, ANCHOR, generator, 8e9),
+        modulated(5e-3, ANCHOR + SPACING, generator, 8e9),
+    )
+    span = pmd_span(GAMMA, 250.0, interleave_pmd=True)
+    result = span.run(CTX, {"in": OpticalSignal(bands=bands)})
+    diagnostics = result["diagnostics"]
+    assert diagnostics.differential_group_delay == pytest.approx(
+        differential_group_delay(pmd_chain("pmd-span", 0.5, 20.0, 12)), rel=1e-12
+    )
+    out = result["out"]
+    assert isinstance(out, OpticalSignal)
+    launched = sum(float(np.mean(np.abs(b.Ex) ** 2)) for b in bands)
+    total = sum(float(np.mean(np.abs(b.Ex) ** 2 + np.abs(b.Ey) ** 2)) for b in out.bands)
+    assert total == pytest.approx(launched, rel=1e-3)
+
+
+def test_pmd_needs_the_two_polarizations_together_on_the_grid() -> None:
+    with pytest.raises(ValueError, match="cross_polarization"):
+        Fiber(composite_fwm=True, pmd_coefficient=0.1).validate()
+    Fiber(composite_fwm=True, pmd_coefficient=0.1, cross_polarization=True).validate()

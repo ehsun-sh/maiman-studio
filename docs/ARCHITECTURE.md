@@ -712,10 +712,17 @@ Stated in the code where each approximation is made, and collected here:
   constants (5e-4), on the one-band split-step over up to four spans for the first two products
   (2e-3, where the series was 2.3 times off), on `propagate_dispersion` for a modulated band in
   the linear limit (1e-9), and on the time-domain product `-i gamma L E_b^2 E_a*` a dispersion-free
-  fibre makes of modulated tones, sample for sample to 1 %. Its limits: each axis is its own
-  scalar problem (no `cross_polarization`, PMD or Raman), carriers must sit on the window's
-  frequency bins or it refuses, a band is taken to lie within half the distance to its nearest
-  neighbour, and the cost is the comb's sampling rate.
+  fibre makes of modulated tones, sample for sample to 1 %. With `cross_polarization` the grid
+  carries both axes through the coupled split-step -- its phase-only form, or with
+  `coherent_polarization` the isotropic tensor's circular-basis step -- and lands on the vector
+  tone solver to 2e-3 at 1 and 20 mW for both. PMD draws the split-step's own chain and acts
+  across the whole grid, so each carrier meets it at its own frequency, which the tone solver's
+  rest-frame rotation cannot say: a single band comes out as `apply_pmd` gives it to rounding,
+  and two carriers 100 GHz apart are rotated alike no longer. Its limits: no Raman, carriers must
+  sit on the window's frequency bins or it refuses, a band is taken to lie within half the
+  distance to its nearest neighbour (a product is three times as wide as the modulation it
+  makes), the PMD phases of the carriers are kept rather than stripped, and the cost is the
+  comb's sampling rate.
 * **Gratings and modes.** The average index a writing process raises is carried when a grating's
   `dc_compensated` flag is off: as Erdogan's self-coupling for the Bragg and long-period gratings,
   and for the uniform tilted one as the fibre it leaves, its core raised and every mode solved
@@ -799,10 +806,10 @@ next, in order:
    against them skip in CI. Past the shaper the path is held to a digest everywhere, and
    `RELEASING.md` runs the rest with `MAIMAN_REQUIRE_SPEC=1` before each release; the shaper
    itself is checked on every push only once the `specification` job in `ci.yml` has a runner.
-2. **Give the composite grid what it cannot yet take.** It is exact for modulated bands and
-   scalar per axis: a second polarization coupled by the Kerr tensor, PMD and Raman are the
-   tone solver's and not yet its, and the perturbative series still serves a modulated comb where
-   the cost of the grid is too much (0.89 of the split-step at 10 mW over 10 km).
+2. **Give the composite grid Raman.** It is exact for modulated bands, with both polarizations and
+   PMD; stimulated Raman scattering is the tone solver's and not yet its, since the grid's
+   split-step has no time-domain Raman term, and the perturbative series still serves a modulated
+   comb where the cost of the grid is too much (0.89 of the split-step at 10 mW over 10 km).
 3. **The rest of [Open](#open)**, each with the closed-form test that shows it did something.
 
 Criticism of the decisions above §10 is still worth more than any of these.

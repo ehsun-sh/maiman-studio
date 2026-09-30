@@ -427,17 +427,20 @@ class Fiber(Component):
                 ("pump_phase", self.pump_phase),
                 ("carry_phase", self.carry_phase),
                 ("cascaded_fwm", self.cascaded_fwm),
-                ("cross_polarization", self.cross_polarization),
                 ("mixing_steps", self.mixing_steps > 1.0),
-                ("pmd_coefficient", self.pmd_coefficient > 0.0),
                 ("raman_gain_slope", self.raman_gain_slope > 0.0),
             ):
                 if on:
                     raise ValueError(
                         f"{self.label or 'Fiber'}: composite_fwm split-steps the whole comb on one "
-                        f"grid itself, per polarization, and has nothing for {name} to do or no "
-                        "way to carry it. Turn one off."
+                        f"grid itself and has nothing for {name} to do or no way to carry it. "
+                        "Turn one off."
                     )
+            if self.pmd_coefficient > 0.0 and not self.cross_polarization:
+                raise ValueError(
+                    f"{self.label or 'Fiber'}: PMD rotates the two polarizations together, so "
+                    "composite_fwm needs cross_polarization on to carry it"
+                )
         if self.tone_solver:
             for name, on in (
                 ("pump_phase", self.pump_phase),
@@ -873,11 +876,17 @@ class Fiber(Component):
         finished: list[np.ndarray] = []
         steps = 0
         peak = 0.0
-        for axis in (0, 1):
+        sections: tuple[PMDSection, ...] = ()
+        realised_dgd = 0.0
+        if self.mean_dgd() > 0.0:
+            # The chain the split-step draws, from the same stream: the same fibre.
+            sections = random_pmd_sections(
+                self.mean_dgd(), int(self.pmd_sections), ctx.rng("Fiber", self.label, "pmd")
+            )
+            realised_dgd = differential_group_delay(sections)
+
+        def combine(axis: int) -> np.ndarray:
             fields = [np.asarray(b.Ex if axis == 0 else b.Ey, dtype=np.complex128) for b in bands]
-            if not any(np.any(field != 0.0) for field in fields):
-                finished.append(np.zeros(samples * factor, dtype=np.complex128))
-                continue
             combined = np.zeros(samples * factor, dtype=np.complex128)
             for band, field in zip(bands, fields, strict=True):
                 # A band is stored without the phase its carrier has turned through --
@@ -897,19 +906,53 @@ class Fiber(Component):
                     half_width=half_width,
                 )
                 combined += band_to_grid(filtered * behind, factor) * carrier(band.f0 - centre_of)
-            (out,), diagnostics = propagate_coupled_ssfm(
-                (combined,),
+            return combined
+
+        if self.cross_polarization:
+            # One problem: the two axes of the sum, coupled as the split-step couples them
+            # -- the phase-only form, or with ``coherent_polarization`` the isotropic
+            # tensor's coherent term too -- and the waveplate chain, where there is one,
+            # acting across the whole comb on the grid, where each carrier meets it at
+            # its own frequency: between the pieces of the span with ``interleave_pmd``,
+            # after the Kerr effect otherwise.
+            interleaved = bool(sections) and self.interleave_pmd
+            (out_x, out_y), diagnostics = propagate_coupled_ssfm(
+                (combine(0), combine(1)),
                 grid_rate,
-                beta2=(beta2,),
-                walkoff=(0.0,),
+                beta2=(beta2, beta2),
+                walkoff=(0.0, 0.0),
                 gamma=gamma,
                 alpha=alpha,
                 distance=distance,
+                polarization=(0, 1),
+                pairs=((0, 1),) if (self.coherent_polarization or interleaved) else None,
+                coherent_polarization=self.coherent_polarization,
+                pmd=sections if interleaved else None,
                 max_step=step,
             )
-            finished.append(out)
-            steps = max(steps, diagnostics.steps)
-            peak = max(peak, diagnostics.peak_nonlinear_phase)
+            if sections and not interleaved:
+                out_x, out_y = apply_pmd(out_x, out_y, grid_rate, sections)
+            finished = [out_x, out_y]
+            steps, peak = diagnostics.steps, diagnostics.peak_nonlinear_phase
+        else:
+            for axis in (0, 1):
+                combined = combine(axis)
+                if not np.any(combined != 0.0):
+                    finished.append(np.zeros(samples * factor, dtype=np.complex128))
+                    continue
+                (out,), diagnostics = propagate_coupled_ssfm(
+                    (combined,),
+                    grid_rate,
+                    beta2=(beta2,),
+                    walkoff=(0.0,),
+                    gamma=gamma,
+                    alpha=alpha,
+                    distance=distance,
+                    max_step=step,
+                )
+                finished.append(out)
+                steps = max(steps, diagnostics.steps)
+                peak = max(peak, diagnostics.peak_nonlinear_phase)
 
         dtype = ctx.complex_dtype
         present = [band.f0 for band in bands]
@@ -959,6 +1002,7 @@ class Fiber(Component):
             peak_nonlinear_phase=peak,
             mixing_products=len(products),
             fwm_depletion=made / total if total > 0.0 else 0.0,
+            differential_group_delay=realised_dgd,
         )
         return {
             "out": OpticalSignal(
