@@ -411,7 +411,6 @@ class Fiber(Component):
                 ("carry_phase", self.carry_phase),
                 ("cascaded_fwm", self.cascaded_fwm),
                 ("mixing_steps", self.mixing_steps > 1.0),
-                ("pmd_coefficient", self.pmd_coefficient > 0.0),
             ):
                 if on:
                     raise ValueError(
@@ -419,6 +418,11 @@ class Fiber(Component):
                         f"equations itself -- cross-phase, mixing to every order, depletion -- "
                         f"and has nothing for {name} to do or no way to carry it. Turn one off."
                     )
+        if self.tone_solver and self.pmd_coefficient > 0.0 and not self.cross_polarization:
+            raise ValueError(
+                f"{self.label or 'Fiber'}: PMD rotates the two polarizations together, so the "
+                "tone solver needs cross_polarization on to carry it"
+            )
         if self.mixing_steps > 1.0 and self.pmd_coefficient > 0.0:
             raise ValueError(
                 f"{self.label or 'Fiber'}: mixing_steps cuts the span into pieces, and each "
@@ -631,22 +635,55 @@ class Fiber(Component):
                 profile="triangle" if narrow else "silica",
                 photon_conserving=not narrow,
             )
+        sections: tuple[PMDSection, ...] = ()
+        realised_dgd = 0.0
+        if self.mean_dgd() > 0.0:
+            # The chain the split-step draws, from the same stream: the same fibre.
+            sections = random_pmd_sections(
+                self.mean_dgd(), int(self.pmd_sections), ctx.rng("Fiber", self.label, "pmd")
+            )
+            realised_dgd = differential_group_delay(sections)
         if self.cross_polarization:
             # One problem: each tone a Jones vector, the two axes coupled by the
             # isotropic Kerr tensor -- or its phase-only form without the coherent
             # term, as the split-step's own default has it.
-            finish, steps = fwm_tone_solve(
-                offsets,
-                start,
-                beta2=beta2,
-                gamma=gamma,
-                alpha=alpha,
-                distance=distance,
-                accumulated_gvd=signal.accumulated_gvd,
-                triples=triples,
-                coherent=self.coherent_polarization,
-                raman=coupling,
-            )
+            def solve(
+                amplitudes: np.ndarray, length: float, behind: float
+            ) -> tuple[np.ndarray, int]:
+                return fwm_tone_solve(
+                    offsets,
+                    amplitudes,
+                    beta2=beta2,
+                    gamma=gamma,
+                    alpha=alpha,
+                    distance=length,
+                    accumulated_gvd=behind,
+                    triples=triples,
+                    coherent=self.coherent_polarization,
+                    raman=coupling,
+                )
+
+            # PMD acts on a tone in its own baseband, where the delay is a phase of
+            # one and a section is only its Jones rotation -- the same matrix for
+            # every tone, as :func:`~maiman.kernels.apply_pmd` gives a band at rest.
+            # The amplitudes are conjugated against this library's fields, so it is
+            # the conjugate rotation that turns them. Where the sections are
+            # interleaved the span is cut into as many pieces and each is solved
+            # before its rotation; otherwise the whole chain comes after the Kerr
+            # effect, as it does in the split-step.
+            if sections and self.interleave_pmd:
+                finish = start
+                piece = distance / len(sections)
+                for index, section in enumerate(sections):
+                    finish, taken = solve(
+                        finish, piece, signal.accumulated_gvd + beta2 * piece * index
+                    )
+                    steps += taken
+                    finish = finish @ np.conj(section.unitary).T
+            else:
+                finish, steps = solve(start, distance, signal.accumulated_gvd)
+                for section in sections:
+                    finish = finish @ np.conj(section.unitary).T
         else:
             for axis in (0, 1):
                 if np.any(start[:, axis] != 0.0):
@@ -707,6 +744,7 @@ class Fiber(Component):
             ),
             mixing_products=len(products),
             fwm_depletion=made / total if total > 0.0 else 0.0,
+            differential_group_delay=realised_dgd,
         )
         return {
             "out": OpticalSignal(

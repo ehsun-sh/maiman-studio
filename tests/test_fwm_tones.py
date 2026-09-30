@@ -20,6 +20,8 @@ import pytest
 from maiman.components import EDFA, Fiber
 from maiman.context import SimulationContext
 from maiman.kernels import (
+    PMDSection,
+    apply_pmd,
     attenuation_db_per_m_to_alpha,
     effective_length,
     fwm_cascade_amplitude,
@@ -30,6 +32,7 @@ from maiman.kernels import (
     raman_coupling,
     raman_tilt,
     raman_transfer,
+    random_pmd_sections,
 )
 from maiman.signals import Band, OpticalSignal
 
@@ -280,7 +283,6 @@ def test_a_modulated_band_is_refused_by_name() -> None:
         {"pump_phase": True},
         {"cascaded_fwm": True},
         {"mixing_steps": 4.0},
-        {"pmd_coefficient": 0.1},
     ],
 )
 def test_it_is_refused_beside_what_it_replaces(other: dict[str, Any]) -> None:
@@ -567,3 +569,103 @@ def test_raman_moves_no_phase() -> None:
 
 def test_raman_is_no_longer_refused_by_the_tone_solver() -> None:
     Fiber(tone_solver=True, raman_gain_slope=SLOPE).validate()
+
+
+# -- PMD ------------------------------------------------------------------------------
+
+
+def pmd_chain(
+    label: str, coefficient: float, length_km: float, sections: int
+) -> tuple[PMDSection, ...]:
+    """The waveplate chain a span of this label draws: the same stream the split-step reads."""
+    mean = Fiber(length=length_km, pmd_coefficient=coefficient).mean_dgd()
+    return random_pmd_sections(mean, sections, CTX.rng("Fiber", label, "pmd"))
+
+
+def pmd_span(nonlinearity: float = 1e-9, **settings: object) -> Fiber:
+    return Fiber(
+        label="pmd-span",
+        length=20.0,
+        attenuation=0.0,
+        dispersion=2.0,
+        nonlinearity=nonlinearity,  # the default: nothing to mix, what is left is the chain
+        four_wave_mixing=True,
+        mixing_floor=0.0,
+        tone_solver=True,
+        cross_polarization=True,
+        pmd_coefficient=0.5,
+        pmd_sections=12.0,
+        **settings,  # type: ignore[arg-type]
+    )
+
+
+JONES = (math.cos(0.4), 1j * math.sin(0.4))
+
+
+def test_a_tone_meets_pmd_as_a_band_at_rest_does() -> None:
+    """With nothing to mix the tone comes out of the chain exactly as ``apply_pmd`` leaves it.
+
+    A tone is a constant, at its own baseband, where a section's delay is a phase of
+    one and only its Jones rotation is left: the product of the chain's unitaries.
+    ``apply_pmd`` does that through the frequency domain, sharing no arithmetic with
+    the tone solver, and the chain is the one the same label draws for the split-step.
+    """
+    signal = jones_pumps(1e-6, JONES)
+    out = pmd_span().run(CTX, {"in": signal})["out"]
+    assert isinstance(out, OpticalSignal)
+    chain = pmd_chain("pmd-span", 0.5, 20.0, 12)
+    for band, launched in zip(out.bands, signal.bands, strict=False):
+        ex, ey = apply_pmd(launched.Ex, launched.Ey, launched.fs, chain)
+        assert np.allclose(np.mean(band.Ex), np.mean(ex), rtol=0, atol=1e-9 * abs(np.mean(ex)))
+        assert np.allclose(np.mean(band.Ey), np.mean(ey), rtol=0, atol=1e-9 * abs(np.mean(ey)))
+
+
+def test_the_diagnostics_report_the_dgd_of_the_chain_that_was_drawn() -> None:
+    from maiman.kernels import differential_group_delay
+
+    diagnostics = pmd_span().run(CTX, {"in": jones_pumps(1e-6, JONES)})["diagnostics"]
+    assert diagnostics.differential_group_delay == pytest.approx(
+        differential_group_delay(pmd_chain("pmd-span", 0.5, 20.0, 12)), rel=1e-12
+    )
+    assert diagnostics.differential_group_delay > 0.0
+
+
+def test_interleaved_sections_are_the_same_chain_when_nothing_is_nonlinear() -> None:
+    """Cut into twelve solves with a rotation between each, the tone is where it was."""
+    signal = jones_pumps(1e-6, JONES)
+    end = pmd_span().run(CTX, {"in": signal})["out"]
+    between = pmd_span(interleave_pmd=True).run(CTX, {"in": signal})["out"]
+    assert isinstance(end, OpticalSignal) and isinstance(between, OpticalSignal)
+    for a, b in zip(end.bands, between.bands, strict=False):
+        assert np.mean(a.Ex) == pytest.approx(np.mean(b.Ex), rel=1e-6, abs=1e-12)
+        assert np.mean(a.Ey) == pytest.approx(np.mean(b.Ey), rel=1e-6, abs=1e-12)
+
+
+def test_where_the_chain_sits_matters_once_light_is_strong() -> None:
+    """At 30 mW the Kerr effect is not covariant under a general rotation, so order shows.
+
+    The isotropic tensor's coherent term turns with the polarization it acts on: a
+    chain of rotations before the Kerr steps and one after do not commute with it. The
+    two differ visibly here and agree at a microwatt (the test above).
+    """
+    signal = jones_pumps(30e-3, JONES)
+    end = pmd_span(GAMMA).run(CTX, {"in": signal})["out"]
+    between = pmd_span(GAMMA, interleave_pmd=True).run(CTX, {"in": signal})["out"]
+    assert isinstance(end, OpticalSignal) and isinstance(between, OpticalSignal)
+    gap = abs(np.mean(end.bands[0].Ex) - np.mean(between.bands[0].Ex))
+    assert gap > 1e-3 * abs(np.mean(end.bands[0].Ex))
+
+
+def test_pmd_conserves_power_through_the_chain_and_the_kerr_effect() -> None:
+    signal = jones_pumps(30e-3, JONES)
+    for interleave in (False, True):
+        out = pmd_span(GAMMA, interleave_pmd=interleave).run(CTX, {"in": signal})["out"]
+        assert isinstance(out, OpticalSignal)
+        total = sum(float(np.mean(np.abs(b.Ex) ** 2 + np.abs(b.Ey) ** 2)) for b in out.bands)
+        assert total == pytest.approx(60e-3, rel=1e-8)
+
+
+def test_pmd_needs_the_two_polarizations_together() -> None:
+    with pytest.raises(ValueError, match="cross_polarization"):
+        Fiber(tone_solver=True, pmd_coefficient=0.1).validate()
+    Fiber(tone_solver=True, pmd_coefficient=0.1, cross_polarization=True).validate()

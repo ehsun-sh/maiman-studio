@@ -685,12 +685,19 @@ Stated in the code where each approximation is made, and collected here:
   digits where the series was 25 % off (30 mW over 20 km) or 2.3 times (20 mW, D = 4, four
   spans), over lossy amplified spans too, and holds the total power to 1e-9 without loss. It
   replaces the split-step's Kerr step on those bands, is refused beside `pump_phase`,
-  `carry_phase`, `cascaded_fwm`, `mixing_steps` and PMD, and refuses a modulated band by name
-  rather than treat its mean as its phase. Stimulated Raman scattering joins it as a power
+  `carry_phase`, `cascaded_fwm` and `mixing_steps`, and refuses a modulated band by name rather
+  than treat its mean as its phase. Stimulated Raman scattering joins it as a power
   exchange the amplitudes feel -- the triangle of the closed form inside the gain peak's line,
   silica's measured shape with the quantum defect taken past it, as the perturbative path picks
   -- and lands on `raman_tilt` and `raman_transfer` to 2e-4 with the loss divided back out; it
-  moves power and no phase. With `cross_polarization` the tones are Jones
+  moves power and no phase. PMD, with `cross_polarization` on, draws the split-step's own
+  chain from the same stream and meets a tone as it meets a band at rest -- a constant sits at
+  its own baseband, where a section's delay is a phase of one and only its Jones rotation is
+  left, the same matrix for every tone, so the chain is what `apply_pmd` leaves to the digit
+  where nothing mixes; after the Kerr effect, or between pieces of the span with
+  `interleave_pmd`, where the isotropic tensor's coherent term does not commute with it. What
+  it does not have, as the split-step does not, is the rotation differing from tone to tone
+  across a wide comb. With `cross_polarization` the tones are Jones
   vectors and the two axes are coupled by silica's isotropic Kerr tensor -- circular light turns
   at two thirds of linear's rate, an orthogonal neighbour cross-phase modulates at two thirds,
   and `coherent_polarization` off keeps the phase-only form the split-step defaults to -- each
@@ -772,9 +779,9 @@ next, in order:
    `RELEASING.md` runs the rest with `MAIMAN_REQUIRE_SPEC=1` before each release; the shaper
    itself is checked on every push only once the `specification` job in `ci.yml` has a runner.
 2. **Give the tone solver what it cannot yet take.** It is exact for constant tones, scalar or
-   with two polarizations, with Raman, and refuses a modulated channel and PMD; a channel's phase is not
-   one number, so the
-   perturbative series still serves the modulated case at the powers it is good to
+   with two polarizations, with Raman and with PMD, and refuses a modulated channel; a channel's
+   phase is not one number, so the perturbative series still serves the modulated case at the
+   powers it is good to
    (0.89 of the split-step at 10 mW over 10 km, and 1.25 over two such spans where terms nearly
    cancel), and closing that gap is the largest physical approximation under [Open](#open).
 3. **The rest of [Open](#open)**, each with the closed-form test that shows it did something: a
