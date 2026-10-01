@@ -141,6 +141,19 @@ class CoherentReceiver(Component):
         anchor = walkoff.at(nearest.f0)
         return [(nearest, 0.0)] + [(band, walkoff.at(band.f0) - anchor) for band in others]
 
+    @staticmethod
+    def _carried_turn(signal: OpticalSignal, lo: OpticalSignal, band: Band, f_lo: float) -> complex:
+        """``exp(-i (phase_s - phase_lo))``: the carrier phases the two paths carried, beaten.
+
+        A span divides each carrier's ``beta(omega) L`` out of its band and, with
+        ``carry_carrier_phase``, keeps it on the signal; the signal's field is turned
+        by its own and the LO's by the LO's before they are mixed, as
+        :func:`~maiman.components.detectors.mutual_beat` turns two bands on a diode.
+        An LO from its own laser carries none and the signal's then sets the phase;
+        with neither carried this is one, and nothing moves.
+        """
+        return complex(np.exp(-1j * (signal.walkoff.phase_at(band.f0) - lo.walkoff.phase_at(f_lo))))
+
     def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
         signal: OpticalSignal = inputs["in"]
         lo: OpticalSignal = inputs["lo"]
@@ -161,6 +174,7 @@ class CoherentReceiver(Component):
             beat = np.exp(2j * np.pi * (band.f0 - reference.f0) * ctx.time_axis())
             field_x, field_y = delayed_field(band, delay)
             term = (field_x * np.conj(lo_x)) + (field_y * np.conj(lo_y))
+            term = term * self._carried_turn(signal, lo, band, reference.f0)
             mix = term * beat if index == 0 else mix + term * beat
 
         responsivity = self.si("responsivity")
@@ -303,7 +317,12 @@ class DualPolarizationReceiver(CoherentReceiver):
             for index, (band, delay) in enumerate(mixed):
                 beat = np.exp(2j * np.pi * (band.f0 - reference.f0) * ctx.time_axis())
                 component = delayed_field(band, delay)[0 if field == "Ex" else 1]
-                term = component * np.conj(lo_branch) * beat
+                term = (
+                    component
+                    * np.conj(lo_branch)
+                    * beat
+                    * self._carried_turn(signal, lo, band, reference.f0)
+                )
                 mix = term if index == 0 else mix + term
 
             for quadrature, part in (("i", mix.real), ("q", mix.imag)):

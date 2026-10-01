@@ -181,3 +181,111 @@ def test_a_common_length_shifts_both_tones_and_the_beat_moves_by_their_differenc
     one = beat_phase(fibre(20.0).run(CTX, {"in": signal})["out"], B, A)
     two = beat_phase(fibre(40.0).run(CTX, {"in": signal})["out"], B, A)
     assert wrapped(two - 2.0 * one) == pytest.approx(0.0, abs=5e-3)
+
+
+# -- mixing products and the local oscillator (maiman-lej) ----------------------------
+
+WIDE = 100e9  # pump spacing for mixing: products a whole spacing apart, on their own bands
+#: Double precision: a constant band must stay one complex number for the tone solver, and a
+#: carried phase of 1e5 rad must survive the field it turns.
+DOUBLE = SimulationContext(
+    bit_rate=10e9, samples_per_symbol=16, sequence_length=16, seed=7, precision="double"
+)
+
+
+def test_a_mixing_product_carries_the_phase_of_the_whole_path() -> None:
+    """Every product is its carried phase off the field a split-step with all of ``beta`` gives.
+
+    Two 10 mW pumps through two 10 km spans of D = 2 with the tone solver. The
+    reference propagates their sum on one grid with the whole propagation constant
+    -- ``n_p omega_0 / c``, ``n_g / c`` and ``beta2``, written from the indices and
+    not from :class:`Fiber` -- so every carrier's absolute phase is in its field. A
+    product's stored amplitude turned by its carried phase is that field, to 1e-3,
+    first and second order on both sides: the phase a carrier at its frequency would
+    have had over the whole path, though it was made inside the first span and the
+    second. The reference wavelength sits on the lower pump, where the ``beta2`` the
+    mixing is written with and the one the carried phase expands are the same number.
+    """
+    from maiman.kernels import propagate_coupled_ssfm
+
+    reference = C_LIGHT / ANCHOR
+    pump, span, dispersion, gamma = 10e-3, 10e3, 2.0, 1.3
+    signal = OpticalSignal(bands=(tone(ANCHOR, pump), tone(ANCHOR + WIDE, pump)))
+    for index in range(2):
+        signal = Fiber(
+            label=f"mix{index}",
+            length=span / 1e3,
+            dispersion=dispersion,
+            attenuation=0.0,
+            nonlinearity=gamma,
+            mixing_floor=250.0,
+            tone_solver=True,
+            carry_carrier_phase=True,
+            phase_index=PHASE_INDEX,
+            group_index=GROUP_INDEX,
+            reference_wavelength=reference * 1e9,
+        ).run(DOUBLE, {"in": signal})["out"]
+        assert isinstance(signal, OpticalSignal)
+
+    beta2 = -dispersion * 1e-6 * reference**2 / (2.0 * math.pi * C_LIGHT)
+    n, rate = 512, 64 * WIDE
+    t = np.arange(n) / rate
+    field = math.sqrt(pump) * (1.0 + np.exp(2j * np.pi * WIDE * t))
+    for _ in range(2):
+        (field,), _ = propagate_coupled_ssfm(
+            (field,),
+            rate,
+            beta2=(beta2,),
+            walkoff=(GROUP_INDEX / C_LIGHT,),
+            gamma=gamma * 1e-3,
+            alpha=0.0,
+            distance=span,
+            max_step=2.0,
+            max_nonlinear_phase=1e-4,
+        )
+    field = field * np.exp(-1j * PHASE_INDEX * 2.0 * math.pi * ANCHOR / C_LIGHT * 2.0 * span)
+    for m in (-2, -1, 2, 3):
+        f0 = ANCHOR + m * WIDE
+        product = next(b for b in signal.bands if abs(b.f0 - f0) < 1e3)
+        carried = complex(np.mean(product.Ex)) * np.exp(-1j * signal.walkoff.phase_at(f0))
+        truth = complex(np.mean(field * np.exp(-2j * np.pi * m * WIDE * t)))
+        assert abs(carried - truth) < 1e-3 * abs(truth)
+
+
+def test_a_product_with_no_pair_to_place_it_is_left_without_a_phase() -> None:
+    """Off every pair's whole spacings there is no exact phase to give, and none is invented."""
+    signal = OpticalSignal(bands=(tone(A), tone(B)))
+    assert Fiber._product_phase_before(signal, A + 0.37 * SPACING) is None
+    assert Fiber._product_phase_before(signal, A + 3 * SPACING) == 0.0
+
+
+def coherent_phase(signal: OpticalSignal, lo: OpticalSignal, dual: bool = False) -> float:
+    from maiman.components import CoherentReceiver, DualPolarizationReceiver
+
+    kind = DualPolarizationReceiver if dual else CoherentReceiver
+    receiver = kind(label="rx", shot_noise=False, thermal_noise=False, ase_beat_noise=False)
+    out = receiver.run(DOUBLE, {"in": signal, "lo": lo})
+    i, q = (out["xi"], out["xq"]) if dual else (out["i"], out["q"])
+    return float(np.angle(np.mean(i.samples + 1j * q.samples)))
+
+
+@pytest.mark.parametrize("dual", [False, True])
+def test_a_local_oscillator_beats_at_the_difference_of_the_two_paths_phases(dual: bool) -> None:
+    """One laser split: the signal down 12 km, the LO down 3 km, then a hybrid.
+
+    ``E_s exp(-i phi_s) conj(E_lo exp(-i phi_lo))``: the photocurrent sits at
+    ``-(beta L_s - beta L_lo)``, the closed form from the indices. Off by default
+    nothing is carried and it sits at zero, as it did; an LO from its own laser
+    carries nothing and the signal's path sets the phase alone. To 1e-4: ``beta L`` is
+    5e10 rad here, and double precision holds it to about 1e-5.
+    """
+    source = OpticalSignal(bands=(tone(A),))
+    signal = fibre(12.0, 0.0).run(DOUBLE, {"in": source})["out"]
+    lo = fibre(3.0, 0.0).run(DOUBLE, {"in": source})["out"]
+    assert isinstance(signal, OpticalSignal) and isinstance(lo, OpticalSignal)
+    expected = -(beta(A, 0.0) * 12e3 - beta(A, 0.0) * 3e3)
+    assert wrapped(coherent_phase(signal, lo, dual) - expected) == pytest.approx(0.0, abs=1e-4)
+    assert wrapped(coherent_phase(signal, source, dual) + beta(A, 0.0) * 12e3) == pytest.approx(
+        0.0, abs=1e-4
+    )
+    assert coherent_phase(source, source, dual) == pytest.approx(0.0, abs=1e-12)

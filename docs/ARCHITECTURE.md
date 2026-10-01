@@ -770,7 +770,17 @@ Stated in the code where each approximation is made, and collected here:
   term, and two tones of one source down fibre beat at `-(beta_a - beta_b) L`, checked against the
   propagation constant written out independently; a carrier joined by two paths at two phases is a
   recorded conflict, as with the delays. Between independent lasers there is no such phase to get
-  wrong. Four-wave mixing products and a local oscillator beat do not carry one.
+  wrong. A four-wave mixing product carries the phase a carrier at its frequency would have
+  over the whole path, because its amplitude is formed with the path's curvature put back: two
+  carried carriers and `accumulated_gvd` fix it, for a product a whole number of their spacings
+  away, and against a split-step with the whole propagation constant every product of two pumps
+  over two spans is its field to 1e-3 (tone solver; the composite grid to its own 1.5e-3; the
+  series' own product phase is drawn unless `carry_phase`). A coherent receiver turns the signal
+  by its carried phase and the local oscillator by its own before they beat, so one laser split
+  down two lengths comes out at `-(beta L_s - beta L_lo)`. Where the reference wavelength is not
+  the first band's, the mixing's `beta2` (at the first band) and the carried phase's (at the
+  reference) differ by `(lambda / lambda_ref)^2`, which at 1552.5 against 1550 nm is 0.03 rad
+  over 20 km of D = 2 at 100 GHz.
   The shaping tables are normative data and are loaded from `MAIMAN_WPORT_TABLES` rather than
   shipped, so the DPO path needs them present to run at all. Error marking overwrites a failed
   CRC32's whole span with 802.3 error marking blocks; which of them belong to which Ethernet

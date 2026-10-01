@@ -809,7 +809,7 @@ class Fiber(Component):
                 noise=tuple(n.scale_power(power_factor) for n in signal.noise),
                 accumulated_gvd=signal.accumulated_gvd + beta2 * distance,
                 nonlinear_history=signal.nonlinear_history,
-                walkoff=self._walkoff(signal, distance),
+                walkoff=self._walkoff(signal, distance, products),
             ),
             "diagnostics": diagnostics,
         }
@@ -1087,7 +1087,7 @@ class Fiber(Component):
                 noise=tuple(n.scale_power(power_factor) for n in signal.noise),
                 accumulated_gvd=signal.accumulated_gvd + beta2 * distance,
                 nonlinear_history=signal.nonlinear_history,
-                walkoff=self._walkoff(signal, distance),
+                walkoff=self._walkoff(signal, distance, products),
             ),
             "diagnostics": diagnostics_out,
         }
@@ -1145,12 +1145,12 @@ class Fiber(Component):
         diagnostics = replace(diagnostics, raman_tilt=tilt)
 
         history = self._nonlinear_history(signal, gamma=gamma, alpha=alpha, propagated=bands)
-        walkoff = self._walkoff(signal, distance)
         if gamma != 0.0 and self.four_wave_mixing:
             bands, emitted, depleted = self._mix(
                 ctx, signal, bands, gamma=gamma, alpha=alpha, after=history
             )
             diagnostics = replace(diagnostics, mixing_products=emitted, fwm_depletion=depleted)
+        walkoff = self._walkoff(signal, distance, bands)
 
         return {
             "out": OpticalSignal(
@@ -1184,7 +1184,42 @@ class Fiber(Component):
             )
         return out[0], out[1]
 
-    def _walkoff(self, signal: OpticalSignal, distance: float) -> WalkoffHistory:
+    @staticmethod
+    def _product_phase_before(signal: OpticalSignal, frequency: float) -> float | None:
+        """The carrier phase a product new at ``frequency`` arrives at this span with [rad].
+
+        A product's amplitude is formed with the curvature the path has accumulated
+        put back, so it stands as a carrier at its own frequency that had run the
+        whole path -- and carries what such a carrier would have, checked against a
+        split-step with the whole ``beta(omega)`` to 1e-4 rad. Along one path the
+        phase is a quadratic in frequency whose curvature is ``accumulated_gvd``, so
+        two carried carriers ``a`` and ``b`` fix it at ``f = f_a + k (f_b - f_a)``::
+
+            phi = (1 - k) phi_a + k phi_b - (G / 2) k (1 - k) (omega_b - omega_a)^2
+
+        For whole ``k`` only, which keeps it exact modulo ``2 pi``: a product of a comb
+        lies a whole number of some pair's spacings from it. ``None`` where no pair
+        does, and the product is then left with no entry, as before.
+        """
+        walkoff = signal.walkoff
+        bands = signal.bands
+        for index, a in enumerate(bands):
+            for b in bands[index + 1 :]:
+                k = (frequency - a.f0) / (b.f0 - a.f0)
+                if abs(k - round(k)) > 1e-6:
+                    continue
+                k = round(k)
+                omega = 2.0 * math.pi * (b.f0 - a.f0)
+                return (
+                    (1 - k) * walkoff.phase_at(a.f0)
+                    + k * walkoff.phase_at(b.f0)
+                    - 0.5 * signal.accumulated_gvd * k * (1 - k) * omega**2
+                )
+        return None
+
+    def _walkoff(
+        self, signal: OpticalSignal, distance: float, made: Sequence[Band] = ()
+    ) -> WalkoffHistory:
         """Each band's group delay after this span, against the first band's [s].
 
         Walk-off is a linear operator like dispersion, but it is a *constant*
@@ -1198,6 +1233,10 @@ class Fiber(Component):
         Written against ``bands[0]``, which is the frame :meth:`reference_beta2`
         is written against too -- and since only differences are observable, any
         band would do.
+
+        With ``carry_carrier_phase``, the bands in ``made`` that this span created --
+        mixing products -- are given a carrier phase too, from
+        :meth:`_product_phase_before` and this span's ``beta L`` at their frequency.
         """
         if not (self.carry_walkoff or self.carry_carrier_phase) or not signal.bands:
             return signal.walkoff
@@ -1221,6 +1260,15 @@ class Fiber(Component):
                     before.phase_at(band.f0) + self.carrier_phase_of(band) * distance,
                     2.0 * math.pi,
                 )
+            present = [band.f0 for band in signal.bands]
+            for band in made:
+                if any(abs(band.f0 - f) <= TONE_TOLERANCE for f in present):
+                    continue
+                arrived = self._product_phase_before(signal, band.f0)
+                if arrived is not None:
+                    phases[band.f0] = math.remainder(
+                        arrived + self.carrier_phase_of(band) * distance, 2.0 * math.pi
+                    )
         return WalkoffHistory(
             carriers=tuple(sorted(delays.items())), phases=tuple(sorted(phases.items()))
         )
