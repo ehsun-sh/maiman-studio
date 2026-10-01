@@ -36,6 +36,7 @@ from maiman import (
     step_schedule,
 )
 from maiman.components import EDFA
+from maiman.signals import NoiseBin
 from maiman.units import C_LIGHT, H_PLANCK, db_to_linear
 
 CROSSOVER = 1531e-9
@@ -421,3 +422,86 @@ def test_the_ase_power_is_the_papers_eq_32_in_a_bandwidth() -> None:
     paper = 2.0 * n_sp * (gain - 1.0) * photon * bandwidth
     density = float(np.ravel(spectral_ase_psd(spectrum, wavelength, inversion))[0])
     assert 2.0 * density * bandwidth == pytest.approx(paper, rel=1e-12)
+
+
+# ---------------------------------------------------------------------------
+# The block itself, given a spectrum (maiman-7oa)
+# ---------------------------------------------------------------------------
+
+
+def emitted(amp: EDFA) -> tuple[NoiseBin, float]:
+    """The noise bin the block adds to a dim tone, and the gain it ran at."""
+    from maiman import SimulationContext
+    from maiman.signals import Band, OpticalSignal
+
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=8, sequence_length=16, seed=1)
+    tone = Band(
+        Ex=np.full(ctx.num_samples, 1e-3, dtype=np.complex128),
+        Ey=np.zeros(ctx.num_samples, dtype=np.complex128),
+        f0=C_LIGHT / amp.si("center_wavelength"),
+        fs=ctx.sample_rate,
+    )
+    out = amp.run(ctx, {"in": OpticalSignal(bands=(tone,))})["out"]
+    assert isinstance(out, OpticalSignal)
+    return out.noise[-1], amp.effective_gain(float(np.abs(tone.Ex[0]) ** 2))
+
+
+def test_given_a_spectrum_the_block_emits_the_shaped_bin() -> None:
+    """The block's bin is :func:`spectral_ase_noise_bin`'s, and keeps the noise figure's total.
+
+    The shape is ``n_sp (G - 1)`` over the band -- tested against the formula above --
+    so here what is checked is that the block emits it rather than the flat bin, and
+    that the total the noise figure sets has not moved.
+    """
+    spectrum = curved_spectrum()
+    shaped = EDFA(spectrum, gain=20.0, noise_figure=5.0, bandwidth=2.0, label="edfa")
+    flat = amplifier()
+    bin_, gain = emitted(shaped)
+    plain, _ = emitted(flat)
+    wanted = spectral_ase_noise_bin(shaped, spectrum, gain)
+    assert bin_.shape is not None and plain.shape is None and wanted.shape is not None
+    assert np.array_equal(bin_.shape.weight_x, wanted.shape.weight_x)
+    assert bin_.total_power() == pytest.approx(plain.total_power(), rel=1e-12)
+    centre = C_LIGHT / shaped.si("center_wavelength")
+    edges = [bin_.density_at(centre + offset)[0] for offset in (-0.9e12, 0.9e12)]
+    assert abs(edges[0] - edges[1]) > 0.1 * max(edges), "and it is not flat"
+
+
+def test_a_flat_spectrum_on_the_block_reads_as_no_spectrum() -> None:
+    """``A + G*`` flat: every density and the total are the unshaped block's, to rounding."""
+    bin_, _ = emitted(EDFA(flat_spectrum(), gain=20.0, noise_figure=5.0, bandwidth=2.0))
+    plain, _ = emitted(amplifier())
+    centre = C_LIGHT / amplifier().si("center_wavelength")
+    for offset in (-0.7e12, 0.0, 0.9e12):
+        assert bin_.density_at(centre + offset) == pytest.approx(
+            plain.density_at(centre + offset),
+            rel=1e-12,
+        )
+
+
+def test_the_spectrum_survives_a_project_file() -> None:
+    """Saved as its three curves, read back into the same spectrum and the same noise."""
+    import json
+
+    from maiman import Graph, SimulationContext
+    from maiman.project import graph_from_dict, graph_to_dict
+
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=8, sequence_length=16, seed=1)
+    graph = Graph(ctx)
+    graph.add(EDFA(curved_spectrum(), gain=20.0, label="edfa"))
+    plain = Graph(ctx)
+    plain.add(EDFA(gain=20.0, label="edfa"))
+    saved = json.loads(json.dumps(graph_to_dict(graph)))
+    assert "config" not in graph_to_dict(plain)["nodes"][0], "and nothing is saved without one"
+    restored = graph_from_dict(saved).components[0]
+    assert isinstance(restored, EDFA) and restored.erbium_spectrum is not None
+    original = curved_spectrum()
+    assert np.array_equal(restored.erbium_spectrum.wavelengths, original.wavelengths)
+    assert np.array_equal(
+        restored.erbium_spectrum.full_inversion_gain_db, original.full_inversion_gain_db
+    )
+
+
+def test_a_spectrum_must_be_one() -> None:
+    with pytest.raises(TypeError, match="ErbiumSpectrum"):
+        EDFA("erbium")

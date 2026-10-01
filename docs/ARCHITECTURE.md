@@ -646,11 +646,12 @@ Stated in the code where each approximation is made, and collected here:
   1995), which holds the integrator at `limit - kp e + T_t e / tau_c` against a limit, where
   without it the integrator winds on to the limit behind the clamp, and takes a saturating
   step's overshoot from 0.050 to 0.035 dB. No gain scheduling: the loop's constants are one
-  set for every working point. The `EDFA` block itself always emits its ASE
-  flat across its band, because it knows no cross sections; `transient.spectral_ase_noise_bin`
-  reshapes that same total power to the standard steady-state form -- `n_sp(λ)·hν·(G(λ)−1)` per
-  slice, from an `ErbiumSpectrum` and the amplifier's own gain -- as an offline step over the
-  block's output, and `spectral_gain_transient(..., spectral_ase=True)` weighs how hard each slice
+  set for every working point. The `EDFA` block emits its ASE flat across its band unless it
+  is given the coil's measured curves, `EDFA(erbium_spectrum=...)` -- structural, saved in the
+  project as its three lists, and shipped by nobody, since a spectrum belongs to its glass. Given
+  them it emits `transient.spectral_ase_noise_bin`: the same total power the noise figure sets,
+  in the standard steady-state form `n_sp(λ)·hν·(G(λ)−1)` per slice, from the spectrum and the
+  amplifier's own gain; a spectrum whose `A + G*` is flat reads as no spectrum to rounding. And `spectral_gain_transient(..., spectral_ase=True)` weighs how hard each slice
   of it drains the reservoir by that same shape rather than by cross section alone. Both are off by
   default, and without a spectrum at all -- the block itself, and the controlled transient -- the
   reservoir still drains at the centre wavelength's rate.

@@ -10,6 +10,7 @@ gain compression.
 from __future__ import annotations
 
 import math
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -17,6 +18,9 @@ from ..component import BoolParam, Component, Param, PortType
 from ..context import SimulationContext
 from ..signals import Band, NoiseBin, OpticalSignal, Signal
 from ..units import C_LIGHT, H_PLANCK, db_to_linear
+
+if TYPE_CHECKING:
+    from ..transient import ErbiumSpectrum
 
 
 class EDFA(Component):
@@ -153,6 +157,52 @@ class EDFA(Component):
     inputs = {"in": PortType.OPTICAL}
     outputs = {"out": PortType.OPTICAL}
 
+    def __init__(
+        self,
+        erbium_spectrum: object = None,
+        *,
+        label: str | None = None,
+        **params: float | bool,
+    ) -> None:
+        """``erbium_spectrum``: the coil's measured Giles curves, to shape the ASE by.
+
+        Structural rather than a parameter, because it is two curves and not a
+        number, and the library ships none -- an erbium spectrum belongs to the
+        glass it was measured in. Given one, the ASE the block emits keeps the total
+        the noise figure sets and takes the shape ``n_sp(lambda) (G(lambda) - 1)`` of
+        :func:`~maiman.transient.spectral_ase_noise_bin`, where without one it is
+        flat across ``bandwidth``. A dictionary of the spectrum's three fields, as a
+        project file stores it, is read back into one.
+        """
+        from ..transient import ErbiumSpectrum
+
+        super().__init__(label=label, **params)
+        if isinstance(erbium_spectrum, dict):
+            erbium_spectrum = ErbiumSpectrum(
+                wavelengths=np.asarray(erbium_spectrum["wavelengths"], dtype=np.float64),
+                absorption_db=np.asarray(erbium_spectrum["absorption_db"], dtype=np.float64),
+                full_inversion_gain_db=np.asarray(
+                    erbium_spectrum["full_inversion_gain_db"], dtype=np.float64
+                ),
+            )
+        if erbium_spectrum is not None and not isinstance(erbium_spectrum, ErbiumSpectrum):
+            raise TypeError(
+                f"erbium_spectrum must be an ErbiumSpectrum or its fields, got {erbium_spectrum!r}"
+            )
+        self.erbium_spectrum: ErbiumSpectrum | None = erbium_spectrum
+
+    def structural_config(self) -> dict[str, Any]:
+        spectrum = self.erbium_spectrum
+        if spectrum is None:
+            return {}
+        return {
+            "erbium_spectrum": {
+                "wavelengths": [float(v) for v in spectrum.wavelengths],
+                "absorption_db": [float(v) for v in spectrum.absorption_db],
+                "full_inversion_gain_db": [float(v) for v in spectrum.full_inversion_gain_db],
+            }
+        }
+
     def spontaneous_emission_factor(self, gain_linear: float) -> float:
         """``n_sp``, the population inversion factor implied by the noise figure.
 
@@ -271,7 +321,11 @@ class EDFA(Component):
 
         bandwidth = self.si("bandwidth")
         psd = self.ase_psd(gain)
-        if bandwidth > 0.0 and psd > 0.0:
+        if bandwidth > 0.0 and psd > 0.0 and self.erbium_spectrum is not None:
+            from ..transient import spectral_ase_noise_bin
+
+            noise.append(spectral_ase_noise_bin(self, self.erbium_spectrum, gain))
+        elif bandwidth > 0.0 and psd > 0.0:
             centre = C_LIGHT / self.si("center_wavelength")
             noise.append(
                 NoiseBin(
