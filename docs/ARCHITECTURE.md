@@ -640,9 +640,13 @@ Stated in the code where each approximation is made, and collected here:
   (`proportional`, nepers of pump per neper of error) and a first-order loop filter
   (`filter_time`) on the error before either acts: zero, the loop is the integrator bit for bit,
   and set, a setpoint step follows the closed-form second-order response -- third-order with the
-  filter -- of the reservoir linearised about its working point. Nothing beyond a PI and one
-  pole is modelled: no derivative term, no gain scheduling, no anti-windup beyond the pump's own
-  limits. The `EDFA` block itself always emits its ASE
+  filter -- of the reservoir linearised about its working point. A `derivative` term on the
+  filtered error makes it a PID, and follows the same response with `kd` added to the
+  reservoir's inertia; `tracking_time` is back-calculation anti-windup (Astrom and Hagglund
+  1995), which holds the integrator at `limit - kp e + T_t e / tau_c` against a limit, where
+  without it the integrator winds on to the limit behind the clamp, and takes a saturating
+  step's overshoot from 0.050 to 0.035 dB. No gain scheduling: the loop's constants are one
+  set for every working point. The `EDFA` block itself always emits its ASE
   flat across its band, because it knows no cross sections; `transient.spectral_ase_noise_bin`
   reshapes that same total power to the standard steady-state form -- `n_sp(λ)·hν·(G(λ)−1)` per
   slice, from an `ErbiumSpectrum` and the amplifier's own gain -- as an offline step over the

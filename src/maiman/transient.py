@@ -995,6 +995,21 @@ class PumpControl:
     ``tau_c`` makes the loop ring, and it smooths detector noise before the
     proportional term can pass it to the pump. Both default to zero, and then the
     loop is the integrator it always was, bit for bit.
+
+    **A derivative term and anti-windup.** ``derivative`` [s] adds ``kd`` nepers of
+    pump per neper-per-second of the *filtered* error's slope, so the controller is
+    a PID with its derivative rolled off by the filter -- which it therefore needs:
+    on the raw error a setpoint step is an impulse to it and detector noise is
+    differentiated. The step response is then
+    ``(kd s^2 + kp s + 1 / tau_c) / (tau tau_f s^3 + (tau + a tau_f + kd) s^2 + (a + kp) s +
+    1 / tau_c)``: the derivative is inertia added to the reservoir's. ``tracking_time``
+    [s] is back-calculation (Astrom and Hagglund, *PID Controllers: Theory, Design and
+    Tuning*, 2nd ed., 1995, sec. 3.5): when the proportional and derivative terms push
+    the pump past a limit and it is clamped, the integrator is pulled toward what
+    keeps the pump there, by ``(applied - wanted) / T_t``, instead of winding on
+    behind the clamp. Held against a limit by an error ``e`` it settles at
+    ``limit - kp e + T_t e / tau_c``. Without it the integrator is only stopped at
+    the limits itself, as it always was. Both default to zero.
     """
 
     mode: str = "gain"
@@ -1008,6 +1023,8 @@ class PumpControl:
     dither_frequency: float = 0.0
     proportional: float = 0.0
     filter_time: float = 0.0
+    derivative: float = 0.0
+    tracking_time: float = 0.0
 
     def __post_init__(self) -> None:
         if self.mode not in ("gain", "power"):
@@ -1028,6 +1045,15 @@ class PumpControl:
             raise ValueError(f"a proportional gain is not negative, got {self.proportional}")
         if self.filter_time < 0.0:
             raise ValueError(f"a filter's time constant is not negative, got {self.filter_time}")
+        if self.derivative < 0.0:
+            raise ValueError(f"a derivative gain is not negative, got {self.derivative}")
+        if self.derivative > 0.0 and self.filter_time <= 0.0:
+            raise ValueError(
+                "a derivative term needs filter_time: on the raw error a setpoint step is an "
+                "impulse to it and detector noise is differentiated"
+            )
+        if self.tracking_time < 0.0:
+            raise ValueError(f"a tracking time is not negative, got {self.tracking_time}")
 
     @property
     def time_constant(self) -> float:
@@ -1044,6 +1070,10 @@ class ControlledTransient:
 
     pump_gain_db: np.ndarray
     """The small-signal gain the loop called for at each time [dB]."""
+
+    integrator_db: np.ndarray
+    """The integrator's own state at each time [dB] -- the pump without the proportional
+    and derivative terms, which is what winds up behind a clamp."""
 
     control: PumpControl
     setpoint: float
@@ -1231,7 +1261,15 @@ def controlled_gain_transient(
         return value, float(drive[where])
 
     proportional = control.proportional * nepers
+    derivative = control.derivative * nepers
     filtering = control.filter_time > 0.0
+    tracking = control.tracking_time
+
+    def wanted(pump: float, error: float, held: float) -> float:
+        """The pump the controller asks for before the clamp [nepers]."""
+        used = held if filtering else error
+        rate = (error - held) / control.filter_time if filtering else 0.0
+        return pump + proportional * used + derivative * rate
 
     def stage(
         time: float, gain: float, pump: float, held: float, power: float, noise: float
@@ -1249,31 +1287,32 @@ def controlled_gain_transient(
             value, then = seen(time)
             error = loop_error(value, then, noise)
         used = held if filtering else error
-        applied = pump + proportional * used if proportional else pump
-        if proportional:
-            applied = min(max(applied, log_floor), log_ceiling)
+        asked = wanted(pump, error, held) if (proportional or derivative) else pump
+        applied = min(max(asked, log_floor), log_ceiling) if (proportional or derivative) else pump
+        integrating = nepers * used / control.time_constant
+        if tracking:
+            integrating += (applied - asked) / tracking
         return (
             reservoir_slope(gain, applied + dither(time), power),
-            nepers * used / control.time_constant,
+            integrating,
             (error - held) / control.filter_time if filtering else 0.0,
         )
 
     def applied_pump(gain: float, pump: float, held: float, power: float) -> float:
         """What the loop called for at the end of a step, without the dither."""
-        if not proportional:
+        if not (proportional or derivative):
             return pump
         error = loop_error(gain, power, 0.0)
-        return min(
-            max(pump + proportional * (held if filtering else error), log_floor), log_ceiling
-        )
+        return min(max(wanted(pump, error, held), log_floor), log_ceiling)
 
     gains = np.empty(grid.shape)
     pumps = np.empty(grid.shape)
+    states = np.empty(grid.shape)
     log_gain = math.log(settled_gain)
     log_pump = math.log(small_signal)
     # The loop was settled when the run began, so its error was zero and so is the filter's.
     held = 0.0
-    gains[0], pumps[0] = settled_gain, amplifier.gain
+    gains[0], pumps[0], states[0] = settled_gain, amplifier.gain, amplifier.gain
     now = float(grid[0])
     for index in range(1, grid.size):
         span = float(grid[index] - grid[index - 1])
@@ -1330,6 +1369,7 @@ def controlled_gain_transient(
         pumps[index] = 10.0 * math.log10(
             math.exp(applied_pump(log_gain, log_pump, held, float(drive[index])))
         )
+        states[index] = log_pump / nepers
 
     return ControlledTransient(
         transient=GainTransient(
@@ -1340,6 +1380,7 @@ def controlled_gain_transient(
             substeps=substeps,
         ),
         pump_gain_db=pumps,
+        integrator_db=states,
         control=control,
         setpoint=setpoint,
     )

@@ -499,3 +499,117 @@ def test_the_gains_must_not_be_negative() -> None:
         PumpControl(proportional=-1.0)
     with pytest.raises(ValueError, match="filter"):
         PumpControl(filter_time=-1e-3)
+
+
+# ---------------------------------------------------------------------------
+# A derivative term and back-calculation anti-windup (maiman-hmk)
+# ---------------------------------------------------------------------------
+#
+# The derivative acts on the filtered error's slope, so with ``kd`` the controller
+# is ``(kd s^2 + kp s + w_i) / (s (tau_f s + 1))`` and a setpoint step sees
+#
+#     (kd s^2 + kp s + w_i) / (tau tau_f s^3 + (tau + a tau_f + kd) s^2 + (a + kp) s + w_i)
+#
+# Back-calculation (Astrom and Hagglund 1995, sec. 3.5) pulls the integrator by
+# ``(applied - wanted) / T_t`` while the pump is clamped; held there by an error
+# ``e`` it settles where its slope is zero, ``limit - kp e + T_t e / tau_c``.
+
+
+@pytest.mark.parametrize("derivative", [1e-3, 5e-3])
+def test_a_derivative_term_follows_the_closed_form_step_response(derivative: float) -> None:
+    """PID with the filter rolling off its derivative: the cubic above, to 3 % of the step."""
+    control = PumpControl(
+        mode="gain", bandwidth=1e3, proportional=6.0, filter_time=2e-4, derivative=derivative
+    )
+    a, tau = loop_constants(control)
+    w_i = 1.0 / control.time_constant
+    tf, kp = control.filter_time, control.proportional
+    times, moved = setpoint_step(control)
+    expected = 0.02 * linearised_step(
+        [derivative, kp, w_i], [tau * tf, tau + a * tf + derivative, a + kp, w_i], times
+    )
+    assert np.max(np.abs(moved - expected)) < 0.02 * 0.03
+    without = setpoint_step(PumpControl(**{**control.__dict__, "derivative": 0.0}))[1]
+    assert np.max(np.abs(moved - without)) > 0.02 * 0.05, "and it moved the response"
+
+
+def test_held_at_its_limit_the_integrator_settles_where_back_calculation_says() -> None:
+    """An unreachable setpoint: ``limit - kp e + T_t e / tau_c``, to 1e-3 dB.
+
+    Without tracking the integrator winds on to the ceiling behind the clamp and
+    stays there; with it, it sits 10.6 dB under, where the pump is held at the
+    limit by the proportional term rather than by the integrator's own clamp.
+    """
+    edfa = amplifier()
+    settled = 10.0 * math.log10(edfa.effective_gain(CHANNEL))
+    times = np.linspace(0.0, 0.05, 2501)
+    held = np.full_like(times, CHANNEL)
+    runs = {}
+    for tracking in (0.0, 2e-4):
+        control = PumpControl(
+            bandwidth=1e3,
+            proportional=6.0,
+            max_pump_gain=21.0,
+            setpoint=settled + 3.0,
+            tracking_time=tracking,
+        )
+        runs[tracking] = (control, controlled_gain_transient(edfa, times, held, control))
+    control, run = runs[2e-4]
+    error = run.setpoint - run.gain_db[-1]
+    predicted = 21.0 - control.proportional * error + 2e-4 * error / control.time_constant
+    assert run.integrator_db[-1] == pytest.approx(predicted, abs=1e-3)
+    assert run.pump_limited
+    assert runs[0.0][1].integrator_db[-1] == pytest.approx(21.0, abs=1e-9)
+
+
+def test_back_calculation_takes_the_windup_out_of_a_saturating_step() -> None:
+    """A 1 dB step that runs the pump into its ceiling on the way: 0.050 dB over, then 0.035."""
+    edfa = amplifier()
+    settled = 10.0 * math.log10(edfa.effective_gain(CHANNEL))
+    times = np.linspace(0.0, 0.05, 2501)
+    held = np.full_like(times, CHANNEL)
+    over = []
+    for tracking in (0.0, 2e-4):
+        run = controlled_gain_transient(
+            edfa,
+            times,
+            held,
+            PumpControl(
+                bandwidth=1e3,
+                proportional=6.0,
+                max_pump_gain=22.0,
+                setpoint=settled + 1.0,
+                tracking_time=tracking,
+            ),
+        )
+        assert run.pump_saturated and not run.pump_limited
+        assert run.gain_db[-1] == pytest.approx(run.setpoint, abs=1e-3)
+        over.append(float(run.gain_db.max() - run.setpoint))
+    assert over[1] < 0.8 * over[0]
+
+
+def test_derivative_and_tracking_move_nothing_at_zero() -> None:
+    times, power = drop(300)
+    plain = controlled_gain_transient(
+        amplifier(), times, power, PumpControl(bandwidth=1e3, proportional=6.0, filter_time=2e-4)
+    )
+    zeros = controlled_gain_transient(
+        amplifier(),
+        times,
+        power,
+        PumpControl(
+            bandwidth=1e3, proportional=6.0, filter_time=2e-4, derivative=0.0, tracking_time=0.0
+        ),
+    )
+    assert np.array_equal(plain.gain_db, zeros.gain_db)
+    assert np.array_equal(plain.pump_gain_db, zeros.pump_gain_db)
+
+
+def test_a_derivative_needs_its_filter_and_neither_is_negative() -> None:
+    with pytest.raises(ValueError, match="filter_time"):
+        PumpControl(derivative=1e-3)
+    with pytest.raises(ValueError, match="derivative"):
+        PumpControl(derivative=-1e-3, filter_time=1e-4)
+    with pytest.raises(ValueError, match="tracking"):
+        PumpControl(tracking_time=-1.0)
+    PumpControl(derivative=1e-3, filter_time=1e-4)
