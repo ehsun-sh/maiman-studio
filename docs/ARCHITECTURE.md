@@ -764,7 +764,11 @@ Stated in the code where each approximation is made, and collected here:
   half a percent as the absorber's length and strength move, falls from 0.37 to 0.06 as a fixed
   beam is given 8 to 32 periods to be radiated out again, and a long grating under a wide beam
   sends back the infinite grating's power to 5 %. Its reflection is converged to about 3 %, not
-  exact; a solve is seconds a wavelength, and the guided mode is TE.
+  exact; a solve is seconds a wavelength. The guided mode is TE by default, and TM with
+  `polarization="tm"`: the RCWA solves it with the inverse rule (Lalanne and Morris 1996, Li 1996)
+  for the field that crosses the grating's walls, lands on Fresnel, Brewster and a TM thin film to
+  1e-12, on a uniaxial effective medium as the period shrinks, and on an independent Laurent-rule
+  solve as that one creeps up on it like 1/M.
 * **Transceivers.** Bands within half the sample rate of each other beat — on a diode, and
   against a local oscillator — each field late by its own walk-off; farther apart they add as
   powers, which is the rejection any receiver's bandwidth performs anyway. The carrier phase a

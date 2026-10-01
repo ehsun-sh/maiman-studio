@@ -45,7 +45,7 @@ from .modes import (
     core_modes,
     lpg_coupling,
 )
-from .rcwa import GratingLayer, PatternedLayer, UniformLayer, diffract_te
+from .rcwa import GratingLayer, PatternedLayer, UniformLayer, diffract, diffract_te
 from .units import C_LIGHT, frequency_to_wavelength
 from .vector_modes import VectorMode, vector_cladding_modes, vector_core_modes, vector_coupling
 
@@ -2982,6 +2982,7 @@ def finite_coupler_response(
     absorber_length: float = 30e-6,
     absorber_extinction: float = 0.05,
     harmonics: int | None = None,
+    polarization: str = "te",
 ) -> FiniteCoupler:
     """A beam on a grating coupler of ``periods`` teeth, what leaves down the waveguide taken.
 
@@ -2999,8 +3000,10 @@ def finite_coupler_response(
     Converged, not exact: ``coupled`` holds to about 1.5 % and the reflection to
     about 3 % as the absorber's length and strength are changed (the tests move
     both), and ``harmonics`` defaults to enough orders for the silicon's own
-    propagating ones with margin. The guided mode is TE and the teeth are cut a
-    fixed ``etch_depth`` into the silicon, the grooves filled with the top medium.
+    propagating ones with margin. The teeth are cut a fixed ``etch_depth`` into the
+    silicon, the grooves filled with the top medium. ``polarization`` is the guided
+    mode's: ``"te"``, the default, or ``"tm"``, solved by :func:`maiman.rcwa.diffract`
+    with the inverse rule; a TM beam's ``reflection`` is its magnetic field's.
     """
     if periods < 1:
         raise ValueError(f"a grating has at least one tooth, got {periods}")
@@ -3041,7 +3044,7 @@ def finite_coupler_response(
     beam = np.exp(-0.25 * (orders * spacing * beam_radius) ** 2) * np.exp(
         -1j * orders * spacing * centre
     )
-    result = diffract_te(
+    result = diffract(
         wavelength,
         sine=sine,
         period=cell,
@@ -3050,6 +3053,7 @@ def finite_coupler_response(
         substrate_index=substrate_index,
         harmonics=order,
         incident=beam,
+        polarization=polarization,
     )
     return FiniteCoupler(
         reflection=result.reflection,

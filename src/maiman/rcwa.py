@@ -1,4 +1,4 @@
-"""Rigorous coupled-wave analysis of a lamellar grating on a layered stack, TE polarization.
+"""Rigorous coupled-wave analysis of a lamellar grating on a layered stack, TE and TM.
 
 What a grating coupler sends back up at the fibre is the grating's own zeroth-order
 reflection, and its phase is what decides the ripple of the gap between fibre and
@@ -17,7 +17,9 @@ perpendicular to the grating's lines.
 into the stack and an absorbing medium has a positive imaginary index, as
 :mod:`maiman.photonics` has it; ``z`` runs down from the top interface, where the
 phase of every reflection is referenced. TE means the electric field lies along the
-grating's lines, which is what a grating coupler's waveguide carries.
+grating's lines, which is what a grating coupler's waveguide usually carries; TM the
+magnetic field, solved with the inverse rule for the electric field that crosses the
+grating's walls (see :func:`diffract`).
 
 **How.** In each layer the field's harmonics obey ``u'' = k0^2 (Kx^2 - E) u``, with
 ``E`` the Toeplitz matrix of the layer's permittivity harmonics -- the Laurent rule,
@@ -38,7 +40,15 @@ from dataclasses import dataclass
 
 import numpy as np
 
-__all__ = ["Diffraction", "GratingLayer", "PatternedLayer", "UniformLayer", "diffract_te"]
+__all__ = [
+    "Diffraction",
+    "GratingLayer",
+    "PatternedLayer",
+    "UniformLayer",
+    "diffract",
+    "diffract_te",
+    "diffract_tm",
+]
 
 
 @dataclass(frozen=True)
@@ -145,6 +155,31 @@ def _harmonics(
     return out
 
 
+def _inverse_harmonics(
+    layer: UniformLayer | GratingLayer | PatternedLayer, count: int, period: float
+) -> np.ndarray:
+    """The Fourier harmonics of ``1 / eps``, for the inverse rule TM needs.
+
+    :func:`_harmonics` squares each index, so the same layer with every index
+    replaced by its reciprocal gives ``1 / n^2`` -- for an absorbing one too.
+    """
+    if isinstance(layer, UniformLayer):
+        return _harmonics(UniformLayer(layer.thickness, 1.0 / complex(layer.index)), count, period)
+    if isinstance(layer, PatternedLayer):
+        flipped = tuple((width, 1.0 / complex(index)) for width, index in layer.segments)
+        return _harmonics(PatternedLayer(layer.thickness, flipped, layer.offset), count, period)
+    return _harmonics(
+        GratingLayer(
+            layer.thickness,
+            1.0 / complex(layer.ridge_index),
+            1.0 / complex(layer.groove_index),
+            layer.duty,
+        ),
+        count,
+        period,
+    )
+
+
 def _forward(q: np.ndarray) -> np.ndarray:
     """The root of each ``q^2`` that decays, or travels, downward (``exp(-k0 q z)``)."""
     q = np.sqrt(q.astype(np.complex128))
@@ -163,7 +198,69 @@ def diffract_te(
     harmonics: int = 15,
     incident: np.ndarray | None = None,
 ) -> Diffraction:
-    """Diffraction of a TE plane wave by a layered stack with lamellar grating layers.
+    """TE: :func:`diffract` with the electric field along the grating's lines."""
+    return diffract(
+        wavelength,
+        sine=sine,
+        period=period,
+        top_index=top_index,
+        layers=layers,
+        substrate_index=substrate_index,
+        harmonics=harmonics,
+        incident=incident,
+        polarization="te",
+    )
+
+
+def diffract_tm(
+    wavelength: float,
+    *,
+    sine: float,
+    period: float,
+    top_index: float,
+    layers: Sequence[UniformLayer | GratingLayer | PatternedLayer],
+    substrate_index: complex,
+    harmonics: int = 15,
+    incident: np.ndarray | None = None,
+) -> Diffraction:
+    """TM: :func:`diffract` with the magnetic field along the grating's lines."""
+    return diffract(
+        wavelength,
+        sine=sine,
+        period=period,
+        top_index=top_index,
+        layers=layers,
+        substrate_index=substrate_index,
+        harmonics=harmonics,
+        incident=incident,
+        polarization="tm",
+    )
+
+
+def diffract(
+    wavelength: float,
+    *,
+    sine: float,
+    period: float,
+    top_index: float,
+    layers: Sequence[UniformLayer | GratingLayer | PatternedLayer],
+    substrate_index: complex,
+    harmonics: int = 15,
+    incident: np.ndarray | None = None,
+    polarization: str = "te",
+) -> Diffraction:
+    """Diffraction of a plane wave by a layered stack with lamellar grating layers.
+
+    ``polarization`` is ``"te"``, the electric field along the grating's lines, or
+    ``"tm"``, the magnetic field along them. In TM the amplitudes are those of
+    ``H_y``, so ``reflection`` is the magnetic field's -- for one interface
+    ``(eps_2 k_z1 - eps_1 k_z2) / (eps_2 k_z1 + eps_1 k_z2)`` -- and the electric
+    field normal to the grating's walls, ``E_x``, has its product with the
+    permittivity taken by the inverse rule (Lalanne and Morris, J. Opt. Soc. Am. A
+    13, 779 (1996); Li, J. Opt. Soc. Am. A 13, 1870 (1996)): with ``A`` the Toeplitz
+    matrix of ``1 / eps`` and ``E`` that of ``eps``, ``H'' = k0^2 A^-1 (Kx E^-1 Kx - I) H``,
+    and what is matched at each interface is ``H_y`` and ``A H_y'``. The Laurent rule
+    there converges like a staircase and is why TM had a name for being slow.
 
     ``sine`` is the sine of the incidence angle in the top medium, ``harmonics`` the
     number ``M`` of diffraction orders kept either side of the zeroth (``2 M + 1`` in
@@ -184,41 +281,56 @@ def diffract_te(
         raise ValueError("the number of harmonics is not negative")
     if abs(complex(top_index).imag) > 0.0:
         raise ValueError("the top medium must be lossless: the incident wave travels in it")
+    if polarization not in ("te", "tm"):
+        raise ValueError(f"polarization is 'te' or 'tm', got {polarization!r}")
+    tm = polarization == "tm"
     count = harmonics
     orders = np.arange(-count, count + 1)
     size = orders.size
     k0 = 2.0 * math.pi / wavelength
     kx = top_index * sine + orders * (wavelength / period)  # kx / k0
     identity = np.eye(size, dtype=np.complex128)
+    Modes = tuple[np.ndarray, np.ndarray, np.ndarray]
     kx2 = np.diag(kx**2).astype(np.complex128)
 
-    def uniform_modes(index: complex) -> tuple[np.ndarray, np.ndarray]:
-        return identity, _forward(kx**2 - index**2)
+    def uniform_modes(index: complex) -> Modes:
+        # The field, its decay rates, and what is matched beside the field: ``W q``
+        # for TE, ``W q / eps`` for TM.
+        q = _forward(kx**2 - index**2)
+        return identity, q, identity * (q / complex(index) ** 2 if tm else q)
 
-    def toeplitz(layer: UniformLayer | GratingLayer | PatternedLayer) -> np.ndarray:
-        eps = _harmonics(layer, 2 * count, period)
+    def toeplitz(eps: np.ndarray) -> np.ndarray:
         idx = orders[:, None] - orders[None, :]
-        return eps[idx + 2 * count]
+        return np.asarray(eps[idx + 2 * count])
 
-    def modes(
-        layer: UniformLayer | GratingLayer | PatternedLayer,
-    ) -> tuple[np.ndarray, np.ndarray]:
+    def modes(layer: UniformLayer | GratingLayer | PatternedLayer) -> Modes:
         if isinstance(layer, UniformLayer):
             return uniform_modes(layer.index)
-        values, vectors = np.linalg.eig(kx2 - toeplitz(layer))
-        return vectors, _forward(values)
+        eps = _harmonics(layer, 2 * count, period)
+        if not tm:
+            values, vectors = np.linalg.eig(kx2 - toeplitz(eps))
+            q = _forward(values)
+            return vectors, q, vectors * q
+        inverse = toeplitz(_inverse_harmonics(layer, 2 * count, period))
+        across = np.diag(kx).astype(np.complex128)
+        operator = np.linalg.solve(
+            inverse, across @ np.linalg.inv(toeplitz(eps)) @ across - identity
+        )
+        values, vectors = np.linalg.eig(operator)
+        q = _forward(values)
+        return vectors, q, inverse @ (vectors * q)
 
     def interface(
-        above: tuple[np.ndarray, np.ndarray], below: tuple[np.ndarray, np.ndarray]
+        above: Modes, below: Modes
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        wa, qa = above
-        wb, qb = below
-        left = np.block([[wa, -wb], [wa * qa, wb * qb]])
-        right = np.block([[-wa, wb], [wa * qa, wb * qb]])
+        wa, _, va = above
+        wb, _, vb = below
+        left = np.block([[wa, -wb], [va, vb]])
+        right = np.block([[-wa, wb], [va, vb]])
         s = np.linalg.solve(left, right)
         return s[:size, :size], s[:size, size:], s[size:, :size], s[size:, size:]
 
-    stack = [uniform_modes(top_index)]
+    stack: list[Modes] = [uniform_modes(top_index)]
     stack += [modes(layer) for layer in layers]
     stack.append(uniform_modes(substrate_index))
     thickness = [0.0] + [layer.thickness for layer in layers] + [0.0]
@@ -264,8 +376,13 @@ def diffract_te(
     reflectance = np.where(
         wave_top.real > 1e-12, np.abs(back) ** 2 * wave_top.real / delivered, 0.0
     )
+    # Each order's flux down the axis: ``Re(k_z)`` for TE's electric field, and for
+    # TM's magnetic field ``Re(k_z / eps)`` against the incident medium's own ``eps``.
+    flux_sub = (
+        (wave_sub / complex(substrate_index) ** 2).real * top_index**2 if tm else wave_sub.real
+    )
     transmittance = np.where(
-        wave_sub.real > 1e-12, np.abs(forward) ** 2 * wave_sub.real / delivered, 0.0
+        wave_sub.real > 1e-12, np.abs(forward) ** 2 * flux_sub / delivered, 0.0
     )
     return Diffraction(
         reflection=complex(np.vdot(beam, back) / np.vdot(beam, beam)),

@@ -15,7 +15,14 @@ import numpy as np
 import pytest
 
 from maiman.photonics import stack_reflection
-from maiman.rcwa import GratingLayer, PatternedLayer, UniformLayer, diffract_te
+from maiman.rcwa import (
+    GratingLayer,
+    PatternedLayer,
+    UniformLayer,
+    diffract,
+    diffract_te,
+    diffract_tm,
+)
 
 WAVELENGTH = 1.55e-6
 SINE = math.sin(math.radians(8.0))
@@ -376,4 +383,226 @@ def test_a_beam_needs_one_amplitude_per_order() -> None:
             substrate_index=SILICON,
             harmonics=4,
             incident=np.ones(3),
+        )
+
+
+# ---------------------------------------------------------------------------
+# TM (maiman-frt): the inverse rule, held to closed forms and to an independent solve
+# ---------------------------------------------------------------------------
+
+LAM = 1.55e-6
+
+
+def kz(index: complex, sine: float, top: float = 1.0) -> complex:
+    return complex(np.sqrt(complex(index) ** 2 - (top * sine) ** 2))
+
+
+def tm_fresnel(first: complex, second: complex, sine: float) -> complex:
+    """The magnetic field's reflection, ``(eps2 kz1 - eps1 kz2) / (eps2 kz1 + eps1 kz2)``."""
+    e1, e2 = complex(first) ** 2, complex(second) ** 2
+    a, b = e2 * kz(first, sine), e1 * kz(second, sine)
+    return (a - b) / (a + b)
+
+
+@pytest.mark.parametrize("degrees", [0.0, 20.0, 55.0, math.degrees(math.atan(1.45))])
+def test_tm_at_one_interface_is_fresnel_and_vanishes_at_brewster(degrees: float) -> None:
+    sine = math.sin(math.radians(degrees))
+    d = diffract_tm(
+        LAM, sine=sine, period=1e-6, top_index=1.0, layers=[], substrate_index=1.45, harmonics=3
+    )
+    assert abs(d.reflection - tm_fresnel(1.0, 1.45, sine)) < 1e-12
+    assert d.reflectance.sum() + d.transmittance.sum() == pytest.approx(1.0, abs=1e-12)
+    if degrees > 55.0:
+        assert abs(d.reflection) < 1e-12, "at Brewster's angle"
+
+
+def test_tm_through_a_film_is_the_airy_sum() -> None:
+    """A slab at 30 degrees: ``(r12 + r23 e) / (1 + r12 r23 e)``, admittances ``kz / eps``."""
+    sine, film, thickness = 0.5, 2.0, 0.37e-6
+    k0 = 2.0 * math.pi / LAM
+
+    def r(a: float, b: float) -> complex:
+        ya, yb = kz(a, sine) / a**2, kz(b, sine) / b**2
+        return (ya - yb) / (ya + yb)
+
+    phase = np.exp(2j * k0 * kz(film, sine) * thickness)
+    airy = (r(1.0, film) + r(film, 1.45) * phase) / (1 + r(1.0, film) * r(film, 1.45) * phase)
+    d = diffract_tm(
+        LAM,
+        sine=sine,
+        period=1e-6,
+        top_index=1.0,
+        layers=[UniformLayer(thickness, film)],
+        substrate_index=1.45,
+        harmonics=2,
+    )
+    assert abs(d.reflection - airy) < 1e-12
+
+
+@pytest.mark.parametrize("harmonics", [10, 20, 40])
+def test_a_lossless_grating_keeps_all_the_power_in_tm(harmonics: int) -> None:
+    d = diffract_tm(
+        LAM,
+        sine=math.sin(math.radians(10.0)),
+        period=0.63e-6,
+        top_index=1.0,
+        layers=[
+            GratingLayer(0.07e-6, 3.48, 1.44, 0.5),
+            UniformLayer(0.15e-6, 3.48),
+            UniformLayer(2e-6, 1.44),
+        ],
+        substrate_index=3.48,
+        harmonics=harmonics,
+    )
+    assert d.reflectance.sum() + d.transmittance.sum() == pytest.approx(1.0, abs=1e-12)
+
+
+def laurent_tm(period: float, sine: float, harmonics: int) -> complex:
+    """One TM grating layer between two half-spaces, by the Laurent rule, written apart.
+
+    From Maxwell's equations here and sharing no code with :mod:`maiman.rcwa`: the
+    field in each region, both interfaces matched in one linear system rather than
+    a scattering-matrix recursion, and every product by the Laurent rule -- which in
+    TM converges slowly, as ``1 / M``, but to the same limit.
+    """
+    ridge, groove, duty, top, substrate, thickness = 3.48, 1.0, 0.4, 1.0, 1.45, 0.3e-6
+    k0 = 2.0 * math.pi / LAM
+    h = np.arange(-harmonics, harmonics + 1)
+    size = h.size
+    kx = top * sine + h * LAM / period
+    across = np.diag(kx).astype(complex)
+    wide = np.arange(-2 * harmonics, 2 * harmonics + 1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        term = np.where(wide == 0, duty, np.sin(np.pi * wide * duty) / (np.pi * wide))
+    eps_h = (ridge**2 - groove**2) * term
+    eps_h[2 * harmonics] += groove**2
+    eps = eps_h[(h[:, None] - h[None, :]) + 2 * harmonics].astype(complex)
+    inverse = np.linalg.inv(eps)
+    values, w = np.linalg.eig(eps @ (across @ inverse @ across - np.eye(size)))
+    q = np.sqrt(values.astype(complex))
+    q = np.where(q.real < 0, -q, q)
+    v = inverse @ (w * q)
+    kz_top = np.sqrt(top**2 - kx**2 + 0j)
+    kz_sub = np.sqrt(substrate**2 - kx**2 + 0j)
+    kz_top = np.where(kz_top.imag < 0, -kz_top, kz_top)
+    kz_sub = np.where(kz_sub.imag < 0, -kz_sub, kz_sub)
+    decay = np.diag(np.exp(-k0 * q * thickness))
+    zero, one = np.zeros((size, size), complex), np.eye(size)
+    y_top, y_sub = np.diag(kz_top / top**2), np.diag(kz_sub / substrate**2)
+    system = np.block(
+        [
+            [-one, w, w @ decay, zero],
+            [y_top, -v / 1j, (v @ decay) / 1j, zero],
+            [zero, w @ decay, w, -one],
+            [zero, -(v @ decay) / 1j, v / 1j, -y_sub],
+        ]
+    )
+    incident = (h == 0).astype(complex)
+    rhs = np.concatenate([incident, y_top @ incident, np.zeros(size), np.zeros(size)])
+    return complex(np.linalg.solve(system, rhs)[:size][harmonics])
+
+
+@pytest.mark.parametrize("period", [LAM / 10, 0.63e-6])
+def test_tm_lands_where_an_independent_laurent_solve_converges(period: float) -> None:
+    """Converged by 25 orders, to 1.5e-4; the Laurent rule creeps up on it as ``1 / M``.
+
+    Measured: the Laurent solve is 1.6e-2 off at 10 orders, 3.5e-3 at 50 and 1.2e-3
+    at 150, on a subwavelength grating and on a coupler's period alike.
+    """
+    sine = 0.3
+    layer = [GratingLayer(0.3e-6, 3.48, 1.0, 0.4)]
+    mine = {
+        m: diffract_tm(
+            LAM,
+            sine=sine,
+            period=period,
+            top_index=1.0,
+            layers=layer,
+            substrate_index=1.45,
+            harmonics=m,
+        ).reflection
+        for m in (25, 100)
+    }
+    assert abs(mine[25] - mine[100]) < 3e-4, "converged: 1.5e-4 at the coupler period"
+    gaps = [abs(laurent_tm(period, sine, m) - mine[100]) for m in (10, 50, 150)]
+    assert gaps[0] > gaps[1] > gaps[2]
+    assert gaps[2] < 1.6e-3
+    assert gaps[0] / gaps[2] > 8.0, "as 1 / M"
+
+
+def test_a_tm_grating_finer_than_the_wavelength_is_a_uniaxial_slab() -> None:
+    """``E_x`` across the walls sees the harmonic mean, ``E_z`` along them the arithmetic.
+
+    TM sees both: ``kz = sqrt(eps_perp (1 - kx^2 / eps_par))``, admittance ``kz / eps_perp``.
+    Unlike TE, the remainder falls as the period and not its square -- 3.5e-3 at a
+    tenth of the wavelength, 1.1e-3 at a fortieth -- from the charge TM puts on the
+    teeth's faces, whose near field is a period deep. The independent solve above
+    says that remainder is the grating's and not the solver's.
+    """
+    ridge, groove, duty, thickness, sine = 3.48, 1.0, 0.4, 0.3e-6, 0.3
+    perp = 1.0 / (duty / ridge**2 + (1 - duty) / groove**2)
+    par = duty * ridge**2 + (1 - duty) * groove**2
+    k0 = 2.0 * math.pi / LAM
+    inside = np.sqrt(perp * (1 - sine**2 / par) + 0j)
+
+    def y(index: float) -> complex:
+        return kz(index, sine) / index**2
+
+    y_film = inside / perp
+    r12 = (y(1.0) - y_film) / (y(1.0) + y_film)
+    r23 = (y_film - y(1.45)) / (y_film + y(1.45))
+    phase = np.exp(2j * k0 * inside * thickness)
+    slab = (r12 + r23 * phase) / (1 + r12 * r23 * phase)
+    gaps = [
+        abs(
+            diffract_tm(
+                LAM,
+                sine=sine,
+                period=LAM / ratio,
+                top_index=1.0,
+                layers=[GratingLayer(thickness, ridge, groove, duty)],
+                substrate_index=1.45,
+                harmonics=25,
+            ).reflection
+            - slab
+        )
+        for ratio in (10, 20, 40)
+    ]
+    assert gaps[0] > gaps[1] > gaps[2]
+    assert gaps[2] < 1.5e-3
+
+
+def test_a_finite_coupler_in_tm_balances_its_power_and_is_not_te() -> None:
+    from maiman.photonics import finite_coupler_response
+
+    def solve(polarization: str) -> tuple[complex, float]:
+        result = finite_coupler_response(
+            LAM,
+            sine=math.sin(math.radians(10.0)),
+            pitch=0.63e-6,
+            periods=8,
+            duty=0.5,
+            etch_depth=70e-9,
+            beam_radius=2.5e-6,
+            absorber_length=10e-6,
+            polarization=polarization,
+        )
+        return result.reflection, result.reflected + result.transmitted + result.coupled
+
+    tm, total = solve("tm")
+    te, _ = solve("te")
+    assert total == pytest.approx(1.0, abs=1e-9)
+    assert abs(tm - te) > 1e-2
+
+
+def test_a_polarization_is_te_or_tm() -> None:
+    with pytest.raises(ValueError, match="polarization"):
+        diffract(
+            LAM,
+            sine=0.0,
+            period=1e-6,
+            top_index=1.0,
+            layers=[],
+            substrate_index=1.45,
+            polarization="p",
         )
