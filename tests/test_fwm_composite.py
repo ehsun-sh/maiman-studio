@@ -28,6 +28,7 @@ from maiman.kernels import (
     pmd_jones_matrix,
     pmd_sections_from,
     propagate_dispersion,
+    raman_tilt,
 )
 from maiman.signals import Band, OpticalSignal
 from test_fwm_tones import (
@@ -240,7 +241,6 @@ def test_carriers_off_the_windows_bins_are_refused_with_the_reason() -> None:
         {"pump_phase": True},
         {"cascaded_fwm": True},
         {"mixing_steps": 4.0},
-        {"raman_gain_slope": 0.028},
     ],
 )
 def test_it_is_refused_beside_what_it_replaces(other: dict[str, object]) -> None:
@@ -392,3 +392,67 @@ def test_pmd_needs_the_two_polarizations_together_on_the_grid() -> None:
     with pytest.raises(ValueError, match="cross_polarization"):
         Fiber(composite_fwm=True, pmd_coefficient=0.1).validate()
     Fiber(composite_fwm=True, pmd_coefficient=0.1, cross_polarization=True).validate()
+
+
+# -- Raman on the grid ----------------------------------------------------------------
+
+
+def raman_span(**settings: object) -> Fiber:
+    chosen: dict[str, object] = {
+        "label": "raman-span",
+        "length": 40.0,
+        "attenuation": 0.0,
+        "dispersion": 17.0,
+        "nonlinearity": 1e-12,
+        "mixing_floor": 0.0,
+        "composite_fwm": True,
+        "raman_gain_slope": 0.028,
+    }
+    chosen.update(settings)
+    return Fiber(**chosen)  # type: ignore[arg-type]
+
+
+def test_raman_on_the_grid_moves_modulated_power_as_the_closed_form() -> None:
+    """Two modulated channels 200 GHz apart: kept power and tilt are ``raman_tilt``'s, to 1 %.
+
+    The closed form is written in mean powers; the grid moves the modulation itself,
+    and lands 0.5 % of the change from it at 200 GHz and D = 17 -- where constant
+    tones agree to 1e-4 (``test_physics``), so the rest is the pattern's. The
+    reported tilt is measured from the bands.
+    """
+    generator = np.random.default_rng(11)
+    bands = (
+        modulated(100e-3, ANCHOR, generator, 8e9),
+        modulated(100e-3, ANCHOR + 200e9, generator, 8e9),
+    )
+    result = raman_span().run(CTX, {"in": OpticalSignal(bands=bands)})
+    out = result["out"]
+    assert isinstance(out, OpticalSignal)
+    launched = [b.average_power() for b in bands]
+    wanted = raman_tilt([b.f0 for b in bands], launched, gain_slope=2.8e-17, effective_length=40e3)
+    for source, result_band, want in zip(bands, out.bands, wanted, strict=False):
+        kept = result_band.average_power() / source.average_power()
+        assert kept - 1.0 == pytest.approx(want - 1.0, rel=1e-2)
+    assert result["diagnostics"].raman_tilt == pytest.approx(
+        10.0 * math.log10(wanted[0] / wanted[1]), rel=1e-2
+    )
+
+
+def test_raman_on_the_grid_is_refused_past_the_gain_peak() -> None:
+    generator = np.random.default_rng(12)
+    bands = (
+        modulated(1e-3, ANCHOR, generator, 8e9),
+        modulated(1e-3, ANCHOR + 14e12, generator, 8e9),
+    )
+    with pytest.raises(ValueError, match="gain peak"):
+        raman_span(composite_order=1.0, mixing_floor=1e9).run(
+            CTX, {"in": OpticalSignal(bands=bands)}
+        )
+
+
+def test_raman_on_the_grid_needs_both_axes_together() -> None:
+    signal = jones_pumps(1e-3, JONES)
+    with pytest.raises(ValueError, match="both axes"):
+        raman_span().run(CTX, {"in": signal})
+    out = raman_span(cross_polarization=True).run(CTX, {"in": signal})["out"]
+    assert isinstance(out, OpticalSignal)

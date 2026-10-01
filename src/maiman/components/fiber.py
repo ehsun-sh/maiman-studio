@@ -196,6 +196,13 @@ class Fiber(Component):
     closed form is exact. A wider comb — the S, C and L bands together; C and L
     alone are 9.7 THz and stay inside — is integrated instead, with silica's
     measured gain shape and photons rather than watts conserved.
+
+    **Raman on the composite grid.** With ``composite_fwm`` the gain slope enters
+    the split-step itself, as the delayed response's ``T_R`` term, so it acts on
+    the modulation and on the mixing products the grid carries rather than on mean
+    powers afterwards. It is the same straight line, so a comb past the gain peak is
+    refused there, and it is driven by both axes' power, so light on both needs
+    ``cross_polarization`` on.
     """
 
     display_name = "Optical Fiber"
@@ -429,7 +436,6 @@ class Fiber(Component):
                 ("carry_phase", self.carry_phase),
                 ("cascaded_fwm", self.cascaded_fwm),
                 ("mixing_steps", self.mixing_steps > 1.0),
-                ("raman_gain_slope", self.raman_gain_slope > 0.0),
             ):
                 if on:
                     raise ValueError(
@@ -879,6 +885,15 @@ class Fiber(Component):
         def carrier(offset: float) -> np.ndarray:
             return np.asarray(np.exp(2j * np.pi * offset * grid))
 
+        raman = self.si("raman_gain_slope")
+        if raman > 0.0 and float(ordered[-1] - ordered[0]) > RAMAN_TRIANGLE_LIMIT:
+            raise ValueError(
+                f"{self.label or 'Fiber'}: Raman on the composite grid is the gain slope's "
+                f"straight line, good to the {RAMAN_TRIANGLE_LIMIT / 1e12:.1f} THz gain peak, "
+                f"and this comb and its products span "
+                f"{float(ordered[-1] - ordered[0]) / 1e12:.1f} THz; turn composite_fwm off to "
+                "integrate it with silica's measured shape"
+            )
         mismatch = abs(fwm_phase_mismatch(beta2, 0.0, 0.0, float(gaps.min()) if gaps.size else 0.0))
         step = 0.05 / mismatch if mismatch > 0.0 else None
         finished: list[np.ndarray] = []
@@ -943,12 +958,23 @@ class Fiber(Component):
                 coherent_polarization=self.coherent_polarization,
                 pmd=sections if interleaved else None,
                 max_step=step,
+                raman_slope=raman,
             )
             if sections and not interleaved:
                 out_x, out_y = apply_pmd(out_x, out_y, grid_rate, sections)
             finished = [out_x, out_y]
             steps, peak = diagnostics.steps, diagnostics.peak_nonlinear_phase
         else:
+            lit = [
+                any(np.any(np.asarray(b.Ey if axis else b.Ex) != 0.0) for b in bands)
+                for axis in (0, 1)
+            ]
+            if raman > 0.0 and all(lit):
+                raise ValueError(
+                    f"{self.label or 'Fiber'}: Raman is driven by the power on both axes, and "
+                    "with cross_polarization off composite_fwm solves them apart; turn "
+                    "cross_polarization on, or put the light on one axis"
+                )
             for axis in (0, 1):
                 combined = combine(axis)
                 if not np.any(combined != 0.0):
@@ -963,6 +989,7 @@ class Fiber(Component):
                     alpha=alpha,
                     distance=distance,
                     max_step=step,
+                    raman_slope=raman,
                 )
                 finished.append(out)
                 steps = max(steps, diagnostics.steps)
@@ -1017,6 +1044,19 @@ class Fiber(Component):
         total = made + sum(
             float(np.mean(np.abs(b.Ex) ** 2 + np.abs(b.Ey) ** 2)) for b in launched_bands
         )
+        tilt = 0.0
+        if raman > 0.0 and len(bands) > 1:
+            # Measured, not computed: what the lowest and highest carriers kept of what
+            # they were given, as ``_raman`` reports it -- with whatever the mixing took
+            # from them in it too, because on the grid the two are one propagation.
+            order = sorted(range(len(bands)), key=lambda index: bands[index].f0)
+            kept = [
+                launched_bands[index].average_power() / bands[index].average_power()
+                if bands[index].average_power() > 0.0
+                else 1.0
+                for index in (order[0], order[-1])
+            ]
+            tilt = 10.0 * math.log10(kept[0] / kept[1]) if kept[1] > 0.0 else 0.0
         diagnostics_out = PropagationDiagnostics(
             steps=steps,
             distance=distance,
@@ -1026,6 +1066,7 @@ class Fiber(Component):
             mixing_products=len(products),
             fwm_depletion=made / total if total > 0.0 else 0.0,
             differential_group_delay=realised_dgd,
+            raman_tilt=tilt,
         )
         return {
             "out": OpticalSignal(

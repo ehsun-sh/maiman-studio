@@ -338,6 +338,7 @@ def propagate_coupled_ssfm(
     max_nonlinear_phase: float = 0.005,
     max_walkoff_slip: float = 0.5,
     max_step: float | None = None,
+    raman_slope: float = 0.0,
     on_progress: Callable[[float], None] | None = None,
 ) -> tuple[list[np.ndarray], PropagationDiagnostics]:
     """Co-propagate several channels through one fiber, coupled by the Kerr effect.
@@ -451,6 +452,17 @@ def propagate_coupled_ssfm(
     what applying the whole chain afterwards cannot represent. Applied in the order
     :func:`apply_pmd` applies them, so with ``gamma = 0`` the two agree exactly.
 
+    **Raman, when asked for.** ``raman_slope`` is ``C_R`` [1/(W m Hz)], the gain
+    slope :func:`raman_tilt` is written in, and adds the delayed response's
+    first-order term, ``i (C_R / 4 pi) A dP/dT`` for ``P`` the power summed over
+    every field and both axes (Agrawal, *Nonlinear Fiber Optics*, 5th ed., eq.
+    2.3.43, whose ``gamma T_R`` it is). It is a phase in time, applied beside the
+    Kerr one, so it conserves power exactly; at the carriers it is the linear gain
+    ``dP_n/dz = P_n sum_m C_R (f_m - f_n) P_m`` -- the triangle, so good only to the
+    gain peak, and polarization-averaged as ``C_R`` is. Each field sits on one
+    grid, so this is Raman *across* what the grid holds: meant for a comb put on
+    one grid, where a field's own spectrum is where the other carriers are.
+
     Returns the propagated fields, in input order, and
     :class:`PropagationDiagnostics`.
     """
@@ -555,6 +567,10 @@ def propagate_coupled_ssfm(
             # linear run needs no walk-off bound at all.
             if spread > 0.0:
                 step = min(step, max_walkoff_slip / (spread * sample_rate))
+        if raman_slope != 0.0:
+            rate = raman_slope / (4.0 * math.pi) * float(xp.max(xp.abs(_power_rate(a, omega))))
+            if rate > 0.0:
+                step = min(step, max_nonlinear_phase / rate)
         # A step can only be shortened to the point where it still advances;
         # without this an extreme peak power would stall the loop.
         step = max(min(step, remaining), remaining * 1e-9)
@@ -614,6 +630,15 @@ def propagate_coupled_ssfm(
                     )
                     peak_phase = max(peak_phase, turned)
             a = rotated
+
+        if raman_slope != 0.0:
+            # The Raman phase, from the power the Kerr step leaves: both are pure
+            # phases that leave the power where it was, so the order is immaterial
+            # to the step's accuracy, and it is a phase every field shares.
+            turn = raman_slope / (4.0 * math.pi) * _power_rate(a, omega) * step
+            peak_phase = max(peak_phase, float(xp.max(xp.abs(turn))))
+            factor = xp.exp(1j * turn)
+            a = [f * factor for f in a]
 
         a = [xp.fft.ifft(xp.fft.fft(f) * h) for f, h in zip(a, half, strict=True)]
 
@@ -760,6 +785,18 @@ def _apply_pmd_section(
         out[x_index] = xp.fft.ifft(u[0, 0] * delayed_x + u[0, 1] * delayed_y)
         out[y_index] = xp.fft.ifft(u[1, 0] * delayed_x + u[1, 1] * delayed_y)
     return out
+
+
+def _power_rate(fields: Sequence[np.ndarray], omega: np.ndarray) -> np.ndarray:
+    """``dP/dT`` of the power summed over every field [W/s].
+
+    As ``2 Re(A* dA/dT)``, with ``dA/dT`` taken spectrally from the field, which the
+    grid holds. Not by transforming ``|A|**2`` itself: that holds the beat of the
+    furthest carriers, twice as wide as the field, and past the grid's Nyquist
+    frequency it would alias and come back with the wrong sign.
+    """
+    xp = array_module(*fields)
+    return sum(2.0 * xp.real(xp.conj(f) * xp.fft.ifft(1j * omega * xp.fft.fft(f))) for f in fields)
 
 
 def _power_per_axis(fields: Sequence[np.ndarray], axis: Sequence[int]) -> dict[int, np.ndarray]:

@@ -409,3 +409,56 @@ def test_combiner_insertion_loss_applies_to_every_channel(ctx: SimulationContext
 
     for band in g.run()[meter].bands:
         assert band.power_dbm == pytest.approx(-3.0, abs=DB_TOL)
+
+
+# --------------------------------------------------------------------------
+# Raman in the split-step: two tones against the closed form (Zirngibl 1998)
+#   P_n(L) = P_n(0) P_tot exp(-C_R P_tot L df_n) / sum_m P_m(0) exp(-C_R P_tot L df_m)
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("low", "high", "spacing"),
+    [(50e-3, 50e-3, 100e9), (50e-3, 50e-3, 1e12), (100e-3, 20e-3, 2e12)],
+)
+def test_split_step_raman_moves_power_as_the_closed_form(
+    low: float, high: float, spacing: float
+) -> None:
+    """The ``T_R`` term on one grid moves what ``raman_tilt`` says, to 1e-3 of the change.
+
+    Two constant tones ``spacing`` apart, 40 km lossless, D = 17 so that the
+    Raman-assisted mixing the term also carries is mismatched away; nothing else
+    nonlinear. The higher tone pumps the lower, and total power is kept exactly.
+    """
+    from maiman.kernels import dispersion_to_beta2, propagate_coupled_ssfm, raman_tilt
+
+    n, rate = 512, 8.0 * spacing
+    t = np.arange(n) / rate
+    field = math.sqrt(low) * np.exp(-1j * math.pi * spacing * t) + math.sqrt(high) * np.exp(
+        1j * math.pi * spacing * t
+    )
+    slope, length = 2.8e-17, 40e3
+    (out,), _ = propagate_coupled_ssfm(
+        (field,),
+        rate,
+        beta2=(dispersion_to_beta2(17e-6, 1550e-9),),
+        walkoff=(0.0,),
+        gamma=0.0,
+        alpha=0.0,
+        distance=length,
+        raman_slope=slope,
+        max_step=200.0,
+    )
+    spectrum = np.abs(np.fft.fft(out) / n) ** 2
+    frequency = np.fft.fftfreq(n, 1.0 / rate)
+    kept = [
+        spectrum[np.argmin(np.abs(frequency - f))] / p
+        for f, p in ((-spacing / 2, low), (spacing / 2, high))
+    ]
+    wanted = raman_tilt(
+        [-spacing / 2, spacing / 2], [low, high], gain_slope=slope, effective_length=length
+    )
+    for got, want in zip(kept, wanted, strict=True):
+        assert got - 1.0 == pytest.approx(want - 1.0, rel=1e-3)
+    assert kept[0] > 1.0 > kept[1]
+    assert float(spectrum.sum()) == pytest.approx(low + high, rel=1e-12)
