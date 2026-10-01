@@ -717,12 +717,21 @@ Stated in the code where each approximation is made, and collected here:
   `coherent_polarization` the isotropic tensor's circular-basis step -- and lands on the vector
   tone solver to 2e-3 at 1 and 20 mW for both. PMD draws the split-step's own chain and acts
   across the whole grid, so each carrier meets it at its own frequency, which the tone solver's
-  rest-frame rotation cannot say: a single band comes out as `apply_pmd` gives it to rounding,
-  and two carriers 100 GHz apart are rotated alike no longer. Its limits: no Raman, carriers must
-  sit on the window's frequency bins or it refuses, a band is taken to lie within half the
-  distance to its nearest neighbour (a product is three times as wide as the modulation it
-  makes), the PMD phases of the carriers are kept rather than stripped, and the cost is the
-  comb's sampling rate.
+  rest-frame rotation cannot say: the chain is measured from the first band's carrier, as the
+  walk-off and the reference beta2 are, so that band comes out as `apply_pmd` gives it to
+  rounding whatever else is on the grid -- measured from the grid's centre, faint bands beside it
+  had turned it by 46 to 83 % -- and two carriers 100 GHz apart are rotated alike no longer. The
+  slots the grid is cut back into tile it, each to the midpoints with its neighbours and the
+  outermost two out to a band's window, so a product wider than half the spacing (it is three
+  times as wide as the modulation that makes it) keeps its outer skirt -- matched to the
+  time-domain product to 1 % at 25 GHz of modulation -- and hands the inner one to the channel it
+  lands on, as that channel's crosstalk. Stimulated Raman scattering enters the split-step itself
+  as the delayed response's `T_R` term (Agrawal, eq. 2.3.43), a phase in time that keeps power
+  exactly and acts on the modulation and the products: two tones land on `raman_tilt` to 1e-3 of
+  the change, modulated channels 200 GHz apart to 0.5 %. It is the gain slope's straight line, so
+  a comb past the 13.2 THz peak is refused, and it is driven by both axes' power, so light on both
+  needs `cross_polarization`. Its limits: carriers must sit on the window's frequency bins or it
+  refuses, and the cost is the comb's sampling rate.
 * **Gratings and modes.** The average index a writing process raises is carried when a grating's
   `dc_compensated` flag is off: as Erdogan's self-coupling for the Bragg and long-period gratings,
   and for the uniform tilted one as the fibre it leaves, its core raised and every mode solved
@@ -806,10 +815,6 @@ next, in order:
    against them skip in CI. Past the shaper the path is held to a digest everywhere, and
    `RELEASING.md` runs the rest with `MAIMAN_REQUIRE_SPEC=1` before each release; the shaper
    itself is checked on every push only once the `specification` job in `ci.yml` has a runner.
-2. **Give the composite grid Raman.** It is exact for modulated bands, with both polarizations and
-   PMD; stimulated Raman scattering is the tone solver's and not yet its, since the grid's
-   split-step has no time-domain Raman term, and the perturbative series still serves a modulated
-   comb where the cost of the grid is too much (0.89 of the split-step at 10 mW over 10 km).
-3. **The rest of [Open](#open)**, each with the closed-form test that shows it did something.
+2. **The rest of [Open](#open)**, each with the closed-form test that shows it did something.
 
 Criticism of the decisions above §10 is still worth more than any of these.
