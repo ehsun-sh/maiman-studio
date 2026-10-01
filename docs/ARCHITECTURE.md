@@ -777,10 +777,11 @@ Stated in the code where each approximation is made, and collected here:
   over two spans is its field to 1e-3 (tone solver; the composite grid to its own 1.5e-3; the
   series' own product phase is drawn unless `carry_phase`). A coherent receiver turns the signal
   by its carried phase and the local oscillator by its own before they beat, so one laser split
-  down two lengths comes out at `-(beta L_s - beta L_lo)`. Where the reference wavelength is not
-  the first band's, the mixing's `beta2` (at the first band) and the carried phase's (at the
-  reference) differ by `(lambda / lambda_ref)^2`, which at 1552.5 against 1550 nm is 0.03 rad
-  over 20 km of D = 2 at 100 GHz.
+  down two lengths comes out at `-(beta L_s - beta L_lo)`. A span carries every phase about its
+  first band -- value and slope from the expansion about the reference wavelength, curvature
+  from the dispersion at that band's own wavelength, the `beta2` the mixing is written with --
+  since a `beta2` held at 1550 nm across a comb at 1552.5 nm disagrees with it by
+  `(lambda / lambda_ref)^2` and put the products 0.03 rad off the field over 20 km of D = 2.
   The shaping tables are normative data and are loaded from `MAIMAN_WPORT_TABLES` rather than
   shipped, so the DPO path needs them present to run at all. Error marking overwrites a failed
   CRC32's whole span with 802.3 error marking blocks; which of them belong to which Ethernet

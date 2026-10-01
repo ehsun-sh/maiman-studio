@@ -1257,7 +1257,8 @@ class Fiber(Component):
         if self.carry_carrier_phase:
             for band in signal.bands:
                 phases[band.f0] = math.remainder(
-                    before.phase_at(band.f0) + self.carrier_phase_of(band) * distance,
+                    before.phase_at(band.f0)
+                    + self.carrier_phase_of(band, signal.bands[0]) * distance,
                     2.0 * math.pi,
                 )
             present = [band.f0 for band in signal.bands]
@@ -1267,13 +1268,14 @@ class Fiber(Component):
                 arrived = self._product_phase_before(signal, band.f0)
                 if arrived is not None:
                     phases[band.f0] = math.remainder(
-                        arrived + self.carrier_phase_of(band) * distance, 2.0 * math.pi
+                        arrived + self.carrier_phase_of(band, signal.bands[0]) * distance,
+                        2.0 * math.pi,
                     )
         return WalkoffHistory(
             carriers=tuple(sorted(delays.items())), phases=tuple(sorted(phases.items()))
         )
 
-    def carrier_phase_of(self, band: Band) -> float:
+    def carrier_phase_of(self, band: Band, about: Band | None = None) -> float:
         """The phase constant ``beta(omega)`` of the carrier at ``band.f0`` [rad/m].
 
         The mode's propagation constant, absolute -- ``n_p omega_0 / c`` at the
@@ -1288,15 +1290,42 @@ class Fiber(Component):
         ``(n_g / c) (omega_a - omega_b)``, which is why the group index matters as
         much as the phase index; ``phase_index`` only sets where the fast phase of
         one carrier over a length difference lands.
+
+        **About a band, for a comb.** Given ``about``, the expansion is taken again
+        at that carrier: its value and slope there from the one above, and its
+        curvature from :meth:`beta2_at` and :meth:`beta3_at` at that band's own
+        wavelength -- the ``beta2`` :meth:`reference_beta2` gives four-wave mixing.
+        Holding ``beta2`` at the reference wavelength across a comb sitting
+        elsewhere disagrees with that by ``(lambda / lambda_ref)^2``, 0.33 % at
+        1552.5 against 1550 nm, which over 20 km of D = 2 put a product's carried
+        phase 0.03 rad off the field. A span carries every phase about its first
+        band, as it writes its walk-off and its mixing against it.
         """
         reference = self.si("reference_wavelength")
         omega_0 = 2.0 * math.pi * C_LIGHT / reference
-        detuning = 2.0 * math.pi * band.f0 - omega_0
+        beta2, beta3 = self.beta2_at(reference), self.beta3_at(reference)
+
+        def expanded(omega: float) -> tuple[float, float]:
+            d = omega - omega_0
+            value = (
+                self.phase_index * omega_0 / C_LIGHT
+                + self.group_index * d / C_LIGHT
+                + 0.5 * beta2 * d**2
+                + beta3 * d**3 / 6.0
+            )
+            return value, self.group_index / C_LIGHT + beta2 * d + 0.5 * beta3 * d**2
+
+        omega = 2.0 * math.pi * band.f0
+        if about is None:
+            return expanded(omega)[0]
+        anchor = 2.0 * math.pi * about.f0
+        value, slope = expanded(anchor)
+        d = omega - anchor
         return (
-            self.phase_index * omega_0 / C_LIGHT
-            + self.group_index * detuning / C_LIGHT
-            + 0.5 * self.beta2_at(reference) * detuning**2
-            + self.beta3_at(reference) * detuning**3 / 6.0
+            value
+            + slope * d
+            + 0.5 * self.beta2_at(about.wavelength) * d**2
+            + self.beta3_at(about.wavelength) * d**3 / 6.0
         )
 
     # -- propagation ------------------------------------------------------

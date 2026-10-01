@@ -57,12 +57,25 @@ def fibre(length_km: float, dispersion: float = DISPERSION, **settings: object) 
     )
 
 
-def beta(frequency: float, dispersion: float = DISPERSION) -> float:
-    """``beta(omega)`` [rad/m], expanded about the fibre's reference wavelength."""
+def beta(frequency: float, dispersion: float = DISPERSION, about: float | None = None) -> float:
+    """``beta(omega)`` [rad/m], expanded about the fibre's reference wavelength.
+
+    With ``about``, taken again at that carrier: value and slope from the expansion
+    above, curvature from the dispersion at that carrier's own wavelength,
+    ``-D lambda^2 / (2 pi c)`` -- which is what a span carries a comb's phases with.
+    """
     reference = Fiber().si("reference_wavelength")
     omega_0 = 2.0 * math.pi * C_LIGHT / reference
-    detuning = 2.0 * math.pi * frequency - omega_0
     beta2 = -dispersion * 1e-6 * reference**2 / (2.0 * math.pi * C_LIGHT)
+    if about is not None:
+        anchor = 2.0 * math.pi * about - omega_0
+        value = PHASE_INDEX * omega_0 / C_LIGHT + GROUP_INDEX * anchor / C_LIGHT
+        value += 0.5 * beta2 * anchor**2
+        slope = GROUP_INDEX / C_LIGHT + beta2 * anchor
+        local = -dispersion * 1e-6 * (C_LIGHT / about) ** 2 / (2.0 * math.pi * C_LIGHT)
+        d = 2.0 * math.pi * (frequency - about)
+        return value + slope * d + 0.5 * local * d**2
+    detuning = 2.0 * math.pi * frequency - omega_0
     return (
         PHASE_INDEX * omega_0 / C_LIGHT
         + GROUP_INDEX * detuning / C_LIGHT
@@ -114,7 +127,7 @@ def test_two_tones_down_one_span_beat_at_the_difference_of_their_phases(length: 
     signal = OpticalSignal(bands=(tone(A), tone(B)))
     after = fibre(length).run(CTX, {"in": signal})["out"]
     assert isinstance(after, OpticalSignal)
-    expected = -(beta(A) - beta(B)) * length * 1e3
+    expected = -(beta(A, about=A) - beta(B, about=A)) * length * 1e3
     assert wrapped(beat_phase(after, B, A) - expected) == pytest.approx(0.0, abs=1e-3)
 
 
@@ -123,7 +136,9 @@ def test_the_carried_phase_is_the_propagation_constant_times_the_length() -> Non
     after = fibre(10.0).run(CTX, {"in": signal})["out"]
     assert isinstance(after, OpticalSignal)
     for f0 in (A, B):
-        assert wrapped(after.walkoff.phase_at(f0) - beta(f0) * 10e3) == pytest.approx(0.0, abs=2e-3)
+        assert wrapped(after.walkoff.phase_at(f0) - beta(f0, about=A) * 10e3) == pytest.approx(
+            0.0, abs=2e-3
+        )
 
 
 def test_spans_add_and_a_reversed_span_undoes_it() -> None:
@@ -132,7 +147,7 @@ def test_spans_add_and_a_reversed_span_undoes_it() -> None:
     twice = fibre(7.0).run(CTX, {"in": once})["out"]
     assert isinstance(twice, OpticalSignal)
     for f0 in (A, B):
-        assert wrapped(twice.walkoff.phase_at(f0) - 2.0 * beta(f0) * 7e3) == pytest.approx(
+        assert wrapped(twice.walkoff.phase_at(f0) - 2.0 * beta(f0, about=A) * 7e3) == pytest.approx(
             0.0, abs=4e-3
         )
 
@@ -203,12 +218,13 @@ def test_a_mixing_product_carries_the_phase_of_the_whole_path() -> None:
     product's stored amplitude turned by its carried phase is that field, to 1e-3,
     first and second order on both sides: the phase a carrier at its frequency would
     have had over the whole path, though it was made inside the first span and the
-    second. The reference wavelength sits on the lower pump, where the ``beta2`` the
-    mixing is written with and the one the carried phase expands are the same number.
+    second. The reference wavelength is the default 1550 nm, off the comb: the span
+    carries the phases about its first band, with that band's ``beta2`` -- the one the
+    mixing is written with -- and the reference here expands the same way. Held at
+    1550 nm instead, the products were 0.03 rad off (maiman-dvo).
     """
     from maiman.kernels import propagate_coupled_ssfm
 
-    reference = C_LIGHT / ANCHOR
     pump, span, dispersion, gamma = 10e-3, 10e3, 2.0, 1.3
     signal = OpticalSignal(bands=(tone(ANCHOR, pump), tone(ANCHOR + WIDE, pump)))
     for index in range(2):
@@ -223,11 +239,18 @@ def test_a_mixing_product_carries_the_phase_of_the_whole_path() -> None:
             carry_carrier_phase=True,
             phase_index=PHASE_INDEX,
             group_index=GROUP_INDEX,
-            reference_wavelength=reference * 1e9,
         ).run(DOUBLE, {"in": signal})["out"]
         assert isinstance(signal, OpticalSignal)
 
-    beta2 = -dispersion * 1e-6 * reference**2 / (2.0 * math.pi * C_LIGHT)
+    # The whole beta about the lower pump: its value and slope from the expansion about
+    # the reference wavelength, its curvature from the dispersion at its own wavelength.
+    reference = Fiber().si("reference_wavelength")
+    beta2_reference = -dispersion * 1e-6 * reference**2 / (2.0 * math.pi * C_LIGHT)
+    anchor = 2.0 * math.pi * (ANCHOR - C_LIGHT / reference)
+    value = beta(ANCHOR, dispersion)
+    slope = GROUP_INDEX / C_LIGHT + beta2_reference * anchor
+    wavelength = C_LIGHT / ANCHOR
+    beta2 = -dispersion * 1e-6 * wavelength**2 / (2.0 * math.pi * C_LIGHT)
     n, rate = 512, 64 * WIDE
     t = np.arange(n) / rate
     field = math.sqrt(pump) * (1.0 + np.exp(2j * np.pi * WIDE * t))
@@ -236,14 +259,14 @@ def test_a_mixing_product_carries_the_phase_of_the_whole_path() -> None:
             (field,),
             rate,
             beta2=(beta2,),
-            walkoff=(GROUP_INDEX / C_LIGHT,),
+            walkoff=(slope,),
             gamma=gamma * 1e-3,
             alpha=0.0,
             distance=span,
             max_step=2.0,
             max_nonlinear_phase=1e-4,
         )
-    field = field * np.exp(-1j * PHASE_INDEX * 2.0 * math.pi * ANCHOR / C_LIGHT * 2.0 * span)
+    field = field * np.exp(-1j * value * 2.0 * span)
     for m in (-2, -1, 2, 3):
         f0 = ANCHOR + m * WIDE
         product = next(b for b in signal.bands if abs(b.f0 - f0) < 1e3)
