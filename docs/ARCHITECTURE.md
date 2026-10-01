@@ -691,13 +691,16 @@ Stated in the code where each approximation is made, and collected here:
   silica's measured shape with the quantum defect taken past it, as the perturbative path picks
   -- and lands on `raman_tilt` and `raman_transfer` to 2e-4 with the loss divided back out; it
   moves power and no phase. PMD, with `cross_polarization` on, draws the split-step's own
-  chain from the same stream and meets a tone as it meets a band at rest -- a constant sits at
-  its own baseband, where a section's delay is a phase of one and only its Jones rotation is
-  left, the same matrix for every tone, so the chain is what `apply_pmd` leaves to the digit
-  where nothing mixes; after the Kerr effect, or between pieces of the span with
-  `interleave_pmd`, where the isotropic tensor's coherent term does not commute with it. What
-  it does not have, as the split-step does not, is the rotation differing from tone to tone
-  across a wide comb. With `cross_polarization` the tones are Jones
+  chain from the same stream and meets each tone at its own frequency, measured from the first
+  band's carrier as the composite grid measures it: the first tone is turned as `apply_pmd`
+  turns a band at rest, and each other by the chain's Jones matrix at its offset, to the digit
+  where nothing mixes -- a 2 ps chain turns a tone 100 GHz on by tenths otherwise, which the
+  rest-frame rotation every tone used to share could not say. After the Kerr effect, or with
+  `interleave_pmd` at the midpoint of each piece of the span, where the split-step puts its
+  waveplates (it used to rotate at each piece's end, which put the product a third off the grid's at 20 mW),
+  and where the isotropic tensor's coherent term does not commute with it. Against the composite
+  grid through one chain it lands to 1e-12 at a microwatt, and at 20 mW the pumps to 1e-4 and the
+  product to 2e-2. With `cross_polarization` the tones are Jones
   vectors and the two axes are coupled by silica's isotropic Kerr tensor -- circular light turns
   at two thirds of linear's rate, an orthogonal neighbour cross-phase modulates at two thirds,
   and `coherent_polarization` off keeps the phase-only form the split-step defaults to -- each
@@ -716,8 +719,8 @@ Stated in the code where each approximation is made, and collected here:
   carries both axes through the coupled split-step -- its phase-only form, or with
   `coherent_polarization` the isotropic tensor's circular-basis step -- and lands on the vector
   tone solver to 2e-3 at 1 and 20 mW for both. PMD draws the split-step's own chain and acts
-  across the whole grid, so each carrier meets it at its own frequency, which the tone solver's
-  rest-frame rotation cannot say: the chain is measured from the first band's carrier, as the
+  across the whole grid, so each carrier meets it at its own frequency, as the tone solver's
+  tones do: the chain is measured from the first band's carrier, as the
   walk-off and the reference beta2 are, so that band comes out as `apply_pmd` gives it to
   rounding whatever else is on the grid -- measured from the grid's centre, faint bands beside it
   had turned it by 46 to 83 % -- and two carriers 100 GHz apart are rotated alike no longer. The

@@ -707,27 +707,40 @@ class Fiber(Component):
                     raman=coupling,
                 )
 
-            # PMD acts on a tone in its own baseband, where the delay is a phase of
-            # one and a section is only its Jones rotation -- the same matrix for
-            # every tone, as :func:`~maiman.kernels.apply_pmd` gives a band at rest.
-            # The amplitudes are conjugated against this library's fields, so it is
-            # the conjugate rotation that turns them. Where the sections are
-            # interleaved the span is cut into as many pieces and each is solved
-            # before its rotation; otherwise the whole chain comes after the Kerr
-            # effect, as it does in the split-step.
+            # PMD meets each tone at its own frequency, measured from the first band's
+            # carrier as the composite grid measures it: there a section is its Jones
+            # rotation after the delay's phase ``+-omega dgd / 2`` for the tone's offset
+            # ``omega``, so the first band is turned as :func:`~maiman.kernels.apply_pmd`
+            # turns a band at rest and the others each as they differ from it. The
+            # amplitudes are conjugated against this library's fields, so it is the
+            # conjugate matrix that turns them. Where the sections are interleaved the
+            # span is cut into as many pieces and each is solved before its rotation;
+            # otherwise the whole chain comes after the Kerr effect, as it does in the
+            # split-step.
+            omega = 2.0 * math.pi * offsets
+
+            def rotate(amplitudes: np.ndarray, section: PMDSection) -> np.ndarray:
+                phase = np.exp(0.5j * omega * section.dgd)
+                delayed = amplitudes * np.stack([np.conj(phase), phase], axis=1)
+                return np.asarray(delayed @ np.conj(section.unitary).T)
+
             if sections and self.interleave_pmd:
-                finish = start
+                # Each waveplate at the midpoint of its piece, where the split-step puts
+                # it: half a piece, then a plate and a whole piece in turn, then the last
+                # half after the last plate.
                 piece = distance / len(sections)
+                finish, steps = solve(start, 0.5 * piece, signal.accumulated_gvd)
                 for index, section in enumerate(sections):
+                    finish = rotate(finish, section)
+                    length = piece if index + 1 < len(sections) else 0.5 * piece
                     finish, taken = solve(
-                        finish, piece, signal.accumulated_gvd + beta2 * piece * index
+                        finish, length, signal.accumulated_gvd + beta2 * piece * (index + 0.5)
                     )
                     steps += taken
-                    finish = finish @ np.conj(section.unitary).T
             else:
                 finish, steps = solve(start, distance, signal.accumulated_gvd)
                 for section in sections:
-                    finish = finish @ np.conj(section.unitary).T
+                    finish = rotate(finish, section)
         else:
             for axis in (0, 1):
                 if np.any(start[:, axis] != 0.0):

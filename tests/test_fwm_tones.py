@@ -602,22 +602,35 @@ def pmd_span(nonlinearity: float = 1e-9, **settings: object) -> Fiber:
 JONES = (math.cos(0.4), 1j * math.sin(0.4))
 
 
-def test_a_tone_meets_pmd_as_a_band_at_rest_does() -> None:
-    """With nothing to mix the tone comes out of the chain exactly as ``apply_pmd`` leaves it.
+def test_a_tone_meets_pmd_at_its_own_frequency() -> None:
+    """With nothing to mix, the first tone leaves the chain as ``apply_pmd`` leaves it at rest.
 
-    A tone is a constant, at its own baseband, where a section's delay is a phase of
-    one and only its Jones rotation is left: the product of the chain's unitaries.
+    The chain is measured from the first band's carrier, so that tone sits where a
+    section's delay is a phase of one and only its Jones rotation is left;
     ``apply_pmd`` does that through the frequency domain, sharing no arithmetic with
-    the tone solver, and the chain is the one the same label draws for the split-step.
+    the tone solver. The second, 100 GHz on, meets the chain 100 GHz on and is
+    turned otherwise -- by tenths, from a 2 ps chain -- which the rest-frame rotation
+    every tone used to get could not say. The chain's Jones matrix at that offset,
+    from :func:`pmd_jones_matrix`, is where it lands.
     """
+    from maiman.kernels import pmd_jones_matrix
+
     signal = jones_pumps(1e-6, JONES)
     out = pmd_span().run(CTX, {"in": signal})["out"]
     assert isinstance(out, OpticalSignal)
     chain = pmd_chain("pmd-span", 0.5, 20.0, 12)
+    gaps = []
     for band, launched in zip(out.bands, signal.bands, strict=False):
-        ex, ey = apply_pmd(launched.Ex, launched.Ey, launched.fs, chain)
-        assert np.allclose(np.mean(band.Ex), np.mean(ex), rtol=0, atol=1e-9 * abs(np.mean(ex)))
-        assert np.allclose(np.mean(band.Ey), np.mean(ey), rtol=0, atol=1e-9 * abs(np.mean(ey)))
+        omega = 2.0 * math.pi * (launched.f0 - signal.bands[0].f0)
+        jones = np.array([np.mean(launched.Ex), np.mean(launched.Ey)])
+        wanted = pmd_jones_matrix(chain, omega) @ jones
+        got = np.array([np.mean(band.Ex), np.mean(band.Ey)])
+        assert np.linalg.norm(got - wanted) < 1e-9 * np.linalg.norm(wanted)
+        at_rest = apply_pmd(launched.Ex, launched.Ey, launched.fs, chain)
+        rest = np.array([np.mean(at_rest[0]), np.mean(at_rest[1])])
+        gaps.append(np.linalg.norm(got - rest) / np.linalg.norm(rest))
+    assert gaps[0] < 1e-9
+    assert gaps[1] > 0.05
 
 
 def test_the_diagnostics_report_the_dgd_of_the_chain_that_was_drawn() -> None:

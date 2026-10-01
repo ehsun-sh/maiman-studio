@@ -317,7 +317,7 @@ def test_one_band_meets_the_chain_as_apply_pmd_gives_it(interleave: bool) -> Non
 
 
 def test_two_carriers_meet_the_chain_at_their_own_frequencies() -> None:
-    """Unlike the tone solver's, a chain on the grid rotates each carrier by what it does there.
+    """A chain on the grid rotates each carrier by what it does there, as the tone solver's does.
 
     The chain is measured from the first band's carrier, so that band comes out as
     ``apply_pmd`` gives it alone, to rounding. The second, 100 GHz on, meets the
@@ -456,3 +456,46 @@ def test_raman_on_the_grid_needs_both_axes_together() -> None:
         raman_span().run(CTX, {"in": signal})
     out = raman_span(cross_polarization=True).run(CTX, {"in": signal})["out"]
     assert isinstance(out, OpticalSignal)
+
+
+@pytest.mark.parametrize("interleave", [False, True])
+@pytest.mark.parametrize("pump", [1e-6, 20e-3])
+def test_the_tone_solver_meets_pmd_as_the_grid_does(interleave: bool, pump: float) -> None:
+    """Constant tones through one chain: the tone solver against the composite grid.
+
+    Both measure the chain from the first band's carrier and place each waveplate at
+    the midpoint of its piece. At a microwatt every band agrees to 1e-12; at 20 mW
+    the pumps to 1e-4 and the first product to 2e-2, which is as near as the two
+    come at that power with no PMD at all.
+    """
+
+    def span(tones: bool) -> Fiber:
+        return Fiber(
+            label="pmd-span",
+            length=20.0,
+            attenuation=0.0,
+            dispersion=2.0,
+            nonlinearity=GAMMA if pump > 1e-3 else 1e-9,
+            mixing_floor=250.0,
+            tone_solver=tones,
+            composite_fwm=not tones,
+            cross_polarization=True,
+            pmd_coefficient=0.5,
+            pmd_sections=12.0,
+            interleave_pmd=interleave,
+        )
+
+    signal = jones_pumps(pump, JONES)
+    tones = span(True).run(CTX, {"in": signal})["out"]
+    grid = span(False).run(CTX, {"in": signal})["out"]
+    assert isinstance(tones, OpticalSignal) and isinstance(grid, OpticalSignal)
+    for offset, tolerance in ((0.0, 1e-4), (SPACING, 1e-4), (-SPACING, 2e-2)):
+        found = [
+            b for out in (tones, grid) for b in out.bands if abs(b.f0 - (ANCHOR + offset)) < 1e3
+        ]
+        if len(found) < 2:
+            assert pump < 1e-3, "a product above the floor at 20 mW"
+            continue
+        a, b = (np.array([np.mean(band.Ex), np.mean(band.Ey)]) for band in found)
+        limit = 1e-12 if pump < 1e-3 else tolerance
+        assert np.linalg.norm(a - b) < limit * np.linalg.norm(b)
