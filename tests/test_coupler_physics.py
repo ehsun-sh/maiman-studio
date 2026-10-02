@@ -584,14 +584,17 @@ def test_a_finite_coupler_accounts_for_every_watt() -> None:
     assert 0.2 < result.coupled < 0.5, "a 220 nm on 2 um oxide coupler takes a third of a beam"
 
 
-def test_the_power_that_leaves_does_not_depend_on_how_it_is_absorbed() -> None:
-    """Move the absorber's length and strength: the coupled power stays within half a percent.
+def test_what_comes_back_does_not_depend_on_how_it_is_absorbed() -> None:
+    """Move the absorber's length and strength: the reflection holds to 0.5 %, the coupled power
+    to 0.2 % (maiman-7mg).
 
-    Past 30 micrometres of waveguide and an extinction of 0.05 the guided light is
-    gone before it can return, so what the absorber took is what left: 0.3562 at
-    30 um and 0.05, 0.3545 at 0.10, 0.3549 at 45 um.
+    20 to 40 micrometres, an extinction of 0.10 to 0.30. The default used to be 30 um at
+    0.05, which let a few percent of the guided light come back and moved the reflection
+    7 % as the absorber did, 37 % at 0.02; and a beam wider than its grating put its tails
+    on the lossy ramp, counted as coupled. Plain waveguide now reaches as far as the beam
+    either side of the teeth, and the default is 20 um at 0.15.
     """
-    taken = [
+    runs = [
         finite_coupler_response(
             1.55e-6,
             periods=15,
@@ -599,11 +602,14 @@ def test_the_power_that_leaves_does_not_depend_on_how_it_is_absorbed() -> None:
             absorber_length=length,
             absorber_extinction=extinction,
             **FINITE,
-        ).coupled
-        for length, extinction in ((30e-6, 0.05), (30e-6, 0.10), (45e-6, 0.05))
+        )
+        for length, extinction in ((20e-6, 0.15), (30e-6, 0.10), (40e-6, 0.15), (25e-6, 0.30))
     ]
-    assert max(taken) - min(taken) < 0.005
-    assert taken[0] == pytest.approx(0.356, abs=0.01)
+    first = runs[0].reflection
+    assert max(abs(run.reflection - first) for run in runs) < 0.005 * abs(first)
+    taken = [run.coupled for run in runs]
+    assert max(taken) - min(taken) < 0.002
+    assert taken[0] == pytest.approx(0.353, abs=0.005)
 
 
 def test_light_coupled_in_is_radiated_out_again_by_the_grating_it_crosses() -> None:
@@ -621,29 +627,49 @@ def test_light_coupled_in_is_radiated_out_again_by_the_grating_it_crosses() -> N
     assert taken == pytest.approx([0.367, 0.292, 0.056], abs=0.01)
 
 
-def test_a_long_grating_under_a_wide_beam_reflects_what_the_infinite_one_does() -> None:
-    """60 teeth under a 20 um beam: the power sent back is the infinite grating's, to 5 %.
+@pytest.mark.parametrize("radius", [6e-6, 10e-6])
+def test_a_grating_longer_than_its_beam_reflects_the_infinite_one_averaged_over_the_beam(
+    radius: float,
+) -> None:
+    """100 teeth, longer than the beam: the infinite grating's reflectance, beam-averaged, to 3 %.
 
-    0.139 against 0.133 -- the infinite solve's whole reflectance, from
-    :func:`maiman.rcwa.diffract_te` by a route that shares only its linear algebra.
+    Every plane wave in the beam reflects off an infinite grating on its own, so what a
+    beam sends back is ``sum |B(kx)|^2 R(kx) / sum |B|^2`` over its angular spectrum --
+    not the plane wave's 0.133, since a few micrometres of beam spread wider than the
+    grating's resonance. Measured 1.0 % at 6 um and 2.5 % at 10 um; what is left is the
+    grating's ends. The plane-wave number this test used to compare to agreed with a
+    60-tooth grating under a beam wider than it only because the beam's tails fell on
+    the absorber.
     """
     from maiman.rcwa import GratingLayer, UniformLayer, diffract_te
 
-    plane = diffract_te(
-        1.55e-6,
-        sine=FINITE["sine"],
-        period=611e-9,
-        top_index=1.0,
-        layers=[
-            GratingLayer(70e-9, 3.476, 1.0, 0.5),
-            UniformLayer(150e-9, 3.476),
-            UniformLayer(2e-6, 1.444),
-        ],
-        substrate_index=3.476,
-        harmonics=20,
+    k0 = 2.0 * math.pi / 1.55e-6
+
+    def infinite(sine: float) -> float:
+        return float(
+            diffract_te(
+                1.55e-6,
+                sine=sine,
+                period=611e-9,
+                top_index=1.0,
+                layers=[
+                    GratingLayer(70e-9, 3.476, 1.0, 0.5),
+                    UniformLayer(150e-9, 3.476),
+                    UniformLayer(2e-6, 1.444),
+                ],
+                substrate_index=3.476,
+                harmonics=20,
+            ).reflectance.sum()
+        )
+
+    kappa = np.linspace(-4.0 / radius, 4.0 / radius, 81)
+    weight = np.exp(-0.5 * (kappa * radius) ** 2)
+    averaged = float(
+        np.sum(weight * np.array([infinite(FINITE["sine"] + q / k0) for q in kappa]))
+        / np.sum(weight)
     )
-    finite = finite_coupler_response(1.55e-6, periods=60, beam_radius=20e-6, **FINITE)
-    assert finite.reflected == pytest.approx(float(plane.reflectance.sum()), rel=0.05)
+    finite = finite_coupler_response(1.55e-6, periods=100, beam_radius=radius, **FINITE)
+    assert finite.reflected == pytest.approx(averaged, rel=0.03)
 
 
 def test_the_finite_teeth_reach_the_gap_and_keep_the_coupling_physical() -> None:

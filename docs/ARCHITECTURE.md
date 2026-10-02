@@ -760,11 +760,13 @@ Stated in the code where each approximation is made, and collected here:
   the `length / period` teeth it has: a supercell of them and a waveguide whose loss rises and
   falls as `sin^2`, lit by the fibre's own beam (`finite_coupler_response`, layers that step
   through segments and an incident beam of orders in `maiman.rcwa`). Reflected, transmitted and
-  absorbed sum to one exactly, and the absorbed *is* what left down the waveguide: it holds to
-  half a percent as the absorber's length and strength move, falls from 0.37 to 0.06 as a fixed
-  beam is given 8 to 32 periods to be radiated out again, and a long grating under a wide beam
-  sends back the infinite grating's power to 5 %. Its reflection is converged to about 3 %, not
-  exact; a solve is seconds a wavelength. The guided mode is TE by default, and TM with
+  absorbed sum to one exactly, and the absorbed *is* what left down the waveguide: plain
+  waveguide reaches either side of the teeth as far as the beam does, so the ramp takes only
+  guided light. As the absorber's length and strength move the reflection holds to 0.5 % and the
+  coupled power to 0.2 %; it falls from 0.37 to 0.06 as a fixed beam is given 8 to 32 periods to
+  be radiated out again, and a grating longer than its beam sends back the infinite grating's
+  reflectance averaged over the beam's angular spectrum, to 1 % at 6 um and 2.5 % at 10 um. A
+  solve is a second or two a wavelength. The guided mode is TE by default, and TM with
   `polarization="tm"`: the RCWA solves it with the inverse rule (Lalanne and Morris 1996, Li 1996)
   for the field that crosses the grating's walls, lands on Fresnel, Brewster and a TM thin film to
   1e-12, on a uniaxial effective medium as the period shrinks, and on an independent Laurent-rule
