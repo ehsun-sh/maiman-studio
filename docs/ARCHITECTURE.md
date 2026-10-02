@@ -681,6 +681,10 @@ Stated in the code where each approximation is made, and collected here:
   over a span does: one 10 km span is 0.99, 0.97 and 0.89 of the split-step at 1, 3 and 10 mW.
   Where the carried and the in-span terms nearly cancel -- a dispersive span some kilometres long
   -- that few percent in each shows as more in the sum: 1.25 of it at 10 mW over two 10 km spans.
+  A third-order term is not the cure: the exact tone equations, split by order in `gamma`, put
+  the 10 mW span at 0.82 for `gamma**2`, 1.15 with `gamma**3` and 1.03 with `gamma**4` -- the
+  model's folded pump phase already beats the next truncation -- so the series stays at second
+  order and the exact paths below are what to use past a few mW (maiman-0ib).
   Scalar drive only; a modulated channel, whose phase nobody knows, is still drawn. For bands
   that are one complex amplitude per axis -- launched tones, unmodulated carriers, the products
   earlier spans made -- `tone_solver` drops the series: it integrates the coupled equations of the

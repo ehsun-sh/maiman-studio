@@ -28,7 +28,12 @@ import pytest
 
 from maiman.components import Fiber
 from maiman.context import SimulationContext
-from maiman.kernels import fwm_cascade_integral, fwm_phase_mismatch, propagate_ssfm
+from maiman.kernels import (
+    fwm_cascade_integral,
+    fwm_phase_mismatch,
+    fwm_tone_solve,
+    propagate_ssfm,
+)
 from maiman.signals import Band, OpticalSignal
 
 ANCHOR = 193.1e12
@@ -318,6 +323,46 @@ def test_the_residual_grows_with_power_as_a_truncated_perturbation_series_does()
     assert ratios[0] > ratios[1] > ratios[2]
     assert ratios[0] == pytest.approx(0.987, abs=0.01)
     assert ratios[2] == pytest.approx(0.891, abs=0.02)
+
+
+def test_a_third_order_term_would_overshoot_where_the_residual_is_largest() -> None:
+    """Why the series stops at second order (maiman-0ib): at 10 mW the next term overshoots.
+
+    The tone equations solved exactly (:func:`~maiman.kernels.fwm_tone_solve`), with
+    ``gamma`` scaled by ``eps`` and the second-order product's amplitude fitted as a
+    polynomial in it, give each order of the series apart. One 10 km span, D = 2, 10 mW:
+    the ``gamma**2`` term alone is 0.82 of the exact power, the model 0.89 -- its pump
+    phase, folded into the mismatch, already sums part of the higher orders -- and
+    adding ``gamma**3`` lands at 1.15, further off than the model on the other side;
+    only ``gamma**4`` brings it to 1.03. At 1 mW the same term would move 0.98 to 1.00.
+    A third-order term buys a percent where the model is already within one, and costs
+    triples of triples carried across spans; ``tone_solver`` and ``composite_fwm`` are
+    exact where it would matter.
+    """
+    probe = Band(Ex=np.ones(256, complex), Ey=np.zeros(256, complex), f0=ANCHOR, fs=160e9)
+    beta2 = Fiber(dispersion=2.0).reference_beta2(OpticalSignal(bands=(probe,)))
+    offsets = np.arange(-6, 8) * SPACING
+
+    def second(pump: float, gamma: float) -> complex:
+        start = np.zeros(offsets.size, dtype=np.complex128)
+        start[6] = start[7] = np.sqrt(pump)
+        out, _ = fwm_tone_solve(
+            offsets, start, beta2=beta2, gamma=gamma, alpha=0.0, distance=10e3, rtol=1e-12
+        )
+        return complex(out[4])
+
+    def orders(pump: float) -> tuple[float, float, float]:
+        eps = np.array([0.05, 0.1, 0.15, 0.2, 0.25, 0.3])
+        fit = np.vstack([eps**n for n in range(2, 8)]).T
+        values = np.array([second(pump, e * GAMMA * 1e-3) for e in eps])
+        c = np.linalg.lstsq(fit, values, rcond=None)[0]
+        exact = abs(second(pump, GAMMA * 1e-3)) ** 2
+        return tuple(abs(np.sum(c[:n])) ** 2 / exact for n in (1, 2, 3))
+
+    high = orders(10e-3)
+    assert high == pytest.approx((0.822, 1.146, 1.026), abs=0.01)
+    low = orders(1e-3)
+    assert low[:2] == pytest.approx((0.980, 1.002), abs=0.005)
 
 
 def test_carried_phase_at_low_power_over_four_dispersive_spans() -> None:
