@@ -738,8 +738,12 @@ Stated in the code where each approximation is made, and collected here:
   exactly and acts on the modulation and the products: two tones land on `raman_tilt` to 1e-3 of
   the change, modulated channels 200 GHz apart to 0.5 %. It is the gain slope's straight line, so
   a comb past the 13.2 THz peak is refused, and it is driven by both axes' power, so light on both
-  needs `cross_polarization`. Its limits: carriers must sit on the window's frequency bins or it
-  refuses, and the cost is the comb's sampling rate.
+  needs `cross_polarization`. The grid runs the split-step at fourth order (Yoshida's
+  composition, `fourth_order` on the kernel, held to a soliton's shape with its error falling 16
+  times a halved step): a mismatched product needs a step a fraction of its coherence length, and
+  at fourth order four times the second order's comes out ten times closer to a converged run,
+  and sooner. Its limits: carriers must sit on the window's frequency bins or it refuses, and the
+  cost is the comb's sampling rate.
 * **Gratings and modes.** The average index a writing process raises is carried when a grating's
   `dc_compensated` flag is off: as Erdogan's self-coupling for the Bragg and long-period gratings,
   and for the uniform tilted one as the fibre it leaves, its core raised and every mode solved

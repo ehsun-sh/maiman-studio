@@ -321,6 +321,11 @@ def propagate_ssfm(
 ORTHOGONAL_KERR_WEIGHT = 2.0 / 3.0
 
 
+#: Yoshida's fourth-order weights: two outer steps and a backward middle one.
+YOSHIDA_OUTER = 1.0 / (2.0 - 2.0 ** (1.0 / 3.0))
+YOSHIDA_INNER = 1.0 - 2.0 * YOSHIDA_OUTER
+
+
 def propagate_coupled_ssfm(
     fields: Sequence[np.ndarray],
     sample_rate: float,
@@ -339,6 +344,7 @@ def propagate_coupled_ssfm(
     max_walkoff_slip: float = 0.5,
     max_step: float | None = None,
     raman_slope: float = 0.0,
+    fourth_order: bool = False,
     on_progress: Callable[[float], None] | None = None,
 ) -> tuple[list[np.ndarray], PropagationDiagnostics]:
     """Co-propagate several channels through one fiber, coupled by the Kerr effect.
@@ -463,6 +469,15 @@ def propagate_coupled_ssfm(
     grid, so this is Raman *across* what the grid holds: meant for a comb put on
     one grid, where a field's own spectrum is where the other carriers are.
 
+    **Fourth order, when asked for.** ``fourth_order`` composes each step of three
+    symmetric ones, of ``w1 h``, ``w0 h`` and ``w1 h`` with ``w1 = 1 / (2 - 2^(1/3))`` and
+    ``w0 = 1 - 2 w1`` (Yoshida, Phys. Lett. A 150, 262 (1990)): the step's error falls
+    from third order to fifth, so a span's from ``h^2`` to ``h^4``, at three times the
+    work a step. It is what lets a step that would mis-phase a mismatched mixing
+    product -- the bound four-wave mixing on a wide grid needs -- be several times
+    longer for the same answer. The middle step runs backwards, which the linear
+    operator, a phase and a loss, and the nonlinear one, a phase, both allow.
+
     Returns the propagated fields, in input order, and
     :class:`PropagationDiagnostics`.
     """
@@ -580,67 +595,79 @@ def propagate_coupled_ssfm(
             if to_section > 0.0:
                 step = min(step, to_section)
 
-        half = [xp.exp(-alpha * step / 4.0 + op * (step / 2.0)) for op in operators]
-        a = [xp.fft.ifft(xp.fft.fft(f) * h) for f, h in zip(a, half, strict=True)]
+        def symmetric(a: list[np.ndarray], step: float) -> list[np.ndarray]:
+            """One symmetric split step of ``step``: half linear, nonlinear, half linear."""
+            nonlocal peak_phase
+            half = [xp.exp(-alpha * step / 4.0 + op * (step / 2.0)) for op in operators]
+            a = [xp.fft.ifft(xp.fft.fft(f) * h) for f, h in zip(a, half, strict=True)]
 
-        if gamma != 0.0:
-            # Summed per polarization, because power in the orthogonal component
-            # modulates at a different rate than power sharing an axis. With one
-            # axis in use the second sum is zero and this is the scalar model
-            # term for term.
-            per_axis = _power_per_axis(a, axis)
-            rotated = list(a)
-            phases = []
-            for index, (field, ax) in enumerate(zip(a, axis, strict=True)):
-                effective = 2.0 * per_axis[ax] - xp.abs(field) ** 2
-                other = per_axis.get(1 - ax)
-                if other is not None:
-                    effective = effective + ORTHOGONAL_KERR_WEIGHT * other
-                if coherent_polarization and index in partner:
-                    # Only the other bands enter as a phase here. This band's own
-                    # two axes are stepped together, exactly, just below.
-                    effective = (
-                        effective
-                        - xp.abs(field) ** 2
-                        - ORTHOGONAL_KERR_WEIGHT * xp.abs(a[partner[index]]) ** 2
+            if gamma != 0.0:
+                # Summed per polarization, because power in the orthogonal component
+                # modulates at a different rate than power sharing an axis. With one
+                # axis in use the second sum is zero and this is the scalar model
+                # term for term.
+                per_axis = _power_per_axis(a, axis)
+                rotated = list(a)
+                phases = []
+                for index, (field, ax) in enumerate(zip(a, axis, strict=True)):
+                    effective = 2.0 * per_axis[ax] - xp.abs(field) ** 2
+                    other = per_axis.get(1 - ax)
+                    if other is not None:
+                        effective = effective + ORTHOGONAL_KERR_WEIGHT * other
+                    if coherent_polarization and index in partner:
+                        # Only the other bands enter as a phase here. This band's own
+                        # two axes are stepped together, exactly, just below.
+                        effective = (
+                            effective
+                            - xp.abs(field) ** 2
+                            - ORTHOGONAL_KERR_WEIGHT * xp.abs(a[partner[index]]) ** 2
+                        )
+                    phase = gamma * effective * step
+                    peak_phase = max(peak_phase, float(xp.max(xp.abs(phase))))
+                    phases.append(phase)
+                # What the phases above leave out: a neighbour whose two axes are
+                # correlated turns this band's state of polarization, not only its
+                # phase on each axis. See _cross_polarization_coupling.
+                coupling = _cross_polarization_coupling(a, couples, coherent=coherent_polarization)
+                stepped: set[int] = set()
+                for (x_index, y_index), off in zip(couples, coupling, strict=True):
+                    if off is None:
+                        continue
+                    rotated[x_index], rotated[y_index] = _hermitian_step(
+                        a[x_index], a[y_index], phases[x_index], phases[y_index], gamma * step * off
                     )
-                phase = gamma * effective * step
-                peak_phase = max(peak_phase, float(xp.max(xp.abs(phase))))
-                phases.append(phase)
-            # What the phases above leave out: a neighbour whose two axes are
-            # correlated turns this band's state of polarization, not only its
-            # phase on each axis. See _cross_polarization_coupling.
-            coupling = _cross_polarization_coupling(a, couples, coherent=coherent_polarization)
-            stepped: set[int] = set()
-            for (x_index, y_index), off in zip(couples, coupling, strict=True):
-                if off is None:
-                    continue
-                rotated[x_index], rotated[y_index] = _hermitian_step(
-                    a[x_index], a[y_index], phases[x_index], phases[y_index], gamma * step * off
-                )
-                peak_phase = max(peak_phase, float(xp.max(xp.abs(gamma * step * off))))
-                stepped.update((x_index, y_index))
-            for index, (field, phase) in enumerate(zip(a, phases, strict=True)):
-                if index not in stepped:
-                    rotated[index] = field * xp.exp(-1j * phase)
-            if coherent_polarization:
-                for x_index, y_index in couples:
-                    rotated[x_index], rotated[y_index], turned = _coherent_kerr_step(
-                        rotated[x_index], rotated[y_index], gamma * step
-                    )
-                    peak_phase = max(peak_phase, turned)
-            a = rotated
+                    peak_phase = max(peak_phase, float(xp.max(xp.abs(gamma * step * off))))
+                    stepped.update((x_index, y_index))
+                for index, (field, phase) in enumerate(zip(a, phases, strict=True)):
+                    if index not in stepped:
+                        rotated[index] = field * xp.exp(-1j * phase)
+                if coherent_polarization:
+                    for x_index, y_index in couples:
+                        rotated[x_index], rotated[y_index], turned = _coherent_kerr_step(
+                            rotated[x_index], rotated[y_index], gamma * step
+                        )
+                        peak_phase = max(peak_phase, turned)
+                a = rotated
 
-        if raman_slope != 0.0:
-            # The Raman phase, from the power the Kerr step leaves: both are pure
-            # phases that leave the power where it was, so the order is immaterial
-            # to the step's accuracy, and it is a phase every field shares.
-            turn = raman_slope / (4.0 * math.pi) * _power_rate(a, omega) * step
-            peak_phase = max(peak_phase, float(xp.max(xp.abs(turn))))
-            factor = xp.exp(1j * turn)
-            a = [f * factor for f in a]
+            if raman_slope != 0.0:
+                # The Raman phase, from the power the Kerr step leaves: both are pure
+                # phases that leave the power where it was, so the order is immaterial
+                # to the step's accuracy, and it is a phase every field shares.
+                turn = raman_slope / (4.0 * math.pi) * _power_rate(a, omega) * step
+                peak_phase = max(peak_phase, float(xp.max(xp.abs(turn))))
+                factor = xp.exp(1j * turn)
+                a = [f * factor for f in a]
 
-        a = [xp.fft.ifft(xp.fft.fft(f) * h) for f, h in zip(a, half, strict=True)]
+            a = [xp.fft.ifft(xp.fft.fft(f) * h) for f, h in zip(a, half, strict=True)]
+            return a
+
+        if fourth_order:
+            # Yoshida's composition: three symmetric steps whose weights sum to one
+            # cancel the third-order error, the middle one taken backwards.
+            for weight in (YOSHIDA_OUTER, YOSHIDA_INNER, YOSHIDA_OUTER):
+                a = symmetric(a, weight * step)
+        else:
+            a = symmetric(a, step)
 
         travelled += step
         steps += 1

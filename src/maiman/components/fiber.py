@@ -907,8 +907,13 @@ class Fiber(Component):
                 f"{float(ordered[-1] - ordered[0]) / 1e12:.1f} THz; turn composite_fwm off to "
                 "integrate it with silica's measured shape"
             )
+        # The step a mismatched product needs to keep its phase. The grid runs the
+        # split-step at fourth order (Yoshida), whose error goes as the step's fourth
+        # power: at four times the second order's 0.05 / mismatch the products come
+        # out ten times closer to a converged run than they did at that, and sooner
+        # (maiman-tga).
         mismatch = abs(fwm_phase_mismatch(beta2, 0.0, 0.0, float(gaps.min()) if gaps.size else 0.0))
-        step = 0.05 / mismatch if mismatch > 0.0 else None
+        step = 0.2 / mismatch if mismatch > 0.0 else None
         finished: list[np.ndarray] = []
         steps = 0
         peak = 0.0
@@ -972,6 +977,7 @@ class Fiber(Component):
                 pmd=sections if interleaved else None,
                 max_step=step,
                 raman_slope=raman,
+                fourth_order=True,
             )
             if sections and not interleaved:
                 out_x, out_y = apply_pmd(out_x, out_y, grid_rate, sections)
@@ -1003,6 +1009,7 @@ class Fiber(Component):
                     distance=distance,
                     max_step=step,
                     raman_slope=raman,
+                    fourth_order=True,
                 )
                 finished.append(out)
                 steps = max(steps, diagnostics.steps)

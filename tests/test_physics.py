@@ -462,3 +462,48 @@ def test_split_step_raman_moves_power_as_the_closed_form(
         assert got - 1.0 == pytest.approx(want - 1.0, rel=1e-3)
     assert kept[0] > 1.0 > kept[1]
     assert float(spectrum.sum()) == pytest.approx(low + high, rel=1e-12)
+
+
+# --------------------------------------------------------------------------
+# The fourth-order split step: a fundamental soliton keeps its shape exactly
+#   A(0, t) = sqrt(P0) sech(t / T0),  P0 = |beta2| / (gamma T0^2)  (Agrawal, sec. 5.2)
+# --------------------------------------------------------------------------
+
+
+def soliton_error(step: float, fourth_order: bool) -> float:
+    """How far the envelope moved, relative to its peak, after five dispersion lengths."""
+    from maiman.kernels import propagate_coupled_ssfm
+
+    t0, beta2, gamma = 5e-12, -20e-27, 1.3e-3
+    peak = abs(beta2) / (gamma * t0**2)
+    n, rate = 1024, 1024 / (40 * t0)
+    t = (np.arange(n) - n / 2) / rate
+    field = np.sqrt(peak) / np.cosh(t / t0) + 0j
+    length = 5.0 * t0**2 / abs(beta2)
+    (out,), _ = propagate_coupled_ssfm(
+        (field,),
+        rate,
+        beta2=(beta2,),
+        walkoff=(0.0,),
+        gamma=gamma,
+        alpha=0.0,
+        distance=length,
+        max_step=step * length,
+        max_nonlinear_phase=10.0,
+        fourth_order=fourth_order,
+    )
+    return float(np.max(np.abs(np.abs(out) - np.abs(field))) / np.sqrt(peak))
+
+
+def test_the_fourth_order_step_keeps_a_soliton_and_converges_as_the_fourth_power() -> None:
+    """Halving the step divides the error by four at second order and by sixteen at fourth.
+
+    Five dispersion lengths of a fundamental soliton, whose shape the exact equation
+    keeps. At a fiftieth of the length a step, the second order is 7.7e-4 off and
+    the fourth 2.0e-5; Yoshida's composition is what the composite grid runs.
+    """
+    second = [soliton_error(step, False) for step in (1 / 50, 1 / 100)]
+    fourth = [soliton_error(step, True) for step in (1 / 50, 1 / 100)]
+    assert second[0] / second[1] == pytest.approx(4.0, rel=0.1)
+    assert fourth[0] / fourth[1] == pytest.approx(16.0, rel=0.2)
+    assert fourth[0] < 0.05 * second[0]
