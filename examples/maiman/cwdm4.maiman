@@ -1,0 +1,688 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 25781250000.0,
+    "samples_per_symbol": 8,
+    "sequence_length": 1024,
+    "seed": 4,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "prbs",
+      "type": "PRBSGenerator",
+      "params": {
+        "order": 11.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 440.0
+      }
+    },
+    {
+      "id": "drv",
+      "type": "NRZDriver",
+      "params": {
+        "v_low": 4.0,
+        "v_high": 0.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 440.0
+      }
+    },
+    {
+      "id": "mux",
+      "type": "Multiplexer",
+      "params": {
+        "first_wavelength": 1331.0,
+        "wavelength_spacing": 20.0,
+        "bandwidth": 2300.0,
+        "order": 4.0,
+        "insertion_loss": 2.0
+      },
+      "config": {
+        "channels": 4
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "demux",
+      "type": "Demultiplexer",
+      "params": {
+        "first_wavelength": 1331.0,
+        "wavelength_spacing": 20.0,
+        "bandwidth": 2300.0,
+        "order": 4.0,
+        "insertion_loss": 2.0
+      },
+      "config": {
+        "channels": 4
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "tx0",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1331.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "mzm0",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "tx1",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1311.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "mzm1",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "tx2",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1291.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 240.0
+      }
+    },
+    {
+      "id": "mzm2",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 240.0
+      }
+    },
+    {
+      "id": "tx3",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1271.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 340.0
+      }
+    },
+    {
+      "id": "mzm3",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 340.0
+      }
+    },
+    {
+      "id": "fibre",
+      "type": "Fiber",
+      "params": {
+        "length": 10.0,
+        "attenuation": 0.35,
+        "dispersion": 0.0,
+        "reference_wavelength": 1310.0,
+        "dispersion_slope": 0.092
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "osa",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1301.0,
+        "span": 12000.0,
+        "points": 2048.0,
+        "resolution_bandwidth": 12.5
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "pin0",
+      "type": "PINPhotodiode",
+      "params": {},
+      "ui": {
+        "x": 780.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "lpf0",
+      "type": "ElectricalFilter",
+      "params": {
+        "bandwidth": 19.3359375
+      },
+      "ui": {
+        "x": 930.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "ber0",
+      "type": "BERAnalyzer",
+      "params": {},
+      "ui": {
+        "x": 1080.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "pin1",
+      "type": "PINPhotodiode",
+      "params": {},
+      "ui": {
+        "x": 780.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "lpf1",
+      "type": "ElectricalFilter",
+      "params": {
+        "bandwidth": 19.3359375
+      },
+      "ui": {
+        "x": 930.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "ber1",
+      "type": "BERAnalyzer",
+      "params": {},
+      "ui": {
+        "x": 1080.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "pin2",
+      "type": "PINPhotodiode",
+      "params": {},
+      "ui": {
+        "x": 780.0,
+        "y": 240.0
+      }
+    },
+    {
+      "id": "lpf2",
+      "type": "ElectricalFilter",
+      "params": {
+        "bandwidth": 19.3359375
+      },
+      "ui": {
+        "x": 930.0,
+        "y": 240.0
+      }
+    },
+    {
+      "id": "ber2",
+      "type": "BERAnalyzer",
+      "params": {},
+      "ui": {
+        "x": 1080.0,
+        "y": 240.0
+      }
+    },
+    {
+      "id": "pin3",
+      "type": "PINPhotodiode",
+      "params": {},
+      "ui": {
+        "x": 780.0,
+        "y": 340.0
+      }
+    },
+    {
+      "id": "lpf3",
+      "type": "ElectricalFilter",
+      "params": {
+        "bandwidth": 19.3359375
+      },
+      "ui": {
+        "x": 930.0,
+        "y": 340.0
+      }
+    },
+    {
+      "id": "ber3",
+      "type": "BERAnalyzer",
+      "params": {},
+      "ui": {
+        "x": 1080.0,
+        "y": 340.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "lpf0",
+        "out"
+      ],
+      "to": [
+        "ber0",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "ber0",
+        "reference"
+      ]
+    },
+    {
+      "from": [
+        "lpf1",
+        "out"
+      ],
+      "to": [
+        "ber1",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "ber1",
+        "reference"
+      ]
+    },
+    {
+      "from": [
+        "lpf2",
+        "out"
+      ],
+      "to": [
+        "ber2",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "ber2",
+        "reference"
+      ]
+    },
+    {
+      "from": [
+        "lpf3",
+        "out"
+      ],
+      "to": [
+        "ber3",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "ber3",
+        "reference"
+      ]
+    },
+    {
+      "from": [
+        "fibre",
+        "out"
+      ],
+      "to": [
+        "demux",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "drv",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "mux",
+        "out"
+      ],
+      "to": [
+        "fibre",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "pin0",
+        "out"
+      ],
+      "to": [
+        "lpf0",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "pin1",
+        "out"
+      ],
+      "to": [
+        "lpf1",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "pin2",
+        "out"
+      ],
+      "to": [
+        "lpf2",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "pin3",
+        "out"
+      ],
+      "to": [
+        "lpf3",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "mzm0",
+        "out"
+      ],
+      "to": [
+        "mux",
+        "in0"
+      ]
+    },
+    {
+      "from": [
+        "mzm1",
+        "out"
+      ],
+      "to": [
+        "mux",
+        "in1"
+      ]
+    },
+    {
+      "from": [
+        "mzm2",
+        "out"
+      ],
+      "to": [
+        "mux",
+        "in2"
+      ]
+    },
+    {
+      "from": [
+        "mzm3",
+        "out"
+      ],
+      "to": [
+        "mux",
+        "in3"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "out"
+      ],
+      "to": [
+        "mzm0",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "tx0",
+        "out"
+      ],
+      "to": [
+        "mzm0",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "out"
+      ],
+      "to": [
+        "mzm1",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "tx1",
+        "out"
+      ],
+      "to": [
+        "mzm1",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "out"
+      ],
+      "to": [
+        "mzm2",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "tx2",
+        "out"
+      ],
+      "to": [
+        "mzm2",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "out"
+      ],
+      "to": [
+        "mzm3",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "tx3",
+        "out"
+      ],
+      "to": [
+        "mzm3",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "fibre",
+        "out"
+      ],
+      "to": [
+        "osa",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "demux",
+        "out0"
+      ],
+      "to": [
+        "pin0",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "demux",
+        "out1"
+      ],
+      "to": [
+        "pin1",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "demux",
+        "out2"
+      ],
+      "to": [
+        "pin2",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "demux",
+        "out3"
+      ],
+      "to": [
+        "pin3",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "2.6 CWDM4: four lanes in the O-band",
+    "body": "Four 25.78 Gb/s lanes on the coarse WDM grid, [[tx0]] to [[tx3]] at 1331, 1311, 1291 and 1271\nnm, are combined by [[mux]], sent through 10 km of standard fibre [[fibre]] with no amplifier,\nsplit by [[demux]] and received on four PIN receivers. This is how a 100G data-centre optic\ncarries its four lanes. The spectrum is on [[osa]].\n\n## The coarse grid\n\nITU-T G.694.2 places channels 20 nm apart in *wavelength* (dense WDM is uniform in frequency\ninstead). Each 20 nm slot leaves about 13 nm of passband, wide enough for a laser with no\ntemperature control to drift in, which is what makes CWDM optics cheap. [[mux]] steps its\nchannels in nanometres for this.\n\n## Why the O-band\n\nStandard fibre's dispersion crosses zero near 1310 nm. Close to that point it grows linearly\nwith the slope $S_0 \\approx 0.092$ ps/(nm\u00b2\u00b7km):\n\n$$D(\\lambda) \\approx S_0\\,(\\lambda - \\lambda_0)$$\n\n| Lane | $\\lambda$ | $D$ [ps/(nm\u00b7km)] | $Q$ |\n| :-- | :-- | :-- | :-- |\n| [[ber0]] | 1331 nm | +1.9 | 25.3 |\n| [[ber1]] | 1311 nm | +0.1 | 26.0 |\n| [[ber2]] | 1291 nm | \u22121.7 | 25.9 |\n| [[ber3]] | 1271 nm | \u22123.6 | 20.3 |\n\nThe lane furthest from the zero loses the most. With the slope set to zero all four read about\n26.\n\n## The budget\n\nFibre loss is higher here, about 0.35 dB/km, so 10 km costs 3.5 dB. Per lane:\n\n$$0\\ \\text{dBm} - 3\\ (\\text{modulator}) - 2\\ (\\text{mux}) - 3.5\\ (\\text{fibre}) - 2\\ (\\text{demux}) \\approx -10.5\\ \\text{dBm}$$\n\n## Try this\n\n- Set [[fibre]]'s dispersion slope to 0 and compare the four $Q$ values.\n- Lengthen [[fibre]] to 40 km. Which lane fails first, and why?\n- Move [[tx3]] by 7 nm and watch [[demux]] cut it off."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 284.0,
+      "h": 488.0,
+      "text": "4 \u00d7 25G lanes, 1331 to 1271 nm",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 321.0,
+      "y": 163.0,
+      "w": 434.0,
+      "h": 88.0,
+      "text": "One fibre, no amplifier",
+      "tone": "binary"
+    },
+    {
+      "id": "a3",
+      "kind": "rect",
+      "x": 771.0,
+      "y": 13.0,
+      "w": 434.0,
+      "h": 388.0,
+      "text": "4 receivers",
+      "tone": "electrical"
+    },
+    {
+      "id": "a4",
+      "kind": "note",
+      "x": 440.0,
+      "y": 302.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "Near 1310 nm $D \\approx S_0(\\lambda - \\lambda_0)$: from +1.9 to \u22123.6 ps/(nm\u00b7km) across the four lanes.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 538.0,
+      "y1": 300.0,
+      "x2": 538.0,
+      "y2": 256.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

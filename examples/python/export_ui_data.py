@@ -17,6 +17,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import direct_detection
 import dwdm_link
 import first_light
 import lessons
@@ -576,6 +577,18 @@ TEMPLATES: dict[str, tuple[str, Path]] = {
     "soliton": ("1.6 The fundamental soliton", first_light.project_path("soliton")),
     "splitters": ("1.7 Splitters and couplers", first_light.project_path("splitters")),
     "ook-eye": ("2.1 Direct detection, eye diagram", OOK_PROJECT),
+    "receiver-sensitivity": (
+        "2.2 Receiver sensitivity, PIN and APD",
+        direct_detection.project_path("receiver_sensitivity"),
+    ),
+    "dml-reach": ("2.3 DML chirp and reach", direct_detection.project_path("dml_reach")),
+    "mode-partition": (
+        "2.4 Laser noise: mode partition",
+        direct_detection.project_path("mode_partition"),
+    ),
+    "pam4-lane": ("2.5 PAM4 lane with an equaliser", direct_detection.project_path("pam4_lane")),
+    "cwdm4": ("2.6 CWDM4 in the O-band", direct_detection.project_path("cwdm4")),
+    "gpon": ("2.7 GPON downstream, 1:32", direct_detection.project_path("gpon")),
     "wdm-osa": ("3.3 WDM spectrum, 4 channels", WDM_PROJECT),
     "dwdm-link": ("3.4 DWDM link, 8 × 10 Gb/s", dwdm_link.PROJECT),  # noqa: RUF001 -- a times sign
     "coherent-sdfec": ("4.3 Coherent link, soft-decision FEC", SDFEC_PROJECT),
@@ -641,6 +654,9 @@ def main() -> None:
     # And the first-light examples, one idea each.
     for key in first_light.EXAMPLES:
         first_light.write(key)
+    # And the direct-detection links of phase 2.
+    for key in direct_detection.EXAMPLES:
+        direct_detection.write(key)
 
     # Required received power per format, from the same graph re-run.
     sensitivity: list[dict[str, Any]] = []

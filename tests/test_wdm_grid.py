@@ -370,3 +370,61 @@ def test_the_blocks_report_the_grid_they_are_on() -> None:
     assert np.diff(np.array(frequencies)) == pytest.approx(np.full(3, 100e9), rel=1e-9)
     # Descending in wavelength, as a frequency grid is.
     assert np.all(np.diff(np.array(mux.channel_wavelengths())) < 0.0)
+
+
+def test_a_coarse_plan_is_stepped_in_wavelength_and_lands_on_the_standard() -> None:
+    """CWDM4 on the mux: 1331 down to 1271 nm, each on its G.694.2 centre exactly.
+
+    A frequency step cannot do this -- the grid is uniform in the other variable --
+    so the best single spacing in GHz misses the second channel by most of a
+    nanometre, which is what the coarse plan used to have to settle for.
+    """
+    mux = Multiplexer(4, first_wavelength=1331.0, wavelength_spacing=20.0)
+    standard = sorted(cwdm_wavelengths(4), reverse=True)
+    assert mux.channel_wavelengths() == pytest.approx(standard, rel=0.0, abs=1e-15)
+    assert np.all(np.diff(np.array(mux.channel_frequencies())) > 0.0), "still ascending"
+
+    by_frequency = Multiplexer(4, first_wavelength=1331.0, spacing=3550.0)
+    missed = np.abs(np.array(by_frequency.channel_wavelengths()) - np.array(standard))
+    assert missed.max() > 0.5e-9
+
+
+def test_a_coarse_plan_carries_each_lane_through_its_own_port(ctx: SimulationContext) -> None:
+    graph = Graph(ctx)
+    mux = graph.add(
+        Multiplexer(
+            4,
+            first_wavelength=1331.0,
+            wavelength_spacing=20.0,
+            bandwidth=2000.0,
+            insertion_loss=2.0,
+            label="mux",
+        )
+    )
+    demux = graph.add(
+        Demultiplexer(
+            4,
+            first_wavelength=1331.0,
+            wavelength_spacing=20.0,
+            bandwidth=2000.0,
+            insertion_loss=2.0,
+            label="demux",
+        )
+    )
+    for index, wavelength in enumerate(mux.channel_wavelengths()):
+        laser = graph.add(CWLaser(power=0.0, wavelength=wavelength * 1e9, label=f"l{index}"))
+        graph.connect(laser, mux[f"in{index}"])
+    graph.connect(mux, demux["in"])
+    meters = [graph.add(PowerMeter(label=f"m{i}")) for i in range(4)]
+    for index, meter in enumerate(meters):
+        graph.connect(demux[f"out{index}"], meter["in"])
+    results = graph.run()
+    for index, meter in enumerate(meters):
+        own = max(results[meter].bands, key=lambda b: b.power_dbm)
+        assert own.wavelength_nm == pytest.approx(1331.0 - 20.0 * index, abs=1e-6)
+        assert own.power_dbm == pytest.approx(-4.0, abs=1e-3)
+
+
+def test_a_coarse_plan_that_runs_out_of_wavelength_is_refused() -> None:
+    with pytest.raises(ValueError, match="below zero wavelength"):
+        Multiplexer(4, first_wavelength=1300.0, wavelength_spacing=500.0).channel_frequencies()

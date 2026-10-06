@@ -256,6 +256,137 @@ def side_arrow(block: dict[str, float]) -> dict[str, Any]:
     return arrow(block["x"] + NODE_W + 48.0, y, block["x"] + NODE_W + 14.0, y)
 
 
+def below_note(block: dict[str, float], text: str, w: float = 240.0) -> dict[str, Any]:
+    """A note under ``block``, clear of the frame around it."""
+    return note(block["x"] - 40.0, block["y"] + NODE_H + 60.0, text, w=w)
+
+
+def below_arrow(block: dict[str, float]) -> dict[str, Any]:
+    """From a :func:`below_note` up to the block it is about."""
+    x = block["x"] + NODE_W / 2.0
+    return arrow(x, block["y"] + NODE_H + 58.0, x, block["y"] + NODE_H + 14.0)
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: direct-detection links
+
+
+def _receiver_sensitivity(at: Layout) -> list[dict[str, Any]]:
+    apd = at["apd"]
+    return [
+        frame(at, ["prbs", "drv", "tx", "mzm"], "10 Gb/s transmitter", "optical"),
+        frame(at, ["att", "split"], "Variable loss", "binary"),
+        frame(at, ["pin", "lpf_pin", "ber_pin"], "PIN receiver", "electrical"),
+        frame(at, ["apd", "lpf_apd", "ber_apd"], "APD receiver", "electrical"),
+        below_note(
+            apd,
+            "Gain $M$ lifts the signal over the thermal noise; it also multiplies shot "
+            "noise by $M^2F(M)$. Sweep the gain: there is a best one.",
+        ),
+        below_arrow(apd),
+    ]
+
+
+def _dml_reach(at: Layout) -> list[dict[str, Any]]:
+    scope = at["chirp"]
+    return [
+        frame(at, ["drv_dml", "dml"], "Directly modulated laser", "optical"),
+        frame(at, ["cw", "drv_ext", "mzm"], "CW laser + Mach–Zehnder", "optical"),
+        frame(at, ["fibre_dml", "fibre_ext"], "20 km each", "binary"),
+        frame(
+            at,
+            ["pin_dml", "lpf_dml", "ber_dml", "pin_ext", "lpf_ext", "ber_ext"],
+            "Identical receivers",
+            "electrical",
+        ),
+        side_note(
+            scope,
+            "Run, open the Scope tab and tick *Show instantaneous frequency*: "
+            "every edge chirps by gigahertz.",
+        ),
+        side_arrow(scope),
+    ]
+
+
+def _mode_partition(at: Layout) -> list[dict[str, Any]]:
+    fp = at["ber_fp"]
+    return [
+        frame(at, ["tx_dfb", "tx_fp_steady", "tx_fp"], "Three lasers", "optical"),
+        frame(
+            at,
+            ["mzm_dfb", "mzm_fp", "fibre_dfb", "fibre_fp"],
+            "Same modulation, 3 km each",
+            "binary",
+        ),
+        frame(
+            at,
+            ["pin_dfb", "pin_fp", "lpf_dfb", "lpf_fp", "ber_dfb", "ber_fp"],
+            "Identical receivers",
+            "electrical",
+        ),
+        side_note(
+            fp,
+            "Same laser as the row above, with its modes trading power. "
+            "Raise its power by 10 dB: the Q hardly moves.",
+        ),
+        side_arrow(fp),
+    ]
+
+
+def _pam4_lane(at: Layout) -> list[dict[str, Any]]:
+    eq = at["eq"]
+    return [
+        frame(at, ["prbs", "pam4", "tx", "mzm"], "PAM4 transmitter", "optical"),
+        frame(at, ["pin", "lpf"], "7 GHz receiver", "electrical"),
+        frame(at, ["eye", "eq_off", "eq"], "Eye and equalisers", "metric"),
+        side_note(
+            eq,
+            "9 feed-forward taps and 2 of decision feedback undo what the 7 GHz filter smeared.",
+        ),
+        side_arrow(eq),
+    ]
+
+
+def _cwdm4(at: Layout) -> list[dict[str, Any]]:
+    fibre = at["fibre"]
+    return [
+        frame(
+            at,
+            ["tx0", "tx3", "mzm0", "mzm3", "prbs", "drv"],
+            "4 × 25G lanes, 1331 to 1271 nm",
+            "optical",
+        ),
+        frame(at, ["mux", "fibre", "demux"], "One fibre, no amplifier", "binary"),
+        frame(
+            at,
+            ["pin0", "pin3", "lpf0", "lpf3", "ber0", "ber3"],
+            "4 receivers",
+            "electrical",
+        ),
+        below_note(
+            fibre,
+            "Near 1310 nm $D \\approx S_0(\\lambda - \\lambda_0)$: from +1.9 to −3.6 "
+            "ps/(nm·km) across the four lanes.",
+        ),
+        below_arrow(fibre),
+    ]
+
+
+def _gpon(at: Layout) -> list[dict[str, Any]]:
+    split = at["split32"]
+    return [
+        frame(at, ["prbs", "drv", "olt", "mzm"], "OLT, at the exchange", "optical"),
+        frame(at, ["feeder", "split32"], "Outside plant", "binary"),
+        frame(at, ["pm_onu", "apd", "lpf", "ber"], "One ONU, at a home", "electrical"),
+        below_note(
+            split,
+            "1:32 costs $10\\log_{10}32 = 15.05$ dB before any excess loss: more than "
+            "the 20 km of fibre.",
+        ),
+        below_arrow(split),
+    ]
+
+
 _MARKS = {
     "ook_eye": _ook_eye,
     "wdm_osa": _wdm_osa,
@@ -268,6 +399,12 @@ _MARKS = {
     "chirp_compression": _chirp_compression,
     "soliton": _soliton,
     "splitters": _splitters,
+    "receiver_sensitivity": _receiver_sensitivity,
+    "dml_reach": _dml_reach,
+    "mode_partition": _mode_partition,
+    "pam4_lane": _pam4_lane,
+    "cwdm4": _cwdm4,
+    "gpon": _gpon,
 }
 
 
@@ -781,6 +918,292 @@ would interfere instead, which is why [[combiner]] refuses them: that needs a co
 - Change [[split4]]'s excess loss to 0.5 dB, as a real splitter has.
 - Set the coupling of [[tap]] to 0.5 for a 3 dB coupler. What does [[pm_sum]] read?
 - Set [[laser_b]] to 1550 nm and run: read the combiner's message in the Log tab.
+""".strip(),
+    },
+    "receiver_sensitivity": {
+        "title": "2.2 Receiver sensitivity: PIN against APD",
+        "body": r"""
+A 10 Gb/s on–off keyed signal [[tx]] [[mzm]] goes through a variable attenuator [[att]] and is
+split three ways [[split]]: one copy to a power meter [[pm_rx]], one to a PIN photodiode
+[[pin]], and one to an avalanche photodiode [[apd]]. Each receiver has the same 7 GHz filter
+and an error counter, so the only difference between them is the detector.
+
+## What limits a PIN receiver
+
+The photocurrent is $I = \mathcal{R}P$. At low power the dominant noise is the thermal noise of
+the load resistor, which does not depend on the signal at all:
+
+$$\sigma_T^2 = \frac{4k_BT}{R_L}\,B$$
+
+So $Q$ falls in proportion to the received power: halve the power and $Q$ halves.
+
+## What an APD changes
+
+An avalanche photodiode multiplies the photocurrent by $M$ before the load sees it, so the signal
+grows $M$ times while thermal noise stays put. The multiplication is random, which costs an
+excess noise factor on the shot noise:
+
+$$\sigma_s^2 = 2q\,M^2F(M)\,\mathcal{R}P\,B, \qquad F(M) = kM + \left(2 - \frac{1}{M}\right)(1 - k)$$
+
+$k$ is the ionisation ratio, 0.5 on [[apd]] (InGaAs).
+
+## Sensitivity
+
+The **sensitivity** is the received power for $Q = 6$, a bit error rate of $10^{-9}$.
+Open **Sweep**, choose [[att]] and its attenuation, and run 4 to 30 dB:
+
+| Receiver | Sensitivity at $Q = 6$ |
+| :-- | :-- |
+| PIN [[pin]] | −19.2 dBm |
+| APD [[apd]], $M = 10$ | −28.1 dBm |
+
+The APD buys almost 9 dB, which is 45 km of fibre at 0.2 dB/km.
+
+## The optimum gain
+
+More gain is not always better: signal grows as $M$, shot noise as $M^2F(M) \approx kM^3$. At
+[[att]] = 20 dB (−27.8 dBm) the APD's $Q$ is 0.8 at $M = 1$, 6.4 at 10, peaks at 7.3 near
+$M = 20$ and falls back to 6.3 at 40.
+
+## Try this
+
+- Sweep the gain of [[apd]] from 1 to 40 at [[att]] = 20 dB, and find the peak.
+- Set its ionisation ratio to 0.02 (silicon). Where does the best gain move?
+- Narrow [[lpf_pin]] to 5 GHz. Thermal noise falls with $B$; does the eye stay open?
+""".strip(),
+    },
+    "dml_reach": {
+        "title": "2.3 The reach of a directly modulated laser",
+        "body": r"""
+The same 10 Gb/s pattern [[prbs]] leaves two transmitters. On top, the drive current of a
+directly modulated laser [[dml]] is switched. Below, a CW laser [[cw]] is switched by a
+Mach–Zehnder [[mzm]]. The two are matched: the same average power and the same extinction ratio
+(4.84 dB), so the only difference is how the light was modulated. Each goes through 20 km of
+standard fibre into an identical receiver.
+
+## Why a DML chirps
+
+The light comes out when the carrier density in the laser moves, and the refractive index moves
+with the carriers. So every change in power is also a change in frequency. The rate equations
+give it as
+
+$$\Delta\nu(t) = \frac{\alpha}{4\pi}\left(\frac{d}{dt}\ln P(t) + \kappa\,P(t)\right)$$
+
+The first term is the **transient** chirp, at every edge. The second is the **adiabatic** chirp:
+a one sits at a different frequency from a zero. $\alpha$ is the linewidth enhancement factor,
+4 on [[dml]]. The oscilloscope [[chirp]] shows it: the frequency swings by about 21 GHz on the
+rising edges.
+
+## What dispersion does with it
+
+Each part of a bit now travels at its own speed. A frequency excursion $\Delta\nu$ is a
+wavelength excursion $\Delta\lambda = \lambda^2\Delta\nu/c$, which dispersion turns into a delay:
+
+$$\Delta\tau = D\,L\,\Delta\lambda \approx 17 \times 20 \times 0.17\ \text{nm} \approx 58\ \text{ps}$$
+
+That is more than half a 100 ps bit slot.
+
+| Transmitter | $Q$ after 20 km |
+| :-- | :-- |
+| [[dml]] | 2.7 |
+| [[cw]] + [[mzm]] | 39.8 |
+
+A Mach–Zehnder driven push–pull changes only the amplitude of the field, so it does not chirp.
+That is why long-reach links use external modulation, and why 10G DMLs are sold for 10 to
+20 km.
+
+## Try this
+
+- Shorten [[fibre_dml]] to 0, 5 and 10 km. The eye at 5 km is better than back to back: the
+  fibre first undoes some of the laser's ringing.
+- Raise [[dml]]'s bias to 120 mA. It rings faster; does the $Q$ at 20 km improve?
+- Set both fibres' dispersion to 0. What is left of the gap is the laser's ringing, not its
+  chirp.
+""".strip(),
+    },
+    "mode_partition": {
+        "title": "2.4 Laser noise: mode partition in a Fabry–Perot laser",
+        "body": r"""
+One 2.5 Gb/s pattern modulates three lasers at 1550 nm, each through 3 km of standard fibre
+into the same receiver:
+
+- [[tx_dfb]], a single-frequency DFB laser;
+- [[tx_fp_steady]], a seven-mode Fabry–Perot laser with its noise switched off (its modes sit at
+  their steady powers);
+- [[tx_fp]], the same Fabry–Perot laser with its noise on.
+
+## Many modes, one reservoir
+
+A Fabry–Perot cavity supports a comb of longitudinal modes, 1.1 nm apart here, and the gain
+keeps several of them lasing. They all draw on the same carriers, so when one mode gains power
+another loses it. The *sum* is quiet. Each mode on its own is not.
+
+## Dispersion splits them
+
+Each mode travels at its own group velocity. Seven modes span $6 \times 1.1 = 6.6$ nm, so after
+3 km at 17 ps/(nm·km) they arrive
+
+$$\Delta\tau = D\,L\,\Delta\lambda = 17 \times 3 \times 6.6 \approx 340\ \text{ps}$$
+
+apart, most of a 400 ps bit. That alone smears the eye, and the steady laser [[tx_fp_steady]]
+shows how much.
+
+## Partition noise
+
+Once the modes no longer arrive together, the power they were trading no longer cancels at the
+detector. What is left is noise proportional to the signal itself, so turning up the power
+cannot beat it. The textbook estimate (Ogawa; a rule of thumb, not this model) is a relative
+noise of
+
+$$r_\text{mpn} = \frac{k}{\sqrt2}\left[1 - e^{-(\pi B D L \sigma_\lambda)^2}\right]$$
+
+with $k$ the partition coefficient and $\sigma_\lambda$ the laser's rms spectral width. It sets a
+ceiling on $Q$ of about $1/r_\text{mpn}$, whatever the received power.
+
+| Laser | $Q$ after 3 km |
+| :-- | :-- |
+| [[tx_dfb]] | 104 |
+| [[tx_fp_steady]] | 28.6 |
+| [[tx_fp]] | 13.0 |
+
+The difference between the last two rows is partition noise and nothing else.
+
+## Try this
+
+- Raise the power of [[tx_fp]] by 10 dB. Its $Q$ barely moves: a noise floor, not a power limit.
+- Set [[fibre_fp]]'s dispersion to 0, as at 1310 nm. The modes arrive together and $Q$ doubles,
+  to about 26; what is left is the laser's total intensity noise. That is why Fabry–Perot lasers
+  live in the O-band.
+- Cut [[tx_fp]]'s modes from 7 to 3.
+""".strip(),
+    },
+    "pam4_lane": {
+        "title": "2.5 A 53 Gb/s PAM4 lane with an equaliser",
+        "body": r"""
+A PAM4 driver [[pam4]] turns every two bits of [[prbs]] into one of four voltages, and a
+Mach–Zehnder [[mzm]] writes them onto 1310 nm light at 26.5625 GBd: 53 Gb/s, one lane of a
+200G data-centre link. The receiver [[pin]] has only 7 GHz of bandwidth [[lpf]], about a quarter
+of the symbol rate. The eye [[eye]] shows the result, and two equalisers measure it: [[eq_off]]
+with one tap (no equalisation) and [[eq]] with nine feed-forward taps and two of decision
+feedback.
+
+## Four levels on a cosine
+
+The modulator's power is $\cos^2$ of its voltage, so equally spaced volts give unequal steps of
+power and the outer eyes close first. The driver **pre-distorts**: it puts each level at the
+voltage whose power is evenly spaced,
+
+$$V_k = \frac{2V_\pi}{\pi}\arccos\sqrt{P_k/P_\text{max}}$$
+
+## Inter-symbol interference
+
+A filter narrower than the symbol rate spreads each symbol into its neighbours. Sampled at the
+best instant, what arrives is
+
+$$y_n = h_0 a_n + \sum_{k \ne 0} h_k a_{n-k} + \text{noise}$$
+
+and the sum is the ISI. With four levels only a third of the eye height is left between them, so
+ISI that a two-level signal would survive closes PAM4.
+
+## The equaliser
+
+The feed-forward equaliser is a short filter that inverts the channel,
+$z_n = \sum_j c_j y_{n-j}$, trained to minimise the error. The decision-feedback part subtracts
+the ISI of symbols already decided, $z_n - \sum_k b_k \hat a_{n-k}$. A DFE cannot reach a
+*precursor*: a symbol it has not decided yet.
+
+| Receiver | SNR | Symbol errors |
+| :-- | :-- | :-- |
+| [[eq_off]] | 9.9 dB | 609 / 4096 |
+| [[eq]] | 38.7 dB | 0 / 4096 |
+
+## Try this
+
+- Turn off predistortion on [[pam4]]. Which of the three eyes closes first?
+- Widen [[lpf]] to 20 GHz and see how much the equaliser still has to do.
+- Set [[eq]] to 3 feed-forward taps and no feedback.
+""".strip(),
+    },
+    "cwdm4": {
+        "title": "2.6 CWDM4: four lanes in the O-band",
+        "body": r"""
+Four 25.78 Gb/s lanes on the coarse WDM grid, [[tx0]] to [[tx3]] at 1331, 1311, 1291 and 1271
+nm, are combined by [[mux]], sent through 10 km of standard fibre [[fibre]] with no amplifier,
+split by [[demux]] and received on four PIN receivers. This is how a 100G data-centre optic
+carries its four lanes. The spectrum is on [[osa]].
+
+## The coarse grid
+
+ITU-T G.694.2 places channels 20 nm apart in *wavelength* (dense WDM is uniform in frequency
+instead). Each 20 nm slot leaves about 13 nm of passband, wide enough for a laser with no
+temperature control to drift in, which is what makes CWDM optics cheap. [[mux]] steps its
+channels in nanometres for this.
+
+## Why the O-band
+
+Standard fibre's dispersion crosses zero near 1310 nm. Close to that point it grows linearly
+with the slope $S_0 \approx 0.092$ ps/(nm²·km):
+
+$$D(\lambda) \approx S_0\,(\lambda - \lambda_0)$$
+
+| Lane | $\lambda$ | $D$ [ps/(nm·km)] | $Q$ |
+| :-- | :-- | :-- | :-- |
+| [[ber0]] | 1331 nm | +1.9 | 25.3 |
+| [[ber1]] | 1311 nm | +0.1 | 26.0 |
+| [[ber2]] | 1291 nm | −1.7 | 25.9 |
+| [[ber3]] | 1271 nm | −3.6 | 20.3 |
+
+The lane furthest from the zero loses the most. With the slope set to zero all four read about
+26.
+
+## The budget
+
+Fibre loss is higher here, about 0.35 dB/km, so 10 km costs 3.5 dB. Per lane:
+
+$$0\ \text{dBm} - 3\ (\text{modulator}) - 2\ (\text{mux}) - 3.5\ (\text{fibre}) - 2\ (\text{demux}) \approx -10.5\ \text{dBm}$$
+
+## Try this
+
+- Set [[fibre]]'s dispersion slope to 0 and compare the four $Q$ values.
+- Lengthen [[fibre]] to 40 km. Which lane fails first, and why?
+- Move [[tx3]] by 7 nm and watch [[demux]] cut it off.
+""".strip(),
+    },
+    "gpon": {
+        "title": "2.7 GPON downstream: one fibre, 32 homes",
+        "body": r"""
+A passive optical network shares one fibre between many homes with no powered equipment in the
+street. The optical line terminal at the exchange, [[olt]] with [[mzm]], sends 2.488 Gb/s at
+1490 nm through 20 km of feeder fibre [[feeder]] to a 1:32 splitter [[split32]]. Every home's
+ONU receives the whole stream and keeps its own part. One ONU is drawn here: a meter [[pm_onu]]
+and an APD receiver [[apd]].
+
+## The split is the budget
+
+An ideal $1{:}N$ splitter costs $10\log_{10}N$:
+
+$$1{:}32 \;\Rightarrow\; 15.05\ \text{dB}$$
+
+plus about 1.5 dB of excess in a real planar splitter. That is more than the 5 dB of the 20 km
+feeder at 0.25 dB/km.
+
+$$P_\text{ONU} = 3 - 3\ (\text{modulator}) - 5\ (\text{feeder}) - 16.55\ (\text{split}) = -21.55\ \text{dBm}$$
+
+[[pm_onu]] reads −21.56 dBm. A GPON class B+ ONU must work at −28 dBm, which is why ONUs use an
+APD (lesson 2.2), and the link here has 6.5 dB to spare: [[ber]] reads $Q = 35.6$.
+
+## Two directions, two wavelengths
+
+Downstream is 1490 nm and broadcast. Upstream is 1310 nm, and the ONUs take turns: each sends a
+short burst in its own time slot. A burst arrives at the OLT with a power that depends on that
+home's distance and splitter, so the upstream receiver has to settle on each burst's level within
+a few bits. That needs a **burst-mode receiver**, which is not in the palette yet.
+
+## Try this
+
+- Add 3 dB to the excess loss of [[split32]]: that is a 1:64 split. What is left of the margin?
+- Lengthen [[feeder]] to 40 km. Does the APD still hold $Q = 6$?
+- Swap [[apd]] for a PIN photodiode and find the longest feeder that still works.
 """.strip(),
     },
 }

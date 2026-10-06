@@ -165,8 +165,9 @@ anything to see it work.
 4. **The Examples menu opens complete projects**, numbered and grouped as in
    [the examples roadmap](docs/EXAMPLES_ROADMAP.md): first light (a laser on a meter, a loss budget,
    the Mach–Zehnder's cosine, a pulse spreading, compressing and travelling as a soliton on the
-   oscilloscope, splitters and couplers), then an eye diagram on a direct-detection link, a WDM
-   spectrum, an eight-channel DWDM link, and coherent links with the full DSP chain and with
+   oscilloscope, splitters and couplers), then direct-detection links (an eye diagram, PIN against
+   APD sensitivity, a DML's chirp limiting its reach, mode partition noise, a PAM4 lane with an
+   equaliser, CWDM4 in the O-band and a 1:32 GPON downstream), a WDM spectrum, an eight-channel DWDM link, and coherent links with the full DSP chain and with
    soft-decision FEC. Each is a `.maiman` file in `examples/maiman/`, written by a script in
    `examples/python/`.
 5. **Read the notes.** Every project the Examples menu opens comes with a lesson in a panel on the

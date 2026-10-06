@@ -62,15 +62,19 @@ quotes.
 
 The links most fibre in the world still carries. Eyes, Q and BER.
 
+2.2 to 2.7 are written by [`direct_detection.py`](../examples/python/direct_detection.py), and
+[`tests/test_direct_detection.py`](../tests/test_direct_detection.py) holds each to the numbers
+its lesson quotes.
+
 | # | Example | What it teaches | Status |
 | :-- | :--- | :--- | :--- |
 | 2.1 | 10 Gb/s OOK, back to back and over 20 km | Eye, $Q$, $\tfrac{1}{2}\mathrm{erfc}(Q/\sqrt2)$ | ✅ `ook_eye.maiman`, with lesson |
-| 2.2 | Receiver sensitivity: PIN against APD | BER against received power, APD gain and excess noise | 🟢 Attenuator, PINPhotodiode, APDPhotodiode, sweep |
-| 2.3 | Dispersion-limited reach of a DML | Chirp from the rate equations, reach at 10 and 25 Gb/s | ✅ `dml_reach.py`; studio project to add |
-| 2.4 | Laser noise floors | RIN, linewidth, mode partition noise | ✅ `laser_noise.py`; studio project to add |
-| 2.5 | 50/100G PAM4 lane with FFE/DFE | Four levels, equalisation, why a DFE cannot reach a precursor | ✅ `pam4_lane.py`; studio project to add |
-| 2.6 | Four-lane CWDM data-centre link (O-band) | Coarse grid, 1310 nm, no amplifier | 🟢 to verify the Multiplexer on a 20 nm grid |
-| 2.7 | Passive optical network (GPON, 1:32) | Split loss, power budget, two wavelengths on one fibre | 🟢 downstream; 🟡 upstream needs a **burst-mode receiver** |
+| 2.2 | Receiver sensitivity: PIN against APD | BER against received power, APD gain and excess noise | ✅ `receiver_sensitivity.maiman`, with lesson |
+| 2.3 | Dispersion-limited reach of a DML | Chirp from the rate equations, reach at 10 and 25 Gb/s | ✅ `dml_reach.maiman`, with lesson, against an external modulator matched in power and extinction |
+| 2.4 | Laser noise floors | Mode partition noise: a floor that power does not lift | ✅ `mode_partition.maiman`, with lesson; RIN and linewidth stay in `laser_noise.py` |
+| 2.5 | 50/100G PAM4 lane with FFE/DFE | Four levels, equalisation, why a DFE cannot reach a precursor | ✅ `pam4_lane.maiman`, with lesson |
+| 2.6 | Four-lane CWDM data-centre link (O-band) | Coarse grid, 1310 nm, no amplifier | ✅ `cwdm4.maiman`, with lesson, on the Multiplexer's new wavelength step |
+| 2.7 | Passive optical network (GPON, 1:32) | Split loss, power budget, two wavelengths on one fibre | ✅ downstream, `gpon.maiman`, with lesson; 🟡 upstream needs a **burst-mode receiver** |
 
 ## Phase 3: Amplified and WDM links
 
@@ -169,6 +173,10 @@ first. Each entry says which example found it and what was done.
 
 | Date | Example | Finding | Outcome |
 | :--- | :--- | :--- | :--- |
+| 2026-10-06 | 2.7 | GPON upstream is bursts from 32 ONUs at different powers, which no receiver here can settle on | Open: downstream only, until a **burst-mode receiver** exists |
+| 2026-10-06 | 2.2, 2.7 | A run with only meters and error counters left the dock on an empty plot, and once a run had moved to the log, the next example stayed there | Such a run now opens the Log tab; a run with something to draw leaves a log the studio opened, never one the user picked |
+| 2026-10-06 | phase 1, 2 | Lesson tables never rendered: the lesson panel had no Markdown tables, so every table in phase 1 showed as a paragraph of pipes | Pipe tables added to the lesson renderer |
+| 2026-10-06 | 2.6 | The Multiplexer stepped only in frequency, so no setting landed four lanes on the 20 nm CWDM grid (3550 GHz from 1331 nm reaches 1310.35 nm) | `wavelength_spacing` added to the Multiplexer and Demultiplexer |
 | 2026-10-06 | 1.2, 1.3 | A project cannot carry a sweep, so the two sweep lessons tell the reader which parameter and range to set by hand | Open: a `.maiman` file could save its sweep beside its notes |
 | 2026-10-06 | 1.4 | After a run the dock stayed on whichever tab was open, so a pulse example showed an empty constellation | A run whose results the open tab cannot draw now moves to the first tab that can |
 | 2026-10-06 | 1.1 | The toolbar's run settings (32 GBd, 4096 sym, seed 2026) and the status bar's 65 536 samples were written into the page once, for the flagship, and shown for every project; they were wrong for the flagship too, which runs 8192 symbols | Read from the open project's context, and redrawn whenever it changes |
