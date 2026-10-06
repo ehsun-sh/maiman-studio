@@ -1,0 +1,551 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 10000000000.0,
+    "samples_per_symbol": 8,
+    "sequence_length": 256,
+    "seed": 0,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "laser",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "span1",
+      "type": "Fiber",
+      "params": {
+        "length": 80.0,
+        "attenuation": 0.2
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "edfa1",
+      "type": "EDFA",
+      "params": {
+        "gain": 16.0,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "osnr1",
+      "type": "OSNRMeter",
+      "params": {},
+      "ui": {
+        "x": 330.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "osa1",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1550.0,
+        "span": 4000.0,
+        "points": 1024.0,
+        "resolution_bandwidth": 12.5
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 220.0
+      }
+    },
+    {
+      "id": "span2",
+      "type": "Fiber",
+      "params": {
+        "length": 80.0,
+        "attenuation": 0.2
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "edfa2",
+      "type": "EDFA",
+      "params": {
+        "gain": 16.0,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "osnr2",
+      "type": "OSNRMeter",
+      "params": {},
+      "ui": {
+        "x": 630.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "span3",
+      "type": "Fiber",
+      "params": {
+        "length": 80.0,
+        "attenuation": 0.2
+      },
+      "ui": {
+        "x": 780.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "edfa3",
+      "type": "EDFA",
+      "params": {
+        "gain": 16.0,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 930.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "span4",
+      "type": "Fiber",
+      "params": {
+        "length": 80.0,
+        "attenuation": 0.2
+      },
+      "ui": {
+        "x": 1080.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "edfa4",
+      "type": "EDFA",
+      "params": {
+        "gain": 16.0,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 1230.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "osnr4",
+      "type": "OSNRMeter",
+      "params": {},
+      "ui": {
+        "x": 1230.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "span5",
+      "type": "Fiber",
+      "params": {
+        "length": 80.0,
+        "attenuation": 0.2
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 290.0
+      }
+    },
+    {
+      "id": "edfa5",
+      "type": "EDFA",
+      "params": {
+        "gain": 16.0,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 290.0
+      }
+    },
+    {
+      "id": "span6",
+      "type": "Fiber",
+      "params": {
+        "length": 80.0,
+        "attenuation": 0.2
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 290.0
+      }
+    },
+    {
+      "id": "edfa6",
+      "type": "EDFA",
+      "params": {
+        "gain": 16.0,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 290.0
+      }
+    },
+    {
+      "id": "span7",
+      "type": "Fiber",
+      "params": {
+        "length": 80.0,
+        "attenuation": 0.2
+      },
+      "ui": {
+        "x": 780.0,
+        "y": 290.0
+      }
+    },
+    {
+      "id": "edfa7",
+      "type": "EDFA",
+      "params": {
+        "gain": 16.0,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 930.0,
+        "y": 290.0
+      }
+    },
+    {
+      "id": "span8",
+      "type": "Fiber",
+      "params": {
+        "length": 80.0,
+        "attenuation": 0.2
+      },
+      "ui": {
+        "x": 1080.0,
+        "y": 290.0
+      }
+    },
+    {
+      "id": "edfa8",
+      "type": "EDFA",
+      "params": {
+        "gain": 16.0,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 1230.0,
+        "y": 290.0
+      }
+    },
+    {
+      "id": "osnr8",
+      "type": "OSNRMeter",
+      "params": {},
+      "ui": {
+        "x": 1230.0,
+        "y": 390.0
+      }
+    },
+    {
+      "id": "osa8",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1550.0,
+        "span": 4000.0,
+        "points": 1024.0,
+        "resolution_bandwidth": 12.5
+      },
+      "ui": {
+        "x": 1230.0,
+        "y": 190.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "span1",
+        "out"
+      ],
+      "to": [
+        "edfa1",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "span2",
+        "out"
+      ],
+      "to": [
+        "edfa2",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "span3",
+        "out"
+      ],
+      "to": [
+        "edfa3",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "span4",
+        "out"
+      ],
+      "to": [
+        "edfa4",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "span5",
+        "out"
+      ],
+      "to": [
+        "edfa5",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "span6",
+        "out"
+      ],
+      "to": [
+        "edfa6",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "span7",
+        "out"
+      ],
+      "to": [
+        "edfa7",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "span8",
+        "out"
+      ],
+      "to": [
+        "edfa8",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "edfa1",
+        "out"
+      ],
+      "to": [
+        "osa1",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "edfa8",
+        "out"
+      ],
+      "to": [
+        "osa8",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "edfa1",
+        "out"
+      ],
+      "to": [
+        "osnr1",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "edfa2",
+        "out"
+      ],
+      "to": [
+        "osnr2",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "edfa4",
+        "out"
+      ],
+      "to": [
+        "osnr4",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "edfa8",
+        "out"
+      ],
+      "to": [
+        "osnr8",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "laser",
+        "out"
+      ],
+      "to": [
+        "span1",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "edfa1",
+        "out"
+      ],
+      "to": [
+        "span2",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "edfa2",
+        "out"
+      ],
+      "to": [
+        "span3",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "edfa3",
+        "out"
+      ],
+      "to": [
+        "span4",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "edfa4",
+        "out"
+      ],
+      "to": [
+        "span5",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "edfa5",
+        "out"
+      ],
+      "to": [
+        "span6",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "edfa6",
+        "out"
+      ],
+      "to": [
+        "span7",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "edfa7",
+        "out"
+      ],
+      "to": [
+        "span8",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "3.2 A chain of amplified spans",
+    "body": "A 0 dBm line [[laser]] goes through eight 80 km spans, [[span1]] to [[span8]]. After each one an\nEDFA ([[edfa1]] to [[edfa8]]) makes up exactly the 16 dB that span lost. The OSNR is read after 1,\n2, 4 and 8 spans by [[osnr1]], [[osnr2]], [[osnr4]] and [[osnr8]], and the spectrum after the\nfirst and the last by [[osa1]] and [[osa8]].\n\n## Noise adds up, the signal does not\n\nEvery span is identical, so every amplifier receives the same \u221216 dBm and adds the same ASE.\nThe signal leaves each amplifier at 0 dBm again, but the ASE from earlier amplifiers is carried\nalong. After $N$ spans there is $N$ times the noise of one:\n\n$$\\text{OSNR}_N = \\text{OSNR}_1 - 10\\log_{10}N$$\n\n| Spans | Reach | OSNR in 0.1 nm |\n| :-- | :-- | :-- |\n| 1 | 80 km | 36.95 dB |\n| 2 | 160 km | 33.94 dB |\n| 4 | 320 km | 30.93 dB |\n| 8 | 640 km | 27.92 dB |\n\nEach doubling costs 3.01 dB. On [[osa1]] the ASE floor is 37 dB under the line, and on\n[[osa8]] it has risen to 28 dB under it.\n\n## Try this\n\n- Lengthen every span to 100 km and raise every gain to 20 dB. How much OSNR does the extra\n  4 dB of span loss cost?\n- Raise [[laser]] to +3 dBm. Every OSNR rises by 3 dB. 3.5 is why that cannot go on."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 171.0,
+      "y": 13.0,
+      "w": 1184.0,
+      "h": 88.0,
+      "text": "Spans 1 to 4",
+      "tone": "binary"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 171.0,
+      "y": 263.0,
+      "w": 1184.0,
+      "h": 88.0,
+      "text": "Spans 5 to 8",
+      "tone": "binary"
+    },
+    {
+      "id": "a3",
+      "kind": "note",
+      "x": 1396.0,
+      "y": 170.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "Every amplifier adds the same noise; the signal stays the same. Twice the spans, half the OSNR: 3 dB.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a4",
+      "kind": "arrow",
+      "x1": 1394.0,
+      "y1": 216.0,
+      "x2": 1360.0,
+      "y2": 216.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

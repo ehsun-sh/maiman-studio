@@ -220,6 +220,15 @@
       }
     },
     {
+      "id": "eye0",
+      "type": "EyeDiagram",
+      "params": {},
+      "ui": {
+        "x": 1230.0,
+        "y": 40.0
+      }
+    },
+    {
       "id": "pin1",
       "type": "PINPhotodiode",
       "params": {},
@@ -245,6 +254,15 @@
       "params": {},
       "ui": {
         "x": 1080.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "eye1",
+      "type": "EyeDiagram",
+      "params": {},
+      "ui": {
+        "x": 1230.0,
         "y": 140.0
       }
     },
@@ -278,6 +296,15 @@
       }
     },
     {
+      "id": "eye2",
+      "type": "EyeDiagram",
+      "params": {},
+      "ui": {
+        "x": 1230.0,
+        "y": 240.0
+      }
+    },
+    {
       "id": "pin3",
       "type": "PINPhotodiode",
       "params": {},
@@ -303,6 +330,15 @@
       "params": {},
       "ui": {
         "x": 1080.0,
+        "y": 340.0
+      }
+    },
+    {
+      "id": "eye3",
+      "type": "EyeDiagram",
+      "params": {},
+      "ui": {
+        "x": 1230.0,
         "y": 340.0
       }
     }
@@ -405,6 +441,46 @@
       ],
       "to": [
         "drv",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "lpf0",
+        "out"
+      ],
+      "to": [
+        "eye0",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "lpf1",
+        "out"
+      ],
+      "to": [
+        "eye1",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "lpf2",
+        "out"
+      ],
+      "to": [
+        "eye2",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "lpf3",
+        "out"
+      ],
+      "to": [
+        "eye3",
         "in"
       ]
     },
@@ -631,7 +707,7 @@
   ],
   "notes": {
     "title": "2.6 CWDM4: four lanes in the O-band",
-    "body": "Four 25.78 Gb/s lanes on the coarse WDM grid, [[tx0]] to [[tx3]] at 1331, 1311, 1291 and 1271\nnm, are combined by [[mux]], sent through 10 km of standard fibre [[fibre]] with no amplifier,\nsplit by [[demux]] and received on four PIN receivers. This is how a 100G data-centre optic\ncarries its four lanes. The spectrum is on [[osa]].\n\n## The coarse grid\n\nITU-T G.694.2 places channels 20 nm apart in *wavelength* (dense WDM is uniform in frequency\ninstead). Each 20 nm slot leaves about 13 nm of passband, wide enough for a laser with no\ntemperature control to drift in, which is what makes CWDM optics cheap. [[mux]] steps its\nchannels in nanometres for this.\n\n## Why the O-band\n\nStandard fibre's dispersion crosses zero near 1310 nm. Close to that point it grows linearly\nwith the slope $S_0 \\approx 0.092$ ps/(nm\u00b2\u00b7km):\n\n$$D(\\lambda) \\approx S_0\\,(\\lambda - \\lambda_0)$$\n\n| Lane | $\\lambda$ | $D$ [ps/(nm\u00b7km)] | $Q$ |\n| :-- | :-- | :-- | :-- |\n| [[ber0]] | 1331 nm | +1.9 | 25.3 |\n| [[ber1]] | 1311 nm | +0.1 | 26.0 |\n| [[ber2]] | 1291 nm | \u22121.7 | 25.9 |\n| [[ber3]] | 1271 nm | \u22123.6 | 20.3 |\n\nThe lane furthest from the zero loses the most. With the slope set to zero all four read about\n26.\n\n## The budget\n\nFibre loss is higher here, about 0.35 dB/km, so 10 km costs 3.5 dB. Per lane:\n\n$$0\\ \\text{dBm} - 3\\ (\\text{modulator}) - 2\\ (\\text{mux}) - 3.5\\ (\\text{fibre}) - 2\\ (\\text{demux}) \\approx -10.5\\ \\text{dBm}$$\n\n## Try this\n\n- Set [[fibre]]'s dispersion slope to 0 and compare the four $Q$ values.\n- Lengthen [[fibre]] to 40 km. Which lane fails first, and why?\n- Move [[tx3]] by 7 nm and watch [[demux]] cut it off."
+    "body": "Four 25.78 Gb/s lanes on the coarse WDM grid, [[tx0]] to [[tx3]] at 1331, 1311, 1291 and 1271\nnm, are combined by [[mux]], sent through 10 km of standard fibre [[fibre]] with no amplifier,\nsplit by [[demux]] and received on four PIN receivers. This is how a 100G data-centre optic\ncarries its four lanes. The spectrum is on [[osa]], and each lane's eye, [[eye0]] to [[eye3]],\nin the Eye tab.\n\n## The coarse grid\n\nITU-T G.694.2 places channels 20 nm apart in *wavelength* (dense WDM is uniform in frequency\ninstead). Each 20 nm slot leaves about 13 nm of passband, wide enough for a laser with no\ntemperature control to drift in, which is what makes CWDM optics cheap. [[mux]] steps its\nchannels in nanometres for this.\n\n## Why the O-band\n\nStandard fibre's dispersion crosses zero near 1310 nm. Close to that point it grows linearly\nwith the slope $S_0 \\approx 0.092$ ps/(nm\u00b2\u00b7km):\n\n$$D(\\lambda) \\approx S_0\\,(\\lambda - \\lambda_0)$$\n\n| Lane | $\\lambda$ | $D$ [ps/(nm\u00b7km)] | $Q$ |\n| :-- | :-- | :-- | :-- |\n| [[ber0]] | 1331 nm | +1.9 | 25.3 |\n| [[ber1]] | 1311 nm | +0.1 | 26.0 |\n| [[ber2]] | 1291 nm | \u22121.7 | 25.9 |\n| [[ber3]] | 1271 nm | \u22123.6 | 20.3 |\n\nThe lane furthest from the zero loses the most. With the slope set to zero all four read about\n26.\n\n## The budget\n\nFibre loss is higher here, about 0.35 dB/km, so 10 km costs 3.5 dB. Per lane:\n\n$$0\\ \\text{dBm} - 3\\ (\\text{modulator}) - 2\\ (\\text{mux}) - 3.5\\ (\\text{fibre}) - 2\\ (\\text{demux}) \\approx -10.5\\ \\text{dBm}$$\n\n## Try this\n\n- Set [[fibre]]'s dispersion slope to 0 and compare the four $Q$ values.\n- Lengthen [[fibre]] to 40 km. Which lane fails first, and why?\n- Move [[tx3]] by 7 nm and watch [[demux]] cut it off."
   },
   "annotations": [
     {
@@ -659,7 +735,7 @@
       "kind": "rect",
       "x": 771.0,
       "y": 13.0,
-      "w": 434.0,
+      "w": 584.0,
       "h": 388.0,
       "text": "4 receivers",
       "tone": "electrical"

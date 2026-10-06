@@ -22,6 +22,7 @@ from maiman.components import (
     Multiplexer,
     OpticalFilter,
     PowerMeter,
+    WavelengthSelectiveSwitch,
 )
 from maiman.grid import (
     CWDM_CHANNELS,
@@ -428,3 +429,70 @@ def test_a_coarse_plan_carries_each_lane_through_its_own_port(ctx: SimulationCon
 def test_a_coarse_plan_that_runs_out_of_wavelength_is_refused() -> None:
     with pytest.raises(ValueError, match="below zero wavelength"):
         Multiplexer(4, first_wavelength=1300.0, wavelength_spacing=500.0).channel_frequencies()
+
+
+# ---------------------------------------------------------------------------
+# The add/drop switch
+
+
+def _switch_output(ctx: SimulationContext, isolation: float) -> tuple[dict[float, float], object]:
+    """Band powers [dBm] on ``out`` by centre frequency, and the ``out`` signal."""
+    graph = Graph(ctx)
+    mux = graph.add(Multiplexer(4, insertion_loss=0.0, label="mux"))
+    for index, wavelength in enumerate(mux.channel_wavelengths()):
+        laser = graph.add(CWLaser(power=0.0, wavelength=wavelength * 1e9, label=f"l{index}"))
+        graph.connect(laser, mux[f"in{index}"])
+    wss = graph.add(WavelengthSelectiveSwitch(4, dropped=1.0, isolation=isolation, label="wss"))
+    added = graph.add(
+        CWLaser(power=-3.0, wavelength=mux.channel_wavelengths()[1] * 1e9, label="added")
+    )
+    graph.connect(mux, wss["in"])
+    graph.connect(added, wss["add"])
+    graph.connect(wss["drop"], graph.add(PowerMeter(label="drop"))["in"])
+    graph.connect(wss["out"], graph.add(PowerMeter(label="out"))["in"])
+    out = graph.run(keep=[wss]).port(wss, "out")
+
+    def dbm(band: object) -> float:
+        power = np.mean(np.abs(band.Ex) ** 2 + np.abs(band.Ey) ** 2)  # type: ignore[attr-defined]
+        return float(10 * np.log10(power * 1e3))
+
+    return {band.f0: dbm(band) for band in out.bands}, out
+
+
+def test_a_switch_expresses_the_rest_and_puts_the_added_channel_in_the_dropped_slot(
+    ctx: SimulationContext,
+) -> None:
+    powers, _ = _switch_output(ctx, isolation=200.0)
+    grid = WavelengthSelectiveSwitch(4).channel_frequencies()
+    assert sorted(powers) == pytest.approx(sorted(grid))
+    loss = WavelengthSelectiveSwitch(4).insertion_loss
+
+    def nearest(centre: float) -> float:
+        return min(powers, key=lambda f: abs(f - centre))
+
+    by_channel = [powers[nearest(c)] for c in grid]
+    assert by_channel == pytest.approx([-loss, -3.0 - loss, -loss, -loss], abs=0.01)
+
+
+def test_a_switch_leaks_the_dropped_channel_onto_the_added_one_as_a_field(
+    ctx: SimulationContext,
+) -> None:
+    """What the switch fails to block is added to the new channel's field, not beside it."""
+    _, clean = _switch_output(ctx, isolation=200.0)
+    _, leaky = _switch_output(ctx, isolation=30.0)
+    slot = WavelengthSelectiveSwitch(4).channel_frequencies()[1]
+    at_slot = [
+        min(signal.bands, key=lambda b: abs(b.f0 - slot))  # type: ignore[attr-defined]
+        for signal in (clean, leaky)
+    ]
+    leak = at_slot[1].Ex - at_slot[0].Ex
+    power = float(np.mean(np.abs(leak) ** 2 + np.abs(at_slot[1].Ey - at_slot[0].Ey) ** 2))
+    # The line arrived at 0 dBm; 30 dB of isolation leaves -30 dBm.
+    assert 10 * np.log10(power * 1e3) == pytest.approx(-30.0, abs=0.01)
+
+
+def test_a_switch_refuses_a_channel_it_does_not_have() -> None:
+    with pytest.raises(ValueError, match="not one of channels 0 to 3"):
+        WavelengthSelectiveSwitch(4, dropped=4.0)
+    with pytest.raises(ValueError, match="not one of channels 0 to 3"):
+        WavelengthSelectiveSwitch(4, dropped=1.5)

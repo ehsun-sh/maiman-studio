@@ -1,0 +1,650 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 10000000000.0,
+    "samples_per_symbol": 8,
+    "sequence_length": 512,
+    "seed": 7,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "prbs",
+      "type": "PRBSGenerator",
+      "params": {
+        "order": 9.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "drv",
+      "type": "NRZDriver",
+      "params": {
+        "v_low": 4.0,
+        "v_high": 0.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "tx",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "mzm",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "booster",
+      "type": "EDFA",
+      "params": {
+        "gain": 6.0,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "pm_launch",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+        "x": 330.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "span1",
+      "type": "Fiber",
+      "params": {
+        "length": 80.0,
+        "attenuation": 0.2,
+        "dispersion": 17.0,
+        "nonlinearity": 1.3
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "dcf1",
+      "type": "Fiber",
+      "params": {
+        "length": 13.6,
+        "attenuation": 0.5,
+        "dispersion": -100.0
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "edfa1",
+      "type": "EDFA",
+      "params": {
+        "gain": 22.8,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 780.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "span2",
+      "type": "Fiber",
+      "params": {
+        "length": 80.0,
+        "attenuation": 0.2,
+        "dispersion": 17.0,
+        "nonlinearity": 1.3
+      },
+      "ui": {
+        "x": 930.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "dcf2",
+      "type": "Fiber",
+      "params": {
+        "length": 13.6,
+        "attenuation": 0.5,
+        "dispersion": -100.0
+      },
+      "ui": {
+        "x": 1080.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "edfa2",
+      "type": "EDFA",
+      "params": {
+        "gain": 22.8,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 1230.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "span3",
+      "type": "Fiber",
+      "params": {
+        "length": 80.0,
+        "attenuation": 0.2,
+        "dispersion": 17.0,
+        "nonlinearity": 1.3
+      },
+      "ui": {
+        "x": 1380.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "dcf3",
+      "type": "Fiber",
+      "params": {
+        "length": 13.6,
+        "attenuation": 0.5,
+        "dispersion": -100.0
+      },
+      "ui": {
+        "x": 1530.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "edfa3",
+      "type": "EDFA",
+      "params": {
+        "gain": 22.8,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 1680.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "span4",
+      "type": "Fiber",
+      "params": {
+        "length": 80.0,
+        "attenuation": 0.2,
+        "dispersion": 17.0,
+        "nonlinearity": 1.3
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 360.0
+      }
+    },
+    {
+      "id": "dcf4",
+      "type": "Fiber",
+      "params": {
+        "length": 13.6,
+        "attenuation": 0.5,
+        "dispersion": -100.0
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 360.0
+      }
+    },
+    {
+      "id": "edfa4",
+      "type": "EDFA",
+      "params": {
+        "gain": 22.8,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 780.0,
+        "y": 360.0
+      }
+    },
+    {
+      "id": "span5",
+      "type": "Fiber",
+      "params": {
+        "length": 80.0,
+        "attenuation": 0.2,
+        "dispersion": 17.0,
+        "nonlinearity": 1.3
+      },
+      "ui": {
+        "x": 930.0,
+        "y": 360.0
+      }
+    },
+    {
+      "id": "dcf5",
+      "type": "Fiber",
+      "params": {
+        "length": 13.6,
+        "attenuation": 0.5,
+        "dispersion": -100.0
+      },
+      "ui": {
+        "x": 1080.0,
+        "y": 360.0
+      }
+    },
+    {
+      "id": "edfa5",
+      "type": "EDFA",
+      "params": {
+        "gain": 22.8,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 1230.0,
+        "y": 360.0
+      }
+    },
+    {
+      "id": "osnr",
+      "type": "OSNRMeter",
+      "params": {},
+      "ui": {
+        "x": 1380.0,
+        "y": 360.0
+      }
+    },
+    {
+      "id": "pin",
+      "type": "PINPhotodiode",
+      "params": {},
+      "ui": {
+        "x": 1380.0,
+        "y": 460.0
+      }
+    },
+    {
+      "id": "lpf",
+      "type": "ElectricalFilter",
+      "params": {
+        "bandwidth": 7.0
+      },
+      "ui": {
+        "x": 1530.0,
+        "y": 460.0
+      }
+    },
+    {
+      "id": "ber",
+      "type": "BERAnalyzer",
+      "params": {},
+      "ui": {
+        "x": 1680.0,
+        "y": 460.0
+      }
+    },
+    {
+      "id": "eye",
+      "type": "EyeDiagram",
+      "params": {},
+      "ui": {
+        "x": 1830.0,
+        "y": 460.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "lpf",
+        "out"
+      ],
+      "to": [
+        "ber",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "ber",
+        "reference"
+      ]
+    },
+    {
+      "from": [
+        "mzm",
+        "out"
+      ],
+      "to": [
+        "booster",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "span1",
+        "out"
+      ],
+      "to": [
+        "dcf1",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "span2",
+        "out"
+      ],
+      "to": [
+        "dcf2",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "span3",
+        "out"
+      ],
+      "to": [
+        "dcf3",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "span4",
+        "out"
+      ],
+      "to": [
+        "dcf4",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "span5",
+        "out"
+      ],
+      "to": [
+        "dcf5",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "drv",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "dcf1",
+        "out"
+      ],
+      "to": [
+        "edfa1",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "dcf2",
+        "out"
+      ],
+      "to": [
+        "edfa2",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "dcf3",
+        "out"
+      ],
+      "to": [
+        "edfa3",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "dcf4",
+        "out"
+      ],
+      "to": [
+        "edfa4",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "dcf5",
+        "out"
+      ],
+      "to": [
+        "edfa5",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "lpf",
+        "out"
+      ],
+      "to": [
+        "eye",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "pin",
+        "out"
+      ],
+      "to": [
+        "lpf",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "out"
+      ],
+      "to": [
+        "mzm",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "tx",
+        "out"
+      ],
+      "to": [
+        "mzm",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "edfa5",
+        "out"
+      ],
+      "to": [
+        "osnr",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "edfa5",
+        "out"
+      ],
+      "to": [
+        "pin",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "booster",
+        "out"
+      ],
+      "to": [
+        "pm_launch",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "booster",
+        "out"
+      ],
+      "to": [
+        "span1",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "edfa1",
+        "out"
+      ],
+      "to": [
+        "span2",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "edfa2",
+        "out"
+      ],
+      "to": [
+        "span3",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "edfa3",
+        "out"
+      ],
+      "to": [
+        "span4",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "edfa4",
+        "out"
+      ],
+      "to": [
+        "span5",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "3.5 Optimum launch power",
+    "body": "A 10 Gb/s OOK signal [[tx]] [[mzm]] is launched by a booster [[booster]] into five 80 km spans of\nstandard fibre. Each span is followed by a spool of dispersion-compensating fibre ([[dcf1]] to\n[[dcf5]]) that undoes its 1360 ps/nm, and an amplifier that makes up the 22.8 dB the two lost.\nThe launch power is read on [[pm_launch]], and the receiver ends in [[osnr]], [[ber]] and [[eye]].\n\n## Two limits\n\nMore launch power means more OSNR, decibel for decibel. But standard fibre's Kerr\nnonlinearity, $\\gamma = 1.3$ /(W\u00b7km), shifts the phase of the signal by its own power:\n\n$$\\phi_\\text{NL} = \\gamma P L_\\text{eff}, \\qquad L_\\text{eff} = \\frac{1 - e^{-\\alpha L}}{\\alpha} \\approx 21\\ \\text{km}$$\n\nThe phase varies with the bit pattern, and the dispersion of the next span turns that phase into\ndistortion of the power. Too little power and the noise closes the eye; too much and the\ndistortion does.\n\n## The bathtub\n\nSweep the gain of [[booster]] from 0 to 15 dB in steps of 3 (*Sweep* in the toolbar):\n\n| Booster gain | Launch | OSNR | Q |\n| :-- | :-- | :-- | :-- |\n| 0 dB | \u22123.0 dBm | 20.2 dB | 5.90 |\n| 3 dB | 0.0 dBm | 23.1 dB | 9.74 |\n| 6 dB | +3.0 dBm | 26.1 dB | 12.24 |\n| 9 dB | +6.0 dBm | 29.1 dB | 8.71 |\n| 12 dB | +9.0 dBm | 32.1 dB | 4.18 |\n| 15 dB | +12.0 dBm | 35.0 dB | 1.67 |\n\nThe OSNR keeps rising to the last row, but the Q peaks at +3 dBm and falls on either side.\nDesigning a line system starts from this curve.\n\n## Try this\n\n- Set the nonlinearity of every span to 0 and sweep again. The Q now only rises.\n- Compare [[eye]] at 6 dB of gain with 12 dB."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 284.0,
+      "h": 188.0,
+      "text": "10 Gb/s transmitter",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 113.0,
+      "w": 1334.0,
+      "h": 88.0,
+      "text": "Spans 1 to 3, each compensated",
+      "tone": "binary"
+    },
+    {
+      "id": "a3",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 333.0,
+      "w": 884.0,
+      "h": 88.0,
+      "text": "Spans 4 and 5",
+      "tone": "binary"
+    },
+    {
+      "id": "a4",
+      "kind": "rect",
+      "x": 1371.0,
+      "y": 433.0,
+      "w": 584.0,
+      "h": 88.0,
+      "text": "Receiver",
+      "tone": "electrical"
+    },
+    {
+      "id": "a5",
+      "kind": "note",
+      "x": 290.0,
+      "y": 252.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "Sweep this gain from 0 to 15 dB. Too little and noise wins; too much and the Kerr effect does. The best launch is near +3 dBm.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a6",
+      "kind": "arrow",
+      "x1": 388.0,
+      "y1": 250.0,
+      "x2": 388.0,
+      "y2": 206.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

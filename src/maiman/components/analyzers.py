@@ -123,6 +123,10 @@ class EyeDiagram(Component):
     span_symbols = Param(2.0, unit="", min=1.0, doc="Symbols across the horizontal axis")
     time_bins = Param(128.0, unit="", min=8.0, doc="Horizontal resolution")
     amplitude_bins = Param(128.0, unit="", min=8.0, doc="Vertical resolution")
+    interpolate = BoolParam(
+        True,
+        doc="Draw each transition between samples by band-limited interpolation, not as a step",
+    )
 
     inputs = {"in": PortType.ELECTRICAL}
     outputs = {"out": PortType.METRIC}
@@ -137,6 +141,7 @@ class EyeDiagram(Component):
             time_bins=int(self.time_bins),
             amplitude_bins=int(self.amplitude_bins),
             unit=waveform.unit,
+            interpolate=self.interpolate,
         )
         return {"out": histogram}
 

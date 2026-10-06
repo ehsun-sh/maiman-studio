@@ -1,0 +1,812 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 10000000000.0,
+    "samples_per_symbol": 8,
+    "sequence_length": 512,
+    "seed": 9,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "prbs",
+      "type": "PRBSGenerator",
+      "params": {
+        "order": 9.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 490.0
+      }
+    },
+    {
+      "id": "drv",
+      "type": "NRZDriver",
+      "params": {
+        "v_low": 4.0,
+        "v_high": 0.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 490.0
+      }
+    },
+    {
+      "id": "mux_a",
+      "type": "Multiplexer",
+      "params": {
+        "first_wavelength": 1550.0,
+        "spacing": 100.0
+      },
+      "config": {
+        "channels": 4
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "tx0",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1550.0000000000002
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "mzm0",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "tx1",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1549.1990263841478
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "mzm1",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "tx2",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1548.398880158456
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 240.0
+      }
+    },
+    {
+      "id": "mzm2",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 240.0
+      }
+    },
+    {
+      "id": "tx3",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1547.5995600415697
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 340.0
+      }
+    },
+    {
+      "id": "mzm3",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 340.0
+      }
+    },
+    {
+      "id": "span_a",
+      "type": "Fiber",
+      "params": {
+        "length": 80.0,
+        "attenuation": 0.2
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "edfa_a",
+      "type": "EDFA",
+      "params": {
+        "gain": 22.0,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "osa_a",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1548.8,
+        "span": 600.0,
+        "points": 1024.0,
+        "resolution_bandwidth": 12.5
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "wss",
+      "type": "WavelengthSelectiveSwitch",
+      "params": {
+        "dropped": 1.0,
+        "first_wavelength": 1550.0,
+        "spacing": 100.0
+      },
+      "config": {
+        "channels": 4
+      },
+      "ui": {
+        "x": 780.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "pin_drop",
+      "type": "PINPhotodiode",
+      "params": {},
+      "ui": {
+        "x": 930.0,
+        "y": 390.0
+      }
+    },
+    {
+      "id": "lpf_drop",
+      "type": "ElectricalFilter",
+      "params": {
+        "bandwidth": 7.0
+      },
+      "ui": {
+        "x": 1080.0,
+        "y": 390.0
+      }
+    },
+    {
+      "id": "ber_drop",
+      "type": "BERAnalyzer",
+      "params": {},
+      "ui": {
+        "x": 1230.0,
+        "y": 390.0
+      }
+    },
+    {
+      "id": "eye_drop",
+      "type": "EyeDiagram",
+      "params": {},
+      "ui": {
+        "x": 1380.0,
+        "y": 390.0
+      }
+    },
+    {
+      "id": "prbs_add",
+      "type": "PRBSGenerator",
+      "params": {
+        "order": 11.0
+      },
+      "ui": {
+        "x": 780.0,
+        "y": 540.0
+      }
+    },
+    {
+      "id": "drv_add",
+      "type": "NRZDriver",
+      "params": {
+        "v_low": 4.0,
+        "v_high": 0.0
+      },
+      "ui": {
+        "x": 930.0,
+        "y": 540.0
+      }
+    },
+    {
+      "id": "tx_add",
+      "type": "CWLaser",
+      "params": {
+        "power": 2.0,
+        "wavelength": 1549.1990263841478
+      },
+      "ui": {
+        "x": 780.0,
+        "y": 640.0
+      }
+    },
+    {
+      "id": "mzm_add",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 930.0,
+        "y": 640.0
+      }
+    },
+    {
+      "id": "span_b",
+      "type": "Fiber",
+      "params": {
+        "length": 80.0,
+        "attenuation": 0.2
+      },
+      "ui": {
+        "x": 1230.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "edfa_b",
+      "type": "EDFA",
+      "params": {
+        "gain": 22.0,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 1380.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "osa_b",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1548.8,
+        "span": 600.0,
+        "points": 1024.0,
+        "resolution_bandwidth": 12.5
+      },
+      "ui": {
+        "x": 1230.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "demux_b",
+      "type": "Demultiplexer",
+      "params": {
+        "first_wavelength": 1550.0,
+        "spacing": 100.0
+      },
+      "config": {
+        "channels": 4
+      },
+      "ui": {
+        "x": 1530.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "pin_add",
+      "type": "PINPhotodiode",
+      "params": {},
+      "ui": {
+        "x": 1680.0,
+        "y": 390.0
+      }
+    },
+    {
+      "id": "lpf_add",
+      "type": "ElectricalFilter",
+      "params": {
+        "bandwidth": 7.0
+      },
+      "ui": {
+        "x": 1830.0,
+        "y": 390.0
+      }
+    },
+    {
+      "id": "ber_add",
+      "type": "BERAnalyzer",
+      "params": {},
+      "ui": {
+        "x": 1980.0,
+        "y": 390.0
+      }
+    },
+    {
+      "id": "eye_add",
+      "type": "EyeDiagram",
+      "params": {},
+      "ui": {
+        "x": 2130.0,
+        "y": 390.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "lpf_add",
+        "out"
+      ],
+      "to": [
+        "ber_add",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs_add",
+        "out"
+      ],
+      "to": [
+        "ber_add",
+        "reference"
+      ]
+    },
+    {
+      "from": [
+        "lpf_drop",
+        "out"
+      ],
+      "to": [
+        "ber_drop",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "ber_drop",
+        "reference"
+      ]
+    },
+    {
+      "from": [
+        "edfa_b",
+        "out"
+      ],
+      "to": [
+        "demux_b",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "drv",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs_add",
+        "out"
+      ],
+      "to": [
+        "drv_add",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "span_a",
+        "out"
+      ],
+      "to": [
+        "edfa_a",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "span_b",
+        "out"
+      ],
+      "to": [
+        "edfa_b",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "lpf_add",
+        "out"
+      ],
+      "to": [
+        "eye_add",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "lpf_drop",
+        "out"
+      ],
+      "to": [
+        "eye_drop",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "pin_add",
+        "out"
+      ],
+      "to": [
+        "lpf_add",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "pin_drop",
+        "out"
+      ],
+      "to": [
+        "lpf_drop",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "mzm0",
+        "out"
+      ],
+      "to": [
+        "mux_a",
+        "in0"
+      ]
+    },
+    {
+      "from": [
+        "mzm1",
+        "out"
+      ],
+      "to": [
+        "mux_a",
+        "in1"
+      ]
+    },
+    {
+      "from": [
+        "mzm2",
+        "out"
+      ],
+      "to": [
+        "mux_a",
+        "in2"
+      ]
+    },
+    {
+      "from": [
+        "mzm3",
+        "out"
+      ],
+      "to": [
+        "mux_a",
+        "in3"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "out"
+      ],
+      "to": [
+        "mzm0",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "tx0",
+        "out"
+      ],
+      "to": [
+        "mzm0",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "out"
+      ],
+      "to": [
+        "mzm1",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "tx1",
+        "out"
+      ],
+      "to": [
+        "mzm1",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "out"
+      ],
+      "to": [
+        "mzm2",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "tx2",
+        "out"
+      ],
+      "to": [
+        "mzm2",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "out"
+      ],
+      "to": [
+        "mzm3",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "tx3",
+        "out"
+      ],
+      "to": [
+        "mzm3",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "drv_add",
+        "out"
+      ],
+      "to": [
+        "mzm_add",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "tx_add",
+        "out"
+      ],
+      "to": [
+        "mzm_add",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "edfa_a",
+        "out"
+      ],
+      "to": [
+        "osa_a",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "wss",
+        "out"
+      ],
+      "to": [
+        "osa_b",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "demux_b",
+        "out1"
+      ],
+      "to": [
+        "pin_add",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "wss",
+        "drop"
+      ],
+      "to": [
+        "pin_drop",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "mux_a",
+        "out"
+      ],
+      "to": [
+        "span_a",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "wss",
+        "out"
+      ],
+      "to": [
+        "span_b",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "mzm_add",
+        "out"
+      ],
+      "to": [
+        "wss",
+        "add"
+      ]
+    },
+    {
+      "from": [
+        "edfa_a",
+        "out"
+      ],
+      "to": [
+        "wss",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "3.9 A ROADM add/drop node",
+    "body": "Four 10 Gb/s channels [[tx0]] to [[tx3]], 100 GHz apart, cross a span [[span_a]] [[edfa_a]] and\nreach a node. There a wavelength-selective switch [[wss]] lets three channels through\n(*express*), takes channel 1 off to a local receiver (*drop*, [[ber_drop]]) and puts a new\nchannel with different data on the same wavelength (*add*, [[tx_add]]). The line continues\nthrough [[span_b]] [[edfa_b]] to [[demux_b]], where the added channel is received by\n[[ber_add]]. The spectra on [[osa_a]] and [[osa_b]] look alike, but channel 1 now carries other\ndata.\n\n## In-band crosstalk\n\nA switch does not block perfectly. What it leaks of the dropped channel, its *isolation* below\nthe arrival, reaches the out port on exactly the frequency of the added channel. There no filter\ncan separate them. The two fields add, and the receiver sees their beat:\n\n$$P = |E_\\text{add} + E_\\text{leak}|^2 = P_\\text{add} + P_\\text{leak} + 2\\sqrt{P_\\text{add}P_\\text{leak}}\\cos\\Delta\\phi$$\n\nThe beat term is in amplitude, so crosstalk 35 dB down in power is only 17.5 dB down in field.\n\n| [[wss]] isolation | Q, added channel |\n| :-- | :-- |\n| 80 dB | 41.2 |\n| 35 dB | 26.2 |\n| 25 dB | 10.8 |\n| 20 dB | 6.2 |\n\nThe dropped channel reads Q 32.1 on [[ber_drop]] whatever the isolation is. The leak only\nharms the channel that takes its place.\n\n## Try this\n\n- Sweep the *isolation* of [[wss]] from 15 to 40 dB.\n- Lower [[tx_add]]'s power by 5 dB. The leak is now 5 dB closer to the added channel."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 284.0,
+      "h": 538.0,
+      "text": "4 channels",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 163.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "Span in",
+      "tone": "binary"
+    },
+    {
+      "id": "a3",
+      "kind": "rect",
+      "x": 921.0,
+      "y": 363.0,
+      "w": 584.0,
+      "h": 88.0,
+      "text": "Drop",
+      "tone": "electrical"
+    },
+    {
+      "id": "a4",
+      "kind": "rect",
+      "x": 771.0,
+      "y": 513.0,
+      "w": 284.0,
+      "h": 188.0,
+      "text": "Add, new data",
+      "tone": "optical"
+    },
+    {
+      "id": "a5",
+      "kind": "rect",
+      "x": 1221.0,
+      "y": 163.0,
+      "w": 434.0,
+      "h": 88.0,
+      "text": "Span out",
+      "tone": "binary"
+    },
+    {
+      "id": "a6",
+      "kind": "rect",
+      "x": 1671.0,
+      "y": 363.0,
+      "w": 584.0,
+      "h": 88.0,
+      "text": "Added channel",
+      "tone": "electrical"
+    },
+    {
+      "id": "a7",
+      "kind": "note",
+      "x": 740.0,
+      "y": 40.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "Express three, drop one, add one in its slot. What leaks of the dropped channel sits on top of the new one.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a8",
+      "kind": "arrow",
+      "x1": 838.0,
+      "y1": 138.0,
+      "x2": 838.0,
+      "y2": 178.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

@@ -17,6 +17,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import amplified
 import direct_detection
 import dwdm_link
 import first_light
@@ -589,8 +590,16 @@ TEMPLATES: dict[str, tuple[str, Path]] = {
     "pam4-lane": ("2.5 PAM4 lane with an equaliser", direct_detection.project_path("pam4_lane")),
     "cwdm4": ("2.6 CWDM4 in the O-band", direct_detection.project_path("cwdm4")),
     "gpon": ("2.7 GPON downstream, 1:32", direct_detection.project_path("gpon")),
+    "edfa-basics": ("3.1 One EDFA, before and after", amplified.project_path("edfa_basics")),
+    "amplified-chain": (
+        "3.2 A chain of amplified spans",
+        amplified.project_path("amplified_chain"),
+    ),
     "wdm-osa": ("3.3 WDM spectrum, 4 channels", WDM_PROJECT),
     "dwdm-link": ("3.4 DWDM link, 8 × 10 Gb/s", dwdm_link.PROJECT),  # noqa: RUF001 -- a times sign
+    "launch-power": ("3.5 Optimum launch power", amplified.project_path("launch_power")),
+    "fwm-dsf": ("3.6 Four-wave mixing on G.653 fibre", amplified.project_path("fwm_dsf")),
+    "roadm": ("3.9 A ROADM add/drop node", amplified.project_path("roadm")),
     "coherent-sdfec": ("4.3 Coherent link, soft-decision FEC", SDFEC_PROJECT),
 }
 
@@ -657,6 +666,8 @@ def main() -> None:
     # And the direct-detection links of phase 2.
     for key in direct_detection.EXAMPLES:
         direct_detection.write(key)
+    for key in amplified.EXAMPLES:
+        amplified.write(key)
 
     # Required received power per format, from the same graph re-run.
     sensitivity: list[dict[str, Any]] = []
