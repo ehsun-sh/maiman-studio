@@ -28,7 +28,8 @@ from maiman.server import run_project
 
 ROOT = Path(__file__).resolve().parent.parent
 STUDIO = ROOT / "src" / "maiman" / "studio" / "index.html"
-EXPORT = ROOT / "examples" / "ui_data.json"
+EXPORT = ROOT / "examples" / "python" / "ui_data.json"
+PROJECTS = ROOT / "examples" / "maiman"
 DATA_TAG = '<script id="maiman-data" type="application/json">'
 
 
@@ -43,12 +44,12 @@ def embedded() -> Any:
 def test_the_page_carries_the_current_export() -> None:
     """The baked-in copy and the file it was baked from must agree.
 
-    They are the same bytes on purpose: `examples/export_ui_data.py` writes the
+    They are the same bytes on purpose: `examples/python/export_ui_data.py` writes the
     JSON and it is spliced in verbatim, so any difference means the splice was
     not done after the export was regenerated.
     """
     assert embedded() == json.loads(EXPORT.read_text(encoding="utf-8")), (
-        "the studio page carries a stale copy of examples/ui_data.json. "
+        "the studio page carries a stale copy of examples/python/ui_data.json. "
         "Re-run the export and splice the result back into the page."
     )
 
@@ -72,7 +73,7 @@ def test_the_baked_manifests_are_the_live_ones() -> None:
     """
     assert embedded()["manifests"] == manifests(), (
         "the baked manifests no longer match the library — a parameter was added "
-        "or changed since the last export. Re-run examples/export_ui_data.py and "
+        "or changed since the last export. Re-run examples/python/export_ui_data.py and "
         "splice the result back into the page."
     )
 
@@ -420,7 +421,7 @@ def test_the_shipped_eye_comes_from_the_project_beside_it() -> None:
     that link has no eye — so it ships with the project it did come from, which
     anyone can open from the File menu and take further.
     """
-    project = json.loads((ROOT / "examples" / "ook_eye.maiman").read_text(encoding="utf-8"))
+    project = json.loads((PROJECTS / "ook_eye.maiman").read_text(encoding="utf-8"))
     assert "EyeDiagram" in {node["type"] for node in project["nodes"]}
     assert all("ui" in node for node in project["nodes"]), "it should open laid out"
 
@@ -588,7 +589,7 @@ def test_the_shipped_spectrum_comes_from_the_project_beside_it() -> None:
     arrays the plot reads. A live run sends four, so the reduction is redone here
     from the run's own numbers and has to land on the shipped ones.
     """
-    project = json.loads((ROOT / "examples" / "wdm_osa.maiman").read_text(encoding="utf-8"))
+    project = json.loads((PROJECTS / "wdm_osa.maiman").read_text(encoding="utf-8"))
     assert "OpticalSpectrumAnalyzer" in {node["type"] for node in project["nodes"]}
     assert all("ui" in node for node in project["nodes"]), "it should open laid out"
 
@@ -1174,7 +1175,7 @@ def test_every_template_row_is_a_project_the_page_carries() -> None:
 def test_every_template_is_the_file_beside_its_script() -> None:
     """What the menu opens is the file a user could open by hand, not a copy of it."""
     for key, name in TEMPLATE_FILES.items():
-        on_disk = json.loads((ROOT / "examples" / name).read_text(encoding="utf-8"))
+        on_disk = json.loads((PROJECTS / name).read_text(encoding="utf-8"))
         assert embedded()["templates"][key]["project"] == on_disk, key
 
 
@@ -1188,3 +1189,56 @@ def test_a_template_opens_as_a_copy() -> None:
     """Editing the canvas must not edit the template it came from."""
     text = STUDIO.read_text(encoding="utf-8")
     assert "structuredClone(TEMPLATES[key].project)" in text
+
+
+# ---------------------------------------------------------------------------
+# Teaching: the lesson panel and the marks on the canvas
+
+
+def test_every_project_the_page_opens_carries_a_lesson() -> None:
+    """The page's own project and every template open with their notes beside them."""
+    data = embedded()
+    projects = {"(the page's own)": data["project"]}
+    projects.update({key: t["project"] for key, t in data["templates"].items()})
+    for key, project in projects.items():
+        notes = project.get("notes") or {}
+        assert notes.get("title") and notes.get("body"), f"{key} has no lesson"
+        labels = {node["id"] for node in project["nodes"]}
+        named = set(re.findall(r"\[\[([A-Za-z0-9_\-]+)\]\]", notes["body"]))
+        assert named, f"the {key} lesson never points at a block"
+        assert named <= labels, f"the {key} lesson names {sorted(named - labels)}"
+
+
+def test_every_template_mark_is_a_kind_the_page_draws() -> None:
+    text = STUDIO.read_text(encoding="utf-8")
+    kinds = set(re.findall(r"(\w+): \"\w+\"", text[text.index("const ANN_KINDS") :][:200]))
+    for key, template in embedded()["templates"].items():
+        marks = template["project"].get("annotations", [])
+        assert marks, f"{key} has no marks on its canvas"
+        assert len({m["id"] for m in marks}) == len(marks), f"{key} repeats a mark id"
+        for mark in marks:
+            assert mark["kind"] in kinds, (key, mark)
+            fields = ("x1", "y1", "x2", "y2") if mark["kind"] == "arrow" else ("x", "y", "w", "h")
+            assert all(math.isfinite(mark[f]) for f in fields), (key, mark)
+
+
+def test_formulas_are_drawn_without_fetching_anything() -> None:
+    """The page opens off disk with no network, so maths cannot come from a CDN.
+
+    TeX is turned into MathML in the page and the browser draws it. A script or
+    stylesheet tag pointing anywhere would be the first thing this file fetched.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    assert "function texToMathML(" in text
+    assert not re.search(r"<script[^>]+src=", text), "the page loads a script from somewhere"
+    assert not re.search(r"<link[^>]+stylesheet", text), "the page loads a stylesheet"
+
+
+def test_teaching_material_is_saved_and_reopened() -> None:
+    """What the canvas holds is what Save writes and what Open reads back."""
+    text = STUDIO.read_text(encoding="utf-8")
+    assert "PROJECT.annotations = cleanAnnotations(document_.annotations)" in text
+    assert "const notes = cleanNotes(document_.notes)" in text
+    assert "annotations: PROJECT.annotations, notes: PROJECT.notes" in text, (
+        "undo no longer covers the marks and the lesson"
+    )

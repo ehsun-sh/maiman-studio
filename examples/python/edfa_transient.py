@@ -12,7 +12,7 @@ five orders of magnitude slower than any waveform window this engine runs. The
 second is a single amplifier losing seven channels of eight. The third is the
 same disturbance down a chain, which is where the number stops being academic.
 
-Run: ``python examples/edfa_transient.py``
+Run: ``python examples/python/edfa_transient.py``
 """
 
 from __future__ import annotations

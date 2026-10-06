@@ -36,7 +36,7 @@ from maiman.pdk import (
 )
 
 ROOT = Path(__file__).resolve().parent.parent
-SHIPPED = ROOT / "examples" / "silicon_220nm.pdk.json"
+SHIPPED = ROOT / "examples" / "python" / "silicon_220nm.pdk.json"
 
 
 def kit(**overrides: Any) -> dict[str, Any]:

@@ -16,7 +16,7 @@ transfer functions cannot do and a scattering-matrix reduction can.
 
 Nothing here imports gdsfactory. See ``src/maiman/netlist.py``.
 
-Run: ``python examples/netlist_circuit.py``
+Run: ``python examples/python/netlist_circuit.py``
 """
 
 from __future__ import annotations
@@ -36,10 +36,10 @@ from maiman.netlist import (
 from maiman.pdk import PDK, PDKError, load_pdk
 from maiman.units import C_LIGHT
 
-ROOT = Path(__file__).resolve().parent.parent
-KIT = ROOT / "examples" / "silicon_220nm.pdk.json"
+ROOT = Path(__file__).resolve().parents[2]
+KIT = ROOT / "examples" / "python" / "silicon_220nm.pdk.json"
 FROM_GDSFACTORY = ROOT / "tests" / "data" / "gdsfactory_straight_with_bend.yml"
-RACETRACK = ROOT / "examples" / "ring_racetrack.netlist.yml"
+RACETRACK = ROOT / "examples" / "python" / "ring_racetrack.netlist.yml"
 
 REFERENCE = C_LIGHT / 1550e-9
 LOOP_UM = 100.0

@@ -2,10 +2,10 @@
 
 Run it with::
 
-    python examples/ook_link.py
+    python examples/python/ook_link.py
 
 It builds the link once, sweeps it, and writes the schematic to
-``examples/ook_link.maiman`` — the same file the GUI will eventually open.
+``examples/maiman/ook_link.maiman`` — the same file the GUI will eventually open.
 No plotting dependency: results print as tables.
 """
 
@@ -27,6 +27,9 @@ from maiman.components import (
 
 BIT_RATE = 10e9
 V_PI = 4.0
+
+#: The project file this writes, in the `.maiman` folder beside this one.
+PROJECT = Path(__file__).resolve().parent.parent / "maiman" / "ook_link.maiman"
 
 # Where the GUI would put the blocks. Kept out of the physics, in its own
 # section of the project file, so a diff shows model changes and not moved boxes.
@@ -146,5 +149,5 @@ if __name__ == "__main__":
     dispersion_limited_reach(graph)
     monte_carlo(graph)
 
-    destination = save(graph, Path(__file__).with_suffix(".maiman"), ui=LAYOUT)
+    destination = save(graph, PROJECT, ui=LAYOUT)
     print(f"\nSchematic written to {destination.name}")

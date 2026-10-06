@@ -12,7 +12,7 @@ produce. The laser's own numbers, which are the datasheet's. And the reach: the
 same pattern, the same receiver, from this laser and from a Mach-Zehnder that
 does not chirp.
 
-Run: ``python examples/dml_reach.py``
+Run: ``python examples/python/dml_reach.py``
 """
 
 from __future__ import annotations

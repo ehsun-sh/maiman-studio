@@ -37,4 +37,4 @@ jobs:
       # Exits non-zero if any transmission of the add-drop ring disagrees by
       # more than 1e-12.
       - name: Compare the two solves
-        run: python examples/sax_crossvalidation.py
+        run: python examples/python/sax_crossvalidation.py

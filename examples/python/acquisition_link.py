@@ -13,7 +13,7 @@ table is why the coarse stage reads the waveform rather than the symbols: the
 alias is a rotation the alphabet is symmetric under, so nothing measured on
 symbols can see it.
 
-Run: ``python examples/acquisition_link.py``
+Run: ``python examples/python/acquisition_link.py``
 """
 
 from __future__ import annotations

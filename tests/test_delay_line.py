@@ -169,7 +169,7 @@ def test_without_the_delay_every_lap_lands_on_the_first() -> None:
 
 
 def test_the_example_prints_the_table_the_readme_quotes(capsys: pytest.CaptureFixture[str]) -> None:
-    """``examples/recirculating_loop.py`` is where the README's lap table comes from."""
+    """``examples/python/recirculating_loop.py`` is where the README's lap table comes from."""
     import recirculating_loop
 
     recirculating_loop.main()

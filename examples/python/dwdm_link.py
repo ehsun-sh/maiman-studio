@@ -25,6 +25,8 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+import lessons
+
 from maiman import Graph, SimulationContext
 from maiman.components import (
     EDFA,
@@ -46,7 +48,7 @@ from maiman.project import save
 from maiman.signals import EyeMeasurement, PowerReading
 from maiman.units import frequency_to_wavelength
 
-PROJECT = Path(__file__).parent / "dwdm_link.maiman"
+PROJECT = Path(__file__).resolve().parent.parent / "maiman" / "dwdm_link.maiman"
 
 CHANNELS = 8
 SPACING_GHZ = 100.0
@@ -154,7 +156,13 @@ def build() -> Graph:
 def write() -> Graph:
     """Build the template and save it where the studio's export reads it."""
     graph = build()
-    save(graph, PROJECT, ui=LAYOUT)
+    save(
+        graph,
+        PROJECT,
+        ui=LAYOUT,
+        notes=lessons.NOTES["dwdm_link"],
+        annotations=lessons.marks("dwdm_link", LAYOUT),
+    )
     return graph
 
 

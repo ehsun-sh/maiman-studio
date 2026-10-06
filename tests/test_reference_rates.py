@@ -30,7 +30,7 @@ from maiman.modulation import ber_qam
 from maiman.project import load
 
 ROOT = Path(__file__).resolve().parent.parent
-EXAMPLES = ROOT / "examples"
+EXAMPLES = ROOT / "examples" / "maiman"
 
 BAUD_400G = 59.84e9
 

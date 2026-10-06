@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -521,7 +522,9 @@ def test_the_coupler_kept_only_the_parameters_that_move_it() -> None:
 #: Every `.maiman` file in examples/. Discovered rather than listed, so a new
 #: one is covered the moment it is written instead of when somebody remembers
 #: to add it here.
-SHIPPED_PROJECTS = sorted((Path(__file__).resolve().parent.parent / "examples").glob("*.maiman"))
+SHIPPED_PROJECTS = sorted(
+    (Path(__file__).resolve().parent.parent / "examples" / "maiman").glob("*.maiman")
+)
 
 
 def test_there_are_projects_to_ship() -> None:
@@ -563,3 +566,48 @@ def test_every_shipped_project_carries_its_layout(path: Path) -> None:
         f"{sorted(set(positions) - node_ids)}, blocks with no position "
         f"{sorted(node_ids - set(positions))}"
     )
+
+
+# --------------------------------------------------------------------------
+# Teaching material: a lesson and marks on the canvas
+# --------------------------------------------------------------------------
+
+LESSON = {"title": "A lesson", "body": "Loss is $P(L) = P(0)\\,10^{-\\alpha L/10}$."}
+MARKS = [
+    {"id": "a1", "kind": "note", "x": 10.0, "y": 20.0, "w": 200.0, "h": 90.0, "text": "hi"},
+    {"id": "a2", "kind": "arrow", "x1": 0.0, "y1": 0.0, "x2": 50.0, "y2": 10.0, "text": ""},
+]
+
+
+def test_a_project_without_teaching_material_is_written_as_before() -> None:
+    """Absent sections are absent, not empty, so old files and new ones diff clean."""
+    document = graph_to_dict(_link_graph())
+    assert "notes" not in document
+    assert "annotations" not in document
+
+
+def test_notes_and_annotations_survive_a_save(tmp_path: Path) -> None:
+    path = save(_link_graph(), tmp_path / "taught.maiman", notes=LESSON, annotations=MARKS)
+    document = json.loads(path.read_text(encoding="utf-8"))
+    assert document["notes"] == LESSON
+    assert document["annotations"] == MARKS
+
+
+def test_the_engine_ignores_teaching_material() -> None:
+    """A lesson changes what a reader sees, never what the link computes."""
+    plain = graph_to_dict(_link_graph())
+    taught = graph_to_dict(_link_graph(), notes=LESSON, annotations=MARKS)
+    assert {k: v for k, v in taught.items() if k not in ("notes", "annotations")} == plain
+    graph = graph_from_dict(taught)
+    assert graph.run()
+
+
+@pytest.mark.parametrize("path", SHIPPED_PROJECTS, ids=lambda p: p.name)
+def test_a_lesson_names_only_blocks_its_project_has(path: Path) -> None:
+    """`[[label]]` in a lesson is a link to a block; a dangling one goes nowhere."""
+    document = json.loads(path.read_text(encoding="utf-8"))
+    labels = {node["id"] for node in document["nodes"]}
+    texts = [document.get("notes", {}).get("body", "")]
+    texts += [mark.get("text", "") for mark in document.get("annotations", [])]
+    named = {ref for text in texts for ref in re.findall(r"\[\[([A-Za-z0-9_\-]+)\]\]", text)}
+    assert named <= labels, f"{path.name} names {sorted(named - labels)}, which it does not have"

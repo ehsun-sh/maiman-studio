@@ -121,7 +121,7 @@ project's:
 ```bash
 python -m venv sax-env
 sax-env/bin/pip install -e . "sax==0.18.2"
-sax-env/bin/python examples/sax_crossvalidation.py
+sax-env/bin/python examples/python/sax_crossvalidation.py
 ```
 
 

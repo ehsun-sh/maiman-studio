@@ -324,7 +324,7 @@ def test_no_metric_port_in_the_library_encodes_as_opaque() -> None:
     import sys
     from pathlib import Path as _Path
 
-    sys.path.insert(0, str(_Path(__file__).resolve().parent.parent / "examples"))
+    sys.path.insert(0, str(_Path(__file__).resolve().parent.parent / "examples" / "python"))
     from export_ui_data import build as build_coherent
 
     covered: set[tuple[str, str]] = set()
@@ -807,7 +807,7 @@ def coherent_document() -> dict[str, Any]:
     import sys
     from pathlib import Path as _Path
 
-    sys.path.insert(0, str(_Path(__file__).resolve().parent.parent / "examples"))
+    sys.path.insert(0, str(_Path(__file__).resolve().parent.parent / "examples" / "python"))
     from export_ui_data import build
 
     # 4096, not 256: the flagship carries a block code now, and a staircase

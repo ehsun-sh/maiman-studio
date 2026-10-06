@@ -70,10 +70,10 @@ channel, `TimingRecovery` for a DSP block with a diagnostics port.
 6. Regenerate the interface's baked data and splice it back into the page:
 
 ```bash
-python examples/export_ui_data.py
+python examples/python/export_ui_data.py
 ```
 
-Then copy `examples/ui_data.json` verbatim into the `<script id="maiman-data">` block of
+Then copy `examples/python/ui_data.json` verbatim into the `<script id="maiman-data">` block of
 `src/maiman/studio/index.html`. The tests below will tell you if you forget.
 
 If your component emits a new kind of measurement, it also needs an encoder in

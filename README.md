@@ -165,8 +165,14 @@ anything to see it work.
 4. **The File menu opens templates** — complete links to start from: an eight-channel DWDM link on
    the ITU grid with a multiplexer, a span, a demultiplexer and a counted receiver; a WDM spectrum on
    an optical spectrum analyser; an eye diagram on a direct-detection link; a coherent link decoded
-   with soft-decision FEC. Each is a `.maiman` file in `examples/`, written by the script beside it.
-5. **File → Save** writes a `.maiman` file — a plain text description of your link that you can
+   with soft-decision FEC. Each is a `.maiman` file in `examples/maiman/`, written by a script in
+   `examples/python/`.
+5. **Read the notes.** Every project the File menu opens comes with a lesson in a panel on the left
+   of the canvas: what the link is for, the formulas behind each stage, and what to try next. A
+   block named in the lesson is a link: click it and the block is selected on the canvas. The
+   toolbar's note, frame and arrow tools put your own explanations on the canvas, and **Notes →
+   Edit** writes a lesson of your own; both are saved in the `.maiman` file.
+6. **File → Save** writes a `.maiman` file — a plain text description of your link that you can
    keep, re-open, or send to someone.
 
 To add blocks of your own: drag one from the palette on the left, then drag from one block's output
@@ -233,8 +239,11 @@ received power: -16.00 dBm
 0 dBm launched, 80 km at 0.2 dB/km, so −16.00 dBm out. Nothing in that number is a lookup: the
 laser makes a field, the fiber attenuates it, the meter integrates it.
 
-The [`examples/`](examples/) folder has a dozen more, each one runnable with
-`python examples/<name>.py`.
+The [`examples/python/`](examples/python/) folder has two dozen more, each one runnable with
+`python examples/python/<name>.py`; the projects the studio opens are beside it in
+[`examples/maiman/`](examples/maiman/). [The examples roadmap](docs/EXAMPLES_ROADMAP.md) lists the
+ones still to build, from a laser on a power meter to a submarine cable, in the order we mean to
+build them.
 
 ### Checking your machine
 
@@ -351,7 +360,7 @@ they were. That asymmetry is the whole reason an OSNR figure is meaningless with
 it was quoted in, and it is one parameter and one Run away from being seen rather than described.
 The OSNR beside the trace comes from an OSNR meter on the graph and is left empty when there is
 none: a figure read off the displayed curve would move with the resolution knob and would not be
-the OSNR anyone means. `examples/wdm_osa.maiman` opens four channels on the 100 GHz grid through
+the OSNR anyone means. `examples/maiman/wdm_osa.maiman` opens four channels on the 100 GHz grid through
 two amplified spans, which is what the trace baked into the page is a run of.
 
 **A block's own spectrum.** Select a grating, a ring, a coupler or any other photonic block and its
@@ -450,7 +459,7 @@ exactly what a single-carrier signal model cannot do.
 
 ## Results
 
-`python examples/ook_link.py` builds a 10 Gb/s OOK link and characterises it. Abridged output:
+`python examples/python/ook_link.py` builds a 10 Gb/s OOK link and characterises it. Abridged output:
 
 ```
 Receiver sensitivity (back to back)        Dispersion-limited reach (0 dBm launch)
@@ -473,11 +482,11 @@ filter and analyzer all have to agree for that to hold; it is
 [a test](tests/test_ber.py), not a coincidence.
 
 Both curves come from `sweep()`, and the same script writes the schematic to
-[`examples/ook_link.maiman`](examples/ook_link.maiman) — versioned JSON, diffable, runnable headless.
+[`examples/maiman/ook_link.maiman`](examples/maiman/ook_link.maiman) — versioned JSON, diffable, runnable headless.
 
 ### Coherent
 
-`python examples/coherent_link.py` runs the same treatment on a 32 GBd coherent link —
+`python examples/python/coherent_link.py` runs the same treatment on a 32 GBd coherent link —
 PRBS → Gray-coded M-QAM → IQ driver → IQ modulator → 90° hybrid with balanced detection —
 and finds the received power each format needs for a BER of 1e-3 — a **soft-decision** FEC
 threshold, not the hard-decision one; see [What FEC is for](#what-fec-is-for) for what
@@ -861,7 +870,7 @@ hardware too, and nobody runs an OTN link at 256 symbols either.
 
 ### A coherent link that runs on soft decisions
 
-`examples/coherent_sdfec.maiman` — open it from the File menu. 32 GBd 16-QAM, the staircase code at
+`examples/maiman/coherent_sdfec.maiman` — open it from the File menu. 32 GBd 16-QAM, the staircase code at
 16.4 % overhead, decoded on log-likelihood ratios from a max-log demapper rather than on bits:
 
 ```
@@ -988,7 +997,7 @@ answers in a fraction of its own lifetime: the stimulated emission draining the 
 proportional to how full it is. That closed form is tested against a step response measured from
 the integrator, to a part in a thousand.
 
-`python examples/edfa_transient.py` drops seven channels of eight from a −6 dBm comb:
+`python examples/python/edfa_transient.py` drops seven channels of eight from a −6 dBm comb:
 
 ```
                       one amplifier      down a chain of 8
@@ -1035,7 +1044,7 @@ wavelength it is the single-reservoir answer to 1e-10 dB, and every other channe
 
 A link designed around the centre wavelength's 3.2 dB under-protects its short-wavelength receivers by
 three decibels. The tilt does not depend on the inversion, which is why it is one curve per amplifier,
-measured once. `examples/edfa_gain_tilt.py` prints the table.
+measured once. `examples/python/edfa_gain_tilt.py` prints the table.
 
 Still not modelled: channels at different wavelengths drain the inversion at their own cross sections,
 where the reservoir here is driven by total power; and the pump control loop that pushes back.
@@ -1068,7 +1077,7 @@ drains it by its photon flux times its cross section: 1.90× at 1530 nm against 
 same spectrum the tilt comes from. Pass `channel_powers` and the reservoir is driven by that weighted
 sum, so dropping the short-wavelength half of a comb is a larger disturbance than dropping the
 long-wavelength half of equal power. A comb sitting at the reference wavelength weighs exactly one,
-which is the single total this model was always driven with. `examples/edfa_pump_control.py` prints
+which is the single total this model was always driven with. `examples/python/edfa_pump_control.py` prints
 all three tables.
 
 ### Its own noise is a load
@@ -1358,7 +1367,7 @@ M-th power's peak-to-median it is informative about the thing that actually goes
 what degrades a circular mean is the spectrum ceasing to be a band. Walking the launch power down:
 0.98 at +10 dBm, 0.88 at 0, 0.66 at −6, 0.43 at −10, 0.23 at −14.
 
-`python examples/acquisition_link.py` runs one link with a matched filter in it through both
+`python examples/python/acquisition_link.py` runs one link with a matched filter in it through both
 arrangements and prints the two tables side by side. Its middle rows are the interesting ones: the
 fine stage reports −3.900 GHz for a +4.100 GHz offset at a confidence of 19.6, where a correct
 estimate on the same link scores 23.2. Further out — at 20 and 100 GHz — the confidence does
@@ -1427,7 +1436,7 @@ would be meaningless without the first.
 
 ### Reaching past the bench
 
-Every coherent example above was back to back. `python examples/dispersion_link.py` puts the same
+Every coherent example above was back to back. `python examples/python/dispersion_link.py` puts the same
 32 GBd 16-QAM link through real fiber, with loss and nonlinearity switched off so that chromatic
 dispersion is the only thing acting:
 
@@ -1480,7 +1489,7 @@ each. That ordering is [asserted](tests/test_cd_compensation.py), not quoted.
 
 ### Dual polarization
 
-`python examples/dualpol_link.py` puts two independent 16-QAM tributaries on orthogonal
+`python examples/python/dualpol_link.py` puts two independent 16-QAM tributaries on orthogonal
 polarizations of one wavelength — **256 Gb/s** — and rotates the state the way a fibre does:
 
 ```
@@ -1536,7 +1545,7 @@ BER at a marginal operating point is one sample, not an answer.
 
 ### Amplified and nonlinear
 
-`python examples/amplified_link.py` runs a chain of 80 km spans, each amplified back to transparency:
+`python examples/python/amplified_link.py` runs a chain of 80 km spans, each amplified back to transparency:
 
 ```
   spans   reach     OSNR      vs. one span            Sech pulse over 4 soliton periods
@@ -1600,7 +1609,7 @@ construction.
 
 ### Wavelength selection, and what a filter is really for
 
-`python examples/wdm_demux.py` puts four channels on a 100 GHz grid through four amplified spans
+`python examples/python/wdm_demux.py` puts four channels on a 100 GHz grid through four amplified spans
 and demultiplexes one. Because every band carries its own centre frequency, that is a real
 wavelength-selective operation and not a choice of array index — a filter tuned *between* two
 channels attenuates both.
@@ -1689,7 +1698,7 @@ refuses FFTW over exactly that question.
 
 Refusing the dependency is not refusing the reference. SAX, installed in an environment of its own,
 is given the same two device models, the same wiring and the same grid —
-`python examples/sax_crossvalidation.py`:
+`python examples/python/sax_crossvalidation.py`:
 
 | add-drop ring, 4001 frequencies over 2 THz | max &#124;maiman − sax&#124; |
 | :--- | ---: |
@@ -1706,7 +1715,7 @@ reason those twelve lines are defensible.
 
 ### What comes out of it
 
-`python examples/microring_filter.py`. Three blocks
+`python examples/python/microring_filter.py`. Three blocks
 ([`maiman/components/photonic.py`](src/maiman/components/photonic.py)) and two device models
 ([`maiman/photonics.py`](src/maiman/photonics.py)), and the ring is **assembled rather than written
 down** — two couplers and two arcs, wired into a loop and handed to the solver. The closed forms from
@@ -1818,7 +1827,7 @@ thousand, each against its own group index. Measured on a graph: at 1558.16 nm t
 sits in a notch and `Ey` passes; at 1561.71 nm it is the other way round. A ring like this is a
 polarization-selective filter, which is what a real one is.
 
-`python examples/birefringent_ring.py` prints both tables — where each comb sits against
+`python examples/python/birefringent_ring.py` prints both tables — where each comb sits against
 `c/(n_g·L)`, and then the same ring as a block with the light launched at 45° so both axes carry
 something for it to treat differently. Using TE's group index for TM would put that row 75 GHz out,
 a tenth of a free spectral range, and it would still look like a perfectly plausible ring.
@@ -1939,7 +1948,7 @@ accumulates down a chain of these. At 25 GHz with a 50 GHz passband the neighbou
 the channel, and no floor is involved at all — which is a channel plan that does not work rather
 than a model that does not.
 
-`python examples/wdm_grid.py` prints all five tables.
+`python examples/python/wdm_grid.py` prints all five tables.
 
 ## A mirror, and a graph that goes one way
 
@@ -2297,7 +2306,7 @@ single-wavelength probe means every grating is reflecting a copy of the *same* b
 carriers have to be added as fields on a common grid rather than multiplexed. So each grating is
 metered where it sits, which is the quantity being measured anyway.
 
-`python examples/fbg_sensor.py` prints all five tables.
+`python examples/python/fbg_sensor.py` prints all five tables.
 
 ### And a sign that was wrong, in the fibre
 
@@ -2340,7 +2349,7 @@ The test that caught it had been written as a *pin* rather than a claim, precise
 reconciling the kernel would fail and name the compensator as one of the things that moved with it.
 It did exactly that.
 
-`python examples/fbg_circulator.py` prints all seven tables.
+`python examples/python/fbg_circulator.py` prints all seven tables.
 
 ## Cladding modes, and a grating that couples to them
 
@@ -2542,7 +2551,7 @@ while temperature moves both together. A 10 mm grating tilted 4°, moved from ai
 ```
 
 Read at the bottom of its comb against the Bragg line at the top, it is a refractometer carrying its
-own temperature reference. `python examples/tilted_grating_refractometer.py` prints all four tables.
+own temperature reference. `python examples/python/tilted_grating_refractometer.py` prints all four tables.
 
 ### And each polarization sees its own comb
 
@@ -2622,7 +2631,7 @@ What it costs, at 10 Gb/s and 1550 nm against a Mach-Zehnder carrying the same p
 to back. Dispersion acts on a signal whose instantaneous frequency moves with its power, and over a
 short span that partly undoes the laser's own ringing before it starts spreading the pulses. Past
 10 km there is nothing left to undo, which is the reach limit a DML is specified with.
-`examples/dml_reach.py` prints all three tables.
+`examples/python/dml_reach.py` prints all three tables.
 
 ### And the noise it makes on its own
 
@@ -2696,7 +2705,7 @@ its own amount, and `dispersed_power` undoes the cancellation:
    3 s/m          5.0e-2    180 km, most of every mode's
 ```
 
-A floor no received power lifts: mode partition noise. `examples/laser_noise.py` prints the tables.
+A floor no received power lifts: mode partition noise. `examples/python/laser_noise.py` prints the tables.
 
 ### The same noise, in the link
 
@@ -2756,7 +2765,7 @@ least-squares solution for the same samples, and a feedback tap to the postcurso
 level, so normalised LMS — which divides by the regressor's length — spent almost all of that length on
 the bias and the feedback, and a nine-tap FFE equalised no better than one tap: 14.55 dB either way. The
 input is standardised before adaptation now. And the test that was to catch a DFE cancelling a
-postcursor had built a precursor, which no DFE can reach. `examples/pam4_lane.py` prints the table.
+postcursor had built a precursor, which no DFE can reach. `examples/python/pam4_lane.py` prints the table.
 
 **A receiver in the field has neither a reference nor a choice of sampling phase**, so the
 equaliser has both answers. `fractional` takes two samples a symbol and spaces the taps half a symbol
@@ -2942,7 +2951,7 @@ An instance says it is a `straight` drawn in cross-section `strip`; the kit says
 same geometry under another name, and a table of cell names compiled into a simulator would be
 wrong for every kit but one.
 
-`python examples/netlist_circuit.py` solves a netlist **gdsfactory actually emitted**, shipped
+`python examples/python/netlist_circuit.py` solves a netlist **gdsfactory actually emitted**, shipped
 unmodified in `tests/data/` with its MIT attribution:
 
 ```
@@ -3082,9 +3091,9 @@ with filled fibre and optical SNR to spare pays for it.
 
 `maiman.analysis` carries the bridge these rest on — `snr_from_osnr`, `snr_for_ber` and
 `required_osnr` — and the two reference designs ship as
-[`examples/zr400.maiman`](examples/zr400.maiman) and
-[`examples/zr800.maiman`](examples/zr800.maiman), laid out and openable in the studio.
-[`examples/reference_rates.py`](examples/reference_rates.py) builds them and prints the tables.
+[`examples/maiman/zr400.maiman`](examples/maiman/zr400.maiman) and
+[`examples/maiman/zr800.maiman`](examples/maiman/zr800.maiman), laid out and openable in the studio.
+[`examples/python/reference_rates.py`](examples/python/reference_rates.py) builds them and prints the tables.
 
 ## Mixing products add in field, not in power
 
@@ -3364,7 +3373,7 @@ warning from the contrast figure — which scored 29 on a run that was wrong by 
 that was right. Resolution also scales as 1/R\_s²: the same link at 10 GBd lands 44 ps/nm out where
 32 GBd lands 5. All of that is in
 [`estimate_dispersion`](src/maiman/dsp.py)'s docstring, measured rather than asserted, and the
-third table of [`examples/dispersion_link.py`](examples/dispersion_link.py) prints it.
+third table of [`examples/python/dispersion_link.py`](examples/python/dispersion_link.py) prints it.
 
 ## What channels do to each other
 
@@ -3429,7 +3438,7 @@ because it depends on the neighbour's instantaneous power sliding past; four-wav
 in closed form from the band powers and injected as tones, because the products land at frequencies
 no band is sampled at. Not putting the channels on one grid is what makes a WDM comb affordable at
 all, and that choice has to be paid for somewhere. See
-[`examples/wdm_nonlinear.py`](examples/wdm_nonlinear.py).
+[`examples/python/wdm_nonlinear.py`](examples/python/wdm_nonlinear.py).
 
 ## A foundry's numbers, not a foundry's code
 
@@ -3446,7 +3455,7 @@ quieter. Those numbers come off a wafer.
 ```python
 from maiman import load_pdk
 
-pdk = load_pdk("examples/silicon_220nm.pdk.json")
+pdk = load_pdk("examples/python/silicon_220nm.pdk.json")
 coupler = pdk.make("dc_3db", label="split")        # 0.48, not 0.5
 splitter = pdk.make("mmi_1x4", wavelength=1565.0)  # the fits, evaluated there
 ```
@@ -3472,8 +3481,8 @@ And nominal is not what you build. The same 1 × 4 splitter, twice:
     textbook         -6.021   -6.021   -6.021   -6.021   total +0.000 dB   spread 0.000 dB
     silicon-220nm    -6.298   -6.414   -6.531   -6.648   total -0.450 dB   spread 0.350 dB
 
-See [`examples/pdk_import.py`](examples/pdk_import.py) and the kit it reads,
-[`examples/silicon_220nm.pdk.json`](examples/silicon_220nm.pdk.json) — representative of the open
+See [`examples/python/pdk_import.py`](examples/python/pdk_import.py) and the kit it reads,
+[`examples/python/silicon_220nm.pdk.json`](examples/python/silicon_220nm.pdk.json) — representative of the open
 multi-project-wafer processes and drawn from published literature, not from anyone's confidential
 kit. Replace it with yours.
 
@@ -3744,7 +3753,7 @@ Every physics block ships with a test against a closed-form result, run in CI
 | FWM phase mismatch | `Δβ = −β₂(ω_i−ω_k)(ω_j−ω_k)` — quadratic in spacing, zero at zero dispersion | ✅ |
 | FWM product power | Component reproduces `d²γ²P_iP_jP_k·L_eff²·η·e^{−αL}` to 1e-7; cubic in power; `d = 2−δ_ij` gives non-degenerate products exactly 6.02 dB | ✅ |
 | **Circuit reduction** | Eliminating internal ports agrees with summing round trips lap by lap to 1e-13 — a different algorithm, sharing no code | ✅ |
-| Reduction vs SAX | Same models, same wiring: 4.8e-15 over 4001 frequencies. Not in per-push CI — it costs 37 packages and a licence review — but a dispatch-only workflow runs `examples/sax_crossvalidation.py` before a release | — |
+| Reduction vs SAX | Same models, same wiring: 4.8e-15 over 4001 frequencies. Not in per-push CI — it costs 37 packages and a licence review — but a dispatch-only workflow runs `examples/python/sax_crossvalidation.py` before a release | — |
 | Non-reciprocal and reflecting devices | An isolator stays one-way and a mirror returns `r·e^{−2iβL}`; the reduction assumes neither | ✅ |
 | Dangling ports | An unwired port is `a = 0`, not a mirror — a 3 dB coupler with one port open passes exactly half | ✅ |
 | **Ring resonator** | Assembled from a coupler and two arcs, matches Yariv's all-pass and add-drop transfer functions to 1e-13 | ✅ |

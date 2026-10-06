@@ -2,7 +2,7 @@
 
 Run it with::
 
-    python examples/amplified_link.py
+    python examples/python/amplified_link.py
 
 Two effects fight each other here. Launch too little power and amplifier noise
 dominates; launch too much and the Kerr effect distorts the signal. The optimum

@@ -627,7 +627,7 @@ def shipped_variant(*, timing: bool, frequency: bool, detuned: bool = True) -> A
     import sys
     from pathlib import Path as _Path
 
-    sys.path.insert(0, str(_Path(__file__).resolve().parent.parent / "examples"))
+    sys.path.insert(0, str(_Path(__file__).resolve().parent.parent / "examples" / "python"))
     from export_ui_data import build
 
     from maiman.project import graph_from_dict, graph_to_dict
@@ -845,7 +845,7 @@ def test_soft_information_survives_the_flagship_now() -> None:
     import sys
     from pathlib import Path as _Path
 
-    sys.path.insert(0, str(_Path(__file__).resolve().parent.parent / "examples"))
+    sys.path.insert(0, str(_Path(__file__).resolve().parent.parent / "examples" / "python"))
     from export_ui_data import build
 
     from maiman.modulation import soft_demap
@@ -1094,7 +1094,7 @@ def test_on_the_shipped_link_acquisition_is_what_makes_a_large_offset_survivable
     import sys
     from pathlib import Path as _Path
 
-    sys.path.insert(0, str(_Path(__file__).resolve().parent.parent / "examples"))
+    sys.path.insert(0, str(_Path(__file__).resolve().parent.parent / "examples" / "python"))
     from export_ui_data import build as build_flagship
 
     from maiman.components import CoarseFrequencyRecovery as _Coarse
