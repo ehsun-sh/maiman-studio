@@ -1,0 +1,192 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 10000000000.0,
+    "samples_per_symbol": 256,
+    "sequence_length": 4,
+    "seed": 1,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "pulse",
+      "type": "GaussianPulse",
+      "params": {
+        "peak_power": 0.0,
+        "width": 10.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 60.0
+      }
+    },
+    {
+      "id": "fibre_a",
+      "type": "Fiber",
+      "params": {
+        "length": 5.0,
+        "attenuation": 0.0,
+        "dispersion": 17.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 60.0
+      }
+    },
+    {
+      "id": "fibre_b",
+      "type": "Fiber",
+      "params": {
+        "length": 5.0,
+        "attenuation": 0.0,
+        "dispersion": 17.0
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 60.0
+      }
+    },
+    {
+      "id": "launch",
+      "type": "Oscilloscope",
+      "params": {
+        "span": 200.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 220.0
+      }
+    },
+    {
+      "id": "after_5km",
+      "type": "Oscilloscope",
+      "params": {
+        "span": 200.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 220.0
+      }
+    },
+    {
+      "id": "after_10km",
+      "type": "Oscilloscope",
+      "params": {
+        "span": 200.0
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 220.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "fibre_b",
+        "out"
+      ],
+      "to": [
+        "after_10km",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "fibre_a",
+        "out"
+      ],
+      "to": [
+        "after_5km",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "pulse",
+        "out"
+      ],
+      "to": [
+        "fibre_a",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "fibre_a",
+        "out"
+      ],
+      "to": [
+        "fibre_b",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "pulse",
+        "out"
+      ],
+      "to": [
+        "launch",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "1.4 A pulse spreading in fibre",
+    "body": "A Gaussian pulse [[pulse]] with $T_0 = 10$ ps goes through two 5 km pieces of standard fibre\n[[fibre_a]] [[fibre_b]]. Three oscilloscopes, [[launch]], [[after_5km]] and [[after_10km]],\ndraw it on one time axis in the **Scope** tab. Loss is set to zero so that dispersion is the\nonly thing happening.\n\n## Why it spreads\n\nA short pulse is made of many frequencies, and in fibre each travels at its own speed. That is\ngroup-velocity dispersion, written as $D$ in ps/(nm\u00b7km) on a datasheet and $\\beta_2$ in the\nequations:\n\n$$\\beta_2 = -\\frac{D\\,\\lambda^2}{2\\pi c} \\approx -21.7\\ \\text{ps}^2/\\text{km} \\quad (D = 17,\\ \\lambda = 1550\\ \\text{nm})$$\n\n## How fast\n\nThe distance over which dispersion matters is the **dispersion length**,\n\n$$L_D = \\frac{T_0^2}{|\\beta_2|} = \\frac{(10\\ \\text{ps})^2}{21.7\\ \\text{ps}^2/\\text{km}} = 4.6\\ \\text{km}$$\n\nand an unchirped Gaussian widens as\n\n$$\\frac{T_1}{T_0} = \\sqrt{1 + \\left(\\frac{z}{L_D}\\right)^2}$$\n\n| Scope | $z$ | $T_1/T_0$ | FWHM ($1.665\\,T$) |\n| :-- | :-- | :-- | :-- |\n| [[launch]] | 0 | 1 | 16.65 ps |\n| [[after_5km]] | 5 km | 1.48 | 24.6 ps |\n| [[after_10km]] | 10 km | 2.39 | 39.8 ps |\n\nThe scopes' FWHM readings are these numbers. The area under each trace is the same energy, so as\nthe pulse widens its peak falls by the same factor.\n\n## Try this\n\n- Halve the width of [[pulse]] to 5 ps. $L_D$ falls four times: how wide is it after 10 km?\n- Set [[fibre_b]]'s dispersion to \u221217. What does [[after_10km]] show, and why?\n- Tick *Show instantaneous frequency* in the Scope tab: dispersion leaves the pulse chirped. In standard fibre blue\n  travels faster, so the leading edge is bluer than the tail."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 33.0,
+      "w": 134.0,
+      "h": 88.0,
+      "text": "10 ps pulse",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 171.0,
+      "y": 33.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "2 \u00d7 5 km, lossless",
+      "tone": "binary"
+    },
+    {
+      "id": "a3",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 193.0,
+      "w": 434.0,
+      "h": 88.0,
+      "text": "Scopes",
+      "tone": "metric"
+    },
+    {
+      "id": "a4",
+      "kind": "note",
+      "x": 496.0,
+      "y": 200.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "Run, then open the Scope tab: three pulses, one energy. $T_1/T_0 = \\sqrt{1 + (z/L_D)^2}$",
+      "tone": "electrical"
+    },
+    {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 494.0,
+      "y1": 246.0,
+      "x2": 460.0,
+      "y2": 246.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

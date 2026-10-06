@@ -44,15 +44,19 @@ from the physics.
 Single ideas, one or two blocks each. The point is to see one relation work before it is buried
 in a link.
 
+All seven are written by [`first_light.py`](../examples/python/first_light.py), and
+[`tests/test_first_light.py`](../tests/test_first_light.py) holds each to the numbers its lesson
+quotes.
+
 | # | Example | What it teaches | Status |
 | :-- | :--- | :--- | :--- |
-| 1.1 | Laser on a power meter and an OSA | dBm and mW, linewidth, what an OSA's resolution does | 🟢 CWLaser, PowerMeter, OpticalSpectrumAnalyzer |
-| 1.2 | Loss budget | $P(L) = P(0)\,10^{-\alpha L/10}$, swept over length | 🟢 Fiber, Attenuator, sweep |
-| 1.3 | MZM transfer curve | $\cos^2(\pi V/2V_\pi)$, bias points, extinction ratio | 🟢 DCVoltage, MachZehnderModulator, sweep |
-| 1.4 | A pulse spreading in fibre | $T_1/T_0 = \sqrt{1 + (z/L_D)^2}$ | 🟡 needs a **time-domain scope** to show one pulse |
-| 1.5 | Chirped pulse compression | Sign of $\beta_2$ against sign of chirp | 🟡 same scope |
-| 1.6 | The fundamental soliton | $N = 1$: dispersion and Kerr cancel | 🟡 same scope |
-| 1.7 | Splitters and couplers | Power conservation, 3 dB per split | 🟢 Splitter, Combiner, DirectionalCoupler |
+| 1.1 | Laser on a power meter and an OSA | dBm and mW, linewidth, what an OSA's resolution does | ✅ `laser_meters.maiman`, with lesson |
+| 1.2 | Loss budget | $P(L) = P(0)\,10^{-\alpha L/10}$, swept over length | ✅ `loss_budget.maiman`, with lesson |
+| 1.3 | MZM transfer curve | $\cos^2(\pi V/2V_\pi)$, bias points, extinction ratio | ✅ `mzm_curve.maiman`, with lesson |
+| 1.4 | A pulse spreading in fibre | $T_1/T_0 = \sqrt{1 + (z/L_D)^2}$ | ✅ `pulse_spreading.maiman`, with lesson, on the new **Optical Oscilloscope** |
+| 1.5 | Chirped pulse compression | Sign of $\beta_2$ against sign of chirp | ✅ `chirp_compression.maiman`, with lesson |
+| 1.6 | The fundamental soliton | $N = 1$: dispersion and Kerr cancel | ✅ `soliton.maiman`, with lesson |
+| 1.7 | Splitters and couplers | Power conservation, 3 dB per split | ✅ `splitters.maiman`, with lesson |
 
 ## Phase 2: Direct-detection links
 
@@ -92,7 +96,7 @@ Phase and amplitude, and the DSP that recovers them.
 | # | Example | What it teaches | Status |
 | :-- | :--- | :--- | :--- |
 | 4.1 | QPSK back to back, ideal carrier | Constellation, EVM, $\mathrm{EVM} \approx 1/\sqrt{\mathrm{SNR}}$ | 🟢 |
-| 4.2 | 16-QAM over 80 km with the full DSP chain | CD compensation, timing, frequency and phase recovery | ✅ the studio's own project, with lesson |
+| 4.2 | 16-QAM over 80 km with the full DSP chain | CD compensation, timing, frequency and phase recovery | ✅ the studio's own project, with lesson; in the Examples menu |
 | 4.3 | Soft-decision FEC | LLRs, the post-FEC cliff | ✅ `coherent_sdfec.maiman`, with lesson |
 | 4.4 | Dual-polarisation 256 Gb/s | Butterfly equaliser, PMD | ✅ `dualpol_link.py`; studio project to add |
 | 4.5 | Blind acquisition of a large offset | Why the 4th-power estimator folds at $\pm R_s/8$ | ✅ `acquisition_link.py` |
@@ -148,7 +152,7 @@ Collected from the 🟡 and 🔴 rows, in the order the phases need them:
 
 | Component | First needed by | Notes |
 | :--- | :--- | :--- |
-| Time-domain scope (power or field against time) | 1.4 | The eye diagram folds; a single pulse needs an unfolded trace in the dock |
+| Time-domain scope (power or field against time) | 1.4 | ✅ **Optical Oscilloscope**: power and instantaneous frequency against time, in the dock's Scope tab |
 | Burst-mode receiver | 2.7 | Fast settling threshold for PON upstream |
 | Wavelength-selective switch | 3.9 | Per-channel pass, block and attenuate; filter shape per port |
 | Raman amplifier | 3.10 | Counter-pumped, using the measured gain shape the SRS model already has |
@@ -165,5 +169,10 @@ first. Each entry says which example found it and what was done.
 
 | Date | Example | Finding | Outcome |
 | :--- | :--- | :--- | :--- |
+| 2026-10-06 | 1.2, 1.3 | A project cannot carry a sweep, so the two sweep lessons tell the reader which parameter and range to set by hand | Open: a `.maiman` file could save its sweep beside its notes |
+| 2026-10-06 | 1.4 | After a run the dock stayed on whichever tab was open, so a pulse example showed an empty constellation | A run whose results the open tab cannot draw now moves to the first tab that can |
+| 2026-10-06 | 1.1 | The toolbar's run settings (32 GBd, 4096 sym, seed 2026) and the status bar's 65 536 samples were written into the page once, for the flagship, and shown for every project; they were wrong for the flagship too, which runs 8192 symbols | Read from the open project's context, and redrawn whenever it changes |
+| 2026-10-06 | phase 1 | Eleven templates no longer fit as rows of the File menu | An **Examples** menu, grouped by phase and numbered as here; it also reopens the flagship (4.2) |
+| 2026-10-06 | 1.4–1.6 | No block could show a single pulse: the eye diagram folds it onto two symbols | **Optical Oscilloscope** added, with peak, FWHM, RMS width, centroid, energy and chirp measured on every sample; held to the closed-form Gaussian broadening |
 | 2026-10-06 | all templates | The studio had nowhere to explain a link | Lesson panel, notes, frames and arrows added; lessons written for the five projects the studio opens |
 | 2026-10-06 | 2.1 | `ook_link.maiman` duplicates `ook_eye.maiman` with other labels and no lesson | Open: decide whether to keep both |

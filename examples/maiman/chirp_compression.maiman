@@ -1,0 +1,206 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 10000000000.0,
+    "samples_per_symbol": 256,
+    "sequence_length": 4,
+    "seed": 1,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "up",
+      "type": "GaussianPulse",
+      "params": {
+        "peak_power": 0.0,
+        "width": 10.0,
+        "chirp": 2.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 60.0
+      }
+    },
+    {
+      "id": "down",
+      "type": "GaussianPulse",
+      "params": {
+        "peak_power": 0.0,
+        "width": 10.0,
+        "chirp": -2.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 260.0
+      }
+    },
+    {
+      "id": "fibre_up",
+      "type": "Fiber",
+      "params": {
+        "length": 1.84,
+        "attenuation": 0.0,
+        "dispersion": 17.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 60.0
+      }
+    },
+    {
+      "id": "up_out",
+      "type": "Oscilloscope",
+      "params": {
+        "span": 200.0
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 60.0
+      }
+    },
+    {
+      "id": "fibre_down",
+      "type": "Fiber",
+      "params": {
+        "length": 1.84,
+        "attenuation": 0.0,
+        "dispersion": 17.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 260.0
+      }
+    },
+    {
+      "id": "down_out",
+      "type": "Oscilloscope",
+      "params": {
+        "span": 200.0
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 260.0
+      }
+    },
+    {
+      "id": "launch",
+      "type": "Oscilloscope",
+      "params": {
+        "span": 200.0
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 160.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "fibre_down",
+        "out"
+      ],
+      "to": [
+        "down_out",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "down",
+        "out"
+      ],
+      "to": [
+        "fibre_down",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "up",
+        "out"
+      ],
+      "to": [
+        "fibre_up",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "up",
+        "out"
+      ],
+      "to": [
+        "launch",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "fibre_up",
+        "out"
+      ],
+      "to": [
+        "up_out",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "1.5 Chirped pulse compression",
+    "body": "Two Gaussian pulses with the same $T_0 = 10$ ps but opposite chirp, [[up]] ($C = +2$) and\n[[down]] ($C = -2$), go through identical 1.84 km fibres [[fibre_up]] [[fibre_down]]. The\n**Scope** tab overlays the launched pulse [[launch]] and both outputs [[up_out]] [[down_out]].\n\n## Chirp\n\nA chirped pulse has a frequency that changes across it. With\n\n$$A(0, T) = \\sqrt{P_0}\\,\\exp\\left(-\\frac{1 - jC}{2}\\,\\frac{T^2}{T_0^2}\\right)$$\n\nthe instantaneous frequency is $\\delta f = C\\,T/(2\\pi T_0^2)$: for $C > 0$ the tail is bluer than\nthe head (an up-chirp). Tick *Show instantaneous frequency* in the\nScope tab to see that straight line.\n\n## The sign matters\n\nIn standard fibre $\\beta_2 < 0$, and blue light travels *faster*. An up-chirped pulse has its\nblue at the back, which catches up with the red at the front: the pulse first narrows. A\ndown-chirped pulse is already arranged the wrong way and spreads faster than an unchirped one.\n\n$$\\frac{T_1}{T_0} = \\sqrt{\\left(1 + \\frac{C\\beta_2 z}{T_0^2}\\right)^2 + \\left(\\frac{\\beta_2 z}{T_0^2}\\right)^2}$$\n\nThe narrowest point is at $z = L_D\\,C/(1 + C^2) = 0.4\\,L_D = 1.84$ km, where the width is\n$T_0/\\sqrt{1+C^2}$:\n\n| Scope | $C$ | $T_1/T_0$ | FWHM |\n| :-- | :-- | :-- | :-- |\n| [[launch]] | \u2014 | 1 | 16.65 ps |\n| [[up_out]] | +2 | 0.447 | 7.45 ps |\n| [[down_out]] | \u22122 | 1.84 | 30.7 ps |\n\nThis is how a directly modulated laser's chirp limits its reach, and how pulse compressors and\nchirped-pulse amplifiers work.\n\n## Try this\n\n- Make [[fibre_up]] twice as long. The pulse passes its narrowest point and spreads again.\n- Set the chirp of [[up]] to 0. Now both outputs spread the same way."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 33.0,
+      "w": 134.0,
+      "h": 288.0,
+      "text": "Opposite chirps",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 171.0,
+      "y": 33.0,
+      "w": 134.0,
+      "h": 288.0,
+      "text": "Same fibre",
+      "tone": "binary"
+    },
+    {
+      "id": "a3",
+      "kind": "rect",
+      "x": 321.0,
+      "y": 33.0,
+      "w": 134.0,
+      "h": 288.0,
+      "text": "Scopes",
+      "tone": "metric"
+    },
+    {
+      "id": "a4",
+      "kind": "note",
+      "x": 496.0,
+      "y": 40.0,
+      "w": 240.0,
+      "h": 112.0,
+      "text": "$C\\beta_2 < 0$: the chirp and the fibre undo each other and the pulse narrows. Tick *Show instantaneous frequency* in the Scope tab to see why.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 494.0,
+      "y1": 86.0,
+      "x2": 460.0,
+      "y2": 86.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

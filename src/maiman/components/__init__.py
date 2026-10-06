@@ -53,7 +53,7 @@ from .mapping import (
     PilotPhaseRecovery,
     QAMMapper,
 )
-from .meters import OSNRMeter, PowerMeter
+from .meters import Oscilloscope, OSNRMeter, PowerMeter
 from .modulators import IQModulator, MachZehnderModulator
 from .pam import FFEDFEEqualizer, PAM4Driver
 from .passive import (
@@ -122,6 +122,7 @@ __all__ = [
     "OSNRMeter",
     "OpticalFilter",
     "OpticalSpectrumAnalyzer",
+    "Oscilloscope",
     "PAM4Driver",
     "PINPhotodiode",
     "PRBSGenerator",

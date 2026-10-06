@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import dwdm_link
+import first_light
 import lessons
 import numpy as np
 
@@ -556,14 +557,28 @@ def of_type(graph: Graph, kind: type) -> Any:
     return next(c for c in graph.components if isinstance(c, kind))
 
 
-#: The File menu's starting points: key, the title the row shows, and the project
-#: file a script in this directory writes. Read back from disk rather than rebuilt,
-#: so what the menu opens is byte for byte the file a user can open by hand.
+#: The Examples menu: key, the title the row shows, and the project file a script
+#: in this directory writes. Read back from disk rather than rebuilt, so what the
+#: menu opens is byte for byte the file a user can open by hand. Numbered as in
+#: docs/EXAMPLES_ROADMAP.md.
 TEMPLATES: dict[str, tuple[str, Path]] = {
-    "dwdm-link": ("DWDM link, 8 × 10 Gb/s", dwdm_link.PROJECT),  # noqa: RUF001 -- a times sign
-    "wdm-osa": ("WDM spectrum, 4 channels", WDM_PROJECT),
-    "ook-eye": ("Direct detection, eye diagram", OOK_PROJECT),
-    "coherent-sdfec": ("Coherent link, soft-decision FEC", SDFEC_PROJECT),
+    "laser-meters": ("1.1 Laser, power meter and OSA", first_light.project_path("laser_meters")),
+    "loss-budget": ("1.2 Loss budget", first_light.project_path("loss_budget")),
+    "mzm-curve": ("1.3 MZM transfer curve", first_light.project_path("mzm_curve")),
+    "pulse-spreading": (
+        "1.4 A pulse spreading in fibre",
+        first_light.project_path("pulse_spreading"),
+    ),
+    "chirp-compression": (
+        "1.5 Chirped pulse compression",
+        first_light.project_path("chirp_compression"),
+    ),
+    "soliton": ("1.6 The fundamental soliton", first_light.project_path("soliton")),
+    "splitters": ("1.7 Splitters and couplers", first_light.project_path("splitters")),
+    "ook-eye": ("2.1 Direct detection, eye diagram", OOK_PROJECT),
+    "wdm-osa": ("3.3 WDM spectrum, 4 channels", WDM_PROJECT),
+    "dwdm-link": ("3.4 DWDM link, 8 × 10 Gb/s", dwdm_link.PROJECT),  # noqa: RUF001 -- a times sign
+    "coherent-sdfec": ("4.3 Coherent link, soft-decision FEC", SDFEC_PROJECT),
 }
 
 
@@ -622,6 +637,10 @@ def main() -> None:
 
     # And the DWDM template, which nothing else on the page draws from.
     dwdm_link.write()
+
+    # And the first-light examples, one idea each.
+    for key in first_light.EXAMPLES:
+        first_light.write(key)
 
     # Required received power per format, from the same graph re-run.
     sensitivity: list[dict[str, Any]] = []

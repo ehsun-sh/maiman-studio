@@ -1,0 +1,167 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 10000000000.0,
+    "samples_per_symbol": 8,
+    "sequence_length": 256,
+    "seed": 1,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "laser",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 120.0
+      }
+    },
+    {
+      "id": "patch_tx",
+      "type": "Attenuator",
+      "params": {
+        "attenuation": 0.5
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 120.0
+      }
+    },
+    {
+      "id": "span",
+      "type": "Fiber",
+      "params": {
+        "length": 50.0,
+        "attenuation": 0.2,
+        "dispersion": 0.0
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 120.0
+      }
+    },
+    {
+      "id": "patch_rx",
+      "type": "Attenuator",
+      "params": {
+        "attenuation": 0.5
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 120.0
+      }
+    },
+    {
+      "id": "pm_rx",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+        "x": 630.0,
+        "y": 120.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "span",
+        "out"
+      ],
+      "to": [
+        "patch_rx",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "laser",
+        "out"
+      ],
+      "to": [
+        "patch_tx",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "patch_rx",
+        "out"
+      ],
+      "to": [
+        "pm_rx",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "patch_tx",
+        "out"
+      ],
+      "to": [
+        "span",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "1.2 A loss budget",
+    "body": "The first sum anyone designing a link does. A 0 dBm laser [[laser]] goes through a patch\nconnector [[patch_tx]], 50 km of fibre [[span]] and another connector [[patch_rx]] to a\nmeter [[pm_rx]].\n\n## Loss in fibre\n\nPower falls exponentially with length, which is a straight line in decibels:\n\n$$P(L) = P(0)\\,10^{-\\alpha L/10} \\quad\\Leftrightarrow\\quad P_\\text{dBm}(L) = P_\\text{dBm}(0) - \\alpha L$$\n\nwith $\\alpha$ in dB/km: 0.2 dB/km is typical of standard fibre at 1550 nm, so 50 km costs 10 dB.\n\n## The budget\n\nBecause everything is in dB, the budget is an addition:\n\n$$P_\\text{rx} = P_\\text{tx} - \\alpha L - \\sum L_\\text{conn} = 0 - 10 - 2\\times0.5 = -11\\ \\text{dBm}$$\n\nThe **margin** is what is left over the receiver's sensitivity. A receiver that needs\n\u221220 dBm leaves 9 dB here, and a designer would keep 3 dB of it for ageing and repairs.\n\n## Sweep it\n\nOpen the **Sweep** button, choose [[span]] and its length, and run 0 to 100 km. The meter\nfalls 5 dB every 25 km, from \u22121 dBm (the connectors alone) to \u221221 dBm:\n\n| Length | 0 km | 25 km | 50 km | 75 km | 100 km |\n| :-- | :-- | :-- | :-- | :-- | :-- |\n| Received | \u22121 dBm | \u22126 dBm | \u221211 dBm | \u221216 dBm | \u221221 dBm |\n\n## Try this\n\n- At 1310 nm fibre loses about 0.35 dB/km. Change [[span]]'s attenuation and find the length\n  that leaves \u221220 dBm.\n- Add a 1:8 splitter: how much shorter must the fibre be for the same received power?"
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 93.0,
+      "w": 134.0,
+      "h": 88.0,
+      "text": "Transmitter",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 171.0,
+      "y": 93.0,
+      "w": 434.0,
+      "h": 88.0,
+      "text": "Everything between",
+      "tone": "binary"
+    },
+    {
+      "id": "a3",
+      "kind": "rect",
+      "x": 621.0,
+      "y": 93.0,
+      "w": 134.0,
+      "h": 88.0,
+      "text": "Receiver",
+      "tone": "metric"
+    },
+    {
+      "id": "a4",
+      "kind": "note",
+      "x": 290.0,
+      "y": 230.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "$P_\\text{rx} = P_\\text{tx} - \\alpha L - \\sum L_\\text{conn}$, all in dB. 0 \u2212 10 \u2212 1 = \u221211 dBm.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 380.0,
+      "y1": 228.0,
+      "x2": 388.0,
+      "y2": 176.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

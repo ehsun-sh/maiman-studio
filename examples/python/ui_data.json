@@ -2912,6 +2912,46 @@
     }
    }
   },
+  "Oscilloscope": {
+   "name": "Optical Oscilloscope",
+   "type": "Oscilloscope",
+   "class": "maiman.components.meters.Oscilloscope",
+   "category": "Measurements",
+   "version": "0.1.0",
+   "spectral": false,
+   "parameters": {
+    "span": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "ps",
+     "min": 0.0,
+     "doc": "Time shown around `centre`; 0 shows the whole window"
+    },
+    "centre": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "ps",
+     "doc": "Display centre, from the middle of the window"
+    },
+    "points": {
+     "type": "float",
+     "default": 1024.0,
+     "unit": "",
+     "min": 16.0,
+     "max": 8192.0,
+     "doc": "Points sent to the display"
+    }
+   },
+   "structural": {},
+   "ports": {
+    "inputs": {
+     "in": "optical"
+    },
+    "outputs": {
+     "out": "metric"
+    }
+   }
+  },
   "PAM4Driver": {
    "name": "PAM4 Driver",
    "type": "PAM4Driver",
@@ -20807,8 +20847,2082 @@
   }
  ],
  "templates": {
+  "laser-meters": {
+   "title": "1.1 Laser, power meter and OSA",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 10000000000.0,
+     "samples_per_symbol": 8,
+     "sequence_length": 256,
+     "seed": 1,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "laser",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1550.0,
+       "linewidth": 100.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 150.0
+      }
+     },
+     {
+      "id": "pm_tx",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+       "x": 330.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "osa",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 100.0,
+       "points": 1024.0,
+       "resolution_bandwidth": 12.5
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 150.0
+      }
+     },
+     {
+      "id": "att",
+      "type": "Attenuator",
+      "params": {
+       "attenuation": 3.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 270.0
+      }
+     },
+     {
+      "id": "pm_rx",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+       "x": 330.0,
+       "y": 270.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "laser",
+       "out"
+      ],
+      "to": [
+       "att",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "laser",
+       "out"
+      ],
+      "to": [
+       "osa",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "att",
+       "out"
+      ],
+      "to": [
+       "pm_rx",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "laser",
+       "out"
+      ],
+      "to": [
+       "pm_tx",
+       "in"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "1.1 A laser, a power meter and a spectrum",
+     "body": "A laser [[laser]] puts out one milliwatt at 1550 nm. Three instruments read it: a power meter\n[[pm_tx]], an optical spectrum analyser [[osa]], and a second meter [[pm_rx]] behind a 3 dB\nattenuator [[att]].\n\n## dBm\n\nOptical power is quoted against one milliwatt, on a log scale:\n\n$$P_\\text{dBm} = 10\\log_{10}\\frac{P}{1\\ \\text{mW}}, \\qquad P = 1\\ \\text{mW}\\times10^{P_\\text{dBm}/10}$$\n\nSo 0 dBm is 1 mW, +10 dBm is 10 mW and \u221230 dBm is 1 \u00b5W. A loss in dB *subtracts*: 3 dB halves\nthe power, which is why [[pm_rx]] reads \u22123.00 dBm, 0.501 mW.\n\n## What the analyser draws\n\nAn OSA sweeps a narrow filter across the band and reports the power that falls in it. The\nfilter's width is the **resolution bandwidth** (RBW), 12.5 GHz here (0.1 nm at 1550 nm).\n\nThis laser's linewidth is 100 kHz, five orders of magnitude narrower than the filter. So the line\non screen is the *filter's* shape, not the laser's, and its height is the laser's whole power:\n0 dBm. Converting a width in frequency to one in wavelength:\n\n$$\\Delta\\lambda \\approx \\frac{\\lambda^2}{c}\\,\\Delta\\nu \\quad\\Rightarrow\\quad 12.5\\ \\text{GHz} \\approx 0.1\\ \\text{nm}$$\n\n## Try this\n\n- Set [[laser]] to +3 dBm. What do the two meters read, in mW?\n- Widen the resolution bandwidth of [[osa]] to 50 GHz. The line gets wider; does it get taller?\n- Change [[att]] to 10 dB, then 20 dB. Each 10 dB is a factor of ten."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 123.0,
+      "w": 134.0,
+      "h": 88.0,
+      "text": "Source",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 321.0,
+      "y": 13.0,
+      "w": 134.0,
+      "h": 318.0,
+      "text": "Instruments",
+      "tone": "metric"
+     },
+     {
+      "id": "a3",
+      "kind": "note",
+      "x": 160.0,
+      "y": 370.0,
+      "w": 230.0,
+      "h": 96.0,
+      "text": "Halving the power is 3 dB: $10\\log_{10}(1/2) = -3.01$ dB. In dBm, losses subtract.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a4",
+      "kind": "arrow",
+      "x1": 230.0,
+      "y1": 368.0,
+      "x2": 238.0,
+      "y2": 326.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "loss-budget": {
+   "title": "1.2 Loss budget",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 10000000000.0,
+     "samples_per_symbol": 8,
+     "sequence_length": 256,
+     "seed": 1,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "laser",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 120.0
+      }
+     },
+     {
+      "id": "patch_tx",
+      "type": "Attenuator",
+      "params": {
+       "attenuation": 0.5
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 120.0
+      }
+     },
+     {
+      "id": "span",
+      "type": "Fiber",
+      "params": {
+       "length": 50.0,
+       "attenuation": 0.2,
+       "dispersion": 0.0
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 120.0
+      }
+     },
+     {
+      "id": "patch_rx",
+      "type": "Attenuator",
+      "params": {
+       "attenuation": 0.5
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 120.0
+      }
+     },
+     {
+      "id": "pm_rx",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+       "x": 630.0,
+       "y": 120.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "span",
+       "out"
+      ],
+      "to": [
+       "patch_rx",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "laser",
+       "out"
+      ],
+      "to": [
+       "patch_tx",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "patch_rx",
+       "out"
+      ],
+      "to": [
+       "pm_rx",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "patch_tx",
+       "out"
+      ],
+      "to": [
+       "span",
+       "in"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "1.2 A loss budget",
+     "body": "The first sum anyone designing a link does. A 0 dBm laser [[laser]] goes through a patch\nconnector [[patch_tx]], 50 km of fibre [[span]] and another connector [[patch_rx]] to a\nmeter [[pm_rx]].\n\n## Loss in fibre\n\nPower falls exponentially with length, which is a straight line in decibels:\n\n$$P(L) = P(0)\\,10^{-\\alpha L/10} \\quad\\Leftrightarrow\\quad P_\\text{dBm}(L) = P_\\text{dBm}(0) - \\alpha L$$\n\nwith $\\alpha$ in dB/km: 0.2 dB/km is typical of standard fibre at 1550 nm, so 50 km costs 10 dB.\n\n## The budget\n\nBecause everything is in dB, the budget is an addition:\n\n$$P_\\text{rx} = P_\\text{tx} - \\alpha L - \\sum L_\\text{conn} = 0 - 10 - 2\\times0.5 = -11\\ \\text{dBm}$$\n\nThe **margin** is what is left over the receiver's sensitivity. A receiver that needs\n\u221220 dBm leaves 9 dB here, and a designer would keep 3 dB of it for ageing and repairs.\n\n## Sweep it\n\nOpen the **Sweep** button, choose [[span]] and its length, and run 0 to 100 km. The meter\nfalls 5 dB every 25 km, from \u22121 dBm (the connectors alone) to \u221221 dBm:\n\n| Length | 0 km | 25 km | 50 km | 75 km | 100 km |\n| :-- | :-- | :-- | :-- | :-- | :-- |\n| Received | \u22121 dBm | \u22126 dBm | \u221211 dBm | \u221216 dBm | \u221221 dBm |\n\n## Try this\n\n- At 1310 nm fibre loses about 0.35 dB/km. Change [[span]]'s attenuation and find the length\n  that leaves \u221220 dBm.\n- Add a 1:8 splitter: how much shorter must the fibre be for the same received power?"
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 93.0,
+      "w": 134.0,
+      "h": 88.0,
+      "text": "Transmitter",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 171.0,
+      "y": 93.0,
+      "w": 434.0,
+      "h": 88.0,
+      "text": "Everything between",
+      "tone": "binary"
+     },
+     {
+      "id": "a3",
+      "kind": "rect",
+      "x": 621.0,
+      "y": 93.0,
+      "w": 134.0,
+      "h": 88.0,
+      "text": "Receiver",
+      "tone": "metric"
+     },
+     {
+      "id": "a4",
+      "kind": "note",
+      "x": 290.0,
+      "y": 230.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "$P_\\text{rx} = P_\\text{tx} - \\alpha L - \\sum L_\\text{conn}$, all in dB. 0 \u2212 10 \u2212 1 = \u221211 dBm.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 380.0,
+      "y1": 228.0,
+      "x2": 388.0,
+      "y2": 176.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "mzm-curve": {
+   "title": "1.3 MZM transfer curve",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 10000000000.0,
+     "samples_per_symbol": 8,
+     "sequence_length": 256,
+     "seed": 1,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "laser",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 60.0
+      }
+     },
+     {
+      "id": "bias",
+      "type": "DCVoltage",
+      "params": {
+       "voltage": 2.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 190.0
+      }
+     },
+     {
+      "id": "mzm",
+      "type": "MachZehnderModulator",
+      "params": {
+       "v_pi": 4.0,
+       "extinction_ratio": 30.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 120.0
+      }
+     },
+     {
+      "id": "pm_out",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+       "x": 330.0,
+       "y": 120.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "bias",
+       "out"
+      ],
+      "to": [
+       "mzm",
+       "electrical_in"
+      ]
+     },
+     {
+      "from": [
+       "laser",
+       "out"
+      ],
+      "to": [
+       "mzm",
+       "optical_in"
+      ]
+     },
+     {
+      "from": [
+       "mzm",
+       "out"
+      ],
+      "to": [
+       "pm_out",
+       "in"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "1.3 The Mach\u2013Zehnder transfer curve",
+     "body": "A Mach\u2013Zehnder modulator [[mzm]] splits the light of [[laser]] into two arms, shifts the phase\nof one against the other with a voltage, and recombines them. A DC source [[bias]] sets that\nvoltage and [[pm_out]] measures what comes out.\n\n## The cosine\n\nThe two arms interfere. With a phase difference $\\Delta\\phi = \\pi V/V_\\pi$,\n\n$$P_\\text{out} = P_\\text{in}\\cos^2\\left(\\frac{\\Delta\\phi}{2}\\right) = P_\\text{in}\\cos^2\\left(\\frac{\\pi V}{2V_\\pi}\\right)$$\n\n$V_\\pi$ is the voltage that takes the output from full to dark: 4 V here.\n\n## Bias points\n\n| Drive | Name | Output |\n| :-- | :-- | :-- |\n| $0$ | peak | 0 dBm |\n| $V_\\pi/2 = 2$ V | quadrature | \u22123 dBm |\n| $V_\\pi = 4$ V | null | \u221230 dBm |\n\nQuadrature is where the curve is steepest and most nearly straight, so an analogue or a small\ndigital signal is biased there. An on\u2013off keyed signal swings from peak to null instead.\n\n## Extinction ratio\n\nA real modulator never goes fully dark: its arms do not split exactly 50/50. The **extinction\nratio** says how dark,\n\n$$\\mathrm{ER} = 10\\log_{10}\\frac{P_\\text{max}}{P_\\text{min}}$$\n\n30 dB on [[mzm]], which is why the null reads \u221230 dBm and not $-\\infty$.\n\n## Sweep it\n\nOpen **Sweep**, pick [[bias]] and its voltage, and run 0 to 8 V in 0.25 V steps. The curve\nfalls to the null at 4 V and comes back at 8 V: the cosine is periodic in $2V_\\pi$.\n\n## Try this\n\n- Lower the extinction ratio of [[mzm]] to 15 dB. Which bias points move?\n- Set $V_\\pi$ to 2 V and find the new quadrature point."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 33.0,
+      "w": 134.0,
+      "h": 218.0,
+      "text": "Light and a voltage",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 171.0,
+      "y": 93.0,
+      "w": 134.0,
+      "h": 88.0,
+      "text": "Modulator",
+      "tone": "electrical"
+     },
+     {
+      "id": "a3",
+      "kind": "rect",
+      "x": 321.0,
+      "y": 93.0,
+      "w": 134.0,
+      "h": 88.0,
+      "text": "Meter",
+      "tone": "metric"
+     },
+     {
+      "id": "a4",
+      "kind": "note",
+      "x": 170.0,
+      "y": 240.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "$P_\\text{out} = P_\\text{in}\\cos^2(\\pi V/2V_\\pi)$. Sweep the voltage of bias from 0 to 8 V to draw it.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 230.0,
+      "y1": 238.0,
+      "x2": 238.0,
+      "y2": 176.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "pulse-spreading": {
+   "title": "1.4 A pulse spreading in fibre",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 10000000000.0,
+     "samples_per_symbol": 256,
+     "sequence_length": 4,
+     "seed": 1,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "pulse",
+      "type": "GaussianPulse",
+      "params": {
+       "peak_power": 0.0,
+       "width": 10.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 60.0
+      }
+     },
+     {
+      "id": "fibre_a",
+      "type": "Fiber",
+      "params": {
+       "length": 5.0,
+       "attenuation": 0.0,
+       "dispersion": 17.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 60.0
+      }
+     },
+     {
+      "id": "fibre_b",
+      "type": "Fiber",
+      "params": {
+       "length": 5.0,
+       "attenuation": 0.0,
+       "dispersion": 17.0
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 60.0
+      }
+     },
+     {
+      "id": "launch",
+      "type": "Oscilloscope",
+      "params": {
+       "span": 200.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 220.0
+      }
+     },
+     {
+      "id": "after_5km",
+      "type": "Oscilloscope",
+      "params": {
+       "span": 200.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 220.0
+      }
+     },
+     {
+      "id": "after_10km",
+      "type": "Oscilloscope",
+      "params": {
+       "span": 200.0
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 220.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "fibre_b",
+       "out"
+      ],
+      "to": [
+       "after_10km",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "fibre_a",
+       "out"
+      ],
+      "to": [
+       "after_5km",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "pulse",
+       "out"
+      ],
+      "to": [
+       "fibre_a",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "fibre_a",
+       "out"
+      ],
+      "to": [
+       "fibre_b",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "pulse",
+       "out"
+      ],
+      "to": [
+       "launch",
+       "in"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "1.4 A pulse spreading in fibre",
+     "body": "A Gaussian pulse [[pulse]] with $T_0 = 10$ ps goes through two 5 km pieces of standard fibre\n[[fibre_a]] [[fibre_b]]. Three oscilloscopes, [[launch]], [[after_5km]] and [[after_10km]],\ndraw it on one time axis in the **Scope** tab. Loss is set to zero so that dispersion is the\nonly thing happening.\n\n## Why it spreads\n\nA short pulse is made of many frequencies, and in fibre each travels at its own speed. That is\ngroup-velocity dispersion, written as $D$ in ps/(nm\u00b7km) on a datasheet and $\\beta_2$ in the\nequations:\n\n$$\\beta_2 = -\\frac{D\\,\\lambda^2}{2\\pi c} \\approx -21.7\\ \\text{ps}^2/\\text{km} \\quad (D = 17,\\ \\lambda = 1550\\ \\text{nm})$$\n\n## How fast\n\nThe distance over which dispersion matters is the **dispersion length**,\n\n$$L_D = \\frac{T_0^2}{|\\beta_2|} = \\frac{(10\\ \\text{ps})^2}{21.7\\ \\text{ps}^2/\\text{km}} = 4.6\\ \\text{km}$$\n\nand an unchirped Gaussian widens as\n\n$$\\frac{T_1}{T_0} = \\sqrt{1 + \\left(\\frac{z}{L_D}\\right)^2}$$\n\n| Scope | $z$ | $T_1/T_0$ | FWHM ($1.665\\,T$) |\n| :-- | :-- | :-- | :-- |\n| [[launch]] | 0 | 1 | 16.65 ps |\n| [[after_5km]] | 5 km | 1.48 | 24.6 ps |\n| [[after_10km]] | 10 km | 2.39 | 39.8 ps |\n\nThe scopes' FWHM readings are these numbers. The area under each trace is the same energy, so as\nthe pulse widens its peak falls by the same factor.\n\n## Try this\n\n- Halve the width of [[pulse]] to 5 ps. $L_D$ falls four times: how wide is it after 10 km?\n- Set [[fibre_b]]'s dispersion to \u221217. What does [[after_10km]] show, and why?\n- Tick *Show instantaneous frequency* in the Scope tab: dispersion leaves the pulse chirped. In standard fibre blue\n  travels faster, so the leading edge is bluer than the tail."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 33.0,
+      "w": 134.0,
+      "h": 88.0,
+      "text": "10 ps pulse",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 171.0,
+      "y": 33.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "2 \u00d7 5 km, lossless",
+      "tone": "binary"
+     },
+     {
+      "id": "a3",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 193.0,
+      "w": 434.0,
+      "h": 88.0,
+      "text": "Scopes",
+      "tone": "metric"
+     },
+     {
+      "id": "a4",
+      "kind": "note",
+      "x": 496.0,
+      "y": 200.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "Run, then open the Scope tab: three pulses, one energy. $T_1/T_0 = \\sqrt{1 + (z/L_D)^2}$",
+      "tone": "electrical"
+     },
+     {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 494.0,
+      "y1": 246.0,
+      "x2": 460.0,
+      "y2": 246.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "chirp-compression": {
+   "title": "1.5 Chirped pulse compression",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 10000000000.0,
+     "samples_per_symbol": 256,
+     "sequence_length": 4,
+     "seed": 1,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "up",
+      "type": "GaussianPulse",
+      "params": {
+       "peak_power": 0.0,
+       "width": 10.0,
+       "chirp": 2.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 60.0
+      }
+     },
+     {
+      "id": "down",
+      "type": "GaussianPulse",
+      "params": {
+       "peak_power": 0.0,
+       "width": 10.0,
+       "chirp": -2.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 260.0
+      }
+     },
+     {
+      "id": "fibre_up",
+      "type": "Fiber",
+      "params": {
+       "length": 1.84,
+       "attenuation": 0.0,
+       "dispersion": 17.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 60.0
+      }
+     },
+     {
+      "id": "up_out",
+      "type": "Oscilloscope",
+      "params": {
+       "span": 200.0
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 60.0
+      }
+     },
+     {
+      "id": "fibre_down",
+      "type": "Fiber",
+      "params": {
+       "length": 1.84,
+       "attenuation": 0.0,
+       "dispersion": 17.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 260.0
+      }
+     },
+     {
+      "id": "down_out",
+      "type": "Oscilloscope",
+      "params": {
+       "span": 200.0
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 260.0
+      }
+     },
+     {
+      "id": "launch",
+      "type": "Oscilloscope",
+      "params": {
+       "span": 200.0
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 160.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "fibre_down",
+       "out"
+      ],
+      "to": [
+       "down_out",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "down",
+       "out"
+      ],
+      "to": [
+       "fibre_down",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "up",
+       "out"
+      ],
+      "to": [
+       "fibre_up",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "up",
+       "out"
+      ],
+      "to": [
+       "launch",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "fibre_up",
+       "out"
+      ],
+      "to": [
+       "up_out",
+       "in"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "1.5 Chirped pulse compression",
+     "body": "Two Gaussian pulses with the same $T_0 = 10$ ps but opposite chirp, [[up]] ($C = +2$) and\n[[down]] ($C = -2$), go through identical 1.84 km fibres [[fibre_up]] [[fibre_down]]. The\n**Scope** tab overlays the launched pulse [[launch]] and both outputs [[up_out]] [[down_out]].\n\n## Chirp\n\nA chirped pulse has a frequency that changes across it. With\n\n$$A(0, T) = \\sqrt{P_0}\\,\\exp\\left(-\\frac{1 - jC}{2}\\,\\frac{T^2}{T_0^2}\\right)$$\n\nthe instantaneous frequency is $\\delta f = C\\,T/(2\\pi T_0^2)$: for $C > 0$ the tail is bluer than\nthe head (an up-chirp). Tick *Show instantaneous frequency* in the\nScope tab to see that straight line.\n\n## The sign matters\n\nIn standard fibre $\\beta_2 < 0$, and blue light travels *faster*. An up-chirped pulse has its\nblue at the back, which catches up with the red at the front: the pulse first narrows. A\ndown-chirped pulse is already arranged the wrong way and spreads faster than an unchirped one.\n\n$$\\frac{T_1}{T_0} = \\sqrt{\\left(1 + \\frac{C\\beta_2 z}{T_0^2}\\right)^2 + \\left(\\frac{\\beta_2 z}{T_0^2}\\right)^2}$$\n\nThe narrowest point is at $z = L_D\\,C/(1 + C^2) = 0.4\\,L_D = 1.84$ km, where the width is\n$T_0/\\sqrt{1+C^2}$:\n\n| Scope | $C$ | $T_1/T_0$ | FWHM |\n| :-- | :-- | :-- | :-- |\n| [[launch]] | \u2014 | 1 | 16.65 ps |\n| [[up_out]] | +2 | 0.447 | 7.45 ps |\n| [[down_out]] | \u22122 | 1.84 | 30.7 ps |\n\nThis is how a directly modulated laser's chirp limits its reach, and how pulse compressors and\nchirped-pulse amplifiers work.\n\n## Try this\n\n- Make [[fibre_up]] twice as long. The pulse passes its narrowest point and spreads again.\n- Set the chirp of [[up]] to 0. Now both outputs spread the same way."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 33.0,
+      "w": 134.0,
+      "h": 288.0,
+      "text": "Opposite chirps",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 171.0,
+      "y": 33.0,
+      "w": 134.0,
+      "h": 288.0,
+      "text": "Same fibre",
+      "tone": "binary"
+     },
+     {
+      "id": "a3",
+      "kind": "rect",
+      "x": 321.0,
+      "y": 33.0,
+      "w": 134.0,
+      "h": 288.0,
+      "text": "Scopes",
+      "tone": "metric"
+     },
+     {
+      "id": "a4",
+      "kind": "note",
+      "x": 496.0,
+      "y": 40.0,
+      "w": 240.0,
+      "h": 112.0,
+      "text": "$C\\beta_2 < 0$: the chirp and the fibre undo each other and the pulse narrows. Tick *Show instantaneous frequency* in the Scope tab to see why.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 494.0,
+      "y1": 86.0,
+      "x2": 460.0,
+      "y2": 86.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "soliton": {
+   "title": "1.6 The fundamental soliton",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 10000000000.0,
+     "samples_per_symbol": 256,
+     "sequence_length": 4,
+     "seed": 1,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "soliton",
+      "type": "SechPulse",
+      "params": {
+       "peak_power": 22.221683941259776,
+       "width": 10.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 160.0
+      }
+     },
+     {
+      "id": "kerr_on",
+      "type": "Fiber",
+      "params": {
+       "nonlinearity": 1.3,
+       "length": 14.49,
+       "attenuation": 0.0,
+       "dispersion": 17.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 60.0
+      }
+     },
+     {
+      "id": "kerr_off",
+      "type": "Fiber",
+      "params": {
+       "nonlinearity": 0.0,
+       "length": 14.49,
+       "attenuation": 0.0,
+       "dispersion": 17.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 260.0
+      }
+     },
+     {
+      "id": "launch",
+      "type": "Oscilloscope",
+      "params": {
+       "span": 200.0
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 160.0
+      }
+     },
+     {
+      "id": "with_kerr",
+      "type": "Oscilloscope",
+      "params": {
+       "span": 200.0
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 60.0
+      }
+     },
+     {
+      "id": "dispersion_only",
+      "type": "Oscilloscope",
+      "params": {
+       "span": 200.0
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 260.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "kerr_off",
+       "out"
+      ],
+      "to": [
+       "dispersion_only",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "soliton",
+       "out"
+      ],
+      "to": [
+       "kerr_off",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "soliton",
+       "out"
+      ],
+      "to": [
+       "kerr_on",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "soliton",
+       "out"
+      ],
+      "to": [
+       "launch",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "kerr_on",
+       "out"
+      ],
+      "to": [
+       "with_kerr",
+       "in"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "1.6 The fundamental soliton",
+     "body": "A hyperbolic-secant pulse [[soliton]] with $T_0 = 10$ ps is launched at exactly the power that\nmakes it a soliton, into two identical 14.5 km fibres: [[kerr_on]] with the Kerr effect and\n[[kerr_off]] without it. The **Scope** tab overlays the launch [[launch]] and the two outputs\n[[with_kerr]] [[dispersion_only]].\n\n## Two chirps that cancel\n\nDispersion alone spreads the pulse and chirps it (in anomalous fibre, blue ahead). The Kerr\neffect makes the refractive index depend on intensity, $n = n_0 + n_2 I$, so the pulse imposes\na phase on itself,\n\n$$\\phi_\\text{NL}(T) = \\gamma\\,|A(T)|^2\\,z$$\n\nwhich chirps it the *other* way. At the right peak power the two chirps cancel at every point of\nthe pulse and it travels unchanged.\n\n## The soliton condition\n\n$$N^2 = \\frac{\\gamma P_0 T_0^2}{|\\beta_2|} = 1 \\quad\\Rightarrow\\quad P_0 = \\frac{|\\beta_2|}{\\gamma T_0^2} = \\frac{21.7\\ \\text{ps}^2/\\text{km}}{1.3\\ \\text{W}^{-1}\\text{km}^{-1}\\times(10\\ \\text{ps})^2} = 167\\ \\text{mW}$$\n\nThe fibre is two soliton periods long, $z_0 = \\frac{\\pi}{2}L_D = 7.24$ km each.\n\n| Scope | FWHM | Peak |\n| :-- | :-- | :-- |\n| [[launch]] | 17.6 ps ($1.763\\,T_0$) | 167 mW |\n| [[with_kerr]] | 17.6 ps | 167 mW |\n| [[dispersion_only]] | 49.5 ps | 65 mW |\n\n## Try this\n\n- Double the peak power of [[soliton]] (+3 dB). Now $N = \\sqrt2$: the pulse narrows and breathes.\n- Quadruple it (+6 dB) for $N = 2$, and set [[kerr_on]] to 3.62 km ($z_0/2$). A second-order\n  soliton splits and re-forms once a period.\n- Put 0.2 dB/km of loss on [[kerr_on]]. As the power falls, the soliton slowly widens."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 133.0,
+      "w": 134.0,
+      "h": 88.0,
+      "text": "sech pulse, N = 1",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 171.0,
+      "y": 33.0,
+      "w": 134.0,
+      "h": 288.0,
+      "text": "Kerr on and off",
+      "tone": "binary"
+     },
+     {
+      "id": "a3",
+      "kind": "rect",
+      "x": 321.0,
+      "y": 33.0,
+      "w": 134.0,
+      "h": 288.0,
+      "text": "Scopes",
+      "tone": "metric"
+     },
+     {
+      "id": "a4",
+      "kind": "note",
+      "x": 496.0,
+      "y": 40.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "$N^2 = \\gamma P_0 T_0^2/|\\beta_2| = 1$: self-phase modulation cancels the dispersion's chirp exactly.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 494.0,
+      "y1": 86.0,
+      "x2": 460.0,
+      "y2": 86.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "splitters": {
+   "title": "1.7 Splitters and couplers",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 10000000000.0,
+     "samples_per_symbol": 8,
+     "sequence_length": 256,
+     "seed": 1,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "laser_a",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 60.0
+      }
+     },
+     {
+      "id": "laser_b",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1551.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 300.0
+      }
+     },
+     {
+      "id": "split4",
+      "type": "Splitter",
+      "params": {},
+      "config": {
+       "num_outputs": 4
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 60.0
+      }
+     },
+     {
+      "id": "tap",
+      "type": "DirectionalCoupler",
+      "params": {
+       "coupling": 0.1
+      },
+      "config": {
+       "second_input": false
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 300.0
+      }
+     },
+     {
+      "id": "combiner",
+      "type": "Combiner",
+      "params": {},
+      "config": {
+       "num_inputs": 2
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 180.0
+      }
+     },
+     {
+      "id": "pm_quarter",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+       "x": 480.0,
+       "y": 60.0
+      }
+     },
+     {
+      "id": "pm_tap",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+       "x": 480.0,
+       "y": 300.0
+      }
+     },
+     {
+      "id": "pm_sum",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+       "x": 480.0,
+       "y": 180.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "split4",
+       "out1"
+      ],
+      "to": [
+       "combiner",
+       "in0"
+      ]
+     },
+     {
+      "from": [
+       "tap",
+       "out1"
+      ],
+      "to": [
+       "combiner",
+       "in1"
+      ]
+     },
+     {
+      "from": [
+       "split4",
+       "out0"
+      ],
+      "to": [
+       "pm_quarter",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "combiner",
+       "out"
+      ],
+      "to": [
+       "pm_sum",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "tap",
+       "out2"
+      ],
+      "to": [
+       "pm_tap",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "laser_a",
+       "out"
+      ],
+      "to": [
+       "split4",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "laser_b",
+       "out"
+      ],
+      "to": [
+       "tap",
+       "in1"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "1.7 Splitters, couplers and a combiner",
+     "body": "Three ways to divide or join light. A 1:4 splitter [[split4]] shares [[laser_a]] four ways.\nA directional coupler [[tap]] takes 10 % of [[laser_b]] off to a monitor. A combiner\n[[combiner]] puts one quarter of the first laser and the through port of the coupler onto one\nfibre, and [[pm_sum]] measures them together.\n\n## Splitting costs 3 dB per halving\n\nAn ideal $1{:}N$ splitter gives each output $1/N$ of the power:\n\n$$L_\\text{split} = 10\\log_{10}N \\quad\\Rightarrow\\quad 1{:}4 = 6.02\\ \\text{dB}, \\quad 1{:}32 = 15.05\\ \\text{dB}$$\n\n[[pm_quarter]] reads \u22126.02 dBm, 0.25 mW. A passive optical network's 1:32 split costs more than\n70 km of fibre.\n\n## A coupler conserves power\n\nA coupler with power coupling $\\kappa$ sends $\\kappa$ across and keeps $1-\\kappa$ on the straight\npath:\n\n$$P_\\text{cross} = \\kappa P_\\text{in}, \\qquad P_\\text{through} = (1-\\kappa)\\,P_\\text{in}$$\n\nWith $\\kappa = 0.1$, the monitor [[pm_tap]] gets \u221210 dBm and the through port keeps 0.9 mW\n(\u22120.46 dBm). The two add back to the input: nothing is lost in an ideal coupler.\n\n## Powers add in milliwatts\n\nThe combiner joins two *different* wavelengths, 1550 and 1551 nm, so their powers simply add:\n\n$$P_\\text{sum} = 0.25 + 0.90 = 1.15\\ \\text{mW} = +0.61\\ \\text{dBm}$$\n\nAdding the dBm values, \u22126.02 + (\u22120.46), would be meaningless. Two beams at the *same* wavelength\nwould interfere instead, which is why [[combiner]] refuses them: that needs a coupler.\n\n## Try this\n\n- Change [[split4]]'s excess loss to 0.5 dB, as a real splitter has.\n- Set the coupling of [[tap]] to 0.5 for a 3 dB coupler. What does [[pm_sum]] read?\n- Set [[laser_b]] to 1550 nm and run: read the combiner's message in the Log tab."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 33.0,
+      "w": 134.0,
+      "h": 328.0,
+      "text": "Two colours",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 171.0,
+      "y": 33.0,
+      "w": 284.0,
+      "h": 328.0,
+      "text": "Dividing and joining",
+      "tone": "binary"
+     },
+     {
+      "id": "a3",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 33.0,
+      "w": 134.0,
+      "h": 328.0,
+      "text": "Meters",
+      "tone": "metric"
+     },
+     {
+      "id": "a4",
+      "kind": "note",
+      "x": 646.0,
+      "y": 160.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "Powers add in milliwatts, not in dBm: 0.25 + 0.90 = 1.15 mW = +0.61 dBm.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 644.0,
+      "y1": 206.0,
+      "x2": 610.0,
+      "y2": 206.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "ook-eye": {
+   "title": "2.1 Direct detection, eye diagram",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 10000000000.0,
+     "samples_per_symbol": 32,
+     "sequence_length": 512,
+     "seed": 4,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "prbs",
+      "type": "PRBSGenerator",
+      "params": {
+       "order": 7.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 220.0
+      }
+     },
+     {
+      "id": "drv",
+      "type": "NRZDriver",
+      "params": {
+       "v_low": 4.0,
+       "v_high": 0.0
+      },
+      "ui": {
+       "x": 168.0,
+       "y": 220.0
+      }
+     },
+     {
+      "id": "tx",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 168.0,
+       "y": 60.0
+      }
+     },
+     {
+      "id": "mzm",
+      "type": "MachZehnderModulator",
+      "params": {
+       "v_pi": 4.0,
+       "extinction_ratio": 30.0
+      },
+      "ui": {
+       "x": 306.0,
+       "y": 220.0
+      }
+     },
+     {
+      "id": "fib",
+      "type": "Fiber",
+      "params": {
+       "length": 20.0,
+       "attenuation": 0.2,
+       "dispersion": 17.0
+      },
+      "ui": {
+       "x": 444.0,
+       "y": 220.0
+      }
+     },
+     {
+      "id": "pin",
+      "type": "PINPhotodiode",
+      "params": {
+       "responsivity": 0.8
+      },
+      "ui": {
+       "x": 582.0,
+       "y": 220.0
+      }
+     },
+     {
+      "id": "lpf",
+      "type": "ElectricalFilter",
+      "params": {
+       "bandwidth": 7.0
+      },
+      "ui": {
+       "x": 720.0,
+       "y": 220.0
+      }
+     },
+     {
+      "id": "eye",
+      "type": "EyeDiagram",
+      "params": {
+       "span_symbols": 2.0,
+       "time_bins": 64.0,
+       "amplitude_bins": 72.0
+      },
+      "ui": {
+       "x": 858.0,
+       "y": 130.0
+      }
+     },
+     {
+      "id": "ber",
+      "type": "BERAnalyzer",
+      "params": {},
+      "ui": {
+       "x": 858.0,
+       "y": 310.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "lpf",
+       "out"
+      ],
+      "to": [
+       "ber",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "prbs",
+       "out"
+      ],
+      "to": [
+       "ber",
+       "reference"
+      ]
+     },
+     {
+      "from": [
+       "prbs",
+       "out"
+      ],
+      "to": [
+       "drv",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "lpf",
+       "out"
+      ],
+      "to": [
+       "eye",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "mzm",
+       "out"
+      ],
+      "to": [
+       "fib",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "pin",
+       "out"
+      ],
+      "to": [
+       "lpf",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "drv",
+       "out"
+      ],
+      "to": [
+       "mzm",
+       "electrical_in"
+      ]
+     },
+     {
+      "from": [
+       "tx",
+       "out"
+      ],
+      "to": [
+       "mzm",
+       "optical_in"
+      ]
+     },
+     {
+      "from": [
+       "fib",
+       "out"
+      ],
+      "to": [
+       "pin",
+       "in"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "Direct detection: reading an eye",
+     "body": "A 10 Gb/s pseudo-random pattern [[prbs]] drives a Mach\u2013Zehnder modulator [[mzm]] that switches\nthe laser [[tx]] on and off. After 20 km of fibre [[fib]], a PIN photodiode [[pin]] and a\nfilter [[lpf]] turn the light back into a current. The eye [[eye]] folds that current over\ntwo bit periods, and [[ber]] counts errors against the original pattern.\n\n## The modulator\n\nDriven push\u2013pull, an MZM transmits\n\n$$P_\\text{out} = P_\\text{in}\\cos^2\\left(\\frac{\\pi V}{2V_\\pi}\\right)$$\n\nso a drive swinging between $0$ and $V_\\pi$ takes the light from full to nearly dark. How dark\nis set by the extinction ratio, $\\mathrm{ER} = 10\\log_{10}(P_1/P_0)$.\n\n## The fibre\n\nPower falls exponentially with length: $P(L) = P(0)\\,10^{-\\alpha L/10}$, with $\\alpha$ in dB/km.\nAt 0.2 dB/km, 20 km costs 4 dB. Chromatic dispersion spreads each pulse by roughly\n\n$$\\Delta\\tau \\approx D\\,L\\,\\Delta\\lambda$$\n\nWith $D = 17$ ps/(nm\u00b7km) and the 0.08 nm a 10 Gb/s signal occupies, that is about 27 ps,\na quarter of the 100 ps bit slot.\n\n## The photodiode and its noise\n\nThe photocurrent is $I = \\mathcal{R}P$. Two noises ride on it: shot noise, which grows with the\ncurrent, and the thermal noise of the load resistor, which does not.\n\n$$\\sigma^2 = 2q\\,(I + I_d)\\,B + \\frac{4k_BT}{R_L}\\,B$$\n\n## From the eye to a bit error rate\n\nWith the mean and spread of the one and zero rails read off the eye,\n\n$$Q = \\frac{I_1 - I_0}{\\sigma_1 + \\sigma_0}, \\qquad \\mathrm{BER} = \\frac{1}{2}\\,\\mathrm{erfc}\\left(\\frac{Q}{\\sqrt{2}}\\right)$$\n\n$Q = 6$ is the classic target: a BER of about $10^{-9}$.\n\n## Try this\n\n- Stretch [[fib]] to 60, 80 and 100 km. Does the eye lose height first, or width?\n- Lower the power of [[tx]] until errors appear. That power is the receiver's sensitivity.\n- Narrow [[lpf]] to 3 GHz. Less noise gets through, but neighbouring bits start to overlap."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 33.0,
+      "w": 410.0,
+      "h": 248.0,
+      "text": "Transmitter",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 435.0,
+      "y": 193.0,
+      "w": 134.0,
+      "h": 88.0,
+      "text": "Channel",
+      "tone": "binary"
+     },
+     {
+      "id": "a3",
+      "kind": "rect",
+      "x": 573.0,
+      "y": 193.0,
+      "w": 272.0,
+      "h": 88.0,
+      "text": "Receiver",
+      "tone": "electrical"
+     },
+     {
+      "id": "a4",
+      "kind": "rect",
+      "x": 849.0,
+      "y": 103.0,
+      "w": 134.0,
+      "h": 268.0,
+      "text": "Instruments",
+      "tone": "metric"
+     },
+     {
+      "id": "a5",
+      "kind": "note",
+      "x": 404.0,
+      "y": 330.0,
+      "w": 230.0,
+      "h": 96.0,
+      "text": "Lengthen the fibre and run again: loss lowers the eye, dispersion smears it sideways. $\\Delta\\tau \\approx D\\,L\\,\\Delta\\lambda$",
+      "tone": "electrical"
+     },
+     {
+      "id": "a6",
+      "kind": "arrow",
+      "x1": 484.0,
+      "y1": 328.0,
+      "x2": 502.0,
+      "y2": 276.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "wdm-osa": {
+   "title": "3.3 WDM spectrum, 4 channels",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 10000000000.0,
+     "samples_per_symbol": 16,
+     "sequence_length": 1024,
+     "seed": 11,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "prbs",
+      "type": "PRBSGenerator",
+      "params": {
+       "order": 11.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 470.0
+      }
+     },
+     {
+      "id": "drv",
+      "type": "NRZDriver",
+      "params": {
+       "v_low": 4.0,
+       "v_high": 0.0
+      },
+      "ui": {
+       "x": 168.0,
+       "y": 470.0
+      }
+     },
+     {
+      "id": "mux",
+      "type": "Combiner",
+      "params": {},
+      "config": {
+       "num_inputs": 4
+      },
+      "ui": {
+       "x": 444.0,
+       "y": 190.0
+      }
+     },
+     {
+      "id": "ch0",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1550.0000000000002
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "mzm0",
+      "type": "MachZehnderModulator",
+      "params": {
+       "v_pi": 4.0
+      },
+      "ui": {
+       "x": 306.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "ch1",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1549.1990263841478
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "mzm1",
+      "type": "MachZehnderModulator",
+      "params": {
+       "v_pi": 4.0
+      },
+      "ui": {
+       "x": 306.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "ch2",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1548.398880158456
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "mzm2",
+      "type": "MachZehnderModulator",
+      "params": {
+       "v_pi": 4.0
+      },
+      "ui": {
+       "x": 306.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "ch3",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1547.5995600415697
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "mzm3",
+      "type": "MachZehnderModulator",
+      "params": {
+       "v_pi": 4.0
+      },
+      "ui": {
+       "x": 306.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "f0",
+      "type": "Fiber",
+      "params": {
+       "length": 80.0,
+       "attenuation": 0.2,
+       "dispersion": 17.0
+      },
+      "ui": {
+       "x": 582.0,
+       "y": 190.0
+      }
+     },
+     {
+      "id": "edfa0",
+      "type": "EDFA",
+      "params": {
+       "gain": 16.0,
+       "noise_figure": 6.0
+      },
+      "ui": {
+       "x": 720.0,
+       "y": 190.0
+      }
+     },
+     {
+      "id": "f1",
+      "type": "Fiber",
+      "params": {
+       "length": 80.0,
+       "attenuation": 0.2,
+       "dispersion": 17.0
+      },
+      "ui": {
+       "x": 858.0,
+       "y": 190.0
+      }
+     },
+     {
+      "id": "edfa1",
+      "type": "EDFA",
+      "params": {
+       "gain": 16.0,
+       "noise_figure": 6.0
+      },
+      "ui": {
+       "x": 996.0,
+       "y": 190.0
+      }
+     },
+     {
+      "id": "osa",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "center_wavelength": 1548.7989532713018,
+       "span": 800.0,
+       "points": 1024.0,
+       "resolution_bandwidth": 12.5
+      },
+      "ui": {
+       "x": 1134.0,
+       "y": 60.0
+      }
+     },
+     {
+      "id": "pm",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+       "x": 1134.0,
+       "y": 200.0
+      }
+     },
+     {
+      "id": "osnr",
+      "type": "OSNRMeter",
+      "params": {},
+      "ui": {
+       "x": 1134.0,
+       "y": 320.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "prbs",
+       "out"
+      ],
+      "to": [
+       "drv",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "f0",
+       "out"
+      ],
+      "to": [
+       "edfa0",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "f1",
+       "out"
+      ],
+      "to": [
+       "edfa1",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "mux",
+       "out"
+      ],
+      "to": [
+       "f0",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "edfa0",
+       "out"
+      ],
+      "to": [
+       "f1",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "mzm0",
+       "out"
+      ],
+      "to": [
+       "mux",
+       "in0"
+      ]
+     },
+     {
+      "from": [
+       "mzm1",
+       "out"
+      ],
+      "to": [
+       "mux",
+       "in1"
+      ]
+     },
+     {
+      "from": [
+       "mzm2",
+       "out"
+      ],
+      "to": [
+       "mux",
+       "in2"
+      ]
+     },
+     {
+      "from": [
+       "mzm3",
+       "out"
+      ],
+      "to": [
+       "mux",
+       "in3"
+      ]
+     },
+     {
+      "from": [
+       "drv",
+       "out"
+      ],
+      "to": [
+       "mzm0",
+       "electrical_in"
+      ]
+     },
+     {
+      "from": [
+       "ch0",
+       "out"
+      ],
+      "to": [
+       "mzm0",
+       "optical_in"
+      ]
+     },
+     {
+      "from": [
+       "drv",
+       "out"
+      ],
+      "to": [
+       "mzm1",
+       "electrical_in"
+      ]
+     },
+     {
+      "from": [
+       "ch1",
+       "out"
+      ],
+      "to": [
+       "mzm1",
+       "optical_in"
+      ]
+     },
+     {
+      "from": [
+       "drv",
+       "out"
+      ],
+      "to": [
+       "mzm2",
+       "electrical_in"
+      ]
+     },
+     {
+      "from": [
+       "ch2",
+       "out"
+      ],
+      "to": [
+       "mzm2",
+       "optical_in"
+      ]
+     },
+     {
+      "from": [
+       "drv",
+       "out"
+      ],
+      "to": [
+       "mzm3",
+       "electrical_in"
+      ]
+     },
+     {
+      "from": [
+       "ch3",
+       "out"
+      ],
+      "to": [
+       "mzm3",
+       "optical_in"
+      ]
+     },
+     {
+      "from": [
+       "edfa1",
+       "out"
+      ],
+      "to": [
+       "osa",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "edfa1",
+       "out"
+      ],
+      "to": [
+       "osnr",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "edfa1",
+       "out"
+      ],
+      "to": [
+       "pm",
+       "in"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "WDM: four channels and an OSNR",
+     "body": "Four lasers [[ch0]]\u2026[[ch3]] sit on the ITU 100 GHz grid, each modulated by its own MZM, and the\ncombiner [[mux]] puts them on one fibre. Two spans of 80 km each lose 16 dB, and two EDFAs\n[[edfa0]] [[edfa1]] put it back. The analyser [[osa]] draws the spectrum and [[osnr]] reads the\nsignal-to-noise ratio off it.\n\n## The grid\n\nChannels are spaced evenly in *frequency*, not wavelength:\n\n$$\\nu_n = \\nu_0 + n\\,\\Delta\\nu, \\qquad \\Delta\\lambda \\approx \\frac{\\lambda^2}{c}\\,\\Delta\\nu$$\n\nAt 1550 nm, 100 GHz is about 0.8 nm.\n\n## Where the noise floor comes from\n\nAn amplifier with gain $G$ adds amplified spontaneous emission. In a reference bandwidth\n$B_\\text{ref}$, over both polarisations,\n\n$$P_\\text{ASE} = 2\\,n_{sp}\\,h\\nu\\,(G-1)\\,B_\\text{ref}$$\n\nand at high gain the noise figure is $\\mathrm{NF} \\approx 2n_{sp}$.\n\n## OSNR\n\n$$\\mathrm{OSNR} = \\frac{P_\\text{ch}}{P_\\text{ASE}} \\quad \\text{in } B_\\text{ref} = 12.5\\ \\text{GHz}\\ (0.1\\ \\text{nm})$$\n\nFor a chain of $N$ identical spans, the rule of thumb at 1550 nm (a rule of thumb, not this\nmodel) is\n\n$$\\mathrm{OSNR_{dB}} \\approx 58 + P_\\text{ch,dBm} - L_\\text{span,dB} - \\mathrm{NF_{dB}} - 10\\log_{10}N$$\n\n## Resolution bandwidth\n\nAn OSA reports power *per resolution bandwidth*. Widen it from $B_1$ to $B_2$ and the ASE floor\nrises by $10\\log_{10}(B_2/B_1)$ dB, while a channel narrower than the window reads the same.\n\n## Try this\n\n- Change the resolution bandwidth of [[osa]] from 12.5 to 50 GHz. How far does the floor move?\n- Raise the noise figure of [[edfa0]] by 3 dB. Does the OSNR fall by 3 dB?\n- Add a third span and amplifier. The rule of thumb predicts a loss of $10\\log_{10}(3/2)$ dB."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 410.0,
+      "h": 388.0,
+      "text": "4 transmitters",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 573.0,
+      "y": 163.0,
+      "w": 548.0,
+      "h": 88.0,
+      "text": "2 amplified spans",
+      "tone": "binary"
+     },
+     {
+      "id": "a3",
+      "kind": "rect",
+      "x": 1125.0,
+      "y": 33.0,
+      "w": 134.0,
+      "h": 348.0,
+      "text": "Instruments",
+      "tone": "metric"
+     },
+     {
+      "id": "a4",
+      "kind": "note",
+      "x": 700.0,
+      "y": 300.0,
+      "w": 230.0,
+      "h": 96.0,
+      "text": "Each EDFA adds noise as well as gain. The floor it leaves under the channels is what the OSNR meter reads.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 770.0,
+      "y1": 298.0,
+      "x2": 778.0,
+      "y2": 246.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
   "dwdm-link": {
-   "title": "DWDM link, 8 \u00d7 10 Gb/s",
+   "title": "3.4 DWDM link, 8 \u00d7 10 Gb/s",
    "project": {
     "schema_version": 1,
     "maiman_version": "0.16.0",
@@ -21602,769 +23716,8 @@
     ]
    }
   },
-  "wdm-osa": {
-   "title": "WDM spectrum, 4 channels",
-   "project": {
-    "schema_version": 1,
-    "maiman_version": "0.16.0",
-    "context": {
-     "bit_rate": 10000000000.0,
-     "samples_per_symbol": 16,
-     "sequence_length": 1024,
-     "seed": 11,
-     "precision": "single"
-    },
-    "nodes": [
-     {
-      "id": "prbs",
-      "type": "PRBSGenerator",
-      "params": {
-       "order": 11.0
-      },
-      "ui": {
-       "x": 30.0,
-       "y": 470.0
-      }
-     },
-     {
-      "id": "drv",
-      "type": "NRZDriver",
-      "params": {
-       "v_low": 4.0,
-       "v_high": 0.0
-      },
-      "ui": {
-       "x": 168.0,
-       "y": 470.0
-      }
-     },
-     {
-      "id": "mux",
-      "type": "Combiner",
-      "params": {},
-      "config": {
-       "num_inputs": 4
-      },
-      "ui": {
-       "x": 444.0,
-       "y": 190.0
-      }
-     },
-     {
-      "id": "ch0",
-      "type": "CWLaser",
-      "params": {
-       "power": 0.0,
-       "wavelength": 1550.0000000000002
-      },
-      "ui": {
-       "x": 30.0,
-       "y": 40.0
-      }
-     },
-     {
-      "id": "mzm0",
-      "type": "MachZehnderModulator",
-      "params": {
-       "v_pi": 4.0
-      },
-      "ui": {
-       "x": 306.0,
-       "y": 40.0
-      }
-     },
-     {
-      "id": "ch1",
-      "type": "CWLaser",
-      "params": {
-       "power": 0.0,
-       "wavelength": 1549.1990263841478
-      },
-      "ui": {
-       "x": 30.0,
-       "y": 140.0
-      }
-     },
-     {
-      "id": "mzm1",
-      "type": "MachZehnderModulator",
-      "params": {
-       "v_pi": 4.0
-      },
-      "ui": {
-       "x": 306.0,
-       "y": 140.0
-      }
-     },
-     {
-      "id": "ch2",
-      "type": "CWLaser",
-      "params": {
-       "power": 0.0,
-       "wavelength": 1548.398880158456
-      },
-      "ui": {
-       "x": 30.0,
-       "y": 240.0
-      }
-     },
-     {
-      "id": "mzm2",
-      "type": "MachZehnderModulator",
-      "params": {
-       "v_pi": 4.0
-      },
-      "ui": {
-       "x": 306.0,
-       "y": 240.0
-      }
-     },
-     {
-      "id": "ch3",
-      "type": "CWLaser",
-      "params": {
-       "power": 0.0,
-       "wavelength": 1547.5995600415697
-      },
-      "ui": {
-       "x": 30.0,
-       "y": 340.0
-      }
-     },
-     {
-      "id": "mzm3",
-      "type": "MachZehnderModulator",
-      "params": {
-       "v_pi": 4.0
-      },
-      "ui": {
-       "x": 306.0,
-       "y": 340.0
-      }
-     },
-     {
-      "id": "f0",
-      "type": "Fiber",
-      "params": {
-       "length": 80.0,
-       "attenuation": 0.2,
-       "dispersion": 17.0
-      },
-      "ui": {
-       "x": 582.0,
-       "y": 190.0
-      }
-     },
-     {
-      "id": "edfa0",
-      "type": "EDFA",
-      "params": {
-       "gain": 16.0,
-       "noise_figure": 6.0
-      },
-      "ui": {
-       "x": 720.0,
-       "y": 190.0
-      }
-     },
-     {
-      "id": "f1",
-      "type": "Fiber",
-      "params": {
-       "length": 80.0,
-       "attenuation": 0.2,
-       "dispersion": 17.0
-      },
-      "ui": {
-       "x": 858.0,
-       "y": 190.0
-      }
-     },
-     {
-      "id": "edfa1",
-      "type": "EDFA",
-      "params": {
-       "gain": 16.0,
-       "noise_figure": 6.0
-      },
-      "ui": {
-       "x": 996.0,
-       "y": 190.0
-      }
-     },
-     {
-      "id": "osa",
-      "type": "OpticalSpectrumAnalyzer",
-      "params": {
-       "center_wavelength": 1548.7989532713018,
-       "span": 800.0,
-       "points": 1024.0,
-       "resolution_bandwidth": 12.5
-      },
-      "ui": {
-       "x": 1134.0,
-       "y": 60.0
-      }
-     },
-     {
-      "id": "pm",
-      "type": "PowerMeter",
-      "params": {},
-      "ui": {
-       "x": 1134.0,
-       "y": 200.0
-      }
-     },
-     {
-      "id": "osnr",
-      "type": "OSNRMeter",
-      "params": {},
-      "ui": {
-       "x": 1134.0,
-       "y": 320.0
-      }
-     }
-    ],
-    "edges": [
-     {
-      "from": [
-       "prbs",
-       "out"
-      ],
-      "to": [
-       "drv",
-       "in"
-      ]
-     },
-     {
-      "from": [
-       "f0",
-       "out"
-      ],
-      "to": [
-       "edfa0",
-       "in"
-      ]
-     },
-     {
-      "from": [
-       "f1",
-       "out"
-      ],
-      "to": [
-       "edfa1",
-       "in"
-      ]
-     },
-     {
-      "from": [
-       "mux",
-       "out"
-      ],
-      "to": [
-       "f0",
-       "in"
-      ]
-     },
-     {
-      "from": [
-       "edfa0",
-       "out"
-      ],
-      "to": [
-       "f1",
-       "in"
-      ]
-     },
-     {
-      "from": [
-       "mzm0",
-       "out"
-      ],
-      "to": [
-       "mux",
-       "in0"
-      ]
-     },
-     {
-      "from": [
-       "mzm1",
-       "out"
-      ],
-      "to": [
-       "mux",
-       "in1"
-      ]
-     },
-     {
-      "from": [
-       "mzm2",
-       "out"
-      ],
-      "to": [
-       "mux",
-       "in2"
-      ]
-     },
-     {
-      "from": [
-       "mzm3",
-       "out"
-      ],
-      "to": [
-       "mux",
-       "in3"
-      ]
-     },
-     {
-      "from": [
-       "drv",
-       "out"
-      ],
-      "to": [
-       "mzm0",
-       "electrical_in"
-      ]
-     },
-     {
-      "from": [
-       "ch0",
-       "out"
-      ],
-      "to": [
-       "mzm0",
-       "optical_in"
-      ]
-     },
-     {
-      "from": [
-       "drv",
-       "out"
-      ],
-      "to": [
-       "mzm1",
-       "electrical_in"
-      ]
-     },
-     {
-      "from": [
-       "ch1",
-       "out"
-      ],
-      "to": [
-       "mzm1",
-       "optical_in"
-      ]
-     },
-     {
-      "from": [
-       "drv",
-       "out"
-      ],
-      "to": [
-       "mzm2",
-       "electrical_in"
-      ]
-     },
-     {
-      "from": [
-       "ch2",
-       "out"
-      ],
-      "to": [
-       "mzm2",
-       "optical_in"
-      ]
-     },
-     {
-      "from": [
-       "drv",
-       "out"
-      ],
-      "to": [
-       "mzm3",
-       "electrical_in"
-      ]
-     },
-     {
-      "from": [
-       "ch3",
-       "out"
-      ],
-      "to": [
-       "mzm3",
-       "optical_in"
-      ]
-     },
-     {
-      "from": [
-       "edfa1",
-       "out"
-      ],
-      "to": [
-       "osa",
-       "in"
-      ]
-     },
-     {
-      "from": [
-       "edfa1",
-       "out"
-      ],
-      "to": [
-       "osnr",
-       "in"
-      ]
-     },
-     {
-      "from": [
-       "edfa1",
-       "out"
-      ],
-      "to": [
-       "pm",
-       "in"
-      ]
-     }
-    ],
-    "notes": {
-     "title": "WDM: four channels and an OSNR",
-     "body": "Four lasers [[ch0]]\u2026[[ch3]] sit on the ITU 100 GHz grid, each modulated by its own MZM, and the\ncombiner [[mux]] puts them on one fibre. Two spans of 80 km each lose 16 dB, and two EDFAs\n[[edfa0]] [[edfa1]] put it back. The analyser [[osa]] draws the spectrum and [[osnr]] reads the\nsignal-to-noise ratio off it.\n\n## The grid\n\nChannels are spaced evenly in *frequency*, not wavelength:\n\n$$\\nu_n = \\nu_0 + n\\,\\Delta\\nu, \\qquad \\Delta\\lambda \\approx \\frac{\\lambda^2}{c}\\,\\Delta\\nu$$\n\nAt 1550 nm, 100 GHz is about 0.8 nm.\n\n## Where the noise floor comes from\n\nAn amplifier with gain $G$ adds amplified spontaneous emission. In a reference bandwidth\n$B_\\text{ref}$, over both polarisations,\n\n$$P_\\text{ASE} = 2\\,n_{sp}\\,h\\nu\\,(G-1)\\,B_\\text{ref}$$\n\nand at high gain the noise figure is $\\mathrm{NF} \\approx 2n_{sp}$.\n\n## OSNR\n\n$$\\mathrm{OSNR} = \\frac{P_\\text{ch}}{P_\\text{ASE}} \\quad \\text{in } B_\\text{ref} = 12.5\\ \\text{GHz}\\ (0.1\\ \\text{nm})$$\n\nFor a chain of $N$ identical spans, the rule of thumb at 1550 nm (a rule of thumb, not this\nmodel) is\n\n$$\\mathrm{OSNR_{dB}} \\approx 58 + P_\\text{ch,dBm} - L_\\text{span,dB} - \\mathrm{NF_{dB}} - 10\\log_{10}N$$\n\n## Resolution bandwidth\n\nAn OSA reports power *per resolution bandwidth*. Widen it from $B_1$ to $B_2$ and the ASE floor\nrises by $10\\log_{10}(B_2/B_1)$ dB, while a channel narrower than the window reads the same.\n\n## Try this\n\n- Change the resolution bandwidth of [[osa]] from 12.5 to 50 GHz. How far does the floor move?\n- Raise the noise figure of [[edfa0]] by 3 dB. Does the OSNR fall by 3 dB?\n- Add a third span and amplifier. The rule of thumb predicts a loss of $10\\log_{10}(3/2)$ dB."
-    },
-    "annotations": [
-     {
-      "id": "a1",
-      "kind": "rect",
-      "x": 21.0,
-      "y": 13.0,
-      "w": 410.0,
-      "h": 388.0,
-      "text": "4 transmitters",
-      "tone": "optical"
-     },
-     {
-      "id": "a2",
-      "kind": "rect",
-      "x": 573.0,
-      "y": 163.0,
-      "w": 548.0,
-      "h": 88.0,
-      "text": "2 amplified spans",
-      "tone": "binary"
-     },
-     {
-      "id": "a3",
-      "kind": "rect",
-      "x": 1125.0,
-      "y": 33.0,
-      "w": 134.0,
-      "h": 348.0,
-      "text": "Instruments",
-      "tone": "metric"
-     },
-     {
-      "id": "a4",
-      "kind": "note",
-      "x": 700.0,
-      "y": 300.0,
-      "w": 230.0,
-      "h": 96.0,
-      "text": "Each EDFA adds noise as well as gain. The floor it leaves under the channels is what the OSNR meter reads.",
-      "tone": "electrical"
-     },
-     {
-      "id": "a5",
-      "kind": "arrow",
-      "x1": 770.0,
-      "y1": 298.0,
-      "x2": 778.0,
-      "y2": 246.0,
-      "text": "",
-      "tone": "metric"
-     }
-    ]
-   }
-  },
-  "ook-eye": {
-   "title": "Direct detection, eye diagram",
-   "project": {
-    "schema_version": 1,
-    "maiman_version": "0.16.0",
-    "context": {
-     "bit_rate": 10000000000.0,
-     "samples_per_symbol": 32,
-     "sequence_length": 512,
-     "seed": 4,
-     "precision": "single"
-    },
-    "nodes": [
-     {
-      "id": "prbs",
-      "type": "PRBSGenerator",
-      "params": {
-       "order": 7.0
-      },
-      "ui": {
-       "x": 30.0,
-       "y": 220.0
-      }
-     },
-     {
-      "id": "drv",
-      "type": "NRZDriver",
-      "params": {
-       "v_low": 4.0,
-       "v_high": 0.0
-      },
-      "ui": {
-       "x": 168.0,
-       "y": 220.0
-      }
-     },
-     {
-      "id": "tx",
-      "type": "CWLaser",
-      "params": {
-       "power": 0.0,
-       "wavelength": 1550.0
-      },
-      "ui": {
-       "x": 168.0,
-       "y": 60.0
-      }
-     },
-     {
-      "id": "mzm",
-      "type": "MachZehnderModulator",
-      "params": {
-       "v_pi": 4.0,
-       "extinction_ratio": 30.0
-      },
-      "ui": {
-       "x": 306.0,
-       "y": 220.0
-      }
-     },
-     {
-      "id": "fib",
-      "type": "Fiber",
-      "params": {
-       "length": 20.0,
-       "attenuation": 0.2,
-       "dispersion": 17.0
-      },
-      "ui": {
-       "x": 444.0,
-       "y": 220.0
-      }
-     },
-     {
-      "id": "pin",
-      "type": "PINPhotodiode",
-      "params": {
-       "responsivity": 0.8
-      },
-      "ui": {
-       "x": 582.0,
-       "y": 220.0
-      }
-     },
-     {
-      "id": "lpf",
-      "type": "ElectricalFilter",
-      "params": {
-       "bandwidth": 7.0
-      },
-      "ui": {
-       "x": 720.0,
-       "y": 220.0
-      }
-     },
-     {
-      "id": "eye",
-      "type": "EyeDiagram",
-      "params": {
-       "span_symbols": 2.0,
-       "time_bins": 64.0,
-       "amplitude_bins": 72.0
-      },
-      "ui": {
-       "x": 858.0,
-       "y": 130.0
-      }
-     },
-     {
-      "id": "ber",
-      "type": "BERAnalyzer",
-      "params": {},
-      "ui": {
-       "x": 858.0,
-       "y": 310.0
-      }
-     }
-    ],
-    "edges": [
-     {
-      "from": [
-       "lpf",
-       "out"
-      ],
-      "to": [
-       "ber",
-       "in"
-      ]
-     },
-     {
-      "from": [
-       "prbs",
-       "out"
-      ],
-      "to": [
-       "ber",
-       "reference"
-      ]
-     },
-     {
-      "from": [
-       "prbs",
-       "out"
-      ],
-      "to": [
-       "drv",
-       "in"
-      ]
-     },
-     {
-      "from": [
-       "lpf",
-       "out"
-      ],
-      "to": [
-       "eye",
-       "in"
-      ]
-     },
-     {
-      "from": [
-       "mzm",
-       "out"
-      ],
-      "to": [
-       "fib",
-       "in"
-      ]
-     },
-     {
-      "from": [
-       "pin",
-       "out"
-      ],
-      "to": [
-       "lpf",
-       "in"
-      ]
-     },
-     {
-      "from": [
-       "drv",
-       "out"
-      ],
-      "to": [
-       "mzm",
-       "electrical_in"
-      ]
-     },
-     {
-      "from": [
-       "tx",
-       "out"
-      ],
-      "to": [
-       "mzm",
-       "optical_in"
-      ]
-     },
-     {
-      "from": [
-       "fib",
-       "out"
-      ],
-      "to": [
-       "pin",
-       "in"
-      ]
-     }
-    ],
-    "notes": {
-     "title": "Direct detection: reading an eye",
-     "body": "A 10 Gb/s pseudo-random pattern [[prbs]] drives a Mach\u2013Zehnder modulator [[mzm]] that switches\nthe laser [[tx]] on and off. After 20 km of fibre [[fib]], a PIN photodiode [[pin]] and a\nfilter [[lpf]] turn the light back into a current. The eye [[eye]] folds that current over\ntwo bit periods, and [[ber]] counts errors against the original pattern.\n\n## The modulator\n\nDriven push\u2013pull, an MZM transmits\n\n$$P_\\text{out} = P_\\text{in}\\cos^2\\left(\\frac{\\pi V}{2V_\\pi}\\right)$$\n\nso a drive swinging between $0$ and $V_\\pi$ takes the light from full to nearly dark. How dark\nis set by the extinction ratio, $\\mathrm{ER} = 10\\log_{10}(P_1/P_0)$.\n\n## The fibre\n\nPower falls exponentially with length: $P(L) = P(0)\\,10^{-\\alpha L/10}$, with $\\alpha$ in dB/km.\nAt 0.2 dB/km, 20 km costs 4 dB. Chromatic dispersion spreads each pulse by roughly\n\n$$\\Delta\\tau \\approx D\\,L\\,\\Delta\\lambda$$\n\nWith $D = 17$ ps/(nm\u00b7km) and the 0.08 nm a 10 Gb/s signal occupies, that is about 27 ps,\na quarter of the 100 ps bit slot.\n\n## The photodiode and its noise\n\nThe photocurrent is $I = \\mathcal{R}P$. Two noises ride on it: shot noise, which grows with the\ncurrent, and the thermal noise of the load resistor, which does not.\n\n$$\\sigma^2 = 2q\\,(I + I_d)\\,B + \\frac{4k_BT}{R_L}\\,B$$\n\n## From the eye to a bit error rate\n\nWith the mean and spread of the one and zero rails read off the eye,\n\n$$Q = \\frac{I_1 - I_0}{\\sigma_1 + \\sigma_0}, \\qquad \\mathrm{BER} = \\frac{1}{2}\\,\\mathrm{erfc}\\left(\\frac{Q}{\\sqrt{2}}\\right)$$\n\n$Q = 6$ is the classic target: a BER of about $10^{-9}$.\n\n## Try this\n\n- Stretch [[fib]] to 60, 80 and 100 km. Does the eye lose height first, or width?\n- Lower the power of [[tx]] until errors appear. That power is the receiver's sensitivity.\n- Narrow [[lpf]] to 3 GHz. Less noise gets through, but neighbouring bits start to overlap."
-    },
-    "annotations": [
-     {
-      "id": "a1",
-      "kind": "rect",
-      "x": 21.0,
-      "y": 33.0,
-      "w": 410.0,
-      "h": 248.0,
-      "text": "Transmitter",
-      "tone": "optical"
-     },
-     {
-      "id": "a2",
-      "kind": "rect",
-      "x": 435.0,
-      "y": 193.0,
-      "w": 134.0,
-      "h": 88.0,
-      "text": "Channel",
-      "tone": "binary"
-     },
-     {
-      "id": "a3",
-      "kind": "rect",
-      "x": 573.0,
-      "y": 193.0,
-      "w": 272.0,
-      "h": 88.0,
-      "text": "Receiver",
-      "tone": "electrical"
-     },
-     {
-      "id": "a4",
-      "kind": "rect",
-      "x": 849.0,
-      "y": 103.0,
-      "w": 134.0,
-      "h": 268.0,
-      "text": "Instruments",
-      "tone": "metric"
-     },
-     {
-      "id": "a5",
-      "kind": "note",
-      "x": 404.0,
-      "y": 330.0,
-      "w": 230.0,
-      "h": 96.0,
-      "text": "Lengthen the fibre and run again: loss lowers the eye, dispersion smears it sideways. $\\Delta\\tau \\approx D\\,L\\,\\Delta\\lambda$",
-      "tone": "electrical"
-     },
-     {
-      "id": "a6",
-      "kind": "arrow",
-      "x1": 484.0,
-      "y1": 328.0,
-      "x2": 502.0,
-      "y2": 276.0,
-      "text": "",
-      "tone": "metric"
-     }
-    ]
-   }
-  },
   "coherent-sdfec": {
-   "title": "Coherent link, soft-decision FEC",
+   "title": "4.3 Coherent link, soft-decision FEC",
    "project": {
     "schema_version": 1,
     "maiman_version": "0.16.0",

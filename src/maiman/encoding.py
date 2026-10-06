@@ -52,6 +52,7 @@ from .signals import (
     OpticalSpectrum,
     PAMMeasurement,
     PowerReading,
+    ScopeTrace,
     SymbolSignal,
 )
 
@@ -213,6 +214,20 @@ def _spectrum(spectrum: OpticalSpectrum) -> dict[str, Any]:
         "power_w": _numbers(spectrum.power_w),
         "power_per_resolution_w": _numbers(spectrum.power_per_resolution()),
         "resolution_bandwidth": number(spectrum.resolution_bandwidth),
+    }
+
+
+def _scope(trace: ScopeTrace) -> dict[str, Any]:
+    return {
+        "kind": "scope",
+        "time_ps": _numbers(np.asarray(trace.time) * 1e12),
+        "power_mw": _numbers(np.asarray(trace.power_w) * 1e3),
+        "chirp_ghz": _numbers(np.asarray(trace.chirp_hz) / 1e9),
+        "peak_power_mw": number(trace.peak_power_w * 1e3),
+        "fwhm_ps": number(trace.fwhm * 1e12),
+        "rms_width_ps": number(trace.rms_width * 1e12),
+        "centroid_ps": number(trace.centroid * 1e12),
+        "energy_pj": number(trace.energy_j * 1e12),
     }
 
 
@@ -425,6 +440,7 @@ _ENCODERS: dict[type, Any] = {
     SymbolSignal: _symbol,
     PowerReading: _power,
     OpticalSpectrum: _spectrum,
+    ScopeTrace: _scope,
     EyeHistogram: _eye_histogram,
     EyeMeasurement: _eye_measurement,
     PAMMeasurement: _pam_measurement,

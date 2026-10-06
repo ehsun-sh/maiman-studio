@@ -48,6 +48,7 @@ from maiman.components import (
     MachZehnderModulator,
     NRZDriver,
     OpticalSpectrumAnalyzer,
+    Oscilloscope,
     OSNRMeter,
     PAM4Driver,
     PINPhotodiode,
@@ -130,6 +131,7 @@ def metric_rich_link() -> Graph:
         PowerMeter(label="pm"),
         OSNRMeter(label="osnr"),
         OpticalSpectrumAnalyzer(points=256.0, label="osa"),
+        Oscilloscope(points=256.0, label="scope"),
     ):
         graph.connect(amp, graph.add(sink)["in"])
 

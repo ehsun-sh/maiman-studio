@@ -419,7 +419,7 @@ def test_the_shipped_eye_comes_from_the_project_beside_it() -> None:
 
     The reference is no longer the graph on the canvas — it cannot be, since
     that link has no eye — so it ships with the project it did come from, which
-    anyone can open from the File menu and take further.
+    anyone can open from the Examples menu and take further.
     """
     project = json.loads((PROJECTS / "ook_eye.maiman").read_text(encoding="utf-8"))
     assert "EyeDiagram" in {node["type"] for node in project["nodes"]}
@@ -1158,9 +1158,16 @@ def test_a_loop_control_is_captioned_and_warns_until_it_converges() -> None:
 
 #: Each template, and the project file the script beside it writes.
 TEMPLATE_FILES = {
-    "dwdm-link": "dwdm_link.maiman",
-    "wdm-osa": "wdm_osa.maiman",
+    "laser-meters": "laser_meters.maiman",
+    "loss-budget": "loss_budget.maiman",
+    "mzm-curve": "mzm_curve.maiman",
+    "pulse-spreading": "pulse_spreading.maiman",
+    "chirp-compression": "chirp_compression.maiman",
+    "soliton": "soliton.maiman",
+    "splitters": "splitters.maiman",
     "ook-eye": "ook_eye.maiman",
+    "wdm-osa": "wdm_osa.maiman",
+    "dwdm-link": "dwdm_link.maiman",
     "coherent-sdfec": "coherent_sdfec.maiman",
 }
 
@@ -1168,8 +1175,22 @@ TEMPLATE_FILES = {
 def test_every_template_row_is_a_project_the_page_carries() -> None:
     """A row with no project behind it is a control the page cannot back."""
     text = STUDIO.read_text(encoding="utf-8")
-    rows = set(re.findall(r'id="file-template-([a-z0-9-]+)"', text))
+    rows = set(re.findall(r'id="example-([a-z0-9-]+)"', text))
     assert rows == set(embedded()["templates"]) == set(TEMPLATE_FILES)
+
+
+def test_the_examples_menu_is_in_roadmap_order() -> None:
+    """Each row's number is the roadmap's, and the rows run in that order."""
+    text = STUDIO.read_text(encoding="utf-8")
+    menu = text[text.index('id="examples-menu"') :]
+    menu = menu[: menu.index("</div>\n    </div>")]
+    numbers = re.findall(r'role="menuitem" id="examples?-[a-z0-9-]+">(\d+)\.(\d+) ', menu)
+    order = [(int(a), int(b)) for a, b in numbers]
+    assert len(order) == len(TEMPLATE_FILES) + 1, "a row lost its number, or the flagship its row"
+    assert order == sorted(order)
+    for key, template in embedded()["templates"].items():
+        row = re.search(rf'id="example-{key}">([^<]+)<', menu)
+        assert row and row.group(1) == template["title"], key
 
 
 def test_every_template_is_the_file_beside_its_script() -> None:

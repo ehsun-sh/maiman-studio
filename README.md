@@ -20,7 +20,7 @@ link in this simulator descends from.*
 > ### Project status: 0.16.0 — released, and still moving.
 >
 > `pip install maiman`, then `maiman serve` — or [start from no Python at
-> all](#installing-and-running-it). Phases 0 through 5 are done: **65 components, more than 2250 tests, and
+> all](#installing-and-running-it). Phases 0 through 5 are done: **66 components, more than 2250 tests, and
 > every physics block checked against a closed-form result in CI.**
 >
 > **Links run end to end.** Direct detection — PRBS → NRZ → laser → MZM → fiber → PIN → filter →
@@ -140,7 +140,7 @@ You will see:
 
 ```
 Maiman Studio session server
-  65 components
+  66 components
   http://127.0.0.1:8765/
 ```
 
@@ -162,13 +162,15 @@ anything to see it work.
 3. **Change one and press Run again.** Set the fiber's length to 200 km and the received power
    drops by exactly the amount its attenuation says it should. Every number on screen is computed,
    not drawn.
-4. **The File menu opens templates** — complete links to start from: an eight-channel DWDM link on
-   the ITU grid with a multiplexer, a span, a demultiplexer and a counted receiver; a WDM spectrum on
-   an optical spectrum analyser; an eye diagram on a direct-detection link; a coherent link decoded
-   with soft-decision FEC. Each is a `.maiman` file in `examples/maiman/`, written by a script in
+4. **The Examples menu opens complete projects**, numbered and grouped as in
+   [the examples roadmap](docs/EXAMPLES_ROADMAP.md): first light (a laser on a meter, a loss budget,
+   the Mach–Zehnder's cosine, a pulse spreading, compressing and travelling as a soliton on the
+   oscilloscope, splitters and couplers), then an eye diagram on a direct-detection link, a WDM
+   spectrum, an eight-channel DWDM link, and coherent links with the full DSP chain and with
+   soft-decision FEC. Each is a `.maiman` file in `examples/maiman/`, written by a script in
    `examples/python/`.
-5. **Read the notes.** Every project the File menu opens comes with a lesson in a panel on the left
-   of the canvas: what the link is for, the formulas behind each stage, and what to try next. A
+5. **Read the notes.** Every project the Examples menu opens comes with a lesson in a panel on the
+   left of the canvas: what the link is for, the formulas behind each stage, and what to try next. A
    block named in the lesson is a link: click it and the block is selected on the canvas. The
    toolbar's note, frame and arrow tools put your own explanations on the canvas, and **Notes →
    Edit** writes a lesson of your own; both are saved in the `.maiman` file.
@@ -882,7 +884,7 @@ hardware too, and nobody runs an OTN link at 256 symbols either.
 
 ### A coherent link that runs on soft decisions
 
-`examples/maiman/coherent_sdfec.maiman` — open it from the File menu. 32 GBd 16-QAM, the staircase code at
+`examples/maiman/coherent_sdfec.maiman` — open it from the Examples menu. 32 GBd 16-QAM, the staircase code at
 16.4 % overhead, decoded on log-likelihood ratios from a max-log demapper rather than on bits:
 
 ```
@@ -3688,7 +3690,7 @@ time window, and results are reproducible.
 | **2 — Coherent transceiver** ✅ | Gray-coded M-QAM to 256, IQ modulator with bias and quadrature error, 90° hybrid, balanced detection, blind carrier frequency and phase recovery, coarse frequency acquisition over the whole sampled band, blind square-law timing recovery, dual polarization with a blind butterfly equaliser, root-raised-cosine shaping and matched filtering, differential quadrant encoding, receiver-side dispersion compensation over spans to 1000 km with blind estimation of the accumulated value, EVM/MER, constellation diagram, validated against closed-form SER | ~3 months |
 | **3 — GUI & WDM** ✅ | Wavelength-selective filters, the ITU grids and a multiplexer/demultiplexer pair on them with crosstalk that falls out of the channel spacing, an OSA, coupled-channel propagation (XPM with walk-off, FWM accumulating coherently across spans), the session server, a schematic editor — add, wire, move and delete blocks, edit parameters, run, sweep, open and save — the OSA's trace drawn in the dock, and 400G/800G reference designs validated against the OSNR relations, and a back-end indirection the propagation kernels dispatch through — CuPy runs it where a device exists, `maiman devices` cross-checks it against NumPy, and a CI job does the same on any runner labelled `gpu` | ~6 months |
 | **4 — PIC** ✅ | Bidirectional S-matrix circuit solver, waveguide, directional coupler, all-pass and add-drop ring resonators, cross-validated against SAX; N×N MMI couplers on the self-imaging phase relations; a Mach-Zehnder interferometer assembled from them — switch, interleaver, or both; and PDK import, which reads a foundry's fitted numbers out of a JSON kit and refuses to extrapolate them past the window they were fitted in; and birefringence, with each guided polarization carrying its own indices through the same reduction | — |
-| **5 — Gratings, sensing, loops and coupling** ✅ | Fibre Bragg gratings assembled from transfer matrices — apodized, chirped, sampled and phase-shifted — a circulator with isolation and return loss, and a grating read as a strain gauge and a thermometer, by a swept laser or by broadband light on an analyser; noise that carries the spectral shape of what it passed through; loop control that runs a cavity to its fixed point, and a delay line that turns the same loop into a recirculating one lap by lap; pump depletion for four-wave mixing and Raman's measured gain shape past its peak; an erbium transient spread across the spectrum, each channel moving by the fibre's own tilt, drained per channel by its own cross section, and answered by a pump control loop with a bandwidth and a ceiling; an amplifier's own ASE, both ways, depleting its inversion; PMD applied along the span between Kerr steps, and the coherent polarization term that moves power between the axes; a scalar mode solver for core and cladding modes, and the vector HE, EH, TE and TM modes the glass-air boundary splits them into, checked against the exact characteristic equation; glass that disperses as Sellmeier's silica and germania, which makes the default fibre a G.652 one; a long-period grating built on either, alone or as a pair recoupling its cladding light, and a tilted grating whose comb of cladding resonances reads what the fibre is dipped in, split by polarization when its vector modes are solved; edge and grating couplers that put a signal into the chip's TE and TM, the edge coupler's two facets a cavity summed bounce by bounce, and the grating coupler's passband, its teeth's own reflection, its bottom mirror and its apodization computed from its geometry; a PAM4 driver with its modulator's linearity corrected, and a feed-forward and decision-feedback equaliser, fractionally spaced or blind; a laser's linewidth and intensity noise from its own Langevin forces, and the partition noise between a Fabry-Perot laser's modes, carried down a link as each mode's own arrival time and spent at the detector; a directly modulated laser whose chirp comes out of its own rate equations, with its junction's heat moving the line; and templates in the studio's File menu, including an eight-channel DWDM link | — |
+| **5 — Gratings, sensing, loops and coupling** ✅ | Fibre Bragg gratings assembled from transfer matrices — apodized, chirped, sampled and phase-shifted — a circulator with isolation and return loss, and a grating read as a strain gauge and a thermometer, by a swept laser or by broadband light on an analyser; noise that carries the spectral shape of what it passed through; loop control that runs a cavity to its fixed point, and a delay line that turns the same loop into a recirculating one lap by lap; pump depletion for four-wave mixing and Raman's measured gain shape past its peak; an erbium transient spread across the spectrum, each channel moving by the fibre's own tilt, drained per channel by its own cross section, and answered by a pump control loop with a bandwidth and a ceiling; an amplifier's own ASE, both ways, depleting its inversion; PMD applied along the span between Kerr steps, and the coherent polarization term that moves power between the axes; a scalar mode solver for core and cladding modes, and the vector HE, EH, TE and TM modes the glass-air boundary splits them into, checked against the exact characteristic equation; glass that disperses as Sellmeier's silica and germania, which makes the default fibre a G.652 one; a long-period grating built on either, alone or as a pair recoupling its cladding light, and a tilted grating whose comb of cladding resonances reads what the fibre is dipped in, split by polarization when its vector modes are solved; edge and grating couplers that put a signal into the chip's TE and TM, the edge coupler's two facets a cavity summed bounce by bounce, and the grating coupler's passband, its teeth's own reflection, its bottom mirror and its apodization computed from its geometry; a PAM4 driver with its modulator's linearity corrected, and a feed-forward and decision-feedback equaliser, fractionally spaced or blind; a laser's linewidth and intensity noise from its own Langevin forces, and the partition noise between a Fabry-Perot laser's modes, carried down a link as each mode's own arrival time and spent at the detector; a directly modulated laser whose chirp comes out of its own rate equations, with its junction's heat moving the line; and templates in the studio's Examples menu, including an eight-channel DWDM link | — |
 | **Open** | Nothing on the W-Port: all eight of its interfaces, DO and DPO, run end to end and back. What is left are the approximations each block states in its own docstring and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) collects | — |
 
 ¹ One developer, part-time. Estimates, not commitments.

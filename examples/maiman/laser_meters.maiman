@@ -1,0 +1,158 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 10000000000.0,
+    "samples_per_symbol": 8,
+    "sequence_length": 256,
+    "seed": 1,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "laser",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1550.0,
+        "linewidth": 100.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 150.0
+      }
+    },
+    {
+      "id": "pm_tx",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+        "x": 330.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "osa",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1550.0,
+        "span": 100.0,
+        "points": 1024.0,
+        "resolution_bandwidth": 12.5
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 150.0
+      }
+    },
+    {
+      "id": "att",
+      "type": "Attenuator",
+      "params": {
+        "attenuation": 3.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 270.0
+      }
+    },
+    {
+      "id": "pm_rx",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+        "x": 330.0,
+        "y": 270.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "laser",
+        "out"
+      ],
+      "to": [
+        "att",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "laser",
+        "out"
+      ],
+      "to": [
+        "osa",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "att",
+        "out"
+      ],
+      "to": [
+        "pm_rx",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "laser",
+        "out"
+      ],
+      "to": [
+        "pm_tx",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "1.1 A laser, a power meter and a spectrum",
+    "body": "A laser [[laser]] puts out one milliwatt at 1550 nm. Three instruments read it: a power meter\n[[pm_tx]], an optical spectrum analyser [[osa]], and a second meter [[pm_rx]] behind a 3 dB\nattenuator [[att]].\n\n## dBm\n\nOptical power is quoted against one milliwatt, on a log scale:\n\n$$P_\\text{dBm} = 10\\log_{10}\\frac{P}{1\\ \\text{mW}}, \\qquad P = 1\\ \\text{mW}\\times10^{P_\\text{dBm}/10}$$\n\nSo 0 dBm is 1 mW, +10 dBm is 10 mW and \u221230 dBm is 1 \u00b5W. A loss in dB *subtracts*: 3 dB halves\nthe power, which is why [[pm_rx]] reads \u22123.00 dBm, 0.501 mW.\n\n## What the analyser draws\n\nAn OSA sweeps a narrow filter across the band and reports the power that falls in it. The\nfilter's width is the **resolution bandwidth** (RBW), 12.5 GHz here (0.1 nm at 1550 nm).\n\nThis laser's linewidth is 100 kHz, five orders of magnitude narrower than the filter. So the line\non screen is the *filter's* shape, not the laser's, and its height is the laser's whole power:\n0 dBm. Converting a width in frequency to one in wavelength:\n\n$$\\Delta\\lambda \\approx \\frac{\\lambda^2}{c}\\,\\Delta\\nu \\quad\\Rightarrow\\quad 12.5\\ \\text{GHz} \\approx 0.1\\ \\text{nm}$$\n\n## Try this\n\n- Set [[laser]] to +3 dBm. What do the two meters read, in mW?\n- Widen the resolution bandwidth of [[osa]] to 50 GHz. The line gets wider; does it get taller?\n- Change [[att]] to 10 dB, then 20 dB. Each 10 dB is a factor of ten."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 123.0,
+      "w": 134.0,
+      "h": 88.0,
+      "text": "Source",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 321.0,
+      "y": 13.0,
+      "w": 134.0,
+      "h": 318.0,
+      "text": "Instruments",
+      "tone": "metric"
+    },
+    {
+      "id": "a3",
+      "kind": "note",
+      "x": 160.0,
+      "y": 370.0,
+      "w": 230.0,
+      "h": 96.0,
+      "text": "Halving the power is 3 dB: $10\\log_{10}(1/2) = -3.01$ dB. In dBm, losses subtract.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a4",
+      "kind": "arrow",
+      "x1": 230.0,
+      "y1": 368.0,
+      "x2": 238.0,
+      "y2": 326.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

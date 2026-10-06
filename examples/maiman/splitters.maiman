@@ -1,0 +1,230 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 10000000000.0,
+    "samples_per_symbol": 8,
+    "sequence_length": 256,
+    "seed": 1,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "laser_a",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 60.0
+      }
+    },
+    {
+      "id": "laser_b",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1551.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 300.0
+      }
+    },
+    {
+      "id": "split4",
+      "type": "Splitter",
+      "params": {},
+      "config": {
+        "num_outputs": 4
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 60.0
+      }
+    },
+    {
+      "id": "tap",
+      "type": "DirectionalCoupler",
+      "params": {
+        "coupling": 0.1
+      },
+      "config": {
+        "second_input": false
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 300.0
+      }
+    },
+    {
+      "id": "combiner",
+      "type": "Combiner",
+      "params": {},
+      "config": {
+        "num_inputs": 2
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 180.0
+      }
+    },
+    {
+      "id": "pm_quarter",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+        "x": 480.0,
+        "y": 60.0
+      }
+    },
+    {
+      "id": "pm_tap",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+        "x": 480.0,
+        "y": 300.0
+      }
+    },
+    {
+      "id": "pm_sum",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+        "x": 480.0,
+        "y": 180.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "split4",
+        "out1"
+      ],
+      "to": [
+        "combiner",
+        "in0"
+      ]
+    },
+    {
+      "from": [
+        "tap",
+        "out1"
+      ],
+      "to": [
+        "combiner",
+        "in1"
+      ]
+    },
+    {
+      "from": [
+        "split4",
+        "out0"
+      ],
+      "to": [
+        "pm_quarter",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "combiner",
+        "out"
+      ],
+      "to": [
+        "pm_sum",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "tap",
+        "out2"
+      ],
+      "to": [
+        "pm_tap",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "laser_a",
+        "out"
+      ],
+      "to": [
+        "split4",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "laser_b",
+        "out"
+      ],
+      "to": [
+        "tap",
+        "in1"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "1.7 Splitters, couplers and a combiner",
+    "body": "Three ways to divide or join light. A 1:4 splitter [[split4]] shares [[laser_a]] four ways.\nA directional coupler [[tap]] takes 10 % of [[laser_b]] off to a monitor. A combiner\n[[combiner]] puts one quarter of the first laser and the through port of the coupler onto one\nfibre, and [[pm_sum]] measures them together.\n\n## Splitting costs 3 dB per halving\n\nAn ideal $1{:}N$ splitter gives each output $1/N$ of the power:\n\n$$L_\\text{split} = 10\\log_{10}N \\quad\\Rightarrow\\quad 1{:}4 = 6.02\\ \\text{dB}, \\quad 1{:}32 = 15.05\\ \\text{dB}$$\n\n[[pm_quarter]] reads \u22126.02 dBm, 0.25 mW. A passive optical network's 1:32 split costs more than\n70 km of fibre.\n\n## A coupler conserves power\n\nA coupler with power coupling $\\kappa$ sends $\\kappa$ across and keeps $1-\\kappa$ on the straight\npath:\n\n$$P_\\text{cross} = \\kappa P_\\text{in}, \\qquad P_\\text{through} = (1-\\kappa)\\,P_\\text{in}$$\n\nWith $\\kappa = 0.1$, the monitor [[pm_tap]] gets \u221210 dBm and the through port keeps 0.9 mW\n(\u22120.46 dBm). The two add back to the input: nothing is lost in an ideal coupler.\n\n## Powers add in milliwatts\n\nThe combiner joins two *different* wavelengths, 1550 and 1551 nm, so their powers simply add:\n\n$$P_\\text{sum} = 0.25 + 0.90 = 1.15\\ \\text{mW} = +0.61\\ \\text{dBm}$$\n\nAdding the dBm values, \u22126.02 + (\u22120.46), would be meaningless. Two beams at the *same* wavelength\nwould interfere instead, which is why [[combiner]] refuses them: that needs a coupler.\n\n## Try this\n\n- Change [[split4]]'s excess loss to 0.5 dB, as a real splitter has.\n- Set the coupling of [[tap]] to 0.5 for a 3 dB coupler. What does [[pm_sum]] read?\n- Set [[laser_b]] to 1550 nm and run: read the combiner's message in the Log tab."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 33.0,
+      "w": 134.0,
+      "h": 328.0,
+      "text": "Two colours",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 171.0,
+      "y": 33.0,
+      "w": 284.0,
+      "h": 328.0,
+      "text": "Dividing and joining",
+      "tone": "binary"
+    },
+    {
+      "id": "a3",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 33.0,
+      "w": 134.0,
+      "h": 328.0,
+      "text": "Meters",
+      "tone": "metric"
+    },
+    {
+      "id": "a4",
+      "kind": "note",
+      "x": 646.0,
+      "y": 160.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "Powers add in milliwatts, not in dBm: 0.25 + 0.90 = 1.15 mW = +0.61 dBm.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 644.0,
+      "y1": 206.0,
+      "x2": 610.0,
+      "y2": 206.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

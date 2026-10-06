@@ -1058,6 +1058,56 @@ class OpticalSpectrum:
 
 
 @dataclass(frozen=True)
+class ScopeTrace:
+    """Optical power against time, as a fast photodiode on a sampling scope shows it.
+
+    The eye diagram folds a waveform onto two symbol periods, which is right for
+    a data signal and useless for one pulse: there is nothing to fold. This is
+    the unfolded trace, reduced to a fixed number of points so a long window
+    never reaches the interface whole, and with the pulse figures a lesson
+    quotes measured from the full-resolution samples rather than the reduced
+    ones.
+    """
+
+    time: np.ndarray
+    """Display grid [s], relative to the centre of the simulated window."""
+
+    power_w: np.ndarray
+    """Power at each display point [W], both polarizations, every band."""
+
+    chirp_hz: np.ndarray
+    """Instantaneous frequency offset from the carrier [Hz], NaN where too dark to read."""
+
+    peak_power_w: float
+    """Highest instantaneous power in the window [W]."""
+
+    fwhm: float
+    """Full width at half maximum of the brightest feature [s]; NaN if it touches the edge."""
+
+    rms_width: float
+    """Power-weighted standard deviation of time [s]."""
+
+    centroid: float
+    """Power-weighted mean time [s], relative to the window centre."""
+
+    energy_j: float
+    """Integral of power over the window [J]."""
+
+    def __post_init__(self) -> None:
+        if not (self.time.shape == self.power_w.shape == self.chirp_hz.shape):
+            raise ValueError("time, power_w and chirp_hz must share a shape")
+        object.__setattr__(self, "time", freeze(self.time))
+        object.__setattr__(self, "power_w", freeze(self.power_w))
+        object.__setattr__(self, "chirp_hz", freeze(self.chirp_hz))
+
+    def __repr__(self) -> str:
+        return (
+            f"ScopeTrace(peak {self.peak_power_w * 1e3:.4g} mW, "
+            f"FWHM {self.fwhm * 1e12:.4g} ps, rms {self.rms_width * 1e12:.4g} ps)"
+        )
+
+
+@dataclass(frozen=True)
 class EyeHistogram:
     """A binned eye diagram — the reduced form of a waveform, not the waveform.
 
