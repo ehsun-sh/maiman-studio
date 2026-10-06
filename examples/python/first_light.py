@@ -272,6 +272,7 @@ SPLITTERS_LAYOUT: Layout = {
     "pm_quarter": {"x": col(3), "y": 60.0},
     "pm_sum": {"x": col(3), "y": 180.0},
     "pm_tap": {"x": col(3), "y": 300.0},
+    "osa": {"x": col(3), "y": 420.0},
 }
 
 
@@ -290,6 +291,19 @@ def splitters() -> Graph:
     graph.connect(split4["out1"], combiner["in0"])
     graph.connect(tap["out1"], combiner["in1"])
     graph.connect(combiner, graph.add(PowerMeter(label="pm_sum"))["in"])
+    # The two colours the combiner carries, each at its own wavelength: the
+    # meter adds them, the spectrum keeps them apart.
+    osa = graph.add(
+        OpticalSpectrumAnalyzer(
+            auto_span=False,
+            center_wavelength=1550.5,
+            span=300.0,
+            points=1024.0,
+            resolution_bandwidth=12.5,
+            label="osa",
+        )
+    )
+    graph.connect(combiner, osa["in"])
     return graph
 
 

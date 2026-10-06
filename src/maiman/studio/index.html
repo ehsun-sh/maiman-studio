@@ -335,6 +335,19 @@ verdict, and DESIGN.md
   /* The examples list grows by a phase at a time; past the window's height it
      scrolls rather than running off the bottom of the page. */
   .menu-pop-tall { max-height: calc(100vh - 80px); overflow-y: auto; }
+  /* The examples come one phase to a submenu: the whole list outgrew the
+     window. A group opens to its right on hover, on click, or on the right
+     arrow, and its rows are hidden by the stylesheet rather than the `hidden`
+     attribute, which `.menu-pop`'s display would override. */
+  .menu-group { position: relative; display: flex; flex-direction: column; }
+  .menu-sub {
+    display: none; top: -5px; left: 100%; margin-left: 2px;
+    max-height: calc(100vh - 80px); overflow-y: auto;
+  }
+  .menu-group:hover > .menu-sub, .menu-group[data-open] > .menu-sub { display: flex; }
+  .menu-group:hover > .menu-group-btn, .menu-group[data-open] > .menu-group-btn {
+    background: var(--raised); color: var(--ink);
+  }
   /* The align menu drops from a toolbar button rather than from the menubar, so
      it positions against the toolbar. Same furniture, one different anchor. */
   .toolbar { position: relative; }
@@ -1112,29 +1125,45 @@ verdict, and DESIGN.md
     <div class="menu-wrap">
       <button class="menu-item" id="examples-btn" aria-haspopup="true"
               aria-expanded="false">Examples</button>
-      <div class="menu-pop menu-pop-tall" id="examples-menu" role="menu" hidden>
-        <div class="menu-head" role="presentation">1 · First light</div>
-        <button role="menuitem" id="example-laser-meters">1.1 Laser, power meter and OSA</button>
-        <button role="menuitem" id="example-loss-budget">1.2 Loss budget</button>
-        <button role="menuitem" id="example-mzm-curve">1.3 MZM transfer curve</button>
-        <button role="menuitem" id="example-pulse-spreading">1.4 A pulse spreading in fibre</button>
-        <button role="menuitem" id="example-chirp-compression">1.5 Chirped pulse compression</button>
-        <button role="menuitem" id="example-soliton">1.6 The fundamental soliton</button>
-        <button role="menuitem" id="example-splitters">1.7 Splitters and couplers</button>
-        <div class="menu-head" role="presentation">2 · Direct-detection links</div>
-        <button role="menuitem" id="example-ook-eye">2.1 Direct detection, eye diagram</button>
-        <button role="menuitem" id="example-receiver-sensitivity">2.2 Receiver sensitivity, PIN and APD</button>
-        <button role="menuitem" id="example-dml-reach">2.3 DML chirp and reach</button>
-        <button role="menuitem" id="example-mode-partition">2.4 Laser noise: mode partition</button>
-        <button role="menuitem" id="example-pam4-lane">2.5 PAM4 lane with an equaliser</button>
-        <button role="menuitem" id="example-cwdm4">2.6 CWDM4 in the O-band</button>
-        <button role="menuitem" id="example-gpon">2.7 GPON downstream, 1:32</button>
-        <div class="menu-head" role="presentation">3 · Amplified and WDM links</div>
-        <button role="menuitem" id="example-wdm-osa">3.3 WDM spectrum, 4 channels</button>
-        <button role="menuitem" id="example-dwdm-link">3.4 DWDM link, 8 × 10 Gb/s</button>
-        <div class="menu-head" role="presentation">4 · Coherent transmission</div>
-        <button role="menuitem" id="examples-flagship">4.2 Coherent 16-QAM over 80 km</button>
-        <button role="menuitem" id="example-coherent-sdfec">4.3 Coherent link, soft-decision FEC</button>
+      <div class="menu-pop" id="examples-menu" role="menu" hidden>
+        <div class="menu-group">
+          <button class="menu-group-btn" role="menuitem" aria-haspopup="true" aria-expanded="false">1 · First light<span class="menu-key">▸</span></button>
+          <div class="menu-pop menu-sub" role="menu">
+            <button role="menuitem" id="example-laser-meters">1.1 Laser, power meter and OSA</button>
+            <button role="menuitem" id="example-loss-budget">1.2 Loss budget</button>
+            <button role="menuitem" id="example-mzm-curve">1.3 MZM transfer curve</button>
+            <button role="menuitem" id="example-pulse-spreading">1.4 A pulse spreading in fibre</button>
+            <button role="menuitem" id="example-chirp-compression">1.5 Chirped pulse compression</button>
+            <button role="menuitem" id="example-soliton">1.6 The fundamental soliton</button>
+            <button role="menuitem" id="example-splitters">1.7 Splitters and couplers</button>
+          </div>
+        </div>
+        <div class="menu-group">
+          <button class="menu-group-btn" role="menuitem" aria-haspopup="true" aria-expanded="false">2 · Direct-detection links<span class="menu-key">▸</span></button>
+          <div class="menu-pop menu-sub" role="menu">
+            <button role="menuitem" id="example-ook-eye">2.1 Direct detection, eye diagram</button>
+            <button role="menuitem" id="example-receiver-sensitivity">2.2 Receiver sensitivity, PIN and APD</button>
+            <button role="menuitem" id="example-dml-reach">2.3 DML chirp and reach</button>
+            <button role="menuitem" id="example-mode-partition">2.4 Laser noise: mode partition</button>
+            <button role="menuitem" id="example-pam4-lane">2.5 PAM4 lane with an equaliser</button>
+            <button role="menuitem" id="example-cwdm4">2.6 CWDM4 in the O-band</button>
+            <button role="menuitem" id="example-gpon">2.7 GPON downstream, 1:32</button>
+          </div>
+        </div>
+        <div class="menu-group">
+          <button class="menu-group-btn" role="menuitem" aria-haspopup="true" aria-expanded="false">3 · Amplified and WDM links<span class="menu-key">▸</span></button>
+          <div class="menu-pop menu-sub" role="menu">
+            <button role="menuitem" id="example-wdm-osa">3.3 WDM spectrum, 4 channels</button>
+            <button role="menuitem" id="example-dwdm-link">3.4 DWDM link, 8 × 10 Gb/s</button>
+          </div>
+        </div>
+        <div class="menu-group">
+          <button class="menu-group-btn" role="menuitem" aria-haspopup="true" aria-expanded="false">4 · Coherent transmission<span class="menu-key">▸</span></button>
+          <div class="menu-pop menu-sub" role="menu">
+            <button role="menuitem" id="examples-flagship">4.2 Coherent 16-QAM over 80 km</button>
+            <button role="menuitem" id="example-coherent-sdfec">4.3 Coherent link, soft-decision FEC</button>
+          </div>
+        </div>
       </div>
     </div>
     <!-- Reading a project is a file the user picks, not a path the server is
@@ -23724,6 +23753,21 @@ verdict, and DESIGN.md
        "x": 480.0,
        "y": 180.0
       }
+     },
+     {
+      "id": "osa",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.5,
+       "span": 300.0,
+       "points": 1024.0,
+       "resolution_bandwidth": 12.5
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 420.0
+      }
      }
     ],
     "edges": [
@@ -23745,6 +23789,16 @@ verdict, and DESIGN.md
       "to": [
        "combiner",
        "in1"
+      ]
+     },
+     {
+      "from": [
+       "combiner",
+       "out"
+      ],
+      "to": [
+       "osa",
+       "in"
       ]
      },
      {
@@ -23800,7 +23854,7 @@ verdict, and DESIGN.md
     ],
     "notes": {
      "title": "1.7 Splitters, couplers and a combiner",
-     "body": "Three ways to divide or join light. A 1:4 splitter [[split4]] shares [[laser_a]] four ways.\nA directional coupler [[tap]] takes 10 % of [[laser_b]] off to a monitor. A combiner\n[[combiner]] puts one quarter of the first laser and the through port of the coupler onto one\nfibre, and [[pm_sum]] measures them together.\n\n## Splitting costs 3 dB per halving\n\nAn ideal $1{:}N$ splitter gives each output $1/N$ of the power:\n\n$$L_\\text{split} = 10\\log_{10}N \\quad\\Rightarrow\\quad 1{:}4 = 6.02\\ \\text{dB}, \\quad 1{:}32 = 15.05\\ \\text{dB}$$\n\n[[pm_quarter]] reads \u22126.02 dBm, 0.25 mW. A passive optical network's 1:32 split costs more than\n70 km of fibre.\n\n## A coupler conserves power\n\nA coupler with power coupling $\\kappa$ sends $\\kappa$ across and keeps $1-\\kappa$ on the straight\npath:\n\n$$P_\\text{cross} = \\kappa P_\\text{in}, \\qquad P_\\text{through} = (1-\\kappa)\\,P_\\text{in}$$\n\nWith $\\kappa = 0.1$, the monitor [[pm_tap]] gets \u221210 dBm and the through port keeps 0.9 mW\n(\u22120.46 dBm). The two add back to the input: nothing is lost in an ideal coupler.\n\n## Powers add in milliwatts\n\nThe combiner joins two *different* wavelengths, 1550 and 1551 nm, so their powers simply add:\n\n$$P_\\text{sum} = 0.25 + 0.90 = 1.15\\ \\text{mW} = +0.61\\ \\text{dBm}$$\n\nAdding the dBm values, \u22126.02 + (\u22120.46), would be meaningless. Two beams at the *same* wavelength\nwould interfere instead, which is why [[combiner]] refuses them: that needs a coupler.\n\n## Try this\n\n- Change [[split4]]'s excess loss to 0.5 dB, as a real splitter has.\n- Set the coupling of [[tap]] to 0.5 for a 3 dB coupler. What does [[pm_sum]] read?\n- Set [[laser_b]] to 1550 nm and run: read the combiner's message in the Log tab."
+     "body": "Three ways to divide or join light. A 1:4 splitter [[split4]] shares [[laser_a]] four ways.\nA directional coupler [[tap]] takes 10 % of [[laser_b]] off to a monitor. A combiner\n[[combiner]] puts one quarter of the first laser and the through port of the coupler onto one\nfibre, and [[pm_sum]] measures them together. The spectrum [[osa]] keeps apart what the meter\nadds: two lines, 1 nm apart, each at its own power.\n\n## Splitting costs 3 dB per halving\n\nAn ideal $1{:}N$ splitter gives each output $1/N$ of the power:\n\n$$L_\\text{split} = 10\\log_{10}N \\quad\\Rightarrow\\quad 1{:}4 = 6.02\\ \\text{dB}, \\quad 1{:}32 = 15.05\\ \\text{dB}$$\n\n[[pm_quarter]] reads \u22126.02 dBm, 0.25 mW. A passive optical network's 1:32 split costs more than\n70 km of fibre.\n\n## A coupler conserves power\n\nA coupler with power coupling $\\kappa$ sends $\\kappa$ across and keeps $1-\\kappa$ on the straight\npath:\n\n$$P_\\text{cross} = \\kappa P_\\text{in}, \\qquad P_\\text{through} = (1-\\kappa)\\,P_\\text{in}$$\n\nWith $\\kappa = 0.1$, the monitor [[pm_tap]] gets \u221210 dBm and the through port keeps 0.9 mW\n(\u22120.46 dBm). The two add back to the input: nothing is lost in an ideal coupler.\n\n## Powers add in milliwatts\n\nThe combiner joins two *different* wavelengths, 1550 and 1551 nm, so their powers simply add:\n\n$$P_\\text{sum} = 0.25 + 0.90 = 1.15\\ \\text{mW} = +0.61\\ \\text{dBm}$$\n\nAdding the dBm values, \u22126.02 + (\u22120.46), would be meaningless. Two beams at the *same* wavelength\nwould interfere instead, which is why [[combiner]] refuses them: that needs a coupler.\n\n## Try this\n\n- Change [[split4]]'s excess loss to 0.5 dB, as a real splitter has.\n- Set the coupling of [[tap]] to 0.5 for a 3 dB coupler. What does [[pm_sum]] read?\n- Set [[laser_b]] to 1550 nm and run: read the combiner's message in the Log tab."
     },
     "annotations": [
      {
@@ -24267,6 +24321,15 @@ verdict, and DESIGN.md
       }
      },
      {
+      "id": "eye_pin",
+      "type": "EyeDiagram",
+      "params": {},
+      "ui": {
+       "x": 1080.0,
+       "y": 190.0
+      }
+     },
+     {
       "id": "lpf_apd",
       "type": "ElectricalFilter",
       "params": {
@@ -24283,6 +24346,15 @@ verdict, and DESIGN.md
       "params": {},
       "ui": {
        "x": 930.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "eye_apd",
+      "type": "EyeDiagram",
+      "params": {},
+      "ui": {
+       "x": 1080.0,
        "y": 340.0
       }
      }
@@ -24360,6 +24432,26 @@ verdict, and DESIGN.md
      },
      {
       "from": [
+       "lpf_apd",
+       "out"
+      ],
+      "to": [
+       "eye_apd",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "lpf_pin",
+       "out"
+      ],
+      "to": [
+       "eye_pin",
+       "in"
+      ]
+     },
+     {
+      "from": [
        "apd",
        "out"
       ],
@@ -24431,7 +24523,7 @@ verdict, and DESIGN.md
     ],
     "notes": {
      "title": "2.2 Receiver sensitivity: PIN against APD",
-     "body": "A 10 Gb/s on\u2013off keyed signal [[tx]] [[mzm]] goes through a variable attenuator [[att]] and is\nsplit three ways [[split]]: one copy to a power meter [[pm_rx]], one to a PIN photodiode\n[[pin]], and one to an avalanche photodiode [[apd]]. Each receiver has the same 7 GHz filter\nand an error counter, so the only difference between them is the detector.\n\n## What limits a PIN receiver\n\nThe photocurrent is $I = \\mathcal{R}P$. At low power the dominant noise is the thermal noise of\nthe load resistor, which does not depend on the signal at all:\n\n$$\\sigma_T^2 = \\frac{4k_BT}{R_L}\\,B$$\n\nSo $Q$ falls in proportion to the received power: halve the power and $Q$ halves.\n\n## What an APD changes\n\nAn avalanche photodiode multiplies the photocurrent by $M$ before the load sees it, so the signal\ngrows $M$ times while thermal noise stays put. The multiplication is random, which costs an\nexcess noise factor on the shot noise:\n\n$$\\sigma_s^2 = 2q\\,M^2F(M)\\,\\mathcal{R}P\\,B, \\qquad F(M) = kM + \\left(2 - \\frac{1}{M}\\right)(1 - k)$$\n\n$k$ is the ionisation ratio, 0.5 on [[apd]] (InGaAs).\n\n## Sensitivity\n\nThe **sensitivity** is the received power for $Q = 6$, a bit error rate of $10^{-9}$.\nOpen **Sweep**, choose [[att]] and its attenuation, and run 4 to 30 dB:\n\n| Receiver | Sensitivity at $Q = 6$ |\n| :-- | :-- |\n| PIN [[pin]] | \u221219.2 dBm |\n| APD [[apd]], $M = 10$ | \u221228.1 dBm |\n\nThe APD buys almost 9 dB, which is 45 km of fibre at 0.2 dB/km.\n\n## The optimum gain\n\nMore gain is not always better: signal grows as $M$, shot noise as $M^2F(M) \\approx kM^3$. At\n[[att]] = 20 dB (\u221227.8 dBm) the APD's $Q$ is 0.8 at $M = 1$, 6.4 at 10, peaks at 7.3 near\n$M = 20$ and falls back to 6.3 at 40.\n\n## Try this\n\n- Sweep the gain of [[apd]] from 1 to 40 at [[att]] = 20 dB, and find the peak.\n- Set its ionisation ratio to 0.02 (silicon). Where does the best gain move?\n- Narrow [[lpf_pin]] to 5 GHz. Thermal noise falls with $B$; does the eye stay open?"
+     "body": "A 10 Gb/s on\u2013off keyed signal [[tx]] [[mzm]] goes through a variable attenuator [[att]] and is\nsplit three ways [[split]]: one copy to a power meter [[pm_rx]], one to a PIN photodiode\n[[pin]], and one to an avalanche photodiode [[apd]]. Each receiver has the same 7 GHz filter\nand an error counter, so the only difference between them is the detector. Their eyes,\n[[eye_pin]] and [[eye_apd]], are in the Eye tab: raise [[att]] and watch the PIN's close first.\n\n## What limits a PIN receiver\n\nThe photocurrent is $I = \\mathcal{R}P$. At low power the dominant noise is the thermal noise of\nthe load resistor, which does not depend on the signal at all:\n\n$$\\sigma_T^2 = \\frac{4k_BT}{R_L}\\,B$$\n\nSo $Q$ falls in proportion to the received power: halve the power and $Q$ halves.\n\n## What an APD changes\n\nAn avalanche photodiode multiplies the photocurrent by $M$ before the load sees it, so the signal\ngrows $M$ times while thermal noise stays put. The multiplication is random, which costs an\nexcess noise factor on the shot noise:\n\n$$\\sigma_s^2 = 2q\\,M^2F(M)\\,\\mathcal{R}P\\,B, \\qquad F(M) = kM + \\left(2 - \\frac{1}{M}\\right)(1 - k)$$\n\n$k$ is the ionisation ratio, 0.5 on [[apd]] (InGaAs).\n\n## Sensitivity\n\nThe **sensitivity** is the received power for $Q = 6$, a bit error rate of $10^{-9}$.\nOpen **Sweep**, choose [[att]] and its attenuation, and run 4 to 30 dB:\n\n| Receiver | Sensitivity at $Q = 6$ |\n| :-- | :-- |\n| PIN [[pin]] | \u221219.2 dBm |\n| APD [[apd]], $M = 10$ | \u221228.1 dBm |\n\nThe APD buys almost 9 dB, which is 45 km of fibre at 0.2 dB/km.\n\n## The optimum gain\n\nMore gain is not always better: signal grows as $M$, shot noise as $M^2F(M) \\approx kM^3$. At\n[[att]] = 20 dB (\u221227.8 dBm) the APD's $Q$ is 0.8 at $M = 1$, 6.4 at 10, peaks at 7.3 near\n$M = 20$ and falls back to 6.3 at 40.\n\n## Try this\n\n- Sweep the gain of [[apd]] from 1 to 40 at [[att]] = 20 dB, and find the peak.\n- Set its ionisation ratio to 0.02 (silicon). Where does the best gain move?\n- Narrow [[lpf_pin]] to 5 GHz. Thermal noise falls with $B$; does the eye stay open?"
     },
     "annotations": [
      {
@@ -24636,6 +24728,15 @@ verdict, and DESIGN.md
       }
      },
      {
+      "id": "eye_dml",
+      "type": "EyeDiagram",
+      "params": {},
+      "ui": {
+       "x": 1080.0,
+       "y": 40.0
+      }
+     },
+     {
       "id": "fibre_ext",
       "type": "Fiber",
       "params": {
@@ -24674,6 +24775,15 @@ verdict, and DESIGN.md
       "params": {},
       "ui": {
        "x": 930.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "eye_ext",
+      "type": "EyeDiagram",
+      "params": {},
+      "ui": {
+       "x": 1080.0,
        "y": 340.0
       }
      }
@@ -24761,6 +24871,26 @@ verdict, and DESIGN.md
      },
      {
       "from": [
+       "lpf_dml",
+       "out"
+      ],
+      "to": [
+       "eye_dml",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "lpf_ext",
+       "out"
+      ],
+      "to": [
+       "eye_ext",
+       "in"
+      ]
+     },
+     {
+      "from": [
        "dml",
        "out"
       ],
@@ -24842,7 +24972,7 @@ verdict, and DESIGN.md
     ],
     "notes": {
      "title": "2.3 The reach of a directly modulated laser",
-     "body": "The same 10 Gb/s pattern [[prbs]] leaves two transmitters. On top, the drive current of a\ndirectly modulated laser [[dml]] is switched. Below, a CW laser [[cw]] is switched by a\nMach\u2013Zehnder [[mzm]]. The two are matched: the same average power and the same extinction ratio\n(4.84 dB), so the only difference is how the light was modulated. Each goes through 20 km of\nstandard fibre into an identical receiver.\n\n## Why a DML chirps\n\nThe light comes out when the carrier density in the laser moves, and the refractive index moves\nwith the carriers. So every change in power is also a change in frequency. The rate equations\ngive it as\n\n$$\\Delta\\nu(t) = \\frac{\\alpha}{4\\pi}\\left(\\frac{d}{dt}\\ln P(t) + \\kappa\\,P(t)\\right)$$\n\nThe first term is the **transient** chirp, at every edge. The second is the **adiabatic** chirp:\na one sits at a different frequency from a zero. $\\alpha$ is the linewidth enhancement factor,\n4 on [[dml]]. The oscilloscope [[chirp]] shows it: the frequency swings by about 21 GHz on the\nrising edges.\n\n## What dispersion does with it\n\nEach part of a bit now travels at its own speed. A frequency excursion $\\Delta\\nu$ is a\nwavelength excursion $\\Delta\\lambda = \\lambda^2\\Delta\\nu/c$, which dispersion turns into a delay:\n\n$$\\Delta\\tau = D\\,L\\,\\Delta\\lambda \\approx 17 \\times 20 \\times 0.17\\ \\text{nm} \\approx 58\\ \\text{ps}$$\n\nThat is more than half a 100 ps bit slot.\n\n| Transmitter | $Q$ after 20 km |\n| :-- | :-- |\n| [[dml]] | 2.7 |\n| [[cw]] + [[mzm]] | 39.8 |\n\nA Mach\u2013Zehnder driven push\u2013pull changes only the amplitude of the field, so it does not chirp.\nThat is why long-reach links use external modulation, and why 10G DMLs are sold for 10 to\n20 km.\n\n## Try this\n\n- Shorten [[fibre_dml]] to 0, 5 and 10 km. The eye at 5 km is better than back to back: the\n  fibre first undoes some of the laser's ringing.\n- Raise [[dml]]'s bias to 120 mA. It rings faster; does the $Q$ at 20 km improve?\n- Set both fibres' dispersion to 0. What is left of the gap is the laser's ringing, not its\n  chirp."
+     "body": "The same 10 Gb/s pattern [[prbs]] leaves two transmitters. On top, the drive current of a\ndirectly modulated laser [[dml]] is switched. Below, a CW laser [[cw]] is switched by a\nMach\u2013Zehnder [[mzm]]. The two are matched: the same average power and the same extinction ratio\n(4.84 dB), so the only difference is how the light was modulated. Each goes through 20 km of\nstandard fibre into an identical receiver. Compare the two eyes, [[eye_dml]] and\n[[eye_ext]], in the Eye tab.\n\n## Why a DML chirps\n\nThe light comes out when the carrier density in the laser moves, and the refractive index moves\nwith the carriers. So every change in power is also a change in frequency. The rate equations\ngive it as\n\n$$\\Delta\\nu(t) = \\frac{\\alpha}{4\\pi}\\left(\\frac{d}{dt}\\ln P(t) + \\kappa\\,P(t)\\right)$$\n\nThe first term is the **transient** chirp, at every edge. The second is the **adiabatic** chirp:\na one sits at a different frequency from a zero. $\\alpha$ is the linewidth enhancement factor,\n4 on [[dml]]. The oscilloscope [[chirp]] shows it: the frequency swings by about 21 GHz on the\nrising edges.\n\n## What dispersion does with it\n\nEach part of a bit now travels at its own speed. A frequency excursion $\\Delta\\nu$ is a\nwavelength excursion $\\Delta\\lambda = \\lambda^2\\Delta\\nu/c$, which dispersion turns into a delay:\n\n$$\\Delta\\tau = D\\,L\\,\\Delta\\lambda \\approx 17 \\times 20 \\times 0.17\\ \\text{nm} \\approx 58\\ \\text{ps}$$\n\nThat is more than half a 100 ps bit slot.\n\n| Transmitter | $Q$ after 20 km |\n| :-- | :-- |\n| [[dml]] | 2.7 |\n| [[cw]] + [[mzm]] | 39.8 |\n\nA Mach\u2013Zehnder driven push\u2013pull changes only the amplitude of the field, so it does not chirp.\nThat is why long-reach links use external modulation, and why 10G DMLs are sold for 10 to\n20 km.\n\n## Try this\n\n- Shorten [[fibre_dml]] to 0, 5 and 10 km. The eye at 5 km is better than back to back: the\n  fibre first undoes some of the laser's ringing.\n- Raise [[dml]]'s bias to 120 mA. It rings faster; does the $Q$ at 20 km improve?\n- Set both fibres' dispersion to 0. What is left of the gap is the laser's ringing, not its\n  chirp."
     },
     "annotations": [
      {
@@ -25013,6 +25143,15 @@ verdict, and DESIGN.md
       }
      },
      {
+      "id": "eye_dfb",
+      "type": "EyeDiagram",
+      "params": {},
+      "ui": {
+       "x": 1230.0,
+       "y": 40.0
+      }
+     },
+     {
       "id": "tx_fp_steady",
       "type": "FabryPerotLaser",
       "params": {
@@ -25082,6 +25221,15 @@ verdict, and DESIGN.md
       }
      },
      {
+      "id": "eye_fp_steady",
+      "type": "EyeDiagram",
+      "params": {},
+      "ui": {
+       "x": 1230.0,
+       "y": 140.0
+      }
+     },
+     {
       "id": "tx_fp",
       "type": "FabryPerotLaser",
       "params": {
@@ -25146,6 +25294,15 @@ verdict, and DESIGN.md
       "params": {},
       "ui": {
        "x": 1080.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "eye_fp",
+      "type": "EyeDiagram",
+      "params": {},
+      "ui": {
+       "x": 1230.0,
        "y": 240.0
       }
      }
@@ -25218,6 +25375,36 @@ verdict, and DESIGN.md
       ],
       "to": [
        "drv",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "lpf_dfb",
+       "out"
+      ],
+      "to": [
+       "eye_dfb",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "lpf_fp",
+       "out"
+      ],
+      "to": [
+       "eye_fp",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "lpf_fp_steady",
+       "out"
+      ],
+      "to": [
+       "eye_fp_steady",
        "in"
       ]
      },
@@ -25374,7 +25561,7 @@ verdict, and DESIGN.md
     ],
     "notes": {
      "title": "2.4 Laser noise: mode partition in a Fabry\u2013Perot laser",
-     "body": "One 2.5 Gb/s pattern modulates three lasers at 1550 nm, each through 3 km of standard fibre\ninto the same receiver:\n\n- [[tx_dfb]], a single-frequency DFB laser;\n- [[tx_fp_steady]], a seven-mode Fabry\u2013Perot laser with its noise switched off (its modes sit at\n  their steady powers);\n- [[tx_fp]], the same Fabry\u2013Perot laser with its noise on.\n\n## Many modes, one reservoir\n\nA Fabry\u2013Perot cavity supports a comb of longitudinal modes, 1.1 nm apart here, and the gain\nkeeps several of them lasing. They all draw on the same carriers, so when one mode gains power\nanother loses it. The *sum* is quiet. Each mode on its own is not.\n\n## Dispersion splits them\n\nEach mode travels at its own group velocity. Seven modes span $6 \\times 1.1 = 6.6$ nm, so after\n3 km at 17 ps/(nm\u00b7km) they arrive\n\n$$\\Delta\\tau = D\\,L\\,\\Delta\\lambda = 17 \\times 3 \\times 6.6 \\approx 340\\ \\text{ps}$$\n\napart, most of a 400 ps bit. That alone smears the eye, and the steady laser [[tx_fp_steady]]\nshows how much.\n\n## Partition noise\n\nOnce the modes no longer arrive together, the power they were trading no longer cancels at the\ndetector. What is left is noise proportional to the signal itself, so turning up the power\ncannot beat it. The textbook estimate (Ogawa; a rule of thumb, not this model) is a relative\nnoise of\n\n$$r_\\text{mpn} = \\frac{k}{\\sqrt2}\\left[1 - e^{-(\\pi B D L \\sigma_\\lambda)^2}\\right]$$\n\nwith $k$ the partition coefficient and $\\sigma_\\lambda$ the laser's rms spectral width. It sets a\nceiling on $Q$ of about $1/r_\\text{mpn}$, whatever the received power.\n\n| Laser | $Q$ after 3 km |\n| :-- | :-- |\n| [[tx_dfb]] | 104 |\n| [[tx_fp_steady]] | 28.6 |\n| [[tx_fp]] | 13.0 |\n\nThe difference between the last two rows is partition noise and nothing else.\n\n## Try this\n\n- Raise the power of [[tx_fp]] by 10 dB. Its $Q$ barely moves: a noise floor, not a power limit.\n- Set [[fibre_fp]]'s dispersion to 0, as at 1310 nm. The modes arrive together and $Q$ doubles,\n  to about 26; what is left is the laser's total intensity noise. That is why Fabry\u2013Perot lasers\n  live in the O-band.\n- Cut [[tx_fp]]'s modes from 7 to 3."
+     "body": "One 2.5 Gb/s pattern modulates three lasers at 1550 nm, each through 3 km of standard fibre\ninto the same receiver:\n\n- [[tx_dfb]], a single-frequency DFB laser;\n- [[tx_fp_steady]], a seven-mode Fabry\u2013Perot laser with its noise switched off (its modes sit at\n  their steady powers);\n- [[tx_fp]], the same Fabry\u2013Perot laser with its noise on.\n\nEach receiver has its eye: [[eye_fp]] is the one whose rails thicken.\n\n## Many modes, one reservoir\n\nA Fabry\u2013Perot cavity supports a comb of longitudinal modes, 1.1 nm apart here, and the gain\nkeeps several of them lasing. They all draw on the same carriers, so when one mode gains power\nanother loses it. The *sum* is quiet. Each mode on its own is not.\n\n## Dispersion splits them\n\nEach mode travels at its own group velocity. Seven modes span $6 \\times 1.1 = 6.6$ nm, so after\n3 km at 17 ps/(nm\u00b7km) they arrive\n\n$$\\Delta\\tau = D\\,L\\,\\Delta\\lambda = 17 \\times 3 \\times 6.6 \\approx 340\\ \\text{ps}$$\n\napart, most of a 400 ps bit. That alone smears the eye, and the steady laser [[tx_fp_steady]]\nshows how much.\n\n## Partition noise\n\nOnce the modes no longer arrive together, the power they were trading no longer cancels at the\ndetector. What is left is noise proportional to the signal itself, so turning up the power\ncannot beat it. The textbook estimate (Ogawa; a rule of thumb, not this model) is a relative\nnoise of\n\n$$r_\\text{mpn} = \\frac{k}{\\sqrt2}\\left[1 - e^{-(\\pi B D L \\sigma_\\lambda)^2}\\right]$$\n\nwith $k$ the partition coefficient and $\\sigma_\\lambda$ the laser's rms spectral width. It sets a\nceiling on $Q$ of about $1/r_\\text{mpn}$, whatever the received power.\n\n| Laser | $Q$ after 3 km |\n| :-- | :-- |\n| [[tx_dfb]] | 104 |\n| [[tx_fp_steady]] | 28.6 |\n| [[tx_fp]] | 13.0 |\n\nThe difference between the last two rows is partition noise and nothing else.\n\n## Try this\n\n- Raise the power of [[tx_fp]] by 10 dB. Its $Q$ barely moves: a noise floor, not a power limit.\n- Set [[fibre_fp]]'s dispersion to 0, as at 1310 nm. The modes arrive together and $Q$ doubles,\n  to about 26; what is left is the laser's total intensity noise. That is why Fabry\u2013Perot lasers\n  live in the O-band.\n- Cut [[tx_fp]]'s modes from 7 to 3."
     },
     "annotations": [
      {
@@ -25929,6 +26116,15 @@ verdict, and DESIGN.md
       }
      },
      {
+      "id": "eye0",
+      "type": "EyeDiagram",
+      "params": {},
+      "ui": {
+       "x": 1230.0,
+       "y": 40.0
+      }
+     },
+     {
       "id": "pin1",
       "type": "PINPhotodiode",
       "params": {},
@@ -25954,6 +26150,15 @@ verdict, and DESIGN.md
       "params": {},
       "ui": {
        "x": 1080.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "eye1",
+      "type": "EyeDiagram",
+      "params": {},
+      "ui": {
+       "x": 1230.0,
        "y": 140.0
       }
      },
@@ -25987,6 +26192,15 @@ verdict, and DESIGN.md
       }
      },
      {
+      "id": "eye2",
+      "type": "EyeDiagram",
+      "params": {},
+      "ui": {
+       "x": 1230.0,
+       "y": 240.0
+      }
+     },
+     {
       "id": "pin3",
       "type": "PINPhotodiode",
       "params": {},
@@ -26012,6 +26226,15 @@ verdict, and DESIGN.md
       "params": {},
       "ui": {
        "x": 1080.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "eye3",
+      "type": "EyeDiagram",
+      "params": {},
+      "ui": {
+       "x": 1230.0,
        "y": 340.0
       }
      }
@@ -26114,6 +26337,46 @@ verdict, and DESIGN.md
       ],
       "to": [
        "drv",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "lpf0",
+       "out"
+      ],
+      "to": [
+       "eye0",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "lpf1",
+       "out"
+      ],
+      "to": [
+       "eye1",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "lpf2",
+       "out"
+      ],
+      "to": [
+       "eye2",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "lpf3",
+       "out"
+      ],
+      "to": [
+       "eye3",
        "in"
       ]
      },
@@ -26340,7 +26603,7 @@ verdict, and DESIGN.md
     ],
     "notes": {
      "title": "2.6 CWDM4: four lanes in the O-band",
-     "body": "Four 25.78 Gb/s lanes on the coarse WDM grid, [[tx0]] to [[tx3]] at 1331, 1311, 1291 and 1271\nnm, are combined by [[mux]], sent through 10 km of standard fibre [[fibre]] with no amplifier,\nsplit by [[demux]] and received on four PIN receivers. This is how a 100G data-centre optic\ncarries its four lanes. The spectrum is on [[osa]].\n\n## The coarse grid\n\nITU-T G.694.2 places channels 20 nm apart in *wavelength* (dense WDM is uniform in frequency\ninstead). Each 20 nm slot leaves about 13 nm of passband, wide enough for a laser with no\ntemperature control to drift in, which is what makes CWDM optics cheap. [[mux]] steps its\nchannels in nanometres for this.\n\n## Why the O-band\n\nStandard fibre's dispersion crosses zero near 1310 nm. Close to that point it grows linearly\nwith the slope $S_0 \\approx 0.092$ ps/(nm\u00b2\u00b7km):\n\n$$D(\\lambda) \\approx S_0\\,(\\lambda - \\lambda_0)$$\n\n| Lane | $\\lambda$ | $D$ [ps/(nm\u00b7km)] | $Q$ |\n| :-- | :-- | :-- | :-- |\n| [[ber0]] | 1331 nm | +1.9 | 25.3 |\n| [[ber1]] | 1311 nm | +0.1 | 26.0 |\n| [[ber2]] | 1291 nm | \u22121.7 | 25.9 |\n| [[ber3]] | 1271 nm | \u22123.6 | 20.3 |\n\nThe lane furthest from the zero loses the most. With the slope set to zero all four read about\n26.\n\n## The budget\n\nFibre loss is higher here, about 0.35 dB/km, so 10 km costs 3.5 dB. Per lane:\n\n$$0\\ \\text{dBm} - 3\\ (\\text{modulator}) - 2\\ (\\text{mux}) - 3.5\\ (\\text{fibre}) - 2\\ (\\text{demux}) \\approx -10.5\\ \\text{dBm}$$\n\n## Try this\n\n- Set [[fibre]]'s dispersion slope to 0 and compare the four $Q$ values.\n- Lengthen [[fibre]] to 40 km. Which lane fails first, and why?\n- Move [[tx3]] by 7 nm and watch [[demux]] cut it off."
+     "body": "Four 25.78 Gb/s lanes on the coarse WDM grid, [[tx0]] to [[tx3]] at 1331, 1311, 1291 and 1271\nnm, are combined by [[mux]], sent through 10 km of standard fibre [[fibre]] with no amplifier,\nsplit by [[demux]] and received on four PIN receivers. This is how a 100G data-centre optic\ncarries its four lanes. The spectrum is on [[osa]], and each lane's eye, [[eye0]] to [[eye3]],\nin the Eye tab.\n\n## The coarse grid\n\nITU-T G.694.2 places channels 20 nm apart in *wavelength* (dense WDM is uniform in frequency\ninstead). Each 20 nm slot leaves about 13 nm of passband, wide enough for a laser with no\ntemperature control to drift in, which is what makes CWDM optics cheap. [[mux]] steps its\nchannels in nanometres for this.\n\n## Why the O-band\n\nStandard fibre's dispersion crosses zero near 1310 nm. Close to that point it grows linearly\nwith the slope $S_0 \\approx 0.092$ ps/(nm\u00b2\u00b7km):\n\n$$D(\\lambda) \\approx S_0\\,(\\lambda - \\lambda_0)$$\n\n| Lane | $\\lambda$ | $D$ [ps/(nm\u00b7km)] | $Q$ |\n| :-- | :-- | :-- | :-- |\n| [[ber0]] | 1331 nm | +1.9 | 25.3 |\n| [[ber1]] | 1311 nm | +0.1 | 26.0 |\n| [[ber2]] | 1291 nm | \u22121.7 | 25.9 |\n| [[ber3]] | 1271 nm | \u22123.6 | 20.3 |\n\nThe lane furthest from the zero loses the most. With the slope set to zero all four read about\n26.\n\n## The budget\n\nFibre loss is higher here, about 0.35 dB/km, so 10 km costs 3.5 dB. Per lane:\n\n$$0\\ \\text{dBm} - 3\\ (\\text{modulator}) - 2\\ (\\text{mux}) - 3.5\\ (\\text{fibre}) - 2\\ (\\text{demux}) \\approx -10.5\\ \\text{dBm}$$\n\n## Try this\n\n- Set [[fibre]]'s dispersion slope to 0 and compare the four $Q$ values.\n- Lengthen [[fibre]] to 40 km. Which lane fails first, and why?\n- Move [[tx3]] by 7 nm and watch [[demux]] cut it off."
     },
     "annotations": [
      {
@@ -26522,6 +26785,15 @@ verdict, and DESIGN.md
        "x": 930.0,
        "y": 140.0
       }
+     },
+     {
+      "id": "eye",
+      "type": "EyeDiagram",
+      "params": {},
+      "ui": {
+       "x": 1080.0,
+       "y": 140.0
+      }
      }
     ],
     "edges": [
@@ -26562,6 +26834,16 @@ verdict, and DESIGN.md
       ],
       "to": [
        "drv",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "lpf",
+       "out"
+      ],
+      "to": [
+       "eye",
        "in"
       ]
      },
@@ -26628,7 +26910,7 @@ verdict, and DESIGN.md
     ],
     "notes": {
      "title": "2.7 GPON downstream: one fibre, 32 homes",
-     "body": "A passive optical network shares one fibre between many homes with no powered equipment in the\nstreet. The optical line terminal at the exchange, [[olt]] with [[mzm]], sends 2.488 Gb/s at\n1490 nm through 20 km of feeder fibre [[feeder]] to a 1:32 splitter [[split32]]. Every home's\nONU receives the whole stream and keeps its own part. One ONU is drawn here: a meter [[pm_onu]]\nand an APD receiver [[apd]].\n\n## The split is the budget\n\nAn ideal $1{:}N$ splitter costs $10\\log_{10}N$:\n\n$$1{:}32 \\;\\Rightarrow\\; 15.05\\ \\text{dB}$$\n\nplus about 1.5 dB of excess in a real planar splitter. That is more than the 5 dB of the 20 km\nfeeder at 0.25 dB/km.\n\n$$P_\\text{ONU} = 3 - 3\\ (\\text{modulator}) - 5\\ (\\text{feeder}) - 16.55\\ (\\text{split}) = -21.55\\ \\text{dBm}$$\n\n[[pm_onu]] reads \u221221.56 dBm. A GPON class B+ ONU must work at \u221228 dBm, which is why ONUs use an\nAPD (lesson 2.2), and the link here has 6.5 dB to spare: [[ber]] reads $Q = 35.6$.\n\n## Two directions, two wavelengths\n\nDownstream is 1490 nm and broadcast. Upstream is 1310 nm, and the ONUs take turns: each sends a\nshort burst in its own time slot. A burst arrives at the OLT with a power that depends on that\nhome's distance and splitter, so the upstream receiver has to settle on each burst's level within\na few bits. That needs a **burst-mode receiver**, which is not in the palette yet.\n\n## Try this\n\n- Add 3 dB to the excess loss of [[split32]]: that is a 1:64 split. What is left of the margin?\n- Lengthen [[feeder]] to 40 km. Does the APD still hold $Q = 6$?\n- Swap [[apd]] for a PIN photodiode and find the longest feeder that still works."
+     "body": "A passive optical network shares one fibre between many homes with no powered equipment in the\nstreet. The optical line terminal at the exchange, [[olt]] with [[mzm]], sends 2.488 Gb/s at\n1490 nm through 20 km of feeder fibre [[feeder]] to a 1:32 splitter [[split32]]. Every home's\nONU receives the whole stream and keeps its own part. One ONU is drawn here: a meter [[pm_onu]]\nand an APD receiver [[apd]], whose eye is [[eye]].\n\n## The split is the budget\n\nAn ideal $1{:}N$ splitter costs $10\\log_{10}N$:\n\n$$1{:}32 \\;\\Rightarrow\\; 15.05\\ \\text{dB}$$\n\nplus about 1.5 dB of excess in a real planar splitter. That is more than the 5 dB of the 20 km\nfeeder at 0.25 dB/km.\n\n$$P_\\text{ONU} = 3 - 3\\ (\\text{modulator}) - 5\\ (\\text{feeder}) - 16.55\\ (\\text{split}) = -21.55\\ \\text{dBm}$$\n\n[[pm_onu]] reads \u221221.56 dBm. A GPON class B+ ONU must work at \u221228 dBm, which is why ONUs use an\nAPD (lesson 2.2), and the link here has 6.5 dB to spare: [[ber]] reads $Q = 35.6$.\n\n## Two directions, two wavelengths\n\nDownstream is 1490 nm and broadcast. Upstream is 1310 nm, and the ONUs take turns: each sends a\nshort burst in its own time slot. A burst arrives at the OLT with a power that depends on that\nhome's distance and splitter, so the upstream receiver has to settle on each burst's level within\na few bits. That needs a **burst-mode receiver**, which is not in the palette yet.\n\n## Try this\n\n- Add 3 dB to the excess loss of [[split32]]: that is a 1:64 split. What is left of the margin?\n- Lengthen [[feeder]] to 40 km. Does the APD still hold $Q = 6$?\n- Swap [[apd]] for a PIN photodiode and find the longest feeder that still works."
     },
     "annotations": [
      {
@@ -32628,8 +32910,32 @@ verdict, and DESIGN.md
   }));
   let openMenu = null;
 
+  /* The rows the arrow keys walk: those on screen, so a closed submenu's rows
+     are skipped and an open one's are walked in place. */
   function rowsOf(menu) {
-    return [...menu.pop.querySelectorAll("button:not(:disabled)")];
+    return [...menu.pop.querySelectorAll("button:not(:disabled)")]
+      .filter((row) => row.offsetParent !== null);
+  }
+
+  /* One submenu open at a time; opening one by key or click closes the rest. */
+  function openGroup(group) {
+    for (const g of document.querySelectorAll(".menu-group[data-open]")) {
+      if (g !== group) {
+        delete g.dataset.open;
+        g.querySelector(".menu-group-btn").setAttribute("aria-expanded", "false");
+      }
+    }
+    if (!group) return;
+    group.dataset.open = "";
+    group.querySelector(".menu-group-btn").setAttribute("aria-expanded", "true");
+  }
+  for (const group of document.querySelectorAll(".menu-group")) {
+    const btn = group.querySelector(".menu-group-btn");
+    btn.addEventListener("click", () => {
+      if ("open" in group.dataset) openGroup(null);
+      else { openGroup(group); group.querySelector(".menu-sub button").focus(); }
+    });
+    group.addEventListener("pointerenter", () => openGroup(null));
   }
 
   function closeMenus({ focus = false } = {}) {
@@ -32644,6 +32950,7 @@ verdict, and DESIGN.md
     const was = openMenu;
     openMenu = null;
     was.pop.hidden = true;
+    openGroup(null);
     was.button.setAttribute("aria-expanded", "false");
     if (focus) was.button.focus();
   }
@@ -32690,6 +32997,18 @@ verdict, and DESIGN.md
         if (!rows.length) return;
         const step = event.key === "ArrowDown" ? 1 : -1;
         rows[(here + step + rows.length) % rows.length].focus();
+      } else if (event.key === "ArrowRight" &&
+                 document.activeElement.classList.contains("menu-group-btn")) {
+        event.preventDefault();
+        const group = document.activeElement.parentElement;
+        openGroup(group);
+        group.querySelector(".menu-sub button").focus();
+      } else if (event.key === "ArrowLeft" &&
+                 document.activeElement.closest(".menu-sub")) {
+        event.preventDefault();
+        const group = document.activeElement.closest(".menu-group");
+        openGroup(null);
+        group.querySelector(".menu-group-btn").focus();
       } else if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
         event.preventDefault();
         const at = MENUS.indexOf(menu);

@@ -883,7 +883,8 @@ The fibre is two soliton periods long, $z_0 = \frac{\pi}{2}L_D = 7.24$ km each.
 Three ways to divide or join light. A 1:4 splitter [[split4]] shares [[laser_a]] four ways.
 A directional coupler [[tap]] takes 10 % of [[laser_b]] off to a monitor. A combiner
 [[combiner]] puts one quarter of the first laser and the through port of the coupler onto one
-fibre, and [[pm_sum]] measures them together.
+fibre, and [[pm_sum]] measures them together. The spectrum [[osa]] keeps apart what the meter
+adds: two lines, 1 nm apart, each at its own power.
 
 ## Splitting costs 3 dB per halving
 
@@ -926,7 +927,8 @@ would interfere instead, which is why [[combiner]] refuses them: that needs a co
 A 10 Gb/s on–off keyed signal [[tx]] [[mzm]] goes through a variable attenuator [[att]] and is
 split three ways [[split]]: one copy to a power meter [[pm_rx]], one to a PIN photodiode
 [[pin]], and one to an avalanche photodiode [[apd]]. Each receiver has the same 7 GHz filter
-and an error counter, so the only difference between them is the detector.
+and an error counter, so the only difference between them is the detector. Their eyes,
+[[eye_pin]] and [[eye_apd]], are in the Eye tab: raise [[att]] and watch the PIN's close first.
 
 ## What limits a PIN receiver
 
@@ -979,7 +981,8 @@ The same 10 Gb/s pattern [[prbs]] leaves two transmitters. On top, the drive cur
 directly modulated laser [[dml]] is switched. Below, a CW laser [[cw]] is switched by a
 Mach–Zehnder [[mzm]]. The two are matched: the same average power and the same extinction ratio
 (4.84 dB), so the only difference is how the light was modulated. Each goes through 20 km of
-standard fibre into an identical receiver.
+standard fibre into an identical receiver. Compare the two eyes, [[eye_dml]] and
+[[eye_ext]], in the Eye tab.
 
 ## Why a DML chirps
 
@@ -1031,6 +1034,8 @@ into the same receiver:
 - [[tx_fp_steady]], a seven-mode Fabry–Perot laser with its noise switched off (its modes sit at
   their steady powers);
 - [[tx_fp]], the same Fabry–Perot laser with its noise on.
+
+Each receiver has its eye: [[eye_fp]] is the one whose rails thicken.
 
 ## Many modes, one reservoir
 
@@ -1130,7 +1135,8 @@ the ISI of symbols already decided, $z_n - \sum_k b_k \hat a_{n-k}$. A DFE canno
 Four 25.78 Gb/s lanes on the coarse WDM grid, [[tx0]] to [[tx3]] at 1331, 1311, 1291 and 1271
 nm, are combined by [[mux]], sent through 10 km of standard fibre [[fibre]] with no amplifier,
 split by [[demux]] and received on four PIN receivers. This is how a 100G data-centre optic
-carries its four lanes. The spectrum is on [[osa]].
+carries its four lanes. The spectrum is on [[osa]], and each lane's eye, [[eye0]] to [[eye3]],
+in the Eye tab.
 
 ## The coarse grid
 
@@ -1176,7 +1182,7 @@ A passive optical network shares one fibre between many homes with no powered eq
 street. The optical line terminal at the exchange, [[olt]] with [[mzm]], sends 2.488 Gb/s at
 1490 nm through 20 km of feeder fibre [[feeder]] to a 1:32 splitter [[split32]]. Every home's
 ONU receives the whole stream and keeps its own part. One ONU is drawn here: a meter [[pm_onu]]
-and an APD receiver [[apd]].
+and an APD receiver [[apd]], whose eye is [[eye]].
 
 ## The split is the budget
 

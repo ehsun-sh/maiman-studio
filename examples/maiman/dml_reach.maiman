@@ -135,6 +135,15 @@
       }
     },
     {
+      "id": "eye_dml",
+      "type": "EyeDiagram",
+      "params": {},
+      "ui": {
+        "x": 1080.0,
+        "y": 40.0
+      }
+    },
+    {
       "id": "fibre_ext",
       "type": "Fiber",
       "params": {
@@ -173,6 +182,15 @@
       "params": {},
       "ui": {
         "x": 930.0,
+        "y": 340.0
+      }
+    },
+    {
+      "id": "eye_ext",
+      "type": "EyeDiagram",
+      "params": {},
+      "ui": {
+        "x": 1080.0,
         "y": 340.0
       }
     }
@@ -260,6 +278,26 @@
     },
     {
       "from": [
+        "lpf_dml",
+        "out"
+      ],
+      "to": [
+        "eye_dml",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "lpf_ext",
+        "out"
+      ],
+      "to": [
+        "eye_ext",
+        "in"
+      ]
+    },
+    {
+      "from": [
         "dml",
         "out"
       ],
@@ -341,7 +379,7 @@
   ],
   "notes": {
     "title": "2.3 The reach of a directly modulated laser",
-    "body": "The same 10 Gb/s pattern [[prbs]] leaves two transmitters. On top, the drive current of a\ndirectly modulated laser [[dml]] is switched. Below, a CW laser [[cw]] is switched by a\nMach\u2013Zehnder [[mzm]]. The two are matched: the same average power and the same extinction ratio\n(4.84 dB), so the only difference is how the light was modulated. Each goes through 20 km of\nstandard fibre into an identical receiver.\n\n## Why a DML chirps\n\nThe light comes out when the carrier density in the laser moves, and the refractive index moves\nwith the carriers. So every change in power is also a change in frequency. The rate equations\ngive it as\n\n$$\\Delta\\nu(t) = \\frac{\\alpha}{4\\pi}\\left(\\frac{d}{dt}\\ln P(t) + \\kappa\\,P(t)\\right)$$\n\nThe first term is the **transient** chirp, at every edge. The second is the **adiabatic** chirp:\na one sits at a different frequency from a zero. $\\alpha$ is the linewidth enhancement factor,\n4 on [[dml]]. The oscilloscope [[chirp]] shows it: the frequency swings by about 21 GHz on the\nrising edges.\n\n## What dispersion does with it\n\nEach part of a bit now travels at its own speed. A frequency excursion $\\Delta\\nu$ is a\nwavelength excursion $\\Delta\\lambda = \\lambda^2\\Delta\\nu/c$, which dispersion turns into a delay:\n\n$$\\Delta\\tau = D\\,L\\,\\Delta\\lambda \\approx 17 \\times 20 \\times 0.17\\ \\text{nm} \\approx 58\\ \\text{ps}$$\n\nThat is more than half a 100 ps bit slot.\n\n| Transmitter | $Q$ after 20 km |\n| :-- | :-- |\n| [[dml]] | 2.7 |\n| [[cw]] + [[mzm]] | 39.8 |\n\nA Mach\u2013Zehnder driven push\u2013pull changes only the amplitude of the field, so it does not chirp.\nThat is why long-reach links use external modulation, and why 10G DMLs are sold for 10 to\n20 km.\n\n## Try this\n\n- Shorten [[fibre_dml]] to 0, 5 and 10 km. The eye at 5 km is better than back to back: the\n  fibre first undoes some of the laser's ringing.\n- Raise [[dml]]'s bias to 120 mA. It rings faster; does the $Q$ at 20 km improve?\n- Set both fibres' dispersion to 0. What is left of the gap is the laser's ringing, not its\n  chirp."
+    "body": "The same 10 Gb/s pattern [[prbs]] leaves two transmitters. On top, the drive current of a\ndirectly modulated laser [[dml]] is switched. Below, a CW laser [[cw]] is switched by a\nMach\u2013Zehnder [[mzm]]. The two are matched: the same average power and the same extinction ratio\n(4.84 dB), so the only difference is how the light was modulated. Each goes through 20 km of\nstandard fibre into an identical receiver. Compare the two eyes, [[eye_dml]] and\n[[eye_ext]], in the Eye tab.\n\n## Why a DML chirps\n\nThe light comes out when the carrier density in the laser moves, and the refractive index moves\nwith the carriers. So every change in power is also a change in frequency. The rate equations\ngive it as\n\n$$\\Delta\\nu(t) = \\frac{\\alpha}{4\\pi}\\left(\\frac{d}{dt}\\ln P(t) + \\kappa\\,P(t)\\right)$$\n\nThe first term is the **transient** chirp, at every edge. The second is the **adiabatic** chirp:\na one sits at a different frequency from a zero. $\\alpha$ is the linewidth enhancement factor,\n4 on [[dml]]. The oscilloscope [[chirp]] shows it: the frequency swings by about 21 GHz on the\nrising edges.\n\n## What dispersion does with it\n\nEach part of a bit now travels at its own speed. A frequency excursion $\\Delta\\nu$ is a\nwavelength excursion $\\Delta\\lambda = \\lambda^2\\Delta\\nu/c$, which dispersion turns into a delay:\n\n$$\\Delta\\tau = D\\,L\\,\\Delta\\lambda \\approx 17 \\times 20 \\times 0.17\\ \\text{nm} \\approx 58\\ \\text{ps}$$\n\nThat is more than half a 100 ps bit slot.\n\n| Transmitter | $Q$ after 20 km |\n| :-- | :-- |\n| [[dml]] | 2.7 |\n| [[cw]] + [[mzm]] | 39.8 |\n\nA Mach\u2013Zehnder driven push\u2013pull changes only the amplitude of the field, so it does not chirp.\nThat is why long-reach links use external modulation, and why 10G DMLs are sold for 10 to\n20 km.\n\n## Try this\n\n- Shorten [[fibre_dml]] to 0, 5 and 10 km. The eye at 5 km is better than back to back: the\n  fibre first undoes some of the laser's ringing.\n- Raise [[dml]]'s bias to 120 mA. It rings faster; does the $Q$ at 20 km improve?\n- Set both fibres' dispersion to 0. What is left of the gap is the laser's ringing, not its\n  chirp."
   },
   "annotations": [
     {

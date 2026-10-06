@@ -69,6 +69,16 @@ def at(i: float, j: float) -> dict[str, float]:
     return {"x": col(i), "y": row(j)}
 
 
+def with_eyes(layout: Layout) -> Layout:
+    """The layout with each receiver's eye one column right of its error counter."""
+    eyes = {
+        "eye" + name[3:]: {"x": place["x"] + col(1) - col(0), "y": place["y"]}
+        for name, place in layout.items()
+        if name.startswith("ber")
+    }
+    return {**layout, **eyes}
+
+
 def ook_transmitter(
     graph: Graph, *, wavelength: float = 1550.0, power: float = 0.0, suffix: str = ""
 ) -> tuple[Component, Component]:
@@ -93,12 +103,17 @@ def receive(
     bandwidth_ghz: float,
     suffix: str = "",
 ) -> BERAnalyzer:
-    """Detector, filter and error counter, the receiver every example here shares."""
+    """Detector, filter, eye and error counter, the receiver every example here shares.
+
+    The eye watches what the error counter decides on, so the Q it reports can
+    be seen as well as read.
+    """
     lpf = graph.add(ElectricalFilter(bandwidth=bandwidth_ghz, label=f"lpf{suffix}"))
     ber = graph.add(BERAnalyzer(label=f"ber{suffix}"))
     graph.connect(source, detector["in"])  # type: ignore[arg-type]
     graph.connect(detector, lpf["in"])
     graph.connect(lpf, ber["in"])
+    graph.connect(lpf, graph.add(EyeDiagram(label=f"eye{suffix}"))["in"])
     graph.connect(reference, ber["reference"])
     return ber
 
@@ -511,12 +526,12 @@ def gpon() -> Graph:
 
 #: key -> (builder, layout). The key names the project file and its lesson.
 EXAMPLES: dict[str, tuple[Callable[[], Graph], Layout]] = {
-    "receiver_sensitivity": (receiver_sensitivity, SENSITIVITY_LAYOUT),
-    "dml_reach": (dml_link, DML_LAYOUT),
-    "mode_partition": (mode_partition, PARTITION_LAYOUT),
+    "receiver_sensitivity": (receiver_sensitivity, with_eyes(SENSITIVITY_LAYOUT)),
+    "dml_reach": (dml_link, with_eyes(DML_LAYOUT)),
+    "mode_partition": (mode_partition, with_eyes(PARTITION_LAYOUT)),
     "pam4_lane": (pam4_lane, PAM4_LAYOUT),
-    "cwdm4": (cwdm4, CWDM_LAYOUT),
-    "gpon": (gpon, GPON_LAYOUT),
+    "cwdm4": (cwdm4, with_eyes(CWDM_LAYOUT)),
+    "gpon": (gpon, with_eyes(GPON_LAYOUT)),
 }
 
 

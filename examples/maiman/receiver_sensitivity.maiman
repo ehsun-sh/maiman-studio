@@ -129,6 +129,15 @@
       }
     },
     {
+      "id": "eye_pin",
+      "type": "EyeDiagram",
+      "params": {},
+      "ui": {
+        "x": 1080.0,
+        "y": 190.0
+      }
+    },
+    {
       "id": "lpf_apd",
       "type": "ElectricalFilter",
       "params": {
@@ -145,6 +154,15 @@
       "params": {},
       "ui": {
         "x": 930.0,
+        "y": 340.0
+      }
+    },
+    {
+      "id": "eye_apd",
+      "type": "EyeDiagram",
+      "params": {},
+      "ui": {
+        "x": 1080.0,
         "y": 340.0
       }
     }
@@ -222,6 +240,26 @@
     },
     {
       "from": [
+        "lpf_apd",
+        "out"
+      ],
+      "to": [
+        "eye_apd",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "lpf_pin",
+        "out"
+      ],
+      "to": [
+        "eye_pin",
+        "in"
+      ]
+    },
+    {
+      "from": [
         "apd",
         "out"
       ],
@@ -293,7 +331,7 @@
   ],
   "notes": {
     "title": "2.2 Receiver sensitivity: PIN against APD",
-    "body": "A 10 Gb/s on\u2013off keyed signal [[tx]] [[mzm]] goes through a variable attenuator [[att]] and is\nsplit three ways [[split]]: one copy to a power meter [[pm_rx]], one to a PIN photodiode\n[[pin]], and one to an avalanche photodiode [[apd]]. Each receiver has the same 7 GHz filter\nand an error counter, so the only difference between them is the detector.\n\n## What limits a PIN receiver\n\nThe photocurrent is $I = \\mathcal{R}P$. At low power the dominant noise is the thermal noise of\nthe load resistor, which does not depend on the signal at all:\n\n$$\\sigma_T^2 = \\frac{4k_BT}{R_L}\\,B$$\n\nSo $Q$ falls in proportion to the received power: halve the power and $Q$ halves.\n\n## What an APD changes\n\nAn avalanche photodiode multiplies the photocurrent by $M$ before the load sees it, so the signal\ngrows $M$ times while thermal noise stays put. The multiplication is random, which costs an\nexcess noise factor on the shot noise:\n\n$$\\sigma_s^2 = 2q\\,M^2F(M)\\,\\mathcal{R}P\\,B, \\qquad F(M) = kM + \\left(2 - \\frac{1}{M}\\right)(1 - k)$$\n\n$k$ is the ionisation ratio, 0.5 on [[apd]] (InGaAs).\n\n## Sensitivity\n\nThe **sensitivity** is the received power for $Q = 6$, a bit error rate of $10^{-9}$.\nOpen **Sweep**, choose [[att]] and its attenuation, and run 4 to 30 dB:\n\n| Receiver | Sensitivity at $Q = 6$ |\n| :-- | :-- |\n| PIN [[pin]] | \u221219.2 dBm |\n| APD [[apd]], $M = 10$ | \u221228.1 dBm |\n\nThe APD buys almost 9 dB, which is 45 km of fibre at 0.2 dB/km.\n\n## The optimum gain\n\nMore gain is not always better: signal grows as $M$, shot noise as $M^2F(M) \\approx kM^3$. At\n[[att]] = 20 dB (\u221227.8 dBm) the APD's $Q$ is 0.8 at $M = 1$, 6.4 at 10, peaks at 7.3 near\n$M = 20$ and falls back to 6.3 at 40.\n\n## Try this\n\n- Sweep the gain of [[apd]] from 1 to 40 at [[att]] = 20 dB, and find the peak.\n- Set its ionisation ratio to 0.02 (silicon). Where does the best gain move?\n- Narrow [[lpf_pin]] to 5 GHz. Thermal noise falls with $B$; does the eye stay open?"
+    "body": "A 10 Gb/s on\u2013off keyed signal [[tx]] [[mzm]] goes through a variable attenuator [[att]] and is\nsplit three ways [[split]]: one copy to a power meter [[pm_rx]], one to a PIN photodiode\n[[pin]], and one to an avalanche photodiode [[apd]]. Each receiver has the same 7 GHz filter\nand an error counter, so the only difference between them is the detector. Their eyes,\n[[eye_pin]] and [[eye_apd]], are in the Eye tab: raise [[att]] and watch the PIN's close first.\n\n## What limits a PIN receiver\n\nThe photocurrent is $I = \\mathcal{R}P$. At low power the dominant noise is the thermal noise of\nthe load resistor, which does not depend on the signal at all:\n\n$$\\sigma_T^2 = \\frac{4k_BT}{R_L}\\,B$$\n\nSo $Q$ falls in proportion to the received power: halve the power and $Q$ halves.\n\n## What an APD changes\n\nAn avalanche photodiode multiplies the photocurrent by $M$ before the load sees it, so the signal\ngrows $M$ times while thermal noise stays put. The multiplication is random, which costs an\nexcess noise factor on the shot noise:\n\n$$\\sigma_s^2 = 2q\\,M^2F(M)\\,\\mathcal{R}P\\,B, \\qquad F(M) = kM + \\left(2 - \\frac{1}{M}\\right)(1 - k)$$\n\n$k$ is the ionisation ratio, 0.5 on [[apd]] (InGaAs).\n\n## Sensitivity\n\nThe **sensitivity** is the received power for $Q = 6$, a bit error rate of $10^{-9}$.\nOpen **Sweep**, choose [[att]] and its attenuation, and run 4 to 30 dB:\n\n| Receiver | Sensitivity at $Q = 6$ |\n| :-- | :-- |\n| PIN [[pin]] | \u221219.2 dBm |\n| APD [[apd]], $M = 10$ | \u221228.1 dBm |\n\nThe APD buys almost 9 dB, which is 45 km of fibre at 0.2 dB/km.\n\n## The optimum gain\n\nMore gain is not always better: signal grows as $M$, shot noise as $M^2F(M) \\approx kM^3$. At\n[[att]] = 20 dB (\u221227.8 dBm) the APD's $Q$ is 0.8 at $M = 1$, 6.4 at 10, peaks at 7.3 near\n$M = 20$ and falls back to 6.3 at 40.\n\n## Try this\n\n- Sweep the gain of [[apd]] from 1 to 40 at [[att]] = 20 dB, and find the peak.\n- Set its ionisation ratio to 0.02 (silicon). Where does the best gain move?\n- Narrow [[lpf_pin]] to 5 GHz. Thermal noise falls with $B$; does the eye stay open?"
   },
   "annotations": [
     {
