@@ -208,6 +208,15 @@ These are the real failures, in the order they happen to people.
 | The browser says it cannot connect | The server is not running, or you typed the address before it started | Check the terminal still shows the `http://127.0.0.1:8765/` line and no error under it |
 | The page loads but Run does nothing | The browser cannot reach the engine | Make sure the address is `127.0.0.1` and not `0.0.0.0`, and that the terminal is still open |
 
+### The desktop application
+
+The same studio also comes as a desktop application for Windows, macOS and Linux: one window, no
+terminal, nothing to install first. It starts its own copy of the session server on a free port
+when it opens and stops it when it closes, so everything above about `maiman serve` happens out of
+sight. Installers are built by the **Desktop** workflow and attached to each GitHub release. They
+are not code-signed yet; [desktop/README.md](desktop/README.md) says how to open one anyway, and
+how to build it yourself.
+
 ### If you would rather write Python
 
 The interface and the library are the same engine. Anything the page does, a script can do — and a

@@ -133,8 +133,10 @@ call in CI:
 * `README.md` and this file describe the install. They were updated at 0.16.0.
 * `CITATION.cff` needs `date-released` set to the date the release was *published*, not the date
   the version was bumped. Its `version` is already checked against the package on every commit.
-* The version in `pyproject.toml`, `src/maiman/__init__.py` and `CITATION.cff` must move together
-  for the next release — that one *is* checked.
+* The version in `pyproject.toml`, `src/maiman/__init__.py`, `CITATION.cff` and
+  `desktop/package.json` must move together for the next release — that one *is* checked.
+* Publishing the GitHub release also runs the **Desktop** workflow, which builds the Windows,
+  macOS and Linux installers and attaches them to that release.
 
 ## When the upload fails with `invalid-publisher`
 

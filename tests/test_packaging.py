@@ -223,6 +223,21 @@ def test_the_citation_file_names_the_version_the_package_does() -> None:
     )
 
 
+def test_the_desktop_application_names_the_version_the_package_does() -> None:
+    """The installer's file name and About box say this number.
+
+    electron-builder takes the version from ``desktop/package.json``, not from
+    the engine it bundles, so a release that bumps pyproject and forgets this
+    file ships ``maiman-studio-0.16.0`` installers carrying 0.17.0 inside.
+    """
+    import json
+
+    package = json.loads((ROOT / "desktop" / "package.json").read_text(encoding="utf-8"))
+    assert package["version"] == maiman.__version__, (
+        f"desktop/package.json says {package['version']} and the package says {maiman.__version__}"
+    )
+
+
 def test_the_citation_file_has_what_a_citation_needs() -> None:
     """The fields CFF 1.2.0 requires, checked without taking a YAML dependency.
 

@@ -662,7 +662,10 @@ def serve_from_args(args: argparse.Namespace) -> int:
 
     httpd = serve(args.host, args.port)
     url = f"http://{args.host}:{httpd.server_address[1]}/"
-    print(f"Maiman Studio session server\n  {len(manifests())} components\n  {url}\n")
+    # Flushed because the desktop shell reads this line from a pipe to learn
+    # the port, and a pipe is block-buffered: unflushed, the URL sits in a
+    # buffer while the window waits for it.
+    print(f"Maiman Studio session server\n  {len(manifests())} components\n  {url}\n", flush=True)
     try:
         threading.Event().wait()
     except KeyboardInterrupt:

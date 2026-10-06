@@ -1,0 +1,68 @@
+{
+  "name": "maiman-studio-desktop",
+  "productName": "Maiman Studio",
+  "version": "0.16.0",
+  "description": "Maiman Studio as a desktop application: the studio page and its session server in one window.",
+  "author": "Ehsan Shahmohammadi",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/ehsun-sh/maiman-studio",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ehsun-sh/maiman-studio.git"
+  },
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "backend": "pyinstaller --noconfirm --clean --distpath build/backend --workpath build/pyinstaller maiman-backend.spec",
+    "dist": "electron-builder --publish never"
+  },
+  "devDependencies": {
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "io.github.ehsun-sh.maiman-studio",
+    "productName": "Maiman Studio",
+    "artifactName": "maiman-studio-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "backend.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "build/backend/maiman-backend",
+        "to": "backend"
+      }
+    ],
+    "icon": "../assets/icon-512.png",
+    "mac": {
+      "category": "public.app-category.education",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "linux": {
+      "category": "Science",
+      "target": [
+        "AppImage",
+        "deb"
+      ]
+    }
+  }
+}
