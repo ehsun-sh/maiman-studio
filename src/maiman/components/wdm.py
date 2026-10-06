@@ -67,10 +67,16 @@ class _Grid(Component):
         unit="nm",
         min=1200.0,
         max=1700.0,
-        doc="Channel 0. The rest are stepped from it in frequency",
+        doc="Channel 0. The rest are stepped from it up in frequency, down in wavelength",
     )
     spacing = Param(
         100.0, unit="GHz", min=1.0, doc="Channel spacing, in frequency because the grid is"
+    )
+    wavelength_spacing = Param(
+        0.0,
+        unit="nm",
+        min=0.0,
+        doc="A coarse grid's step in wavelength (CWDM: 20 nm), replacing `spacing`; 0 is off",
     )
     bandwidth = Param(50.0, unit="GHz", min=0.0, doc="3 dB full width of each channel's passband")
     order = Param(3.0, unit="", min=1.0, max=10.0, doc="Super-Gaussian order; 3 to 5 is an AWG")
@@ -85,7 +91,25 @@ class _Grid(Component):
     )
 
     def channel_frequencies(self) -> tuple[float, ...]:
-        """Centre of every channel [Hz], ascending from ``first_wavelength``."""
+        """Centre of every channel [Hz], ascending from ``first_wavelength``.
+
+        DWDM is uniform in frequency and CWDM in wavelength (see :mod:`maiman.grid`),
+        so a coarse grid is stepped in nanometres when ``wavelength_spacing`` is
+        set: channel ``k`` sits at ``first_wavelength - k * wavelength_spacing``,
+        still ascending in frequency. A fixed frequency step cannot land on the
+        coarse grid: 3550 GHz from 1331 nm puts the next channel at 1310.35 nm,
+        0.65 nm off its standard centre.
+        """
+        step = self.si("wavelength_spacing")
+        if step > 0.0:
+            first = self.si("first_wavelength")
+            wavelengths = [first - index * step for index in range(self.channels)]
+            if wavelengths[-1] <= 0.0:
+                raise ValueError(
+                    f"{self.label}: {self.channels} channels {self.wavelength_spacing} nm "
+                    f"apart run below zero wavelength from {self.first_wavelength} nm"
+                )
+            return tuple(wavelength_to_frequency(w) for w in wavelengths)
         return channel_frequencies(
             self.channels,
             spacing=self.si("spacing"),

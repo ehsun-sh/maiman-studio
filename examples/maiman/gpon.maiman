@@ -1,0 +1,285 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 2488320000.0,
+    "samples_per_symbol": 8,
+    "sequence_length": 2048,
+    "seed": 6,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "prbs",
+      "type": "PRBSGenerator",
+      "params": {
+        "order": 11.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "drv",
+      "type": "NRZDriver",
+      "params": {
+        "v_low": 4.0,
+        "v_high": 0.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "olt",
+      "type": "CWLaser",
+      "params": {
+        "power": 3.0,
+        "wavelength": 1490.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "mzm",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "feeder",
+      "type": "Fiber",
+      "params": {
+        "length": 20.0,
+        "attenuation": 0.25,
+        "dispersion": 13.0
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "split32",
+      "type": "Splitter",
+      "params": {
+        "excess_loss": 1.5
+      },
+      "config": {
+        "num_outputs": 32
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "pm_onu",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+        "x": 630.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "apd",
+      "type": "APDPhotodiode",
+      "params": {
+        "gain": 10.0,
+        "ionization_ratio": 0.5
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "lpf",
+      "type": "ElectricalFilter",
+      "params": {
+        "bandwidth": 1.9
+      },
+      "ui": {
+        "x": 780.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "ber",
+      "type": "BERAnalyzer",
+      "params": {},
+      "ui": {
+        "x": 930.0,
+        "y": 140.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "split32",
+        "out1"
+      ],
+      "to": [
+        "apd",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "lpf",
+        "out"
+      ],
+      "to": [
+        "ber",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "ber",
+        "reference"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "drv",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "mzm",
+        "out"
+      ],
+      "to": [
+        "feeder",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "apd",
+        "out"
+      ],
+      "to": [
+        "lpf",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "out"
+      ],
+      "to": [
+        "mzm",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "olt",
+        "out"
+      ],
+      "to": [
+        "mzm",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "split32",
+        "out0"
+      ],
+      "to": [
+        "pm_onu",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "feeder",
+        "out"
+      ],
+      "to": [
+        "split32",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "2.7 GPON downstream: one fibre, 32 homes",
+    "body": "A passive optical network shares one fibre between many homes with no powered equipment in the\nstreet. The optical line terminal at the exchange, [[olt]] with [[mzm]], sends 2.488 Gb/s at\n1490 nm through 20 km of feeder fibre [[feeder]] to a 1:32 splitter [[split32]]. Every home's\nONU receives the whole stream and keeps its own part. One ONU is drawn here: a meter [[pm_onu]]\nand an APD receiver [[apd]].\n\n## The split is the budget\n\nAn ideal $1{:}N$ splitter costs $10\\log_{10}N$:\n\n$$1{:}32 \\;\\Rightarrow\\; 15.05\\ \\text{dB}$$\n\nplus about 1.5 dB of excess in a real planar splitter. That is more than the 5 dB of the 20 km\nfeeder at 0.25 dB/km.\n\n$$P_\\text{ONU} = 3 - 3\\ (\\text{modulator}) - 5\\ (\\text{feeder}) - 16.55\\ (\\text{split}) = -21.55\\ \\text{dBm}$$\n\n[[pm_onu]] reads \u221221.56 dBm. A GPON class B+ ONU must work at \u221228 dBm, which is why ONUs use an\nAPD (lesson 2.2), and the link here has 6.5 dB to spare: [[ber]] reads $Q = 35.6$.\n\n## Two directions, two wavelengths\n\nDownstream is 1490 nm and broadcast. Upstream is 1310 nm, and the ONUs take turns: each sends a\nshort burst in its own time slot. A burst arrives at the OLT with a power that depends on that\nhome's distance and splitter, so the upstream receiver has to settle on each burst's level within\na few bits. That needs a **burst-mode receiver**, which is not in the palette yet.\n\n## Try this\n\n- Add 3 dB to the excess loss of [[split32]]: that is a 1:64 split. What is left of the margin?\n- Lengthen [[feeder]] to 40 km. Does the APD still hold $Q = 6$?\n- Swap [[apd]] for a PIN photodiode and find the longest feeder that still works."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 284.0,
+      "h": 188.0,
+      "text": "OLT, at the exchange",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 321.0,
+      "y": 113.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "Outside plant",
+      "tone": "binary"
+    },
+    {
+      "id": "a3",
+      "kind": "rect",
+      "x": 621.0,
+      "y": 13.0,
+      "w": 434.0,
+      "h": 188.0,
+      "text": "One ONU, at a home",
+      "tone": "electrical"
+    },
+    {
+      "id": "a4",
+      "kind": "note",
+      "x": 440.0,
+      "y": 252.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "1:32 costs $10\\log_{10}32 = 15.05$ dB before any excess loss: more than the 20 km of fibre.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 538.0,
+      "y1": 250.0,
+      "x2": 538.0,
+      "y2": 206.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

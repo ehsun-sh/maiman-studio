@@ -1,0 +1,519 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 2500000000.0,
+    "samples_per_symbol": 8,
+    "sequence_length": 512,
+    "seed": 5,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "prbs",
+      "type": "PRBSGenerator",
+      "params": {
+        "order": 9.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 340.0
+      }
+    },
+    {
+      "id": "drv",
+      "type": "NRZDriver",
+      "params": {
+        "v_low": 4.0,
+        "v_high": 0.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 340.0
+      }
+    },
+    {
+      "id": "tx_dfb",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "mzm_dfb",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "fibre_dfb",
+      "type": "Fiber",
+      "params": {
+        "length": 3.0,
+        "attenuation": 0.2,
+        "dispersion": 17.0,
+        "nonlinearity": 0.0,
+        "four_wave_mixing": false,
+        "carry_walkoff": true
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "pin_dfb",
+      "type": "PINPhotodiode",
+      "params": {},
+      "ui": {
+        "x": 780.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "lpf_dfb",
+      "type": "ElectricalFilter",
+      "params": {
+        "bandwidth": 1.75
+      },
+      "ui": {
+        "x": 930.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "ber_dfb",
+      "type": "BERAnalyzer",
+      "params": {},
+      "ui": {
+        "x": 1080.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "tx_fp_steady",
+      "type": "FabryPerotLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1550.0,
+        "partition_noise": false
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "mzm_fp_steady",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "fibre_fp_steady",
+      "type": "Fiber",
+      "params": {
+        "length": 3.0,
+        "attenuation": 0.2,
+        "dispersion": 17.0,
+        "nonlinearity": 0.0,
+        "four_wave_mixing": false,
+        "carry_walkoff": true
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "pin_fp_steady",
+      "type": "PINPhotodiode",
+      "params": {},
+      "ui": {
+        "x": 780.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "lpf_fp_steady",
+      "type": "ElectricalFilter",
+      "params": {
+        "bandwidth": 1.75
+      },
+      "ui": {
+        "x": 930.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "ber_fp_steady",
+      "type": "BERAnalyzer",
+      "params": {},
+      "ui": {
+        "x": 1080.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "tx_fp",
+      "type": "FabryPerotLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 240.0
+      }
+    },
+    {
+      "id": "mzm_fp",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 240.0
+      }
+    },
+    {
+      "id": "fibre_fp",
+      "type": "Fiber",
+      "params": {
+        "length": 3.0,
+        "attenuation": 0.2,
+        "dispersion": 17.0,
+        "nonlinearity": 0.0,
+        "four_wave_mixing": false,
+        "carry_walkoff": true
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 240.0
+      }
+    },
+    {
+      "id": "pin_fp",
+      "type": "PINPhotodiode",
+      "params": {},
+      "ui": {
+        "x": 780.0,
+        "y": 240.0
+      }
+    },
+    {
+      "id": "lpf_fp",
+      "type": "ElectricalFilter",
+      "params": {
+        "bandwidth": 1.75
+      },
+      "ui": {
+        "x": 930.0,
+        "y": 240.0
+      }
+    },
+    {
+      "id": "ber_fp",
+      "type": "BERAnalyzer",
+      "params": {},
+      "ui": {
+        "x": 1080.0,
+        "y": 240.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "lpf_dfb",
+        "out"
+      ],
+      "to": [
+        "ber_dfb",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "ber_dfb",
+        "reference"
+      ]
+    },
+    {
+      "from": [
+        "lpf_fp",
+        "out"
+      ],
+      "to": [
+        "ber_fp",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "ber_fp",
+        "reference"
+      ]
+    },
+    {
+      "from": [
+        "lpf_fp_steady",
+        "out"
+      ],
+      "to": [
+        "ber_fp_steady",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "ber_fp_steady",
+        "reference"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "drv",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "mzm_dfb",
+        "out"
+      ],
+      "to": [
+        "fibre_dfb",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "mzm_fp",
+        "out"
+      ],
+      "to": [
+        "fibre_fp",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "mzm_fp_steady",
+        "out"
+      ],
+      "to": [
+        "fibre_fp_steady",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "pin_dfb",
+        "out"
+      ],
+      "to": [
+        "lpf_dfb",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "pin_fp",
+        "out"
+      ],
+      "to": [
+        "lpf_fp",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "pin_fp_steady",
+        "out"
+      ],
+      "to": [
+        "lpf_fp_steady",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "out"
+      ],
+      "to": [
+        "mzm_dfb",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "tx_dfb",
+        "out"
+      ],
+      "to": [
+        "mzm_dfb",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "out"
+      ],
+      "to": [
+        "mzm_fp",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "tx_fp",
+        "out"
+      ],
+      "to": [
+        "mzm_fp",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "out"
+      ],
+      "to": [
+        "mzm_fp_steady",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "tx_fp_steady",
+        "out"
+      ],
+      "to": [
+        "mzm_fp_steady",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "fibre_dfb",
+        "out"
+      ],
+      "to": [
+        "pin_dfb",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "fibre_fp",
+        "out"
+      ],
+      "to": [
+        "pin_fp",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "fibre_fp_steady",
+        "out"
+      ],
+      "to": [
+        "pin_fp_steady",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "2.4 Laser noise: mode partition in a Fabry\u2013Perot laser",
+    "body": "One 2.5 Gb/s pattern modulates three lasers at 1550 nm, each through 3 km of standard fibre\ninto the same receiver:\n\n- [[tx_dfb]], a single-frequency DFB laser;\n- [[tx_fp_steady]], a seven-mode Fabry\u2013Perot laser with its noise switched off (its modes sit at\n  their steady powers);\n- [[tx_fp]], the same Fabry\u2013Perot laser with its noise on.\n\n## Many modes, one reservoir\n\nA Fabry\u2013Perot cavity supports a comb of longitudinal modes, 1.1 nm apart here, and the gain\nkeeps several of them lasing. They all draw on the same carriers, so when one mode gains power\nanother loses it. The *sum* is quiet. Each mode on its own is not.\n\n## Dispersion splits them\n\nEach mode travels at its own group velocity. Seven modes span $6 \\times 1.1 = 6.6$ nm, so after\n3 km at 17 ps/(nm\u00b7km) they arrive\n\n$$\\Delta\\tau = D\\,L\\,\\Delta\\lambda = 17 \\times 3 \\times 6.6 \\approx 340\\ \\text{ps}$$\n\napart, most of a 400 ps bit. That alone smears the eye, and the steady laser [[tx_fp_steady]]\nshows how much.\n\n## Partition noise\n\nOnce the modes no longer arrive together, the power they were trading no longer cancels at the\ndetector. What is left is noise proportional to the signal itself, so turning up the power\ncannot beat it. The textbook estimate (Ogawa; a rule of thumb, not this model) is a relative\nnoise of\n\n$$r_\\text{mpn} = \\frac{k}{\\sqrt2}\\left[1 - e^{-(\\pi B D L \\sigma_\\lambda)^2}\\right]$$\n\nwith $k$ the partition coefficient and $\\sigma_\\lambda$ the laser's rms spectral width. It sets a\nceiling on $Q$ of about $1/r_\\text{mpn}$, whatever the received power.\n\n| Laser | $Q$ after 3 km |\n| :-- | :-- |\n| [[tx_dfb]] | 104 |\n| [[tx_fp_steady]] | 28.6 |\n| [[tx_fp]] | 13.0 |\n\nThe difference between the last two rows is partition noise and nothing else.\n\n## Try this\n\n- Raise the power of [[tx_fp]] by 10 dB. Its $Q$ barely moves: a noise floor, not a power limit.\n- Set [[fibre_fp]]'s dispersion to 0, as at 1310 nm. The modes arrive together and $Q$ doubles,\n  to about 26; what is left is the laser's total intensity noise. That is why Fabry\u2013Perot lasers\n  live in the O-band.\n- Cut [[tx_fp]]'s modes from 7 to 3."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 321.0,
+      "y": 13.0,
+      "w": 134.0,
+      "h": 288.0,
+      "text": "Three lasers",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 13.0,
+      "w": 284.0,
+      "h": 288.0,
+      "text": "Same modulation, 3 km each",
+      "tone": "binary"
+    },
+    {
+      "id": "a3",
+      "kind": "rect",
+      "x": 771.0,
+      "y": 13.0,
+      "w": 434.0,
+      "h": 288.0,
+      "text": "Identical receivers",
+      "tone": "electrical"
+    },
+    {
+      "id": "a4",
+      "kind": "note",
+      "x": 1246.0,
+      "y": 220.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "Same laser as the row above, with its modes trading power. Raise its power by 10 dB: the Q hardly moves.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 1244.0,
+      "y1": 266.0,
+      "x2": 1210.0,
+      "y2": 266.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

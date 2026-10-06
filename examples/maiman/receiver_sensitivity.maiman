@@ -1,0 +1,360 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 10000000000.0,
+    "samples_per_symbol": 8,
+    "sequence_length": 2048,
+    "seed": 3,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "prbs",
+      "type": "PRBSGenerator",
+      "params": {
+        "order": 11.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "drv",
+      "type": "NRZDriver",
+      "params": {
+        "v_low": 4.0,
+        "v_high": 0.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "tx",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "mzm",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "att",
+      "type": "Attenuator",
+      "params": {
+        "attenuation": 20.0
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "split",
+      "type": "Splitter",
+      "params": {},
+      "config": {
+        "num_outputs": 3
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "pm_rx",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+        "x": 630.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "pin",
+      "type": "PINPhotodiode",
+      "params": {},
+      "ui": {
+        "x": 630.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "apd",
+      "type": "APDPhotodiode",
+      "params": {
+        "gain": 10.0,
+        "ionization_ratio": 0.5
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 340.0
+      }
+    },
+    {
+      "id": "lpf_pin",
+      "type": "ElectricalFilter",
+      "params": {
+        "bandwidth": 7.0
+      },
+      "ui": {
+        "x": 780.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "ber_pin",
+      "type": "BERAnalyzer",
+      "params": {},
+      "ui": {
+        "x": 930.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "lpf_apd",
+      "type": "ElectricalFilter",
+      "params": {
+        "bandwidth": 7.0
+      },
+      "ui": {
+        "x": 780.0,
+        "y": 340.0
+      }
+    },
+    {
+      "id": "ber_apd",
+      "type": "BERAnalyzer",
+      "params": {},
+      "ui": {
+        "x": 930.0,
+        "y": 340.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "split",
+        "out2"
+      ],
+      "to": [
+        "apd",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "mzm",
+        "out"
+      ],
+      "to": [
+        "att",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "lpf_apd",
+        "out"
+      ],
+      "to": [
+        "ber_apd",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "ber_apd",
+        "reference"
+      ]
+    },
+    {
+      "from": [
+        "lpf_pin",
+        "out"
+      ],
+      "to": [
+        "ber_pin",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "ber_pin",
+        "reference"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "drv",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "apd",
+        "out"
+      ],
+      "to": [
+        "lpf_apd",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "pin",
+        "out"
+      ],
+      "to": [
+        "lpf_pin",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "out"
+      ],
+      "to": [
+        "mzm",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "tx",
+        "out"
+      ],
+      "to": [
+        "mzm",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "split",
+        "out1"
+      ],
+      "to": [
+        "pin",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "split",
+        "out0"
+      ],
+      "to": [
+        "pm_rx",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "att",
+        "out"
+      ],
+      "to": [
+        "split",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "2.2 Receiver sensitivity: PIN against APD",
+    "body": "A 10 Gb/s on\u2013off keyed signal [[tx]] [[mzm]] goes through a variable attenuator [[att]] and is\nsplit three ways [[split]]: one copy to a power meter [[pm_rx]], one to a PIN photodiode\n[[pin]], and one to an avalanche photodiode [[apd]]. Each receiver has the same 7 GHz filter\nand an error counter, so the only difference between them is the detector.\n\n## What limits a PIN receiver\n\nThe photocurrent is $I = \\mathcal{R}P$. At low power the dominant noise is the thermal noise of\nthe load resistor, which does not depend on the signal at all:\n\n$$\\sigma_T^2 = \\frac{4k_BT}{R_L}\\,B$$\n\nSo $Q$ falls in proportion to the received power: halve the power and $Q$ halves.\n\n## What an APD changes\n\nAn avalanche photodiode multiplies the photocurrent by $M$ before the load sees it, so the signal\ngrows $M$ times while thermal noise stays put. The multiplication is random, which costs an\nexcess noise factor on the shot noise:\n\n$$\\sigma_s^2 = 2q\\,M^2F(M)\\,\\mathcal{R}P\\,B, \\qquad F(M) = kM + \\left(2 - \\frac{1}{M}\\right)(1 - k)$$\n\n$k$ is the ionisation ratio, 0.5 on [[apd]] (InGaAs).\n\n## Sensitivity\n\nThe **sensitivity** is the received power for $Q = 6$, a bit error rate of $10^{-9}$.\nOpen **Sweep**, choose [[att]] and its attenuation, and run 4 to 30 dB:\n\n| Receiver | Sensitivity at $Q = 6$ |\n| :-- | :-- |\n| PIN [[pin]] | \u221219.2 dBm |\n| APD [[apd]], $M = 10$ | \u221228.1 dBm |\n\nThe APD buys almost 9 dB, which is 45 km of fibre at 0.2 dB/km.\n\n## The optimum gain\n\nMore gain is not always better: signal grows as $M$, shot noise as $M^2F(M) \\approx kM^3$. At\n[[att]] = 20 dB (\u221227.8 dBm) the APD's $Q$ is 0.8 at $M = 1$, 6.4 at 10, peaks at 7.3 near\n$M = 20$ and falls back to 6.3 at 40.\n\n## Try this\n\n- Sweep the gain of [[apd]] from 1 to 40 at [[att]] = 20 dB, and find the peak.\n- Set its ionisation ratio to 0.02 (silicon). Where does the best gain move?\n- Narrow [[lpf_pin]] to 5 GHz. Thermal noise falls with $B$; does the eye stay open?"
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 284.0,
+      "h": 238.0,
+      "text": "10 Gb/s transmitter",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 321.0,
+      "y": 163.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "Variable loss",
+      "tone": "binary"
+    },
+    {
+      "id": "a3",
+      "kind": "rect",
+      "x": 621.0,
+      "y": 163.0,
+      "w": 434.0,
+      "h": 88.0,
+      "text": "PIN receiver",
+      "tone": "electrical"
+    },
+    {
+      "id": "a4",
+      "kind": "rect",
+      "x": 621.0,
+      "y": 313.0,
+      "w": 434.0,
+      "h": 88.0,
+      "text": "APD receiver",
+      "tone": "electrical"
+    },
+    {
+      "id": "a5",
+      "kind": "note",
+      "x": 590.0,
+      "y": 452.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "Gain $M$ lifts the signal over the thermal noise; it also multiplies shot noise by $M^2F(M)$. Sweep the gain: there is a best one.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a6",
+      "kind": "arrow",
+      "x1": 688.0,
+      "y1": 450.0,
+      "x2": 688.0,
+      "y2": 406.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

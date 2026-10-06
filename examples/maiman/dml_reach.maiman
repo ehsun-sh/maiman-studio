@@ -1,0 +1,408 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 10000000000.0,
+    "samples_per_symbol": 32,
+    "sequence_length": 512,
+    "seed": 11,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "prbs",
+      "type": "PRBSGenerator",
+      "params": {
+        "order": 7.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "drv_dml",
+      "type": "NRZDriver",
+      "params": {
+        "v_low": 0.0,
+        "v_high": 1.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "dml",
+      "type": "DirectlyModulatedLaser",
+      "params": {
+        "bias_current": 90.0,
+        "transconductance": 60.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "drv_ext",
+      "type": "NRZDriver",
+      "params": {
+        "v_low": 1.0,
+        "v_high": 0.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 340.0
+      }
+    },
+    {
+      "id": "cw",
+      "type": "CWLaser",
+      "params": {
+        "power": 14.85,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 240.0
+      }
+    },
+    {
+      "id": "mzm",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 1.0,
+        "extinction_ratio": 4.84
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 340.0
+      }
+    },
+    {
+      "id": "chirp",
+      "type": "Oscilloscope",
+      "params": {
+        "span": 1000.0
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "fibre_dml",
+      "type": "Fiber",
+      "params": {
+        "length": 20.0,
+        "attenuation": 0.2,
+        "dispersion": 17.0
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "pin_dml",
+      "type": "PINPhotodiode",
+      "params": {},
+      "ui": {
+        "x": 630.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "lpf_dml",
+      "type": "ElectricalFilter",
+      "params": {
+        "bandwidth": 7.5
+      },
+      "ui": {
+        "x": 780.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "ber_dml",
+      "type": "BERAnalyzer",
+      "params": {},
+      "ui": {
+        "x": 930.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "fibre_ext",
+      "type": "Fiber",
+      "params": {
+        "length": 20.0,
+        "attenuation": 0.2,
+        "dispersion": 17.0
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 340.0
+      }
+    },
+    {
+      "id": "pin_ext",
+      "type": "PINPhotodiode",
+      "params": {},
+      "ui": {
+        "x": 630.0,
+        "y": 340.0
+      }
+    },
+    {
+      "id": "lpf_ext",
+      "type": "ElectricalFilter",
+      "params": {
+        "bandwidth": 7.5
+      },
+      "ui": {
+        "x": 780.0,
+        "y": 340.0
+      }
+    },
+    {
+      "id": "ber_ext",
+      "type": "BERAnalyzer",
+      "params": {},
+      "ui": {
+        "x": 930.0,
+        "y": 340.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "lpf_dml",
+        "out"
+      ],
+      "to": [
+        "ber_dml",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "ber_dml",
+        "reference"
+      ]
+    },
+    {
+      "from": [
+        "lpf_ext",
+        "out"
+      ],
+      "to": [
+        "ber_ext",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "ber_ext",
+        "reference"
+      ]
+    },
+    {
+      "from": [
+        "dml",
+        "out"
+      ],
+      "to": [
+        "chirp",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "drv_dml",
+        "out"
+      ],
+      "to": [
+        "dml",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "drv_dml",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "drv_ext",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "dml",
+        "out"
+      ],
+      "to": [
+        "fibre_dml",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "mzm",
+        "out"
+      ],
+      "to": [
+        "fibre_ext",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "pin_dml",
+        "out"
+      ],
+      "to": [
+        "lpf_dml",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "pin_ext",
+        "out"
+      ],
+      "to": [
+        "lpf_ext",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "drv_ext",
+        "out"
+      ],
+      "to": [
+        "mzm",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "cw",
+        "out"
+      ],
+      "to": [
+        "mzm",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "fibre_dml",
+        "out"
+      ],
+      "to": [
+        "pin_dml",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "fibre_ext",
+        "out"
+      ],
+      "to": [
+        "pin_ext",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "2.3 The reach of a directly modulated laser",
+    "body": "The same 10 Gb/s pattern [[prbs]] leaves two transmitters. On top, the drive current of a\ndirectly modulated laser [[dml]] is switched. Below, a CW laser [[cw]] is switched by a\nMach\u2013Zehnder [[mzm]]. The two are matched: the same average power and the same extinction ratio\n(4.84 dB), so the only difference is how the light was modulated. Each goes through 20 km of\nstandard fibre into an identical receiver.\n\n## Why a DML chirps\n\nThe light comes out when the carrier density in the laser moves, and the refractive index moves\nwith the carriers. So every change in power is also a change in frequency. The rate equations\ngive it as\n\n$$\\Delta\\nu(t) = \\frac{\\alpha}{4\\pi}\\left(\\frac{d}{dt}\\ln P(t) + \\kappa\\,P(t)\\right)$$\n\nThe first term is the **transient** chirp, at every edge. The second is the **adiabatic** chirp:\na one sits at a different frequency from a zero. $\\alpha$ is the linewidth enhancement factor,\n4 on [[dml]]. The oscilloscope [[chirp]] shows it: the frequency swings by about 21 GHz on the\nrising edges.\n\n## What dispersion does with it\n\nEach part of a bit now travels at its own speed. A frequency excursion $\\Delta\\nu$ is a\nwavelength excursion $\\Delta\\lambda = \\lambda^2\\Delta\\nu/c$, which dispersion turns into a delay:\n\n$$\\Delta\\tau = D\\,L\\,\\Delta\\lambda \\approx 17 \\times 20 \\times 0.17\\ \\text{nm} \\approx 58\\ \\text{ps}$$\n\nThat is more than half a 100 ps bit slot.\n\n| Transmitter | $Q$ after 20 km |\n| :-- | :-- |\n| [[dml]] | 2.7 |\n| [[cw]] + [[mzm]] | 39.8 |\n\nA Mach\u2013Zehnder driven push\u2013pull changes only the amplitude of the field, so it does not chirp.\nThat is why long-reach links use external modulation, and why 10G DMLs are sold for 10 to\n20 km.\n\n## Try this\n\n- Shorten [[fibre_dml]] to 0, 5 and 10 km. The eye at 5 km is better than back to back: the\n  fibre first undoes some of the laser's ringing.\n- Raise [[dml]]'s bias to 120 mA. It rings faster; does the $Q$ at 20 km improve?\n- Set both fibres' dispersion to 0. What is left of the gap is the laser's ringing, not its\n  chirp."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 171.0,
+      "y": 13.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "Directly modulated laser",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 171.0,
+      "y": 213.0,
+      "w": 284.0,
+      "h": 188.0,
+      "text": "CW laser + Mach\u2013Zehnder",
+      "tone": "optical"
+    },
+    {
+      "id": "a3",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 13.0,
+      "w": 134.0,
+      "h": 388.0,
+      "text": "20 km each",
+      "tone": "binary"
+    },
+    {
+      "id": "a4",
+      "kind": "rect",
+      "x": 621.0,
+      "y": 13.0,
+      "w": 434.0,
+      "h": 388.0,
+      "text": "Identical receivers",
+      "tone": "electrical"
+    },
+    {
+      "id": "a5",
+      "kind": "note",
+      "x": 646.0,
+      "y": 120.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "Run, open the Scope tab and tick *Show instantaneous frequency*: every edge chirps by gigahertz.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a6",
+      "kind": "arrow",
+      "x1": 644.0,
+      "y1": 166.0,
+      "x2": 610.0,
+      "y2": 166.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

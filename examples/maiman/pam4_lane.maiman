@@ -1,0 +1,272 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 26562500000.0,
+    "samples_per_symbol": 16,
+    "sequence_length": 4096,
+    "seed": 0,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "prbs",
+      "type": "PRBSGenerator",
+      "params": {
+        "order": 15.0,
+        "bits_per_symbol": 2.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "pam4",
+      "type": "PAM4Driver",
+      "params": {
+        "v_low": 3.2,
+        "v_high": 0.8,
+        "predistort": true
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "tx",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1310.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "mzm",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 90.0
+      }
+    },
+    {
+      "id": "pin",
+      "type": "PINPhotodiode",
+      "params": {},
+      "ui": {
+        "x": 480.0,
+        "y": 90.0
+      }
+    },
+    {
+      "id": "lpf",
+      "type": "ElectricalFilter",
+      "params": {
+        "bandwidth": 7.0
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 90.0
+      }
+    },
+    {
+      "id": "eye",
+      "type": "EyeDiagram",
+      "params": {},
+      "ui": {
+        "x": 780.0,
+        "y": -10.0
+      }
+    },
+    {
+      "id": "eq_off",
+      "type": "FFEDFEEqualizer",
+      "params": {
+        "ffe_taps": 1.0,
+        "dfe_taps": 0.0
+      },
+      "ui": {
+        "x": 780.0,
+        "y": 90.0
+      }
+    },
+    {
+      "id": "eq",
+      "type": "FFEDFEEqualizer",
+      "params": {
+        "ffe_taps": 9.0,
+        "dfe_taps": 2.0
+      },
+      "ui": {
+        "x": 780.0,
+        "y": 190.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "lpf",
+        "out"
+      ],
+      "to": [
+        "eq",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "eq",
+        "reference"
+      ]
+    },
+    {
+      "from": [
+        "lpf",
+        "out"
+      ],
+      "to": [
+        "eq_off",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "eq_off",
+        "reference"
+      ]
+    },
+    {
+      "from": [
+        "lpf",
+        "out"
+      ],
+      "to": [
+        "eye",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "pin",
+        "out"
+      ],
+      "to": [
+        "lpf",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "pam4",
+        "out"
+      ],
+      "to": [
+        "mzm",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "tx",
+        "out"
+      ],
+      "to": [
+        "mzm",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "pam4",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "mzm",
+        "out"
+      ],
+      "to": [
+        "pin",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "2.5 A 53 Gb/s PAM4 lane with an equaliser",
+    "body": "A PAM4 driver [[pam4]] turns every two bits of [[prbs]] into one of four voltages, and a\nMach\u2013Zehnder [[mzm]] writes them onto 1310 nm light at 26.5625 GBd: 53 Gb/s, one lane of a\n200G data-centre link. The receiver [[pin]] has only 7 GHz of bandwidth [[lpf]], about a quarter\nof the symbol rate. The eye [[eye]] shows the result, and two equalisers measure it: [[eq_off]]\nwith one tap (no equalisation) and [[eq]] with nine feed-forward taps and two of decision\nfeedback.\n\n## Four levels on a cosine\n\nThe modulator's power is $\\cos^2$ of its voltage, so equally spaced volts give unequal steps of\npower and the outer eyes close first. The driver **pre-distorts**: it puts each level at the\nvoltage whose power is evenly spaced,\n\n$$V_k = \\frac{2V_\\pi}{\\pi}\\arccos\\sqrt{P_k/P_\\text{max}}$$\n\n## Inter-symbol interference\n\nA filter narrower than the symbol rate spreads each symbol into its neighbours. Sampled at the\nbest instant, what arrives is\n\n$$y_n = h_0 a_n + \\sum_{k \\ne 0} h_k a_{n-k} + \\text{noise}$$\n\nand the sum is the ISI. With four levels only a third of the eye height is left between them, so\nISI that a two-level signal would survive closes PAM4.\n\n## The equaliser\n\nThe feed-forward equaliser is a short filter that inverts the channel,\n$z_n = \\sum_j c_j y_{n-j}$, trained to minimise the error. The decision-feedback part subtracts\nthe ISI of symbols already decided, $z_n - \\sum_k b_k \\hat a_{n-k}$. A DFE cannot reach a\n*precursor*: a symbol it has not decided yet.\n\n| Receiver | SNR | Symbol errors |\n| :-- | :-- | :-- |\n| [[eq_off]] | 9.9 dB | 609 / 4096 |\n| [[eq]] | 38.7 dB | 0 / 4096 |\n\n## Try this\n\n- Turn off predistortion on [[pam4]]. Which of the three eyes closes first?\n- Widen [[lpf]] to 20 GHz and see how much the equaliser still has to do.\n- Set [[eq]] to 3 feed-forward taps and no feedback."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 434.0,
+      "h": 188.0,
+      "text": "PAM4 transmitter",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 63.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "7 GHz receiver",
+      "tone": "electrical"
+    },
+    {
+      "id": "a3",
+      "kind": "rect",
+      "x": 771.0,
+      "y": -37.0,
+      "w": 134.0,
+      "h": 288.0,
+      "text": "Eye and equalisers",
+      "tone": "metric"
+    },
+    {
+      "id": "a4",
+      "kind": "note",
+      "x": 946.0,
+      "y": 170.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "9 feed-forward taps and 2 of decision feedback undo what the 7 GHz filter smeared.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 944.0,
+      "y1": 216.0,
+      "x2": 910.0,
+      "y2": 216.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}
