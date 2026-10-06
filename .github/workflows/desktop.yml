@@ -1,0 +1,108 @@
+# Build the desktop application for Windows, macOS and Linux.
+#
+# Each runner freezes the session server with PyInstaller for its own platform
+# (PyInstaller cannot cross-compile), checks the frozen copy serves the studio
+# and runs a link, then wraps it in Electron with electron-builder. The
+# installers are uploaded as workflow artifacts, and attached to the GitHub
+# release when one is published.
+#
+# Nothing is signed. A macOS build is quarantined by Gatekeeper and a Windows
+# installer is flagged by SmartScreen until signing certificates exist;
+# desktop/README.md says how to open them anyway.
+
+name: Desktop
+
+on:
+  pull_request:
+    paths:
+      - "desktop/**"
+      - "src/maiman/server.py"
+      - "src/maiman/cli.py"
+      - ".github/workflows/desktop.yml"
+  release:
+    types: [published]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    defaults:
+      run:
+        working-directory: desktop
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install the engine and PyInstaller
+        run: python -m pip install .. pyinstaller
+
+      - name: Freeze the session server
+        run: npm run backend
+
+      - name: Check the frozen server serves the studio and runs a link
+        run: |
+          exe=build/backend/maiman-backend/maiman-backend
+          [ -f "$exe.exe" ] && exe="$exe.exe"
+          node smoke.js "$exe"
+
+      - name: Install Electron
+        run: npm ci
+
+      - name: Package
+        run: npm run dist
+        env:
+          # Without a certificate electron-builder would go looking for one in
+          # the keychain; say plainly that this build is unsigned.
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: maiman-studio-${{ matrix.os }}
+          path: |
+            desktop/dist/*.exe
+            desktop/dist/*.dmg
+            desktop/dist/*.zip
+            desktop/dist/*.AppImage
+            desktop/dist/*.deb
+          if-no-files-found: error
+
+  attach:
+    name: Attach to the release
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: installers
+          merge-multiple: true
+
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" installers/* --repo "${{ github.repository }}" --clobber
