@@ -1,6 +1,7 @@
 {
   "name": "maiman-studio-desktop",
   "productName": "Maiman Studio",
+  "desktopName": "maiman-studio.desktop",
   "version": "0.16.0",
   "description": "Maiman Studio as a desktop application: the studio page and its session server in one window.",
   "author": "Ehsan Shahmohammadi",
@@ -59,6 +60,8 @@
     },
     "linux": {
       "category": "Science",
+      "maintainer": "Ehsan Shahmohammadi <140869413+ehsun-sh@users.noreply.github.com>",
+      "syncDesktopName": true,
       "target": [
         "AppImage",
         "deb"
