@@ -6,3 +6,6 @@
 *.gds binary
 *.npy binary
 *.npz binary
+
+# cmd.exe misreads labels and blocks in LF batch files.
+*.bat text eol=crlf
