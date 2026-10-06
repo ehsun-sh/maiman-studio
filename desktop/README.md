@@ -31,6 +31,18 @@ Electron (main.js)
 
 Needs Node 20+ and a Python that can import the engine.
 
+The quickest way is the launcher in the repository root — double-click it:
+
+| Platform | Launcher |
+| :--- | :--- |
+| Windows | `start-studio.bat` |
+| macOS | `start-studio.command` |
+| Linux | `start-studio.sh` |
+
+The first run installs Electron into `desktop/node_modules`; after that it opens the window
+directly. It checks for Node.js and NumPy first and says what to install if either is missing.
+By hand, it is:
+
 ```bash
 cd desktop
 npm install

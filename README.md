@@ -217,6 +217,9 @@ sight. Installers are built by the **Desktop** workflow and attached to each Git
 are not code-signed yet; [desktop/README.md](desktop/README.md) says how to open one anyway, and
 how to build it yourself.
 
+From a checkout with Node.js installed, double-click `start-studio.bat` (Windows),
+`start-studio.command` (macOS) or `start-studio.sh` (Linux) in the repository root to open it.
+
 ### If you would rather write Python
 
 The interface and the library are the same engine. Anything the page does, a script can do — and a
