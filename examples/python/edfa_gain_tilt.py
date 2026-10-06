@@ -12,7 +12,7 @@ broad shoulder, with emission derived by McCumber's relation. The ratios this
 prints are what that shape gives; bring a datasheet's Giles parameters for a real
 coil and :class:`~maiman.ErbiumSpectrum` takes them as they are.
 
-Run: ``python examples/edfa_gain_tilt.py``
+Run: ``python examples/python/edfa_gain_tilt.py``
 """
 
 from __future__ import annotations

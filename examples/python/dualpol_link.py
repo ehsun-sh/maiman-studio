@@ -6,7 +6,7 @@ receiver's two branches carry is a *mixture* of both tributaries rather than one
 each — and past a small angle neither is recoverable at all. The butterfly
 equaliser is what separates them again.
 
-Run: ``python examples/dualpol_link.py``
+Run: ``python examples/python/dualpol_link.py``
 """
 
 from __future__ import annotations

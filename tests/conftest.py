@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "examples"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "examples" / "python"))
 
 #: What each variable must point at, as the tests and :mod:`maiman.pcs` open it.
 SPECIFICATION = {

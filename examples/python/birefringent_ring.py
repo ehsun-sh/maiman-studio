@@ -11,7 +11,7 @@ comb sits and how far apart its teeth are, against ``c / (n_g L)``. The second
 is the same ring as a block on a graph, with light launched at 45 degrees so
 there is something on both axes for it to treat differently.
 
-Run: ``python examples/birefringent_ring.py``
+Run: ``python examples/python/birefringent_ring.py``
 """
 
 from __future__ import annotations

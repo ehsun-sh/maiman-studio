@@ -12,7 +12,7 @@ it runs in an environment of its own::
 
     python -m venv sax-env
     sax-env/bin/pip install -e . sax
-    sax-env/bin/python examples/sax_crossvalidation.py
+    sax-env/bin/python examples/python/sax_crossvalidation.py
 
 and in CI only when asked for, from the *SAX cross-validation* workflow. It
 exits non-zero if any transmission disagrees by more than :data:`TOLERANCE`.

@@ -16,7 +16,7 @@ Langevin forces and nothing written in by hand:
    and each mode alone is not -- and fibre dispersion delays each mode by its own
    amount, so the cancellation that kept the total quiet undoes itself.
 
-Run: ``python examples/laser_noise.py``
+Run: ``python examples/python/laser_noise.py``
 """
 
 from __future__ import annotations

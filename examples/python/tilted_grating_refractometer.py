@@ -34,7 +34,7 @@ grating's notch a full nanometre. The last table measures it.
 Takes about a minute: every notch below the Bragg line is a mode solve, and
 there are dozens of them.
 
-Run: ``python examples/tilted_grating_refractometer.py``
+Run: ``python examples/python/tilted_grating_refractometer.py``
 """
 
 from __future__ import annotations

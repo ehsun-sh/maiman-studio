@@ -512,7 +512,7 @@ not so: eliminating a circuit's internal ports is one linear identity,
 matplotlib, pandas, scipy, sympy, xarray, pydantic — and `klujax`, its sparse back-end, is
 **LGPL-2.0-only**, which is the same question §11 already answers for FFTW. So the reduction is
 written here and SAX is kept as a cross-validation reference: given the same models and wiring the
-two agree to 5e-15 across 4001 frequencies, in `examples/sax_crossvalidation.py`, which a
+two agree to 5e-15 across 4001 frequencies, in `examples/python/sax_crossvalidation.py`, which a
 dispatch-only workflow runs in an environment of its own before a release.
 
 For the *ecosystem* the premise half stands. Layout, DRC and the GDS itself are a large body of

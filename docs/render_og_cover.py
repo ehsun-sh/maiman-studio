@@ -75,12 +75,12 @@ TIME_BUDGET_MS = 3000
 def measure() -> dict[str, object]:
     """Run the shipped coherent link and return its constellation, finely binned.
 
-    The graph is ``examples/export_ui_data.build()`` — the same one the interface
+    The graph is ``examples/python/export_ui_data.build()`` — the same one the interface
     draws and the front page quotes — with the diagram's resolution turned up.
     Nothing else about it is touched, so the EVM printed under the plot is the
     EVM of the link on the cover.
     """
-    sys.path.insert(0, str(ROOT / "examples"))
+    sys.path.insert(0, str(ROOT / "examples" / "python"))
     from export_ui_data import build
 
     from maiman.components import ConstellationDiagram

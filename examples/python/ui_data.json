@@ -21543,6 +21543,62 @@
        "in"
       ]
      }
+    ],
+    "notes": {
+     "title": "Eight-channel DWDM link",
+     "body": "Eight 10 Gb/s channels on the 100 GHz grid are multiplexed [[mux]], boosted [[booster]], sent\nthrough 80 km of fibre with the Kerr effect on [[span]], dispersion-compensated [[dcf]] and\namplified again [[preamp]]. One channel is dropped at [[demux]] and received on [[pin]].\n\n## Dispersion compensation\n\nThe compensating fibre has a large negative $D$, and its length is chosen so the accumulated\ndispersion cancels:\n\n$$D_\\text{span}L_\\text{span} + D_\\text{DCF}L_\\text{DCF} = 0 \\;\\Rightarrow\\; L_\\text{DCF} = \\frac{17 \\times 80}{100} = 13.6\\ \\text{km}$$\n\n## The Kerr effect\n\nLight changes the refractive index it travels through. Over a span, a channel picks up a\nphase proportional to its own power, and twice as much per watt from each neighbour:\n\n$$\\phi_j = \\gamma\\,L_\\text{eff}\\Big(P_j + 2\\sum_{k \\ne j} P_k\\Big), \\qquad L_\\text{eff} = \\frac{1 - e^{-\\alpha L}}{\\alpha}$$\n\nWith $\\alpha$ in 1/km (0.2 dB/km is 0.046 /km), $L_\\text{eff}$ of an 80 km span is about 21 km:\nthe nonlinearity happens near the launch, where the power is high.\n\n## Noise against nonlinearity\n\nMore launch power means a better OSNR at the receiver, and more nonlinear phase in the span.\nSomewhere between the two is the best launch power for the link.\n\n## Try this\n\n- Switch off cross-phase modulation on [[span]] and compare the bit error rate and run time.\n- Step the gain of [[booster]] from 4 to 16 dB. Where is the error rate lowest?\n- Shorten [[dcf]] by half and watch the dropped channel's eye at [[ber]]."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 3.0,
+      "w": 410.0,
+      "h": 788.0,
+      "text": "8 transmitters",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 435.0,
+      "y": 353.0,
+      "w": 686.0,
+      "h": 88.0,
+      "text": "Line",
+      "tone": "binary"
+     },
+     {
+      "id": "a3",
+      "kind": "rect",
+      "x": 1125.0,
+      "y": 353.0,
+      "w": 548.0,
+      "h": 268.0,
+      "text": "Drop one channel",
+      "tone": "electrical"
+     },
+     {
+      "id": "a4",
+      "kind": "note",
+      "x": 798.0,
+      "y": 190.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "The DCF is sized to cancel the span exactly: $D_\\text{span}L_\\text{span} + D_\\text{DCF}L_\\text{DCF} = 0$",
+      "tone": "electrical"
+     },
+     {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 898.0,
+      "y1": 288.0,
+      "x2": 916.0,
+      "y2": 346.0,
+      "text": "",
+      "tone": "metric"
+     }
     ]
    }
   },
@@ -21970,6 +22026,62 @@
        "in"
       ]
      }
+    ],
+    "notes": {
+     "title": "WDM: four channels and an OSNR",
+     "body": "Four lasers [[ch0]]\u2026[[ch3]] sit on the ITU 100 GHz grid, each modulated by its own MZM, and the\ncombiner [[mux]] puts them on one fibre. Two spans of 80 km each lose 16 dB, and two EDFAs\n[[edfa0]] [[edfa1]] put it back. The analyser [[osa]] draws the spectrum and [[osnr]] reads the\nsignal-to-noise ratio off it.\n\n## The grid\n\nChannels are spaced evenly in *frequency*, not wavelength:\n\n$$\\nu_n = \\nu_0 + n\\,\\Delta\\nu, \\qquad \\Delta\\lambda \\approx \\frac{\\lambda^2}{c}\\,\\Delta\\nu$$\n\nAt 1550 nm, 100 GHz is about 0.8 nm.\n\n## Where the noise floor comes from\n\nAn amplifier with gain $G$ adds amplified spontaneous emission. In a reference bandwidth\n$B_\\text{ref}$, over both polarisations,\n\n$$P_\\text{ASE} = 2\\,n_{sp}\\,h\\nu\\,(G-1)\\,B_\\text{ref}$$\n\nand at high gain the noise figure is $\\mathrm{NF} \\approx 2n_{sp}$.\n\n## OSNR\n\n$$\\mathrm{OSNR} = \\frac{P_\\text{ch}}{P_\\text{ASE}} \\quad \\text{in } B_\\text{ref} = 12.5\\ \\text{GHz}\\ (0.1\\ \\text{nm})$$\n\nFor a chain of $N$ identical spans, the rule of thumb at 1550 nm (a rule of thumb, not this\nmodel) is\n\n$$\\mathrm{OSNR_{dB}} \\approx 58 + P_\\text{ch,dBm} - L_\\text{span,dB} - \\mathrm{NF_{dB}} - 10\\log_{10}N$$\n\n## Resolution bandwidth\n\nAn OSA reports power *per resolution bandwidth*. Widen it from $B_1$ to $B_2$ and the ASE floor\nrises by $10\\log_{10}(B_2/B_1)$ dB, while a channel narrower than the window reads the same.\n\n## Try this\n\n- Change the resolution bandwidth of [[osa]] from 12.5 to 50 GHz. How far does the floor move?\n- Raise the noise figure of [[edfa0]] by 3 dB. Does the OSNR fall by 3 dB?\n- Add a third span and amplifier. The rule of thumb predicts a loss of $10\\log_{10}(3/2)$ dB."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 410.0,
+      "h": 388.0,
+      "text": "4 transmitters",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 573.0,
+      "y": 163.0,
+      "w": 548.0,
+      "h": 88.0,
+      "text": "2 amplified spans",
+      "tone": "binary"
+     },
+     {
+      "id": "a3",
+      "kind": "rect",
+      "x": 1125.0,
+      "y": 33.0,
+      "w": 134.0,
+      "h": 348.0,
+      "text": "Instruments",
+      "tone": "metric"
+     },
+     {
+      "id": "a4",
+      "kind": "note",
+      "x": 700.0,
+      "y": 300.0,
+      "w": 230.0,
+      "h": 96.0,
+      "text": "Each EDFA adds noise as well as gain. The floor it leaves under the channels is what the OSNR meter reads.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 770.0,
+      "y1": 298.0,
+      "x2": 778.0,
+      "y2": 246.0,
+      "text": "",
+      "tone": "metric"
+     }
     ]
    }
   },
@@ -22181,6 +22293,72 @@
        "pin",
        "in"
       ]
+     }
+    ],
+    "notes": {
+     "title": "Direct detection: reading an eye",
+     "body": "A 10 Gb/s pseudo-random pattern [[prbs]] drives a Mach\u2013Zehnder modulator [[mzm]] that switches\nthe laser [[tx]] on and off. After 20 km of fibre [[fib]], a PIN photodiode [[pin]] and a\nfilter [[lpf]] turn the light back into a current. The eye [[eye]] folds that current over\ntwo bit periods, and [[ber]] counts errors against the original pattern.\n\n## The modulator\n\nDriven push\u2013pull, an MZM transmits\n\n$$P_\\text{out} = P_\\text{in}\\cos^2\\left(\\frac{\\pi V}{2V_\\pi}\\right)$$\n\nso a drive swinging between $0$ and $V_\\pi$ takes the light from full to nearly dark. How dark\nis set by the extinction ratio, $\\mathrm{ER} = 10\\log_{10}(P_1/P_0)$.\n\n## The fibre\n\nPower falls exponentially with length: $P(L) = P(0)\\,10^{-\\alpha L/10}$, with $\\alpha$ in dB/km.\nAt 0.2 dB/km, 20 km costs 4 dB. Chromatic dispersion spreads each pulse by roughly\n\n$$\\Delta\\tau \\approx D\\,L\\,\\Delta\\lambda$$\n\nWith $D = 17$ ps/(nm\u00b7km) and the 0.08 nm a 10 Gb/s signal occupies, that is about 27 ps,\na quarter of the 100 ps bit slot.\n\n## The photodiode and its noise\n\nThe photocurrent is $I = \\mathcal{R}P$. Two noises ride on it: shot noise, which grows with the\ncurrent, and the thermal noise of the load resistor, which does not.\n\n$$\\sigma^2 = 2q\\,(I + I_d)\\,B + \\frac{4k_BT}{R_L}\\,B$$\n\n## From the eye to a bit error rate\n\nWith the mean and spread of the one and zero rails read off the eye,\n\n$$Q = \\frac{I_1 - I_0}{\\sigma_1 + \\sigma_0}, \\qquad \\mathrm{BER} = \\frac{1}{2}\\,\\mathrm{erfc}\\left(\\frac{Q}{\\sqrt{2}}\\right)$$\n\n$Q = 6$ is the classic target: a BER of about $10^{-9}$.\n\n## Try this\n\n- Stretch [[fib]] to 60, 80 and 100 km. Does the eye lose height first, or width?\n- Lower the power of [[tx]] until errors appear. That power is the receiver's sensitivity.\n- Narrow [[lpf]] to 3 GHz. Less noise gets through, but neighbouring bits start to overlap."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 33.0,
+      "w": 410.0,
+      "h": 248.0,
+      "text": "Transmitter",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 435.0,
+      "y": 193.0,
+      "w": 134.0,
+      "h": 88.0,
+      "text": "Channel",
+      "tone": "binary"
+     },
+     {
+      "id": "a3",
+      "kind": "rect",
+      "x": 573.0,
+      "y": 193.0,
+      "w": 272.0,
+      "h": 88.0,
+      "text": "Receiver",
+      "tone": "electrical"
+     },
+     {
+      "id": "a4",
+      "kind": "rect",
+      "x": 849.0,
+      "y": 103.0,
+      "w": 134.0,
+      "h": 268.0,
+      "text": "Instruments",
+      "tone": "metric"
+     },
+     {
+      "id": "a5",
+      "kind": "note",
+      "x": 404.0,
+      "y": 330.0,
+      "w": 230.0,
+      "h": 96.0,
+      "text": "Lengthen the fibre and run again: loss lowers the eye, dispersion smears it sideways. $\\Delta\\tau \\approx D\\,L\\,\\Delta\\lambda$",
+      "tone": "electrical"
+     },
+     {
+      "id": "a6",
+      "kind": "arrow",
+      "x1": 484.0,
+      "y1": 328.0,
+      "x2": 502.0,
+      "y2": 276.0,
+      "text": "",
+      "tone": "metric"
      }
     ]
    }
@@ -22481,6 +22659,62 @@
        "smp",
        "reference"
       ]
+     }
+    ],
+    "notes": {
+     "title": "Coherent 16-QAM with soft-decision FEC",
+     "body": "The encoder [[fec]] adds parity, [[map]] turns every 4 bits into one of 16 points, and [[drv]]\nwith [[mod]] write those points onto the field of [[tx]]. The coherent receiver [[rx]] beats the\nsignal against a strong local oscillator [[lo]], [[smp]] takes one sample per symbol, [[sd]]\nturns each sample into soft bits and [[dec]] corrects them.\n\n## Writing a point onto light\n\nBiased at null, each arm of the IQ modulator has a sine-shaped field response, so\n\n$$E_\\text{out} \\propto \\sin\\left(\\frac{\\pi V_I}{2V_\\pi}\\right) + j\\,\\sin\\left(\\frac{\\pi V_Q}{2V_\\pi}\\right)$$\n\nThe driver pre-distorts with an arcsine so the points land on a square grid.\n\n## Coherent detection\n\nA 90\u00b0 hybrid and balanced photodiodes return the real and imaginary parts of the beat:\n\n$$i_I \\propto \\mathcal{R}\\,\\mathrm{Re}\\{E_s E_\\text{LO}^*\\}, \\qquad i_Q \\propto \\mathcal{R}\\,\\mathrm{Im}\\{E_s E_\\text{LO}^*\\}$$\n\nThe current scales with $\\sqrt{P_s P_\\text{LO}}$, which is why a \u221225 dBm signal is readable:\nthe 10 dBm oscillator lifts it far above the thermal noise of the receiver.\n\n## Quality of the constellation\n\n$$\\mathrm{EVM}_\\text{rms} \\approx \\frac{1}{\\sqrt{\\mathrm{SNR}}}, \\qquad \\mathrm{BER}_\\text{16QAM} \\approx \\frac{3}{8}\\,\\mathrm{erfc}\\sqrt{\\frac{\\mathrm{SNR}}{10}}$$\n\nThe second assumes Gray coding and Gaussian noise.\n\n## Soft decisions\n\nInstead of a 0 or a 1, the demapper gives the decoder a log-likelihood ratio,\n\n$$L(b) = \\ln\\frac{P(b=0\\mid y)}{P(b=1\\mid y)} \\approx \\frac{1}{2\\sigma^2}\\Big(\\min_{s \\in S_1}|y-s|^2 - \\min_{s \\in S_0}|y-s|^2\\Big)$$\n\nwhere $S_0$ and $S_1$ are the points whose bit $b$ is 0 or 1. A sample near a decision boundary\ngives an LLR near zero, and the decoder knows to distrust that bit.\n\n## Try this\n\n- Lower the power of [[tx]] step by step. The pre-FEC error rate rises smoothly; the post-FEC one\n  stays at zero until it falls off a cliff.\n- Cut the iterations of [[dec]] from 8 to 2. Where does the cliff move?"
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 548.0,
+      "h": 268.0,
+      "text": "Transmitter",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 573.0,
+      "y": 13.0,
+      "w": 272.0,
+      "h": 268.0,
+      "text": "Coherent front end",
+      "tone": "electrical"
+     },
+     {
+      "id": "a3",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 373.0,
+      "w": 548.0,
+      "h": 88.0,
+      "text": "Soft decisions and decoding",
+      "tone": "symbol"
+     },
+     {
+      "id": "a4",
+      "kind": "note",
+      "x": 148.0,
+      "y": 500.0,
+      "w": 250.0,
+      "h": 96.0,
+      "text": "The demapper hands the decoder a confidence for every bit, not a bit: $L(b)=\\ln\\frac{P(b=0\\mid y)}{P(b=1\\mid y)}$",
+      "tone": "electrical"
+     },
+     {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 218.0,
+      "y1": 498.0,
+      "x2": 226.0,
+      "y2": 456.0,
+      "text": "",
+      "tone": "metric"
      }
     ]
    }
@@ -22920,7 +23154,11 @@
      "reference"
     ]
    }
-  ]
+  ],
+  "notes": {
+   "title": "Coherent 16-QAM over 80 km",
+   "body": "This is the link the studio opens with: 32 GBd 16-QAM, 128 Gb/s raw, over 80 km of fibre with\nreal lasers. The transmitter and local oscillator [[tx]] [[lo]] each have a 100 kHz linewidth\nand sit about 200 MHz apart, so the receiver has to find the carrier on its own. The bottom row\nof the schematic is that search, in the order a real receiver performs it.\n\n## 1. Undo the dispersion \u2014 [[cdc]]\n\nThe fibre is an all-pass filter whose phase grows with the square of frequency,\n\n$$H_\\text{fibre}(\\omega) = \\exp\\left(j\\,\\frac{\\beta_2 L}{2}\\,\\omega^2\\right), \\qquad \\beta_2 = -\\frac{D\\lambda^2}{2\\pi c}$$\n\nand the compensator applies its conjugate. $17$ ps/(nm\u00b7km) over 80 km accumulates 1360 ps/nm.\n\n## 2. Find the sampling instant \u2014 [[tr]], [[smp]]\n\nTiming recovery estimates where in each symbol to sample, and the sampler applies the\nroot-raised-cosine matched filter (roll-off 0.2) and keeps one sample per symbol.\n\n## 3. Remove the frequency offset \u2014 [[fo]]\n\nRaising a QPSK-like constellation to the fourth power strips the data and leaves the carrier:\n\n$$\\Delta\\hat f = \\frac{1}{8\\pi T}\\,\\arg\\sum_k \\big(y_k\\,y_{k-1}^*\\big)^4$$\n\n## 4. Track the phase \u2014 [[cr]], [[pqr]]\n\nLaser phase noise is a random walk whose step variance per symbol is $2\\pi(\\Delta\\nu_\\text{tx} + \\Delta\\nu_\\text{lo})\\,T$. Blind phase search\ntries [[cr]]'s test phases and keeps the one that lands samples closest to the grid; known pilot\nsymbols, one every 64, settle which of the four quarter turns is the right one.\n\n## 5. Decide, softly \u2014 [[sd]], [[fdec]]\n\nThe demapper turns each symbol into four log-likelihood ratios and the decoder corrects them.\n[[vsa]] measures EVM, SNR and BER, and [[cd]] draws the constellation in the dock below.\n\n## Try this\n\n- Set the linewidth of both lasers to 1000 kHz. What happens to the constellation?\n- Move [[lo]] further from 1550 nm. Where does frequency recovery give up?\n- Change the format to 64-QAM (bits per symbol 6) on [[map]]: every block that cares follows."
+  }
  },
  "context": {
   "symbol_rate": 32000000000.0,

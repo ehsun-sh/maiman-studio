@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import dwdm_link
+import lessons
 import numpy as np
 
 from maiman import Graph, SimulationContext, manifests, sweep
@@ -74,9 +75,12 @@ DISPERSION = 17.0  # ps/nm/km, standard single-mode fiber at 1550 nm
 FORMATS = {2: "QPSK", 4: "16-QAM", 6: "64-QAM", 8: "256-QAM"}
 
 
+#: Where the studio's projects are written: the `.maiman` folder beside this one.
+PROJECTS = Path(__file__).resolve().parent.parent / "maiman"
+
 #: Where the direct-detection project is written, so the studio has a link with
 #: an eye in it to open.
-OOK_PROJECT = Path(__file__).parent / "ook_eye.maiman"
+OOK_PROJECT = PROJECTS / "ook_eye.maiman"
 
 #: Positions for it, so it opens laid out rather than stacked on a grid. The
 #: format carries them and the editor reads them back.
@@ -133,13 +137,19 @@ def ook_eye() -> Any:
     graph = ook_link()
     eye_block = of_type(graph, EyeDiagram)
     histogram = graph.run()[eye_block]
-    save(graph, OOK_PROJECT, ui=OOK_LAYOUT)
+    save(
+        graph,
+        OOK_PROJECT,
+        ui=OOK_LAYOUT,
+        notes=lessons.NOTES["ook_eye"],
+        annotations=lessons.marks("ook_eye", OOK_LAYOUT),
+    )
     return histogram
 
 
 #: Where the soft-decision FEC project is written, so the studio has a coded
 #: link to open.
-SDFEC_PROJECT = Path(__file__).parent / "coherent_sdfec.maiman"
+SDFEC_PROJECT = PROJECTS / "coherent_sdfec.maiman"
 
 #: Blocks per run. The staircase checks every bit twice — once by its own
 #: stripe's rows, once transposed as a column by the stripe after it — so the
@@ -248,7 +258,13 @@ def coherent_sdfec() -> None:
     graph = coherent_sdfec_link()
     decoder = next(c for c in graph.components if c.label == "dec")
     report = graph.run(keep=[decoder]).port(decoder, "diagnostics")
-    save(graph, SDFEC_PROJECT, ui=SDFEC_LAYOUT)
+    save(
+        graph,
+        SDFEC_PROJECT,
+        ui=SDFEC_LAYOUT,
+        notes=lessons.NOTES["coherent_sdfec"],
+        annotations=lessons.marks("coherent_sdfec", SDFEC_LAYOUT),
+    )
     print(
         f"soft-decision FEC: pre-FEC {report.pre_fec_ber:.3e} -> "
         f"post-FEC {report.post_fec_ber:.3e} over {report.blocks} blocks"
@@ -258,7 +274,7 @@ def coherent_sdfec() -> None:
 #: Where the WDM project is written, so the studio has a link with a spectrum in
 #: it to open. The eye has one of these and the spectrum needs its own: neither
 #: instrument has anything to show on the coherent link the page draws by default.
-WDM_PROJECT = Path(__file__).parent / "wdm_osa.maiman"
+WDM_PROJECT = PROJECTS / "wdm_osa.maiman"
 
 #: Channels on the ITU grid, and the amplified line that gives the trace a floor.
 WDM_CHANNELS = 4
@@ -362,7 +378,13 @@ def wdm_spectrum() -> dict[str, Any]:
     block = of_type(graph, OpticalSpectrumAnalyzer)
     results = graph.run()
     spectrum = results[block]
-    save(graph, WDM_PROJECT, ui=WDM_LAYOUT)
+    save(
+        graph,
+        WDM_PROJECT,
+        ui=WDM_LAYOUT,
+        notes=lessons.NOTES["wdm_osa"],
+        annotations=lessons.marks("wdm_osa", WDM_LAYOUT),
+    )
 
     peak_frequency, peak_power = spectrum.peak()
     return {
@@ -672,7 +694,7 @@ def main() -> None:
         # it back to run it, so the blocks on the canvas, the values in the
         # inspector and the graph the engine executes cannot drift apart —
         # there is only the one description of them.
-        "project": graph_to_dict(graph),
+        "project": graph_to_dict(graph, notes=lessons.NOTES["coherent_16qam"]),
         "context": {
             "symbol_rate": graph.ctx.bit_rate,
             "samples_per_symbol": graph.ctx.samples_per_symbol,

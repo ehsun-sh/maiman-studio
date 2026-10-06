@@ -293,5 +293,61 @@
         "reference"
       ]
     }
+  ],
+  "notes": {
+    "title": "Coherent 16-QAM with soft-decision FEC",
+    "body": "The encoder [[fec]] adds parity, [[map]] turns every 4 bits into one of 16 points, and [[drv]]\nwith [[mod]] write those points onto the field of [[tx]]. The coherent receiver [[rx]] beats the\nsignal against a strong local oscillator [[lo]], [[smp]] takes one sample per symbol, [[sd]]\nturns each sample into soft bits and [[dec]] corrects them.\n\n## Writing a point onto light\n\nBiased at null, each arm of the IQ modulator has a sine-shaped field response, so\n\n$$E_\\text{out} \\propto \\sin\\left(\\frac{\\pi V_I}{2V_\\pi}\\right) + j\\,\\sin\\left(\\frac{\\pi V_Q}{2V_\\pi}\\right)$$\n\nThe driver pre-distorts with an arcsine so the points land on a square grid.\n\n## Coherent detection\n\nA 90\u00b0 hybrid and balanced photodiodes return the real and imaginary parts of the beat:\n\n$$i_I \\propto \\mathcal{R}\\,\\mathrm{Re}\\{E_s E_\\text{LO}^*\\}, \\qquad i_Q \\propto \\mathcal{R}\\,\\mathrm{Im}\\{E_s E_\\text{LO}^*\\}$$\n\nThe current scales with $\\sqrt{P_s P_\\text{LO}}$, which is why a \u221225 dBm signal is readable:\nthe 10 dBm oscillator lifts it far above the thermal noise of the receiver.\n\n## Quality of the constellation\n\n$$\\mathrm{EVM}_\\text{rms} \\approx \\frac{1}{\\sqrt{\\mathrm{SNR}}}, \\qquad \\mathrm{BER}_\\text{16QAM} \\approx \\frac{3}{8}\\,\\mathrm{erfc}\\sqrt{\\frac{\\mathrm{SNR}}{10}}$$\n\nThe second assumes Gray coding and Gaussian noise.\n\n## Soft decisions\n\nInstead of a 0 or a 1, the demapper gives the decoder a log-likelihood ratio,\n\n$$L(b) = \\ln\\frac{P(b=0\\mid y)}{P(b=1\\mid y)} \\approx \\frac{1}{2\\sigma^2}\\Big(\\min_{s \\in S_1}|y-s|^2 - \\min_{s \\in S_0}|y-s|^2\\Big)$$\n\nwhere $S_0$ and $S_1$ are the points whose bit $b$ is 0 or 1. A sample near a decision boundary\ngives an LLR near zero, and the decoder knows to distrust that bit.\n\n## Try this\n\n- Lower the power of [[tx]] step by step. The pre-FEC error rate rises smoothly; the post-FEC one\n  stays at zero until it falls off a cliff.\n- Cut the iterations of [[dec]] from 8 to 2. Where does the cliff move?"
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 548.0,
+      "h": 268.0,
+      "text": "Transmitter",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 573.0,
+      "y": 13.0,
+      "w": 272.0,
+      "h": 268.0,
+      "text": "Coherent front end",
+      "tone": "electrical"
+    },
+    {
+      "id": "a3",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 373.0,
+      "w": 548.0,
+      "h": 88.0,
+      "text": "Soft decisions and decoding",
+      "tone": "symbol"
+    },
+    {
+      "id": "a4",
+      "kind": "note",
+      "x": 148.0,
+      "y": 500.0,
+      "w": 250.0,
+      "h": 96.0,
+      "text": "The demapper hands the decoder a confidence for every bit, not a bit: $L(b)=\\ln\\frac{P(b=0\\mid y)}{P(b=1\\mid y)}$",
+      "tone": "electrical"
+    },
+    {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 218.0,
+      "y1": 498.0,
+      "x2": 226.0,
+      "y2": 456.0,
+      "text": "",
+      "tone": "metric"
+    }
   ]
 }

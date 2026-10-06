@@ -13,7 +13,7 @@ is *measured* — a noise-loaded link, bisected until the counted bit error rate
 sits on the threshold — and then compared against
 :func:`maiman.analysis.required_osnr`, which knows nothing about any of it.
 
-Run: ``python examples/reference_rates.py``
+Run: ``python examples/python/reference_rates.py``
 """
 
 from __future__ import annotations
@@ -309,7 +309,7 @@ def main() -> None:
         "  and optical SNR to spare pays for it."
     )
 
-    here = Path(__file__).parent
+    here = Path(__file__).resolve().parent.parent / "maiman"
     for name, filename in (("400G DP-16QAM", "zr400.maiman"), ("800G DP-16QAM", "zr800.maiman")):
         rate, bits, _ = CONFIGURATIONS[name]
         graph, _, _ = build(rate, bits, span_km=SPAN_KM, sequence_length=1024)

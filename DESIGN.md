@@ -202,7 +202,7 @@ names a colour.
 The palette is generated from `manifests()` — the same call the real GUI will
 make. The inspector shows true parameters, units, ranges and docstrings. The
 constellation, eye and sweep are a real run, exported by
-[`examples/export_ui_data.py`](examples/export_ui_data.py).
+[`examples/python/export_ui_data.py`](examples/python/export_ui_data.py).
 
 This is not a purity exercise. Building the mockup against real data has twice
 found engine defects that the test suite missed:
@@ -576,6 +576,35 @@ Toggling a flag rebuilds the panel rather than patching it, because working out
 which rows it owns at that point would be a second copy of a rule the manifest
 already carries.
 
+## 8h. Teaching on the canvas
+
+A link that runs is half of what an example is for; the other half is someone
+understanding *why* it does what it does. So a project can now carry two things
+the engine never reads, both in the same `.maiman` document as the graph:
+
+- **A lesson** (`notes`), opened in a panel on the left of the canvas whenever a
+  project that has one is opened. Markdown, with formulas in TeX between dollar
+  signs. `[[label]]` names a block, and clicking it selects that block and
+  brings it into view, so the prose and the schematic point at each other.
+- **Marks** (`annotations`): sticky notes, frames, ellipses and arrows, placed
+  with four tools beside select and pan. Frames sit *under* the wires and are
+  grabbed by their edge or label, never their middle, because they usually
+  enclose blocks and the bed inside them still has to take a click and a
+  rubber band. Notes and arrows sit over the blocks they point at.
+
+Formulas are turned into MathML in the page and drawn by the browser. KaTeX or
+MathJax would have been the first thing this file fetched from elsewhere, and
+the page has to open off disk with no network; a test holds that line. The
+converter is a subset of TeX, and a command it does not know is printed as
+written, in the bad colour, rather than silently dropped.
+
+Every paragraph in a lesson is `dir="auto"`, so a lesson written in Persian or
+Arabic reads right to left without any setting.
+
+The panel covers the left of the canvas, so opening a project with a lesson
+frames the schematic in the part the panel leaves visible, never zooming past
+100 %. It does not do this on a reload when the tab already has a view.
+
 ## 9. Decisions worth not re-litigating
 
 - **Paper is the default**, and it is stamped before first paint so a dark host
@@ -618,13 +647,13 @@ already carries.
 
 - **Three links still get canvases of their own**, all openable from the File
   menu, and now for one reason rather than two: they cannot be *this* link. The
-  eye comes from [`examples/ook_eye.maiman`](examples/ook_eye.maiman) — a
+  eye comes from [`examples/maiman/ook_eye.maiman`](examples/maiman/ook_eye.maiman) — a
   coherent receiver has no eye. The spectrum comes from
-  [`examples/wdm_osa.maiman`](examples/wdm_osa.maiman) — a single-carrier link
+  [`examples/maiman/wdm_osa.maiman`](examples/maiman/wdm_osa.maiman) — a single-carrier link
   has nothing for an OSA to show. Tests keep both off this canvas rather than
   trusting that nobody wires one on.
 
-  [`examples/coherent_sdfec.maiman`](examples/coherent_sdfec.maiman) is the
+  [`examples/maiman/coherent_sdfec.maiman`](examples/maiman/coherent_sdfec.maiman) is the
   third, and it stays because it isolates the code from the carrier: it declares
   an ideal laser and no fiber, so what it measures is the decoder. The flagship
   now carries soft-decision FEC too, and measures something different — see

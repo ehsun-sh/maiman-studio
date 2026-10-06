@@ -10,7 +10,7 @@ when the pump runs out, which a booster holding output power through a nine
 decibel drop does. And which channels drain the reservoir hardest, because a watt
 at 1530 nm is not a watt at 1560.
 
-Run: ``python examples/edfa_pump_control.py``
+Run: ``python examples/python/edfa_pump_control.py``
 """
 
 from __future__ import annotations

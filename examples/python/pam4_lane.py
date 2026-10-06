@@ -10,7 +10,7 @@ Two tables. The first is the transmitter's linearity: evenly spaced volts on a
 second is the receiver, from no equalisation at all to feed-forward taps and
 decision feedback.
 
-Run: ``python examples/pam4_lane.py``
+Run: ``python examples/python/pam4_lane.py``
 """
 
 from __future__ import annotations

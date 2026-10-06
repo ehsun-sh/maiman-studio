@@ -927,6 +927,120 @@ verdict, and DESIGN.md
   @media (max-width: 1180px) {
     .body { grid-template-columns: 190px minmax(0, 1fr) 240px; }
   }
+
+  /* ---- Teaching: annotations and the lesson ---------------------------- */
+  #canvas-wrap[data-tool="note"] #graph, #canvas-wrap[data-tool="rect"] #graph,
+  #canvas-wrap[data-tool="ellipse"] #graph, #canvas-wrap[data-tool="arrow"] #graph,
+  #canvas-wrap[data-tool="note"] #graph [data-node],
+  #canvas-wrap[data-tool="rect"] #graph [data-node],
+  #canvas-wrap[data-tool="ellipse"] #graph [data-node],
+  #canvas-wrap[data-tool="arrow"] #graph [data-node] { cursor: crosshair; }
+  .ann .ann-body {
+    fill: currentColor; fill-opacity: 0.05; stroke: currentColor; stroke-width: 1.25;
+    stroke-dasharray: 6 4; pointer-events: none;
+  }
+  .ann .ann-grab { fill: none; stroke: transparent; stroke-width: 12; pointer-events: stroke; cursor: move; }
+  .ann-arrow .ann-line { stroke: currentColor; stroke-width: 1.75; pointer-events: none; }
+  .ann-arrow .ann-head { fill: currentColor; pointer-events: none; }
+  .ann-label {
+    fill: currentColor; font-family: var(--sans); font-size: 11.5px; font-weight: 600;
+    paint-order: stroke; stroke: var(--ground); stroke-width: 3px; stroke-linejoin: round;
+  }
+  .ann-grab-text { cursor: move; }
+  .ann-arrow .ann-label { pointer-events: none; }
+  .ann-note-bg {
+    fill: var(--panel); stroke: currentColor; stroke-width: 1;
+    fill: color-mix(in srgb, currentColor 12%, var(--panel));
+    filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.12));
+  }
+  .ann-note { cursor: move; }
+  .ann-note-text {
+    box-sizing: border-box; width: 100%; height: 100%; overflow: hidden;
+    padding: 7px 9px; font-family: var(--sans); font-size: 11.5px; line-height: 1.4;
+    color: var(--ink); user-select: none;
+  }
+  .ann-note-text p { margin: 0 0 4px; }
+  .ann-note-text ul, .ann-note-text ol { margin: 0 0 4px; padding-left: 16px; }
+  .ann-note-text h3, .ann-note-text h4, .ann-note-text h5 { margin: 0 0 4px; font-size: 12px; }
+  .ann-placeholder { color: var(--ink-4); font-style: italic; }
+  .ann.selected .ann-body, .ann.selected .ann-note-bg { stroke-width: 1.75; }
+  .ann.selected .ann-note-bg { stroke: var(--accent); }
+  .ann-handle {
+    fill: var(--panel); stroke: var(--accent); stroke-width: 1.5; cursor: nwse-resize;
+  }
+  .ann-arrow .ann-handle { cursor: crosshair; }
+  .ann-field-label { display: block; font-size: 12px; color: var(--ink-2); margin-bottom: 5px; }
+  .ann-textarea, .lesson-editor textarea, .lesson-editor input {
+    box-sizing: border-box; width: 100%; resize: vertical;
+    background: var(--ground); color: var(--ink); border: 1px solid var(--rule);
+    border-radius: 4px; padding: 6px 7px; font-family: var(--mono); font-size: 11.5px;
+    line-height: 1.45; caret-color: var(--accent);
+  }
+  .ann-textarea:focus, .lesson-editor textarea:focus, .lesson-editor input:focus {
+    outline: none; border-color: var(--accent-dim);
+  }
+  .node-g.pulse .node-halo { opacity: 1; animation: pulse 400ms ease-in-out 3; }
+  @keyframes pulse { 50% { stroke-width: 5; } }
+  @media (prefers-reduced-motion: reduce) { .node-g.pulse .node-halo { animation: none; } }
+
+  .lesson {
+    position: absolute; left: 0; top: 0; bottom: 0; z-index: 4;
+    width: min(360px, 42%); display: flex; flex-direction: column;
+    background: var(--panel); border-right: 1px solid var(--rule);
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.06);
+  }
+  .lesson[hidden] { display: none; }
+  .lesson-open .canvas-badge { left: calc(min(360px, 42%) + 12px); }
+  .lesson-head {
+    display: flex; align-items: center; gap: 6px; padding: 9px 10px 8px 14px;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .lesson-head h2 {
+    flex: 1; margin: 0; font-size: 13.5px; font-weight: 600; letter-spacing: -0.01em;
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .lesson-btn {
+    font: inherit; font-size: 11.5px; color: var(--ink-2); background: none; cursor: pointer;
+    border: 1px solid var(--rule); border-radius: 4px; padding: 2px 8px;
+  }
+  .lesson-btn:hover, .lesson-btn[aria-pressed="true"] { background: var(--raised); color: var(--ink); }
+  .lesson-x { border-color: transparent; font-size: 16px; line-height: 1; padding: 1px 6px; }
+  .lesson-editor {
+    display: flex; flex-direction: column; gap: 6px; padding: 10px 12px;
+    border-bottom: 1px solid var(--rule-soft); background: var(--panel-2);
+  }
+  .lesson-editor[hidden] { display: none; }
+  .lesson-editor textarea { min-height: 180px; height: 34vh; }
+  .lesson-help { margin: 0; font-size: 10.5px; color: var(--ink-4); line-height: 1.4; }
+  .lesson-body {
+    flex: 1; overflow-y: auto; padding: 4px 16px 18px;
+    font-size: 12.5px; line-height: 1.55; color: var(--ink-2);
+  }
+  .lesson-body h3, .lesson-body h4, .lesson-body h5 {
+    margin: 16px 0 4px; color: var(--ink); font-size: 12.5px; font-weight: 650;
+  }
+  .lesson-body h3 { font-size: 13.5px; }
+  .lesson-body p { margin: 8px 0; }
+  .lesson-body ul, .lesson-body ol { margin: 6px 0; padding-left: 18px; }
+  .lesson-body li { margin: 3px 0; }
+  .lesson-body code, .ann-note-text code {
+    font-family: var(--mono); font-size: 0.92em; background: var(--raised);
+    padding: 0 3px; border-radius: 3px;
+  }
+  .lesson-body a { color: var(--accent); }
+  .lesson-empty { color: var(--ink-4); }
+  .rich-math { margin: 8px 0; overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
+  .lesson math, .ann-note-text math { color: var(--ink); font-size: 1.08em; }
+  .rich-math math { font-size: 1.12em; }
+  .tex-unknown { color: var(--bad); }
+  .block-ref {
+    font: inherit; font-family: var(--mono); font-size: 0.9em; color: var(--ink);
+    background: var(--accent-wash); border: 1px solid transparent; border-radius: 3px;
+    padding: 0 4px; margin: 0 1px;
+  }
+  button.block-ref { cursor: pointer; }
+  button.block-ref:hover { border-color: var(--accent-dim); }
+
   @media (max-width: 940px) {
     .body { grid-template-columns: minmax(0, 1fr); }
     .palette, .inspector { display: none; }
@@ -1028,6 +1142,8 @@ verdict, and DESIGN.md
         <button role="menuitem" id="view-pane-smx"><svg class="menu-tick" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 5"/></svg>S-matrix</button>
         <button role="menuitem" id="view-pane-log"><svg class="menu-tick" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 5"/></svg>Log</button>
         <hr class="menu-sep">
+        <button role="menuitem" id="view-notes"><svg class="menu-tick" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 5"/></svg>Lesson notes<span class="menu-key">L</span></button>
+        <hr class="menu-sep">
         <button role="menuitem" id="view-ground-light"><svg class="menu-tick" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 5"/></svg>Paper</button>
         <button role="menuitem" id="view-ground-dark"><svg class="menu-tick" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 5"/></svg>Graphite</button>
       </div>
@@ -1097,6 +1213,26 @@ verdict, and DESIGN.md
            stroke-width="1.4" stroke-linecap="round" aria-hidden="true">
         <path d="M8 2v12M2 8h12M8 2L6 4M8 2l2 2M8 14l-2-2M8 14l2-2M2 8l2-2M2 8l2 2M14 8l-2-2M14 8l-2 2"/>
       </svg>
+    </button>
+    <span class="tb-sep"></span>
+    <!-- Marks for teaching: none of them is part of the link, and the engine
+         never reads them. Each tool places one mark and hands back the select
+         tool, which is what a second click would have wanted anyway. -->
+    <button class="tb" id="tool-note" aria-pressed="false" title="Note — click or drag on the canvas (N)">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 2.5h10v7.5l-3.5 3.5H3z"/><path d="M9.5 13.5V10H13"/><path d="M5.5 6h5M5.5 8.5h3"/></svg>
+    </button>
+    <button class="tb" id="tool-rect" aria-pressed="false" title="Frame — drag around a stage of the link (R)">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="3.5" width="11" height="9" rx="1.5"/></svg>
+    </button>
+    <button class="tb" id="tool-ellipse" aria-pressed="false" title="Ellipse (E)">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="8" cy="8" rx="5.6" ry="4.4"/></svg>
+    </button>
+    <button class="tb" id="tool-arrow" aria-pressed="false" title="Arrow — drag from tail to head (A)">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 13L12.5 3.5M7 3.5h5.5V9"/></svg>
+    </button>
+    <button class="tb" id="notes-btn" aria-pressed="false" title="Lesson notes for this project (L)">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 3.2c2-.9 3.9-.9 5.5.4v9.6c-1.6-1.3-3.5-1.3-5.5-.4zM13.5 3.2c-2-.9-3.9-.9-5.5.4v9.6c1.6-1.3 3.5-1.3 5.5-.4z"/></svg>
+      Notes
     </button>
     <span class="tb-sep"></span>
     <div class="menu-pop tb-pop" id="align-menu" role="menu" hidden>
@@ -1220,6 +1356,27 @@ verdict, and DESIGN.md
         <svg id="graph" viewBox="0 0 1000 530" preserveAspectRatio="xMidYMid meet"
              role="img" aria-label="Optical link schematic"></svg>
         <div id="canvas-hint" role="status" aria-live="polite"></div>
+        <!-- The lesson: what this link is for, the formulas behind it, and
+             what to try. It is part of the project document, so it opens with
+             the project and is saved with it. -->
+        <aside class="lesson" id="lesson" aria-labelledby="lesson-title" hidden>
+          <div class="lesson-head">
+            <h2 id="lesson-title" dir="auto">Notes</h2>
+            <button class="lesson-btn" id="lesson-edit" type="button" aria-pressed="false">Edit</button>
+            <button class="lesson-btn lesson-x" id="lesson-close" type="button"
+                    aria-label="Close the notes">&times;</button>
+          </div>
+          <div class="lesson-editor" id="lesson-editor" hidden>
+            <input id="lesson-title-input" type="text" placeholder="Title" dir="auto"
+                   aria-label="Lesson title" autocomplete="off">
+            <textarea id="lesson-source" spellcheck="false" dir="auto"
+                      aria-label="Lesson text"></textarea>
+            <p class="lesson-help">## heading, - list, **bold**, *italic*, `code`.
+              Formulas in TeX: $E = h\nu$ inline, $$&hellip;$$ on a line of their own.
+              [[label]] links a block.</p>
+          </div>
+          <div class="lesson-body" id="lesson-body"></div>
+        </aside>
         <div class="canvas-badge">
           <span>Ports</span>
           <span class="legend"><i style="background:var(--optical)"></i>optical</span>
@@ -22988,6 +23145,62 @@ verdict, and DESIGN.md
        "in"
       ]
      }
+    ],
+    "notes": {
+     "title": "Eight-channel DWDM link",
+     "body": "Eight 10 Gb/s channels on the 100 GHz grid are multiplexed [[mux]], boosted [[booster]], sent\nthrough 80 km of fibre with the Kerr effect on [[span]], dispersion-compensated [[dcf]] and\namplified again [[preamp]]. One channel is dropped at [[demux]] and received on [[pin]].\n\n## Dispersion compensation\n\nThe compensating fibre has a large negative $D$, and its length is chosen so the accumulated\ndispersion cancels:\n\n$$D_\\text{span}L_\\text{span} + D_\\text{DCF}L_\\text{DCF} = 0 \\;\\Rightarrow\\; L_\\text{DCF} = \\frac{17 \\times 80}{100} = 13.6\\ \\text{km}$$\n\n## The Kerr effect\n\nLight changes the refractive index it travels through. Over a span, a channel picks up a\nphase proportional to its own power, and twice as much per watt from each neighbour:\n\n$$\\phi_j = \\gamma\\,L_\\text{eff}\\Big(P_j + 2\\sum_{k \\ne j} P_k\\Big), \\qquad L_\\text{eff} = \\frac{1 - e^{-\\alpha L}}{\\alpha}$$\n\nWith $\\alpha$ in 1/km (0.2 dB/km is 0.046 /km), $L_\\text{eff}$ of an 80 km span is about 21 km:\nthe nonlinearity happens near the launch, where the power is high.\n\n## Noise against nonlinearity\n\nMore launch power means a better OSNR at the receiver, and more nonlinear phase in the span.\nSomewhere between the two is the best launch power for the link.\n\n## Try this\n\n- Switch off cross-phase modulation on [[span]] and compare the bit error rate and run time.\n- Step the gain of [[booster]] from 4 to 16 dB. Where is the error rate lowest?\n- Shorten [[dcf]] by half and watch the dropped channel's eye at [[ber]]."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 3.0,
+      "w": 410.0,
+      "h": 788.0,
+      "text": "8 transmitters",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 435.0,
+      "y": 353.0,
+      "w": 686.0,
+      "h": 88.0,
+      "text": "Line",
+      "tone": "binary"
+     },
+     {
+      "id": "a3",
+      "kind": "rect",
+      "x": 1125.0,
+      "y": 353.0,
+      "w": 548.0,
+      "h": 268.0,
+      "text": "Drop one channel",
+      "tone": "electrical"
+     },
+     {
+      "id": "a4",
+      "kind": "note",
+      "x": 798.0,
+      "y": 190.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "The DCF is sized to cancel the span exactly: $D_\\text{span}L_\\text{span} + D_\\text{DCF}L_\\text{DCF} = 0$",
+      "tone": "electrical"
+     },
+     {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 898.0,
+      "y1": 288.0,
+      "x2": 916.0,
+      "y2": 346.0,
+      "text": "",
+      "tone": "metric"
+     }
     ]
    }
   },
@@ -23415,6 +23628,62 @@ verdict, and DESIGN.md
        "in"
       ]
      }
+    ],
+    "notes": {
+     "title": "WDM: four channels and an OSNR",
+     "body": "Four lasers [[ch0]]\u2026[[ch3]] sit on the ITU 100 GHz grid, each modulated by its own MZM, and the\ncombiner [[mux]] puts them on one fibre. Two spans of 80 km each lose 16 dB, and two EDFAs\n[[edfa0]] [[edfa1]] put it back. The analyser [[osa]] draws the spectrum and [[osnr]] reads the\nsignal-to-noise ratio off it.\n\n## The grid\n\nChannels are spaced evenly in *frequency*, not wavelength:\n\n$$\\nu_n = \\nu_0 + n\\,\\Delta\\nu, \\qquad \\Delta\\lambda \\approx \\frac{\\lambda^2}{c}\\,\\Delta\\nu$$\n\nAt 1550 nm, 100 GHz is about 0.8 nm.\n\n## Where the noise floor comes from\n\nAn amplifier with gain $G$ adds amplified spontaneous emission. In a reference bandwidth\n$B_\\text{ref}$, over both polarisations,\n\n$$P_\\text{ASE} = 2\\,n_{sp}\\,h\\nu\\,(G-1)\\,B_\\text{ref}$$\n\nand at high gain the noise figure is $\\mathrm{NF} \\approx 2n_{sp}$.\n\n## OSNR\n\n$$\\mathrm{OSNR} = \\frac{P_\\text{ch}}{P_\\text{ASE}} \\quad \\text{in } B_\\text{ref} = 12.5\\ \\text{GHz}\\ (0.1\\ \\text{nm})$$\n\nFor a chain of $N$ identical spans, the rule of thumb at 1550 nm (a rule of thumb, not this\nmodel) is\n\n$$\\mathrm{OSNR_{dB}} \\approx 58 + P_\\text{ch,dBm} - L_\\text{span,dB} - \\mathrm{NF_{dB}} - 10\\log_{10}N$$\n\n## Resolution bandwidth\n\nAn OSA reports power *per resolution bandwidth*. Widen it from $B_1$ to $B_2$ and the ASE floor\nrises by $10\\log_{10}(B_2/B_1)$ dB, while a channel narrower than the window reads the same.\n\n## Try this\n\n- Change the resolution bandwidth of [[osa]] from 12.5 to 50 GHz. How far does the floor move?\n- Raise the noise figure of [[edfa0]] by 3 dB. Does the OSNR fall by 3 dB?\n- Add a third span and amplifier. The rule of thumb predicts a loss of $10\\log_{10}(3/2)$ dB."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 410.0,
+      "h": 388.0,
+      "text": "4 transmitters",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 573.0,
+      "y": 163.0,
+      "w": 548.0,
+      "h": 88.0,
+      "text": "2 amplified spans",
+      "tone": "binary"
+     },
+     {
+      "id": "a3",
+      "kind": "rect",
+      "x": 1125.0,
+      "y": 33.0,
+      "w": 134.0,
+      "h": 348.0,
+      "text": "Instruments",
+      "tone": "metric"
+     },
+     {
+      "id": "a4",
+      "kind": "note",
+      "x": 700.0,
+      "y": 300.0,
+      "w": 230.0,
+      "h": 96.0,
+      "text": "Each EDFA adds noise as well as gain. The floor it leaves under the channels is what the OSNR meter reads.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 770.0,
+      "y1": 298.0,
+      "x2": 778.0,
+      "y2": 246.0,
+      "text": "",
+      "tone": "metric"
+     }
     ]
    }
   },
@@ -23626,6 +23895,72 @@ verdict, and DESIGN.md
        "pin",
        "in"
       ]
+     }
+    ],
+    "notes": {
+     "title": "Direct detection: reading an eye",
+     "body": "A 10 Gb/s pseudo-random pattern [[prbs]] drives a Mach\u2013Zehnder modulator [[mzm]] that switches\nthe laser [[tx]] on and off. After 20 km of fibre [[fib]], a PIN photodiode [[pin]] and a\nfilter [[lpf]] turn the light back into a current. The eye [[eye]] folds that current over\ntwo bit periods, and [[ber]] counts errors against the original pattern.\n\n## The modulator\n\nDriven push\u2013pull, an MZM transmits\n\n$$P_\\text{out} = P_\\text{in}\\cos^2\\left(\\frac{\\pi V}{2V_\\pi}\\right)$$\n\nso a drive swinging between $0$ and $V_\\pi$ takes the light from full to nearly dark. How dark\nis set by the extinction ratio, $\\mathrm{ER} = 10\\log_{10}(P_1/P_0)$.\n\n## The fibre\n\nPower falls exponentially with length: $P(L) = P(0)\\,10^{-\\alpha L/10}$, with $\\alpha$ in dB/km.\nAt 0.2 dB/km, 20 km costs 4 dB. Chromatic dispersion spreads each pulse by roughly\n\n$$\\Delta\\tau \\approx D\\,L\\,\\Delta\\lambda$$\n\nWith $D = 17$ ps/(nm\u00b7km) and the 0.08 nm a 10 Gb/s signal occupies, that is about 27 ps,\na quarter of the 100 ps bit slot.\n\n## The photodiode and its noise\n\nThe photocurrent is $I = \\mathcal{R}P$. Two noises ride on it: shot noise, which grows with the\ncurrent, and the thermal noise of the load resistor, which does not.\n\n$$\\sigma^2 = 2q\\,(I + I_d)\\,B + \\frac{4k_BT}{R_L}\\,B$$\n\n## From the eye to a bit error rate\n\nWith the mean and spread of the one and zero rails read off the eye,\n\n$$Q = \\frac{I_1 - I_0}{\\sigma_1 + \\sigma_0}, \\qquad \\mathrm{BER} = \\frac{1}{2}\\,\\mathrm{erfc}\\left(\\frac{Q}{\\sqrt{2}}\\right)$$\n\n$Q = 6$ is the classic target: a BER of about $10^{-9}$.\n\n## Try this\n\n- Stretch [[fib]] to 60, 80 and 100 km. Does the eye lose height first, or width?\n- Lower the power of [[tx]] until errors appear. That power is the receiver's sensitivity.\n- Narrow [[lpf]] to 3 GHz. Less noise gets through, but neighbouring bits start to overlap."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 33.0,
+      "w": 410.0,
+      "h": 248.0,
+      "text": "Transmitter",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 435.0,
+      "y": 193.0,
+      "w": 134.0,
+      "h": 88.0,
+      "text": "Channel",
+      "tone": "binary"
+     },
+     {
+      "id": "a3",
+      "kind": "rect",
+      "x": 573.0,
+      "y": 193.0,
+      "w": 272.0,
+      "h": 88.0,
+      "text": "Receiver",
+      "tone": "electrical"
+     },
+     {
+      "id": "a4",
+      "kind": "rect",
+      "x": 849.0,
+      "y": 103.0,
+      "w": 134.0,
+      "h": 268.0,
+      "text": "Instruments",
+      "tone": "metric"
+     },
+     {
+      "id": "a5",
+      "kind": "note",
+      "x": 404.0,
+      "y": 330.0,
+      "w": 230.0,
+      "h": 96.0,
+      "text": "Lengthen the fibre and run again: loss lowers the eye, dispersion smears it sideways. $\\Delta\\tau \\approx D\\,L\\,\\Delta\\lambda$",
+      "tone": "electrical"
+     },
+     {
+      "id": "a6",
+      "kind": "arrow",
+      "x1": 484.0,
+      "y1": 328.0,
+      "x2": 502.0,
+      "y2": 276.0,
+      "text": "",
+      "tone": "metric"
      }
     ]
    }
@@ -23926,6 +24261,62 @@ verdict, and DESIGN.md
        "smp",
        "reference"
       ]
+     }
+    ],
+    "notes": {
+     "title": "Coherent 16-QAM with soft-decision FEC",
+     "body": "The encoder [[fec]] adds parity, [[map]] turns every 4 bits into one of 16 points, and [[drv]]\nwith [[mod]] write those points onto the field of [[tx]]. The coherent receiver [[rx]] beats the\nsignal against a strong local oscillator [[lo]], [[smp]] takes one sample per symbol, [[sd]]\nturns each sample into soft bits and [[dec]] corrects them.\n\n## Writing a point onto light\n\nBiased at null, each arm of the IQ modulator has a sine-shaped field response, so\n\n$$E_\\text{out} \\propto \\sin\\left(\\frac{\\pi V_I}{2V_\\pi}\\right) + j\\,\\sin\\left(\\frac{\\pi V_Q}{2V_\\pi}\\right)$$\n\nThe driver pre-distorts with an arcsine so the points land on a square grid.\n\n## Coherent detection\n\nA 90\u00b0 hybrid and balanced photodiodes return the real and imaginary parts of the beat:\n\n$$i_I \\propto \\mathcal{R}\\,\\mathrm{Re}\\{E_s E_\\text{LO}^*\\}, \\qquad i_Q \\propto \\mathcal{R}\\,\\mathrm{Im}\\{E_s E_\\text{LO}^*\\}$$\n\nThe current scales with $\\sqrt{P_s P_\\text{LO}}$, which is why a \u221225 dBm signal is readable:\nthe 10 dBm oscillator lifts it far above the thermal noise of the receiver.\n\n## Quality of the constellation\n\n$$\\mathrm{EVM}_\\text{rms} \\approx \\frac{1}{\\sqrt{\\mathrm{SNR}}}, \\qquad \\mathrm{BER}_\\text{16QAM} \\approx \\frac{3}{8}\\,\\mathrm{erfc}\\sqrt{\\frac{\\mathrm{SNR}}{10}}$$\n\nThe second assumes Gray coding and Gaussian noise.\n\n## Soft decisions\n\nInstead of a 0 or a 1, the demapper gives the decoder a log-likelihood ratio,\n\n$$L(b) = \\ln\\frac{P(b=0\\mid y)}{P(b=1\\mid y)} \\approx \\frac{1}{2\\sigma^2}\\Big(\\min_{s \\in S_1}|y-s|^2 - \\min_{s \\in S_0}|y-s|^2\\Big)$$\n\nwhere $S_0$ and $S_1$ are the points whose bit $b$ is 0 or 1. A sample near a decision boundary\ngives an LLR near zero, and the decoder knows to distrust that bit.\n\n## Try this\n\n- Lower the power of [[tx]] step by step. The pre-FEC error rate rises smoothly; the post-FEC one\n  stays at zero until it falls off a cliff.\n- Cut the iterations of [[dec]] from 8 to 2. Where does the cliff move?"
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 548.0,
+      "h": 268.0,
+      "text": "Transmitter",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 573.0,
+      "y": 13.0,
+      "w": 272.0,
+      "h": 268.0,
+      "text": "Coherent front end",
+      "tone": "electrical"
+     },
+     {
+      "id": "a3",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 373.0,
+      "w": 548.0,
+      "h": 88.0,
+      "text": "Soft decisions and decoding",
+      "tone": "symbol"
+     },
+     {
+      "id": "a4",
+      "kind": "note",
+      "x": 148.0,
+      "y": 500.0,
+      "w": 250.0,
+      "h": 96.0,
+      "text": "The demapper hands the decoder a confidence for every bit, not a bit: $L(b)=\\ln\\frac{P(b=0\\mid y)}{P(b=1\\mid y)}$",
+      "tone": "electrical"
+     },
+     {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 218.0,
+      "y1": 498.0,
+      "x2": 226.0,
+      "y2": 456.0,
+      "text": "",
+      "tone": "metric"
      }
     ]
    }
@@ -24365,7 +24756,11 @@ verdict, and DESIGN.md
      "reference"
     ]
    }
-  ]
+  ],
+  "notes": {
+   "title": "Coherent 16-QAM over 80 km",
+   "body": "This is the link the studio opens with: 32 GBd 16-QAM, 128 Gb/s raw, over 80 km of fibre with\nreal lasers. The transmitter and local oscillator [[tx]] [[lo]] each have a 100 kHz linewidth\nand sit about 200 MHz apart, so the receiver has to find the carrier on its own. The bottom row\nof the schematic is that search, in the order a real receiver performs it.\n\n## 1. Undo the dispersion \u2014 [[cdc]]\n\nThe fibre is an all-pass filter whose phase grows with the square of frequency,\n\n$$H_\\text{fibre}(\\omega) = \\exp\\left(j\\,\\frac{\\beta_2 L}{2}\\,\\omega^2\\right), \\qquad \\beta_2 = -\\frac{D\\lambda^2}{2\\pi c}$$\n\nand the compensator applies its conjugate. $17$ ps/(nm\u00b7km) over 80 km accumulates 1360 ps/nm.\n\n## 2. Find the sampling instant \u2014 [[tr]], [[smp]]\n\nTiming recovery estimates where in each symbol to sample, and the sampler applies the\nroot-raised-cosine matched filter (roll-off 0.2) and keeps one sample per symbol.\n\n## 3. Remove the frequency offset \u2014 [[fo]]\n\nRaising a QPSK-like constellation to the fourth power strips the data and leaves the carrier:\n\n$$\\Delta\\hat f = \\frac{1}{8\\pi T}\\,\\arg\\sum_k \\big(y_k\\,y_{k-1}^*\\big)^4$$\n\n## 4. Track the phase \u2014 [[cr]], [[pqr]]\n\nLaser phase noise is a random walk whose step variance per symbol is $2\\pi(\\Delta\\nu_\\text{tx} + \\Delta\\nu_\\text{lo})\\,T$. Blind phase search\ntries [[cr]]'s test phases and keeps the one that lands samples closest to the grid; known pilot\nsymbols, one every 64, settle which of the four quarter turns is the right one.\n\n## 5. Decide, softly \u2014 [[sd]], [[fdec]]\n\nThe demapper turns each symbol into four log-likelihood ratios and the decoder corrects them.\n[[vsa]] measures EVM, SNR and BER, and [[cd]] draws the constellation in the dock below.\n\n## Try this\n\n- Set the linewidth of both lasers to 1000 kHz. What happens to the constellation?\n- Move [[lo]] further from 1550 nm. Where does frequency recovery give up?\n- Change the format to 64-QAM (bits per symbol 6) on [[map]]: every block that cares follows."
+  }
  },
  "context": {
   "symbol_rate": 32000000000.0,
@@ -24405,7 +24800,7 @@ verdict, and DESIGN.md
   /* ---------- The schematic, which is the project document -----------------
      The blocks, the wires and the parameter values are not written here. They
      are read from `DATA.project`, the same `.maiman` document the session
-     server accepts, exported by examples/export_ui_data.py from the graph it
+     server accepts, exported by examples/python/export_ui_data.py from the graph it
      actually ran. Pressing Run posts this object back. So the picture on the
      canvas, the numbers in the inspector and the graph the engine executes are
      one description rather than three that have to be kept in agreement — the
@@ -24644,6 +25039,7 @@ verdict, and DESIGN.md
   const selection = new Set(["map"]);
 
   function selectOnly(id) {
+    selectedAnn = null;
     selection.clear();
     if (id) selection.add(id);
     selected = id || null;
@@ -24651,6 +25047,7 @@ verdict, and DESIGN.md
 
   function selectAlso(id) {
     if (!id) return;
+    selectedAnn = null;
     if (selection.has(id) && selection.size > 1) {
       /* Clicking a member of a group with the modifier held takes it out, and
          hands the inspector whatever is left rather than nothing. */
@@ -24663,6 +25060,7 @@ verdict, and DESIGN.md
   }
 
   function clearSelection() {
+    selectedAnn = null;
     selection.clear();
     selected = null;
   }
@@ -24704,6 +25102,8 @@ verdict, and DESIGN.md
   let selectedEdge = null;   // index into PROJECT.edges, or null
   let drag = null;           // { id, dx, dy, moved } while a block is being moved
   let wiring = null;         // { from, x, y } while a wire is being pulled
+  let selectedAnn = null;    // id of the selected annotation, or null
+  let annDrag = null;        // a mark being placed, moved or resized
 
   /* Snapshots for undo. A destructive editor without one is a trap: deleting a
      block takes its wires with it, and rebuilding those by hand is exactly the
@@ -24737,7 +25137,8 @@ verdict, and DESIGN.md
   function currentState() {
     return JSON.stringify({
       nodes: PROJECT.nodes, edges: PROJECT.edges, layout: LAYOUT, selected,
-      picked: [...selection], name: projectName
+      picked: [...selection], name: projectName,
+      annotations: PROJECT.annotations, notes: PROJECT.notes || null
     });
   }
 
@@ -24745,6 +25146,13 @@ verdict, and DESIGN.md
     const past = JSON.parse(state);
     PROJECT.nodes = past.nodes;
     PROJECT.edges = past.edges;
+    PROJECT.annotations = past.annotations || [];
+    if (past.notes) PROJECT.notes = past.notes; else delete PROJECT.notes;
+    selectedAnn = null;
+    if (lesson.open) {
+      renderLesson();
+      if (lesson.editing) setLessonEditing(true);
+    }
     for (const key of Object.keys(LAYOUT)) delete LAYOUT[key];
     Object.assign(LAYOUT, past.layout);
     selected = past.selected;
@@ -24952,8 +25360,13 @@ verdict, and DESIGN.md
 
   function drawGraph() {
     svg.innerHTML = "";
+    /* Frames sit under the wires so a frame around a stage never hides the
+       link it frames; notes and arrows sit over the blocks they point at. */
+    const shapeLayer = el("g", {}, svg);
     const wireLayer = el("g", {}, svg);
     const nodeLayer = el("g", {}, svg);
+    const noteLayer = el("g", {}, svg);
+    drawAnnotations(shapeLayer, noteLayer);
 
     if (!NODES.length) drawEmptyCanvas();
 
@@ -25505,7 +25918,7 @@ verdict, and DESIGN.md
     ctx.fillStyle = tok("--ink-4"); ctx.font = MONO_10;
     ctx.fillText("This graph has no Eye Diagram block.", w / 2, h / 2 + 10);
     ctx.fillText("Add one from the palette and wire it to an electrical port,", w / 2, h / 2 + 26);
-    ctx.fillText("or open examples/ook_eye.maiman for a link that has one.", w / 2, h / 2 + 42);
+    ctx.fillText("or open examples/maiman/ook_eye.maiman for a link that has one.", w / 2, h / 2 + 42);
   }
 
   function drawEye() {
@@ -25769,7 +26182,7 @@ verdict, and DESIGN.md
     ctx.fillStyle = tok("--ink-4"); ctx.font = MONO_10;
     ctx.fillText("This graph has no Optical Spectrum Analyzer block.", w / 2, h / 2 + 10);
     ctx.fillText("Add one from the palette and wire it to an optical port,", w / 2, h / 2 + 26);
-    ctx.fillText("or open examples/wdm_osa.maiman for a link that has one.", w / 2, h / 2 + 42);
+    ctx.fillText("or open examples/maiman/wdm_osa.maiman for a link that has one.", w / 2, h / 2 + 42);
   }
 
   function drawSpectrum() {
@@ -26502,8 +26915,9 @@ verdict, and DESIGN.md
   function setTool(next) {
     tool = next;
     $("#canvas-wrap").dataset.tool = next;
-    $("#tool-select").setAttribute("aria-pressed", String(next === "select"));
-    $("#tool-pan").setAttribute("aria-pressed", String(next === "pan"));
+    for (const name of ["select", "pan", "note", "rect", "ellipse", "arrow"]) {
+      $(`#tool-${name}`).setAttribute("aria-pressed", String(next === name));
+    }
   }
 
   const panningNow = () => tool === "pan" || spaceHeld;
@@ -26545,6 +26959,11 @@ verdict, and DESIGN.md
       return;
     }
     if (event.button !== 0) return;
+    if (!panningNow() && startAnnotationPointer(event)) {
+      capture(event);
+      event.preventDefault();
+      return;
+    }
     const port = event.target.closest("[data-port]");
     const node = event.target.closest("[data-node]");
 
@@ -26622,6 +27041,7 @@ verdict, and DESIGN.md
   });
 
   svg.addEventListener("pointermove", (event) => {
+    if (annDrag) { moveAnnotationPointer(event); return; }
     if (banding) {
       const at = svgPoint(event);
       if (!banding.moved
@@ -26807,6 +27227,7 @@ verdict, and DESIGN.md
   }
 
   function endPointer(event) {
+    if (annDrag) endAnnotationPointer();
     if (wiring) {
       const port = document.elementFromPoint(event.clientX, event.clientY);
       const target = port && port.closest("[data-port]");
@@ -26908,7 +27329,7 @@ verdict, and DESIGN.md
     [`${MOD}+shift+Z`, "Redo", { mod: true, shift: true, key: "z", run: () => redo() }],
     [`${MOD}+D`, "Duplicate the selected block",
       { mod: true, key: "d", run: () => duplicateSelected() }],
-    ["delete", "Delete the selected block or wire", { key: "delete", run: () => deleteSelection() }],
+    ["delete", "Delete the selected block, wire or annotation", { key: "delete", run: () => deleteSelection() }],
     [`${MOD}+enter`, "Run", { mod: true, key: "enter",
       run: () => { if (!SESSION.running) runBtn.click(); } }],
     [`${MOD}+=`, "Zoom in", { mod: true, key: "=", run: () => setZoom(zoom + 20) }],
@@ -26916,6 +27337,11 @@ verdict, and DESIGN.md
     [`${MOD}+0`, "Reset view (zoom and position)", { mod: true, key: "0", run: resetView }],
     ["V", "Select tool", { key: "v", run: () => setTool("select") }],
     ["H", "Pan tool (or hold space)", { key: "h", run: () => setTool("pan") }],
+    ["N", "Note tool", { key: "n", run: () => setTool("note") }],
+    ["R", "Frame tool", { key: "r", run: () => setTool("rect") }],
+    ["E", "Ellipse tool", { key: "e", run: () => setTool("ellipse") }],
+    ["A", "Arrow tool", { key: "a", run: () => setTool("arrow") }],
+    ["L", "Show or hide the lesson notes", { key: "l", run: () => setLessonOpen(!lesson.open) }],
     ["?", "Keyboard shortcuts", { key: "?", run: () => showShortcuts() }],
     ["esc", "Close a menu, cancel a wire, or stop a run", { key: "escape", run: onEscape }],
   ];
@@ -26925,6 +27351,8 @@ verdict, and DESIGN.md
     if (openMenu) { closeMenus({ focus: true }); return; }
     if (SESSION.running) { stopBtn.click(); return; }
     if (wiring) { wiring = null; drawPendingWire(); }
+    if (tool !== "select" && tool !== "pan") setTool("select");
+    if (selectedAnn) { selectedAnn = null; showEmptyInspector(); }
     selectedEdge = null;
     drawGraph();
   }
@@ -26954,6 +27382,689 @@ verdict, and DESIGN.md
       return;
     }
   });
+
+  /* ---------- Teaching: math, notes, annotations, the lesson panel ----------
+     A project can carry two things the engine never reads: a *lesson*, opened
+     beside the canvas, and *annotations* drawn on it -- sticky notes, frames
+     around a stage of the link, arrows. They live in the same `.maiman`
+     document as the graph (`notes` and `annotations`), so a lesson travels
+     with the link it explains and a saved file reopens with its marks where
+     they were left.
+
+     Formulas are TeX between dollar signs, rendered to MathML, which every
+     browser this page supports draws natively. A maths library would be the
+     first thing this page fetched from somewhere else, and the page has to
+     open straight off disk with nothing running and no network. */
+
+  const TEX_IDENT = {
+    alpha: "α", beta: "β", gamma: "γ", delta: "δ", epsilon: "ϵ", varepsilon: "ε",
+    zeta: "ζ", eta: "η", theta: "θ", vartheta: "ϑ", iota: "ι", kappa: "κ", lambda: "λ",
+    mu: "μ", nu: "ν", xi: "ξ", pi: "π", rho: "ρ", sigma: "σ", tau: "τ", upsilon: "υ",
+    phi: "ϕ", varphi: "φ", chi: "χ", psi: "ψ", omega: "ω",
+    infty: "∞", partial: "∂", nabla: "∇", hbar: "ℏ", ell: "ℓ"
+  };
+  /* Capitals are upright in print, so they are drawn that way. */
+  const TEX_UPRIGHT = {
+    Gamma: "Γ", Delta: "Δ", Theta: "Θ", Lambda: "Λ", Xi: "Ξ", Pi: "Π", Sigma: "Σ",
+    Upsilon: "Υ", Phi: "Φ", Psi: "Ψ", Omega: "Ω"
+  };
+  const TEX_OPERATOR = {
+    cdot: "⋅", times: "×", div: "÷", pm: "±", mp: "∓", approx: "≈", sim: "∼",
+    simeq: "≃", equiv: "≡", propto: "∝", ne: "≠", neq: "≠", le: "≤", leq: "≤",
+    ge: "≥", geq: "≥", ll: "≪", gg: "≫", to: "→", rightarrow: "→", leftarrow: "←",
+    Rightarrow: "⇒", Leftarrow: "⇐", leftrightarrow: "↔", Leftrightarrow: "⇔",
+    mid: "∣", in: "∈", notin: "∉", cdots: "⋯", ldots: "…", dots: "…", circ: "∘",
+    ast: "∗", star: "⋆", langle: "⟨", rangle: "⟩", vert: "|", Vert: "‖",
+    forall: "∀", exists: "∃", cup: "∪", cap: "∩", subset: "⊂", oplus: "⊕",
+    otimes: "⊗", dagger: "†", degree: "°", int: "∫", oint: "∮",
+    sum: "∑", prod: "∏"
+  };
+  /* Operators whose limits sit under and over them in a display formula. */
+  const TEX_LIMITS = new Set(["sum", "prod", "lim", "min", "max", "sup", "inf", "arg"]);
+  const TEX_FUNCTION = new Set([
+    "sin", "cos", "tan", "cot", "sec", "csc", "sinh", "cosh", "tanh", "arcsin", "arccos",
+    "arctan", "exp", "log", "ln", "lg", "det", "dim", "Re", "Im", "erf", "erfc",
+    "lim", "min", "max", "sup", "inf", "arg"
+  ]);
+  const TEX_SPACE = {
+    ",": "0.167em", ":": "0.222em", ";": "0.278em", " ": "0.25em", "!": "-0.167em",
+    quad: "1em", qquad: "2em"
+  };
+  const TEX_ACCENT = { hat: "^", bar: "¯", overline: "¯", tilde: "~", dot: "˙",
+                       ddot: "¨", vec: "→" };
+  const TEX_FONT = { mathrm: "normal", mathbf: "bold", boldsymbol: "bold-italic",
+                     mathit: "italic", mathcal: "script", mathsf: "sans-serif",
+                     mathbb: "double-struck", mathtt: "monospace" };
+  const TEX_BIG = { big: "1.2em", Big: "1.6em", bigg: "2.1em", Bigg: "2.6em" };
+
+  /* A TeX subset to MathML. Enough for the formulas a link is explained with --
+     fractions, roots, scripts, Greek, the usual operators, \text, \left/\right
+     -- and honest about the rest: a command it does not know is printed as
+     written, in red, rather than dropped. */
+  function texToMathML(source, display) {
+    let i = 0;
+    const src = String(source);
+    const skip = () => { while (i < src.length && /\s/.test(src[i])) i += 1; };
+    const row = (items) => (items.length === 1 ? items[0] : `<mrow>${items.join("")}</mrow>`);
+
+    function command() {
+      i += 1;
+      if (i >= src.length) return "";
+      if (/[A-Za-z]/.test(src[i])) {
+        const start = i;
+        while (i < src.length && /[A-Za-z]/.test(src[i])) i += 1;
+        return src.slice(start, i);
+      }
+      return src[i++];
+    }
+
+    function rawGroup() {
+      skip();
+      if (src[i] !== "{") return src[i++] || "";
+      let depth = 0;
+      const start = i + 1;
+      for (; i < src.length; i += 1) {
+        if (src[i] === "{") depth += 1;
+        else if (src[i] === "}" && --depth === 0) { i += 1; return src.slice(start, i - 1); }
+      }
+      return src.slice(start);
+    }
+
+    function argument() {
+      skip();
+      if (src[i] === "{") {
+        i += 1;
+        const inner = sequence(true);
+        i += 1;
+        return row(inner.length ? inner : ["<mrow></mrow>"]);
+      }
+      return atom() || "<mrow></mrow>";
+    }
+
+    function delimiter() {
+      skip();
+      if (src[i] === "\\") {
+        const name = command();
+        return TEX_OPERATOR[name] || (name === "|" ? "‖" : name);
+      }
+      return src[i++] || "";
+    }
+
+    function atom() {
+      const c = src[i];
+      if (c === "\\") {
+        const name = command();
+        if (name in TEX_SPACE) return `<mspace width="${TEX_SPACE[name]}"></mspace>`;
+        if (name === "\\") return "";
+        if ("{}%$&#_".includes(name)) return `<mo>${escapeHtml(name)}</mo>`;
+        if (name === "frac" || name === "dfrac" || name === "tfrac") {
+          const top = argument();
+          return `<mfrac>${top}${argument()}</mfrac>`;
+        }
+        if (name === "sqrt") {
+          skip();
+          if (src[i] === "[") {
+            const close = src.indexOf("]", i);
+            const index = texToMathML(src.slice(i + 1, close), false)
+              .replace(/^<math[^>]*>|<\/math>$/g, "");
+            i = close + 1;
+            return `<mroot>${argument()}<mrow>${index}</mrow></mroot>`;
+          }
+          return `<msqrt>${argument()}</msqrt>`;
+        }
+        if (name === "text" || name === "textrm" || name === "mbox") {
+          return `<mtext>${escapeHtml(rawGroup())}</mtext>`;
+        }
+        if (name === "operatorname") {
+          return `<mi mathvariant="normal">${escapeHtml(rawGroup())}</mi>`;
+        }
+        if (name in TEX_FONT) {
+          const inner = texToMathML(rawGroup(), false).replace(/^<math[^>]*>|<\/math>$/g, "");
+          return `<mrow>${inner.replace(/<mi>/g, `<mi mathvariant="${TEX_FONT[name]}">`)}</mrow>`;
+        }
+        if (name in TEX_ACCENT) {
+          return `<mover accent="true">${argument()}<mo>${TEX_ACCENT[name]}</mo></mover>`;
+        }
+        if (name === "left" || name === "right") {
+          const d = delimiter();
+          return d === "." ? "" : `<mo stretchy="true">${escapeHtml(d)}</mo>`;
+        }
+        const big = name.replace(/[lr]$/, "");
+        if (big in TEX_BIG) {
+          return `<mo minsize="${TEX_BIG[big]}" maxsize="${TEX_BIG[big]}">` +
+                 `${escapeHtml(delimiter())}</mo>`;
+        }
+        if (TEX_FUNCTION.has(name)) {
+          return TEX_LIMITS.has(name)
+            ? `<mo movablelimits="true" form="prefix" data-limits="">${name}</mo>`
+            : `<mrow><mi mathvariant="normal">${name}</mi><mo>&#x2061;</mo></mrow>`;
+        }
+        if (name in TEX_IDENT) return `<mi>${TEX_IDENT[name]}</mi>`;
+        if (name in TEX_UPRIGHT) return `<mi mathvariant="normal">${TEX_UPRIGHT[name]}</mi>`;
+        if (name in TEX_OPERATOR) {
+          if (TEX_LIMITS.has(name)) {
+            return `<mo largeop="true" movablelimits="true" data-limits="">` +
+                   `${TEX_OPERATOR[name]}</mo>`;
+          }
+          return name === "int" || name === "oint"
+            ? `<mo largeop="true">${TEX_OPERATOR[name]}</mo>`
+            : `<mo>${TEX_OPERATOR[name]}</mo>`;
+        }
+        return `<mtext class="tex-unknown">\\${escapeHtml(name)}</mtext>`;
+      }
+      if (c === "{") {
+        i += 1;
+        const inner = sequence(true);
+        i += 1;
+        return row(inner.length ? inner : ["<mrow></mrow>"]);
+      }
+      if (/[0-9.]/.test(c)) {
+        const start = i;
+        while (i < src.length && /[0-9.]/.test(src[i])) i += 1;
+        return `<mn>${src.slice(start, i)}</mn>`;
+      }
+      i += 1;
+      if (/\p{L}/u.test(c)) return `<mi>${escapeHtml(c)}</mi>`;
+      if (c === "'") return "<mo>′</mo>";
+      if (c === "~") return `<mspace width="0.25em"></mspace>`;
+      if (c === "&") return "";
+      return `<mo>${escapeHtml({ "-": "−", "*": "∗" }[c] || c)}</mo>`;
+    }
+
+    function sequence(inGroup) {
+      const items = [];
+      while (i < src.length) {
+        skip();
+        if (i >= src.length) break;
+        if (src[i] === "}") {
+          if (inGroup) break;
+          i += 1;
+          continue;
+        }
+        if (src[i] === "^" || src[i] === "_") {
+          const base = items.pop() || "<mrow></mrow>";
+          let sub = null, sup = null;
+          while (src[i] === "^" || src[i] === "_") {
+            const which = src[i];
+            i += 1;
+            if (which === "^") sup = argument(); else sub = argument();
+            skip();
+          }
+          const limits = base.includes("data-limits");
+          const [both, under, over] = limits
+            ? ["munderover", "munder", "mover"] : ["msubsup", "msub", "msup"];
+          items.push(sub && sup ? `<${both}>${base}${sub}${sup}</${both}>`
+                     : sub ? `<${under}>${base}${sub}</${under}>`
+                     : `<${over}>${base}${sup}</${over}>`);
+          continue;
+        }
+        const next = atom();
+        if (next) items.push(next);
+      }
+      return items;
+    }
+
+    const body = sequence(false);
+    return `<math${display ? ' display="block"' : ""}>${row(body.length ? body : [""])}</math>`;
+  }
+
+  /* Markdown, the small part of it a lesson needs: headings, paragraphs, lists,
+     bold, italic, code, links, and maths. Everything a person typed is escaped
+     before any of it becomes markup, so a lesson can say `<script>` and mean
+     the word. `[[label]]` names a block: in the lesson panel it is a link that
+     selects that block, so the prose and the schematic point at each other. */
+  function renderRich(text, { refs = false } = {}) {
+    const math = [];
+    const hold = (html) => `\u0000${math.push(html) - 1}\u0000`;
+    let s = String(text || "").replace(/\r\n?/g, "\n");
+    s = s.replace(/\$\$([\s\S]+?)\$\$/g, (_, tex) => hold(texToMathML(tex.trim(), true)));
+    s = s.replace(/(^|[^\\])\$([^\n$]+?)\$/g, (_, pre, tex) => pre + hold(texToMathML(tex, false)));
+    s = s.replace(/\\\$/g, "$");
+
+    const inline = (raw) => escapeHtml(raw)
+      .replace(/`([^`]+)`/g, "<code>$1</code>")
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>")
+      .replace(/\[\[([A-Za-z0-9_\-]+)\]\]/g, (_, id) => refs
+        ? `<button type="button" class="block-ref" data-ref="${id}">${id}</button>`
+        : `<span class="block-ref">${id}</span>`)
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+               '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+      .replace(/\u0000(\d+)\u0000/g, (_, n) => math[Number(n)]);
+
+    const out = [];
+    let para = [], list = null;
+    const flush = () => {
+      if (para.length) out.push(`<p dir="auto">${inline(para.join(" "))}</p>`);
+      para = [];
+      if (list) out.push(`</${list}>`);
+      list = null;
+    };
+    for (const line of s.split("\n")) {
+      const trimmed = line.trim();
+      let m;
+      if (!trimmed) { flush(); continue; }
+      if ((m = /^(#{1,3})\s+(.*)$/.exec(trimmed))) {
+        flush();
+        const level = m[1].length + 2;
+        out.push(`<h${level} dir="auto">${inline(m[2])}</h${level}>`);
+      } else if ((m = /^([-*]|\d+\.)\s+(.*)$/.exec(trimmed))) {
+        if (para.length) { out.push(`<p dir="auto">${inline(para.join(" "))}</p>`); para = []; }
+        const kind = /\d/.test(m[1]) ? "ol" : "ul";
+        if (list !== kind) { if (list) out.push(`</${list}>`); out.push(`<${kind}>`); list = kind; }
+        out.push(`<li dir="auto">${inline(m[2])}</li>`);
+      } else if (/^\u0000\d+\u0000$/.test(trimmed)) {
+        flush();
+        out.push(`<div class="rich-math">${inline(trimmed)}</div>`);
+      } else if (list && /^\s+/.test(line)) {
+        /* A continuation line of a list item, indented under it. */
+        out[out.length - 1] = out[out.length - 1].replace(/<\/li>$/, ` ${inline(trimmed)}</li>`);
+      } else {
+        if (list) { out.push(`</${list}>`); list = null; }
+        para.push(trimmed);
+      }
+    }
+    flush();
+    return out.join("");
+  }
+
+  /* ---- Annotations ---- */
+
+  const ANN_KINDS = { note: "Note", rect: "Frame", ellipse: "Ellipse", arrow: "Arrow" };
+  const ANN_TONES = { optical: "cyan", electrical: "amber", binary: "slate",
+                      symbol: "violet", metric: "magenta" };
+  const ANN_TOOLS = new Set(["note", "rect", "ellipse", "arrow"]);
+  /* The size a shape is given when it is clicked into place rather than dragged. */
+  const ANN_DEFAULT = { note: [200, 92], rect: [240, 150], ellipse: [190, 110] };
+
+  const annotationById = (id) => (PROJECT.annotations || []).find((a) => a.id === id);
+  const annTone = (a) => `var(--${a.tone in ANN_TONES ? a.tone : "binary"})`;
+
+  function freeAnnotationId() {
+    const taken = new Set((PROJECT.annotations || []).map((a) => a.id));
+    for (let n = 1; ; n += 1) if (!taken.has(`a${n}`)) return `a${n}`;
+  }
+
+  /* What a file says is checked before it is drawn: a mark is kept only if it
+     is a kind this page knows and every coordinate is a finite number. A
+     malformed mark is dropped rather than allowed to take the canvas down. */
+  function cleanAnnotations(list) {
+    if (!Array.isArray(list)) return [];
+    const finite = (...v) => v.every(Number.isFinite);
+    const seen = new Set();
+    const kept = [];
+    for (const a of list) {
+      if (!a || typeof a !== "object" || !(a.kind in ANN_KINDS)) continue;
+      const ok = a.kind === "arrow" ? finite(a.x1, a.y1, a.x2, a.y2) : finite(a.x, a.y, a.w, a.h);
+      if (!ok) continue;
+      let id = typeof a.id === "string" && a.id && !seen.has(a.id) ? a.id : null;
+      const mark = { ...a, text: typeof a.text === "string" ? a.text : "" };
+      if (!id) { id = `a${kept.length + 1}`; while (seen.has(id)) id += "_"; }
+      mark.id = id;
+      seen.add(id);
+      kept.push(mark);
+    }
+    return kept;
+  }
+
+  function cleanNotes(notes) {
+    if (!notes || typeof notes !== "object") return null;
+    const title = typeof notes.title === "string" ? notes.title : "";
+    const body = typeof notes.body === "string" ? notes.body : "";
+    return title || body ? { title, body } : null;
+  }
+
+  function drawAnnotations(under, over) {
+    for (const a of PROJECT.annotations || []) {
+      const chosen = a.id === selectedAnn;
+      const cls = `ann ann-${a.kind}` + (chosen ? " selected" : "");
+      const layer = a.kind === "rect" || a.kind === "ellipse" ? under : over;
+      const g = el("g", { class: cls, "data-ann": a.id, style: `color:${annTone(a)}` }, layer);
+
+      if (a.kind === "arrow") {
+        const dx = a.x2 - a.x1, dy = a.y2 - a.y1;
+        const len = Math.hypot(dx, dy) || 1;
+        const ux = dx / len, uy = dy / len;
+        const head = Math.min(12, len * 0.6);
+        const bx = a.x2 - ux * head, by = a.y2 - uy * head;
+        el("line", { x1: a.x1, y1: a.y1, x2: bx, y2: by, class: "ann-line" }, g);
+        el("polygon", {
+          points: `${a.x2},${a.y2} ${bx - uy * head * 0.45},${by + ux * head * 0.45} ` +
+                  `${bx + uy * head * 0.45},${by - ux * head * 0.45}`,
+          class: "ann-head"
+        }, g);
+        el("line", { x1: a.x1, y1: a.y1, x2: a.x2, y2: a.y2, class: "ann-grab" }, g);
+        if (a.text) {
+          const t = el("text", { x: (a.x1 + a.x2) / 2 + 6, y: (a.y1 + a.y2) / 2 - 6,
+                                 class: "ann-label" }, g);
+          t.textContent = a.text;
+        }
+        if (chosen) {
+          el("circle", { cx: a.x1, cy: a.y1, r: 5, class: "ann-handle",
+                         "data-ann-handle": "p1" }, g);
+          el("circle", { cx: a.x2, cy: a.y2, r: 5, class: "ann-handle",
+                         "data-ann-handle": "p2" }, g);
+        }
+        continue;
+      }
+
+      if (a.kind === "note") {
+        el("rect", { x: a.x, y: a.y, width: a.w, height: a.h, rx: 4, class: "ann-note-bg" }, g);
+        const fo = el("foreignObject", { x: a.x, y: a.y, width: a.w, height: a.h }, g);
+        const div = document.createElement("div");
+        div.className = "ann-note-text";
+        div.innerHTML = a.text ? renderRich(a.text) : '<p class="ann-placeholder">Empty note</p>';
+        fo.appendChild(div);
+      } else {
+        const shape = a.kind === "rect"
+          ? { name: "rect", attrs: { x: a.x, y: a.y, width: a.w, height: a.h, rx: 10 } }
+          : { name: "ellipse", attrs: { cx: a.x + a.w / 2, cy: a.y + a.h / 2,
+                                        rx: a.w / 2, ry: a.h / 2 } };
+        el(shape.name, { ...shape.attrs, class: "ann-body" }, g);
+        /* A frame is grabbed by its edge or its label, never its middle: it
+           usually encloses blocks, and the bed inside it still has to take a
+           rubber band and a click. */
+        el(shape.name, { ...shape.attrs, class: "ann-grab" }, g);
+        if (a.text) {
+          const t = el("text", {
+            x: a.kind === "rect" ? a.x + 10 : a.x + a.w / 2,
+            y: a.kind === "rect" ? a.y + 17 : a.y + 16,
+            "text-anchor": a.kind === "rect" ? "start" : "middle",
+            class: "ann-label ann-grab-text"
+          }, g);
+          t.textContent = a.text;
+        }
+      }
+      if (chosen) {
+        el("rect", { x: a.x + a.w - 5, y: a.y + a.h - 5, width: 10, height: 10, rx: 2,
+                     class: "ann-handle", "data-ann-handle": "se" }, g);
+      }
+    }
+  }
+
+  function selectAnnotation(id) {
+    clearSelection();
+    selectedEdge = null;
+    selectedAnn = id;
+    drawGraph();
+    const a = annotationById(id);
+    if (a) showAnnotation(a);
+  }
+
+  function showAnnotation(a) {
+    const isNote = a.kind === "note";
+    const tones = Object.entries(ANN_TONES)
+      .map(([key, name]) =>
+        `<option value="${key}"${(a.tone || "binary") === key ? " selected" : ""}>${name}</option>`)
+      .join("");
+    inspector.innerHTML =
+      `<div class="insp-title"><h2>${ANN_KINDS[a.kind]}</h2>
+         <div class="insp-meta"><span class="chip">annotation</span>
+           <span>not part of the simulation</span></div></div>
+       <div class="field">
+         <label class="ann-field-label" for="ann-text">${isNote ? "Text" : "Label"}</label>
+         <textarea id="ann-text" class="ann-textarea" rows="${isNote ? 8 : 2}" dir="auto"
+                   spellcheck="false"></textarea>
+         <p class="field-doc">${isNote
+           ? "Markdown: **bold**, *italic*, - lists. Formulas in TeX: $\\lambda/2$ inline, $$…$$ on a line of their own."
+           : "Plain text, drawn on the canvas."}</p>
+       </div>
+       <div class="field">
+         <div class="field-row"><label for="ann-tone">colour</label>
+           <span class="field-input"><select id="ann-tone">${tones}</select></span></div>
+       </div>
+       <div class="field" style="border-bottom:0">
+         <p class="field-doc">Drag to move it, ${a.kind === "arrow"
+           ? "or drag either end to re-aim it" : "or drag the corner to resize it"}.
+         Delete removes it and ctrl+D duplicates it. It is saved in the .maiman file, and
+         the engine never reads it.</p>
+       </div>`;
+    const area = $("#ann-text");
+    area.value = a.text || "";
+    let recorded = false;
+    area.addEventListener("focus", () => { recorded = false; });
+    area.addEventListener("input", () => {
+      /* One undo step per visit to the field, not one per keystroke. */
+      if (!recorded) { snapshot(); recorded = true; }
+      a.text = area.value;
+      drawGraph();
+    });
+    $("#ann-tone").addEventListener("change", (event) => {
+      snapshot();
+      a.tone = event.target.value;
+      drawGraph();
+    });
+    $("#sb-sel").textContent = `${ANN_KINDS[a.kind].toLowerCase()} ${a.id} selected`;
+  }
+
+  function deleteAnnotation(id) {
+    snapshot();
+    PROJECT.annotations = PROJECT.annotations.filter((a) => a.id !== id);
+    selectedAnn = null;
+    drawGraph();
+    showEmptyInspector();
+    flashHint("annotation deleted — ctrl+Z to undo");
+  }
+
+  function duplicateAnnotation(id) {
+    const a = annotationById(id);
+    if (!a) return;
+    snapshot();
+    const copy = { ...a, id: freeAnnotationId() };
+    if (a.kind === "arrow") {
+      Object.assign(copy, { x1: a.x1 + 24, y1: a.y1 + 24, x2: a.x2 + 24, y2: a.y2 + 24 });
+    } else {
+      Object.assign(copy, { x: a.x + 24, y: a.y + 24 });
+    }
+    PROJECT.annotations.push(copy);
+    selectAnnotation(copy.id);
+  }
+
+  /* A press with an annotation tool starts a new mark; a press on an existing
+     mark, or on one of its handles, starts moving it. Either way the drag is
+     finished in pointermove and endPointer, beside the block drag. */
+  function startAnnotationPointer(event) {
+    const at = svgPoint(event);
+    const p = { x: Math.round(at.x), y: Math.round(at.y) };
+    if (ANN_TOOLS.has(tool) && !spaceHeld) {
+      snapshot();
+      if (!Array.isArray(PROJECT.annotations)) PROJECT.annotations = [];
+      const a = tool === "arrow"
+        ? { id: freeAnnotationId(), kind: "arrow", x1: p.x, y1: p.y, x2: p.x, y2: p.y,
+            text: "", tone: "metric" }
+        : { id: freeAnnotationId(), kind: tool, x: p.x, y: p.y, w: 0, h: 0, text: "",
+            tone: tool === "note" ? "electrical" : "binary" };
+      PROJECT.annotations.push(a);
+      clearSelection();
+      selectedEdge = null;
+      selectedAnn = a.id;
+      annDrag = { id: a.id, mode: "create", start: p, moved: false };
+      return true;
+    }
+    const handle = event.target.closest("[data-ann-handle]");
+    const mark = event.target.closest("[data-ann]");
+    if (!mark) return false;
+    const a = annotationById(mark.dataset.ann);
+    if (!a) return false;
+    if (selectedAnn !== a.id) selectAnnotation(a.id);
+    annDrag = { id: a.id, mode: handle ? handle.dataset.annHandle : "move",
+                start: p, from: { ...a }, moved: false };
+    return true;
+  }
+
+  function moveAnnotationPointer(event) {
+    const a = annotationById(annDrag.id);
+    if (!a) return;
+    const at = svgPoint(event);
+    const p = { x: Math.round(at.x), y: Math.round(at.y) };
+    const dx = p.x - annDrag.start.x, dy = p.y - annDrag.start.y;
+    if (!annDrag.moved && Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
+    if (!annDrag.moved && annDrag.mode !== "create") snapshot();
+    annDrag.moved = true;
+    const f = annDrag.from;
+    if (annDrag.mode === "create") {
+      if (a.kind === "arrow") { a.x2 = p.x; a.y2 = p.y; }
+      else {
+        a.x = Math.min(p.x, annDrag.start.x); a.y = Math.min(p.y, annDrag.start.y);
+        a.w = Math.abs(dx); a.h = Math.abs(dy);
+      }
+    } else if (annDrag.mode === "move") {
+      if (a.kind === "arrow") {
+        Object.assign(a, { x1: f.x1 + dx, y1: f.y1 + dy, x2: f.x2 + dx, y2: f.y2 + dy });
+      } else {
+        Object.assign(a, { x: f.x + dx, y: f.y + dy });
+      }
+    } else if (annDrag.mode === "se") {
+      a.w = Math.max(40, f.w + dx);
+      a.h = Math.max(28, f.h + dy);
+    } else if (annDrag.mode === "p1") {
+      a.x1 = p.x; a.y1 = p.y;
+    } else if (annDrag.mode === "p2") {
+      a.x2 = p.x; a.y2 = p.y;
+    }
+    drawGraph();
+  }
+
+  function endAnnotationPointer() {
+    const drag_ = annDrag;
+    annDrag = null;
+    const a = annotationById(drag_.id);
+    if (!a) return;
+    if (drag_.mode === "create") {
+      /* A click places a mark of a sensible size; a drag that was too small to
+         see is treated as a click rather than leaving a mark nobody can grab. */
+      if (a.kind === "arrow") {
+        if (Math.hypot(a.x2 - a.x1, a.y2 - a.y1) < 12) { a.x2 = a.x1 + 120; a.y2 = a.y1; }
+      } else if (a.w < 24 || a.h < 18) {
+        [a.w, a.h] = ANN_DEFAULT[a.kind];
+      }
+      setTool("select");
+      selectAnnotation(a.id);
+      const area = $("#ann-text");
+      if (area) area.focus();
+      return;
+    }
+    drawGraph();
+  }
+
+  /* ---- The lesson panel ---- */
+
+  const lesson = { open: false, editing: false, recorded: false };
+  const lessonPanel = $("#lesson");
+
+  function renderLesson() {
+    const notes = cleanNotes(PROJECT.notes);
+    $("#lesson-title").textContent = (notes && notes.title) || "Notes";
+    $("#lesson-body").innerHTML = notes && notes.body
+      ? renderRich(notes.body, { refs: true })
+      : `<p class="lesson-empty">This project has no notes yet. Press <strong>Edit</strong> to
+         write some: what the link is for, the formulas behind it, and what to try. They are
+         saved in the .maiman file with the link.</p>`;
+  }
+
+  function setLessonOpen(open) {
+    lesson.open = open;
+    lessonPanel.hidden = !open;
+    $("#canvas-wrap").classList.toggle("lesson-open", open);
+    $("#notes-btn").setAttribute("aria-pressed", String(open));
+    if (!open) setLessonEditing(false);
+    else renderLesson();
+  }
+
+  function setLessonEditing(on) {
+    lesson.editing = on;
+    $("#lesson-editor").hidden = !on;
+    $("#lesson-edit").setAttribute("aria-pressed", String(on));
+    $("#lesson-edit").textContent = on ? "Done" : "Edit";
+    if (on) {
+      const notes = cleanNotes(PROJECT.notes) || { title: "", body: "" };
+      $("#lesson-title-input").value = notes.title;
+      $("#lesson-source").value = notes.body;
+      lesson.recorded = false;
+      $("#lesson-source").focus();
+    }
+  }
+
+  function editLesson() {
+    if (!lesson.recorded) { snapshot(); lesson.recorded = true; }
+    const notes = { title: $("#lesson-title-input").value, body: $("#lesson-source").value };
+    if (cleanNotes(notes)) PROJECT.notes = notes;
+    else delete PROJECT.notes;
+    renderLesson();
+  }
+
+  /* A block named in the lesson is selected and brought into view, and blinks
+     once so the eye can find it. */
+  function revealBlock(id) {
+    const node = NODES.find((n) => n.id === id);
+    if (!node) { flashHint(`there is no block called ${id} in this project`); return; }
+    selectOnly(id);
+    selectedEdge = null;
+    const z = zoom / 100;
+    const w = VIEW_W / z, h = VIEW_H / z;
+    const cx = node.x + NODE_W / 2, cy = node.y + NODE_H / 2;
+    if (cx < view.x + w * 0.35 || cx > view.x + w || cy < view.y || cy > view.y + h) {
+      view.x = cx - w * 0.6;
+      view.y = cy - h / 2;
+      applyView();
+    }
+    drawGraph();
+    showNode(node);
+    const g = svg.querySelector(`[data-node="${CSS.escape(id)}"]`);
+    if (g) {
+      g.classList.add("pulse");
+      setTimeout(() => g.classList.remove("pulse"), 1200);
+    }
+  }
+
+  $("#notes-btn").addEventListener("click", () => setLessonOpen(!lesson.open));
+  $("#lesson-close").addEventListener("click", () => setLessonOpen(false));
+  $("#lesson-edit").addEventListener("click", () => setLessonEditing(!lesson.editing));
+  $("#lesson-title-input").addEventListener("input", editLesson);
+  $("#lesson-source").addEventListener("input", editLesson);
+  $("#lesson-source").addEventListener("focus", () => { lesson.recorded = false; });
+  $("#lesson-title-input").addEventListener("focus", () => { lesson.recorded = false; });
+  $("#lesson-body").addEventListener("click", (event) => {
+    const ref = event.target.closest("[data-ref]");
+    if (ref) revealBlock(ref.dataset.ref);
+  });
+  for (const kind of ANN_TOOLS) {
+    $(`#tool-${kind}`).addEventListener("click", () => setTool(tool === kind ? "select" : kind));
+  }
+
+  /* Frame everything on the canvas in the part of it the lesson does not
+     cover. Used when a project opens with its lesson, so the panel never sits
+     on top of the first blocks of the link it is explaining. Never zooms in
+     past 100 %: a small link is shown at its own size, not blown up. */
+  function fitContent() {
+    const boxes = NODES.map((n) => [n.x, n.y, n.x + NODE_W, n.y + NODE_H]);
+    for (const a of PROJECT.annotations || []) {
+      boxes.push(a.kind === "arrow"
+        ? [Math.min(a.x1, a.x2), Math.min(a.y1, a.y2), Math.max(a.x1, a.x2), Math.max(a.y1, a.y2)]
+        : [a.x, a.y, a.x + a.w, a.y + a.h]);
+    }
+    const rect = svg.getBoundingClientRect();
+    if (!boxes.length || !rect.width || !rect.height) { resetView(); return; }
+    const pad = 24;
+    const x0 = Math.min(...boxes.map((b) => b[0])) - pad;
+    const y0 = Math.min(...boxes.map((b) => b[1])) - pad;
+    const x1 = Math.max(...boxes.map((b) => b[2])) + pad;
+    const y1 = Math.max(...boxes.map((b) => b[3])) + pad;
+    const inset = lesson.open ? lessonPanel.offsetWidth : 0;
+    const availW = Math.max(160, rect.width - inset);
+    /* Pixels per canvas unit at 100 %, as `meet` letterboxes it. */
+    const base = Math.min(rect.width / VIEW_W, rect.height / VIEW_H);
+    const scale = Math.min(availW / (x1 - x0), rect.height / (y1 - y0), base);
+    zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, (scale / base) * 100));
+    const z = zoom / 100, s = z * base;
+    /* The viewBox is centred in the element, so what is visible extends past
+       it on the letterboxed axis by this much either side. */
+    const extraX = (rect.width / s - VIEW_W / z) / 2;
+    const extraY = (rect.height / s - VIEW_H / z) / 2;
+    view.x = x0 - (inset + (availW - (x1 - x0) * s) / 2) / s + extraX;
+    view.y = y0 - ((rect.height - (y1 - y0) * s) / 2) / s + extraY;
+    applyView();
+  }
 
   /* ---------- The empty inspector ----------------------------------------
      What the panel says when nothing is selected. It used to be impossible to
@@ -27020,6 +28131,10 @@ verdict, and DESIGN.md
       const at = LAYOUT[node.id];
       if (at) node.ui = { x: at.x, y: at.y };
     }
+    /* Teaching material is written only when there is some, so a project
+       without it saves exactly as it did before it existed. */
+    if (!document_.annotations || !document_.annotations.length) delete document_.annotations;
+    if (!cleanNotes(document_.notes)) delete document_.notes;
     return document_;
   }
 
@@ -27097,6 +28212,10 @@ verdict, and DESIGN.md
       ...(n.config ? { config: n.config } : {})
     }));
     PROJECT.edges = document_.edges.map((e) => ({ from: e.from, to: e.to }));
+    PROJECT.annotations = cleanAnnotations(document_.annotations);
+    const notes = cleanNotes(document_.notes);
+    if (notes) PROJECT.notes = notes; else delete PROJECT.notes;
+    selectedAnn = null;
 
     for (const key of Object.keys(LAYOUT)) delete LAYOUT[key];
     document_.nodes.forEach((n, i) => {
@@ -27125,6 +28244,11 @@ verdict, and DESIGN.md
     SESSION.plots.osnr = null;
     SWEEP.points = null;
     afterEdit({ record: false });
+    /* A project that carries a lesson opens with it, and with the schematic
+       framed beside it rather than under it. One without a lesson closes the
+       panel: the last project's notes are not about this one. */
+    setLessonOpen(Boolean(notes));
+    if (notes) requestAnimationFrame(fitContent);
     flashHint(`opened ${projectName}.maiman — ${PROJECT.nodes.length} blocks`);
     logLine("—", `opened ${projectName}.maiman: ${PROJECT.nodes.length} blocks, ` +
                  `${PROJECT.edges.length} links`, "ok");
@@ -27153,6 +28277,10 @@ verdict, and DESIGN.md
     snapshot();
     PROJECT.nodes = [];
     PROJECT.edges = [];
+    PROJECT.annotations = [];
+    delete PROJECT.notes;
+    selectedAnn = null;
+    if (lesson.open) renderLesson();
     for (const key of Object.keys(LAYOUT)) delete LAYOUT[key];
     projectName = "untitled";
     $("#project-name").textContent = `${projectName}.maiman`;
@@ -27202,6 +28330,7 @@ verdict, and DESIGN.md
      that silently joins the signal path is a worse answer than one that waits
      to be wired. */
   function duplicateSelected() {
+    if (selectedAnn) { duplicateAnnotation(selectedAnn); return; }
     const node = PROJECT.nodes.find((n) => n.id === selected);
     if (!node) { flashHint("nothing selected to duplicate"); return; }
     snapshot();
@@ -27224,6 +28353,7 @@ verdict, and DESIGN.md
      done this since blocks became deletable; the menu calls the same path so
      there is one definition of what Delete means. */
   function deleteSelection() {
+    if (selectedAnn) { deleteAnnotation(selectedAnn); return; }
     if (selectedEdge !== null) { removeEdge(selectedEdge); return; }
     if (!selection.size) { flashHint("nothing selected"); return; }
     /* One snapshot for the group, not one per block, so undo brings all of them
@@ -27435,8 +28565,9 @@ verdict, and DESIGN.md
     if (menu.name === "edit") {
       setRow("edit-undo", { enabled: HISTORY.length > 0 });
       setRow("edit-redo", { enabled: FUTURE.length > 0 });
-      setRow("edit-duplicate", { enabled: Boolean(selected) });
-      setRow("edit-delete", { enabled: Boolean(selected) || selectedEdge !== null });
+      setRow("edit-duplicate", { enabled: Boolean(selected) || Boolean(selectedAnn) });
+      setRow("edit-delete", {
+        enabled: Boolean(selected) || selectedEdge !== null || Boolean(selectedAnn) });
       setRow("edit-align", { enabled: selection.size >= 2 });
     } else if (menu.name === "sim") {
       setRow("sim-run", { enabled: !SESSION.running });
@@ -27452,6 +28583,7 @@ verdict, and DESIGN.md
       }
       const ground = document.documentElement.getAttribute("data-theme") === "dark"
         ? "dark" : "light";
+      setRow("view-notes", { ticked: lesson.open });
       setRow("view-ground-light", { ticked: ground === "light" });
       setRow("view-ground-dark", { ticked: ground === "dark" });
     }
@@ -27515,6 +28647,7 @@ verdict, and DESIGN.md
   for (const key of ["con", "eye", "osa", "sens", "smx", "log"]) {
     onMenu(`view-pane-${key}`, () => showTab(key));
   }
+  onMenu("view-notes", () => setLessonOpen(!lesson.open));
   onMenu("view-ground-light", () => applyTheme("light"));
   onMenu("view-ground-dark", () => applyTheme("dark"));
 
@@ -28491,6 +29624,15 @@ verdict, and DESIGN.md
   drawGraph();
   fillSweepForm();
   showNode(NODES.find((n) => n.id === "map"));
+  PROJECT.annotations = cleanAnnotations(PROJECT.annotations);
+  drawGraph();
+  /* The project the page opens with has a lesson too. It opens beside the
+     canvas, and frames the schematic beside it unless this tab already has a
+     view it was left at. */
+  if (cleanNotes(PROJECT.notes)) {
+    setLessonOpen(true);
+    if (zoom === 100 && view.x === 0 && view.y === 0) requestAnimationFrame(fitContent);
+  }
   fillResults();
   fillLog();
   markProvenance();

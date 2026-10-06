@@ -732,5 +732,61 @@
         "in"
       ]
     }
+  ],
+  "notes": {
+    "title": "Eight-channel DWDM link",
+    "body": "Eight 10 Gb/s channels on the 100 GHz grid are multiplexed [[mux]], boosted [[booster]], sent\nthrough 80 km of fibre with the Kerr effect on [[span]], dispersion-compensated [[dcf]] and\namplified again [[preamp]]. One channel is dropped at [[demux]] and received on [[pin]].\n\n## Dispersion compensation\n\nThe compensating fibre has a large negative $D$, and its length is chosen so the accumulated\ndispersion cancels:\n\n$$D_\\text{span}L_\\text{span} + D_\\text{DCF}L_\\text{DCF} = 0 \\;\\Rightarrow\\; L_\\text{DCF} = \\frac{17 \\times 80}{100} = 13.6\\ \\text{km}$$\n\n## The Kerr effect\n\nLight changes the refractive index it travels through. Over a span, a channel picks up a\nphase proportional to its own power, and twice as much per watt from each neighbour:\n\n$$\\phi_j = \\gamma\\,L_\\text{eff}\\Big(P_j + 2\\sum_{k \\ne j} P_k\\Big), \\qquad L_\\text{eff} = \\frac{1 - e^{-\\alpha L}}{\\alpha}$$\n\nWith $\\alpha$ in 1/km (0.2 dB/km is 0.046 /km), $L_\\text{eff}$ of an 80 km span is about 21 km:\nthe nonlinearity happens near the launch, where the power is high.\n\n## Noise against nonlinearity\n\nMore launch power means a better OSNR at the receiver, and more nonlinear phase in the span.\nSomewhere between the two is the best launch power for the link.\n\n## Try this\n\n- Switch off cross-phase modulation on [[span]] and compare the bit error rate and run time.\n- Step the gain of [[booster]] from 4 to 16 dB. Where is the error rate lowest?\n- Shorten [[dcf]] by half and watch the dropped channel's eye at [[ber]]."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 3.0,
+      "w": 410.0,
+      "h": 788.0,
+      "text": "8 transmitters",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 435.0,
+      "y": 353.0,
+      "w": 686.0,
+      "h": 88.0,
+      "text": "Line",
+      "tone": "binary"
+    },
+    {
+      "id": "a3",
+      "kind": "rect",
+      "x": 1125.0,
+      "y": 353.0,
+      "w": 548.0,
+      "h": 268.0,
+      "text": "Drop one channel",
+      "tone": "electrical"
+    },
+    {
+      "id": "a4",
+      "kind": "note",
+      "x": 798.0,
+      "y": 190.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "The DCF is sized to cancel the span exactly: $D_\\text{span}L_\\text{span} + D_\\text{DCF}L_\\text{DCF} = 0$",
+      "tone": "electrical"
+    },
+    {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 898.0,
+      "y1": 288.0,
+      "x2": 916.0,
+      "y2": 346.0,
+      "text": "",
+      "tone": "metric"
+    }
   ]
 }

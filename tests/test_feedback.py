@@ -205,7 +205,7 @@ def test_a_graph_without_a_loop_control_runs_exactly_once() -> None:
 
 
 def test_the_example_prints_the_round_trip_gain(capsys: pytest.CaptureFixture[str]) -> None:
-    """The table in ``examples/fbg_circulator.py`` says what these tests assert."""
+    """The table in ``examples/python/fbg_circulator.py`` says what these tests assert."""
     import fbg_circulator
 
     fbg_circulator.an_echo()

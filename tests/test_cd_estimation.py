@@ -66,7 +66,7 @@ def link(
 ) -> tuple[Graph, ConstellationAnalyzer, DispersionCompensator, CoherentReceiver]:
     """A coherent link over dispersive fibre, with the compensator set exactly right.
 
-    Deliberately the same shape as ``examples/dispersion_link.py``: one mechanism
+    Deliberately the same shape as ``examples/python/dispersion_link.py``: one mechanism
     at a time, loss off unless an amplifier is asked for, so that what the
     estimator is being scored against is dispersion and not a power budget.
     """

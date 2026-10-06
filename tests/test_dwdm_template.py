@@ -55,7 +55,7 @@ def test_the_spool_takes_the_span_s_dispersion_back_out(graph: Graph) -> None:
 
 
 def test_the_link_measures_what_the_template_shows(results: dict[str, object]) -> None:
-    """OSNR, crosstalk and errors, as ``python examples/dwdm_link.py`` prints them."""
+    """OSNR, crosstalk and errors, as ``python examples/python/dwdm_link.py`` prints them."""
     assert results["osnr"] == pytest.approx(33.04, abs=0.05)
 
     drop = results["drop_power"]

@@ -301,7 +301,7 @@ def test_the_slope_changes_nothing_a_flat_fibre_did() -> None:
 def coherent(
     length_km: float, wavelength_nm: float = 1550.0
 ) -> tuple[Graph, ConstellationAnalyzer, DispersionCompensator, Fiber]:
-    """A coherent link over dispersive fibre, the shape ``examples/dispersion_link``
+    """A coherent link over dispersive fibre, the shape ``examples/python/dispersion_link``
     has: one mechanism at a time, loss and nonlinearity off, so that what moves
     when the slope is switched on is the slope.
     """

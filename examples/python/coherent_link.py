@@ -5,7 +5,7 @@ with balanced detection, and sweeps the launch power for each format. The result
 is the trade the tool exists to let someone explore: every extra bit per symbol
 buys spectral efficiency and costs sensitivity, by an amount you can read off.
 
-Run: ``python examples/coherent_link.py``
+Run: ``python examples/python/coherent_link.py``
 """
 
 from __future__ import annotations

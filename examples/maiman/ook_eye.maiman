@@ -1,0 +1,275 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 10000000000.0,
+    "samples_per_symbol": 32,
+    "sequence_length": 512,
+    "seed": 4,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "prbs",
+      "type": "PRBSGenerator",
+      "params": {
+        "order": 7.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 220.0
+      }
+    },
+    {
+      "id": "drv",
+      "type": "NRZDriver",
+      "params": {
+        "v_low": 4.0,
+        "v_high": 0.0
+      },
+      "ui": {
+        "x": 168.0,
+        "y": 220.0
+      }
+    },
+    {
+      "id": "tx",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 168.0,
+        "y": 60.0
+      }
+    },
+    {
+      "id": "mzm",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 4.0,
+        "extinction_ratio": 30.0
+      },
+      "ui": {
+        "x": 306.0,
+        "y": 220.0
+      }
+    },
+    {
+      "id": "fib",
+      "type": "Fiber",
+      "params": {
+        "length": 20.0,
+        "attenuation": 0.2,
+        "dispersion": 17.0
+      },
+      "ui": {
+        "x": 444.0,
+        "y": 220.0
+      }
+    },
+    {
+      "id": "pin",
+      "type": "PINPhotodiode",
+      "params": {
+        "responsivity": 0.8
+      },
+      "ui": {
+        "x": 582.0,
+        "y": 220.0
+      }
+    },
+    {
+      "id": "lpf",
+      "type": "ElectricalFilter",
+      "params": {
+        "bandwidth": 7.0
+      },
+      "ui": {
+        "x": 720.0,
+        "y": 220.0
+      }
+    },
+    {
+      "id": "eye",
+      "type": "EyeDiagram",
+      "params": {
+        "span_symbols": 2.0,
+        "time_bins": 64.0,
+        "amplitude_bins": 72.0
+      },
+      "ui": {
+        "x": 858.0,
+        "y": 130.0
+      }
+    },
+    {
+      "id": "ber",
+      "type": "BERAnalyzer",
+      "params": {},
+      "ui": {
+        "x": 858.0,
+        "y": 310.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "lpf",
+        "out"
+      ],
+      "to": [
+        "ber",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "ber",
+        "reference"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "drv",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "lpf",
+        "out"
+      ],
+      "to": [
+        "eye",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "mzm",
+        "out"
+      ],
+      "to": [
+        "fib",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "pin",
+        "out"
+      ],
+      "to": [
+        "lpf",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "out"
+      ],
+      "to": [
+        "mzm",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "tx",
+        "out"
+      ],
+      "to": [
+        "mzm",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "fib",
+        "out"
+      ],
+      "to": [
+        "pin",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "Direct detection: reading an eye",
+    "body": "A 10 Gb/s pseudo-random pattern [[prbs]] drives a Mach\u2013Zehnder modulator [[mzm]] that switches\nthe laser [[tx]] on and off. After 20 km of fibre [[fib]], a PIN photodiode [[pin]] and a\nfilter [[lpf]] turn the light back into a current. The eye [[eye]] folds that current over\ntwo bit periods, and [[ber]] counts errors against the original pattern.\n\n## The modulator\n\nDriven push\u2013pull, an MZM transmits\n\n$$P_\\text{out} = P_\\text{in}\\cos^2\\left(\\frac{\\pi V}{2V_\\pi}\\right)$$\n\nso a drive swinging between $0$ and $V_\\pi$ takes the light from full to nearly dark. How dark\nis set by the extinction ratio, $\\mathrm{ER} = 10\\log_{10}(P_1/P_0)$.\n\n## The fibre\n\nPower falls exponentially with length: $P(L) = P(0)\\,10^{-\\alpha L/10}$, with $\\alpha$ in dB/km.\nAt 0.2 dB/km, 20 km costs 4 dB. Chromatic dispersion spreads each pulse by roughly\n\n$$\\Delta\\tau \\approx D\\,L\\,\\Delta\\lambda$$\n\nWith $D = 17$ ps/(nm\u00b7km) and the 0.08 nm a 10 Gb/s signal occupies, that is about 27 ps,\na quarter of the 100 ps bit slot.\n\n## The photodiode and its noise\n\nThe photocurrent is $I = \\mathcal{R}P$. Two noises ride on it: shot noise, which grows with the\ncurrent, and the thermal noise of the load resistor, which does not.\n\n$$\\sigma^2 = 2q\\,(I + I_d)\\,B + \\frac{4k_BT}{R_L}\\,B$$\n\n## From the eye to a bit error rate\n\nWith the mean and spread of the one and zero rails read off the eye,\n\n$$Q = \\frac{I_1 - I_0}{\\sigma_1 + \\sigma_0}, \\qquad \\mathrm{BER} = \\frac{1}{2}\\,\\mathrm{erfc}\\left(\\frac{Q}{\\sqrt{2}}\\right)$$\n\n$Q = 6$ is the classic target: a BER of about $10^{-9}$.\n\n## Try this\n\n- Stretch [[fib]] to 60, 80 and 100 km. Does the eye lose height first, or width?\n- Lower the power of [[tx]] until errors appear. That power is the receiver's sensitivity.\n- Narrow [[lpf]] to 3 GHz. Less noise gets through, but neighbouring bits start to overlap."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 33.0,
+      "w": 410.0,
+      "h": 248.0,
+      "text": "Transmitter",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 435.0,
+      "y": 193.0,
+      "w": 134.0,
+      "h": 88.0,
+      "text": "Channel",
+      "tone": "binary"
+    },
+    {
+      "id": "a3",
+      "kind": "rect",
+      "x": 573.0,
+      "y": 193.0,
+      "w": 272.0,
+      "h": 88.0,
+      "text": "Receiver",
+      "tone": "electrical"
+    },
+    {
+      "id": "a4",
+      "kind": "rect",
+      "x": 849.0,
+      "y": 103.0,
+      "w": 134.0,
+      "h": 268.0,
+      "text": "Instruments",
+      "tone": "metric"
+    },
+    {
+      "id": "a5",
+      "kind": "note",
+      "x": 404.0,
+      "y": 330.0,
+      "w": 230.0,
+      "h": 96.0,
+      "text": "Lengthen the fibre and run again: loss lowers the eye, dispersion smears it sideways. $\\Delta\\tau \\approx D\\,L\\,\\Delta\\lambda$",
+      "tone": "electrical"
+    },
+    {
+      "id": "a6",
+      "kind": "arrow",
+      "x1": 484.0,
+      "y1": 328.0,
+      "x2": 502.0,
+      "y2": 276.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

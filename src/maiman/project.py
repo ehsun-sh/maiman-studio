@@ -16,6 +16,12 @@ Three rules shape it:
   slightly differently. ``maiman_version`` is recorded so that is diagnosable.
 * **Names are looked up, never imported.** See :mod:`maiman.registry`.
 
+Two optional sections carry teaching material and nothing else: ``notes``, the
+lesson the studio opens beside the canvas (``{"title", "body"}``, the body
+Markdown with TeX between dollar signs), and ``annotations``, the sticky notes,
+frames and arrows drawn over the schematic. The engine never reads either, so
+a project with them runs exactly as it would without.
+
 A project file is always runnable headless: nothing here requires a GUI, and
 the ``ui`` section is optional.
 """
@@ -41,8 +47,18 @@ class ProjectError(Exception):
     """A project file could not be read."""
 
 
-def graph_to_dict(graph: Graph, *, ui: dict[str, dict[str, float]] | None = None) -> dict[str, Any]:
-    """Serialise a graph to a JSON-compatible dictionary."""
+def graph_to_dict(
+    graph: Graph,
+    *,
+    ui: dict[str, dict[str, float]] | None = None,
+    notes: dict[str, str] | None = None,
+    annotations: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Serialise a graph to a JSON-compatible dictionary.
+
+    ``notes`` and ``annotations`` are written only when given, so a project
+    without teaching material is byte-for-byte what it was before they existed.
+    """
     from . import __version__
 
     positions = ui or {}
@@ -65,13 +81,18 @@ def graph_to_dict(graph: Graph, *, ui: dict[str, dict[str, float]] | None = None
         for (dst_label, dst_port), source in sorted(graph.edges.items())
     ]
 
-    return {
+    document: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "maiman_version": __version__,
         "context": {field: getattr(graph.ctx, field) for field in _CONTEXT_FIELDS},
         "nodes": nodes,
         "edges": edges,
     }
+    if notes:
+        document["notes"] = dict(notes)
+    if annotations:
+        document["annotations"] = [dict(a) for a in annotations]
+    return document
 
 
 def component_from_dict(node: dict[str, Any]) -> Component:
@@ -143,12 +164,18 @@ def ui_from_dict(data: dict[str, Any]) -> dict[str, dict[str, float]]:
     return {node["id"]: node["ui"] for node in data.get("nodes", []) if "ui" in node}
 
 
-def save(graph: Graph, path: str | Path, *, ui: dict[str, dict[str, float]] | None = None) -> Path:
+def save(
+    graph: Graph,
+    path: str | Path,
+    *,
+    ui: dict[str, dict[str, float]] | None = None,
+    notes: dict[str, str] | None = None,
+    annotations: list[dict[str, Any]] | None = None,
+) -> Path:
     """Write ``graph`` to ``path`` as a ``.maiman`` file."""
     destination = Path(path)
-    destination.write_text(
-        json.dumps(graph_to_dict(graph, ui=ui), indent=2) + "\n", encoding="utf-8"
-    )
+    document = graph_to_dict(graph, ui=ui, notes=notes, annotations=annotations)
+    destination.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
     return destination
 
 
