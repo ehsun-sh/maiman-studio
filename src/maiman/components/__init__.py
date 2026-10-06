@@ -73,7 +73,7 @@ from .photonic import (
 from .reflective import Circulator, FiberBraggGrating
 from .sources import CWLaser, FabryPerotLaser, GaussianPulse, SechPulse
 from .tilted import TiltedFiberBraggGrating
-from .wdm import Demultiplexer, Multiplexer
+from .wdm import Demultiplexer, Multiplexer, WavelengthSelectiveSwitch
 
 __all__ = [
     "EDFA",
@@ -142,4 +142,5 @@ __all__ = [
     "TiltedFiberBraggGrating",
     "TimingRecovery",
     "Waveguide",
+    "WavelengthSelectiveSwitch",
 ]

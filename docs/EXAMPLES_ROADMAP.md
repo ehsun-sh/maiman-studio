@@ -80,17 +80,22 @@ its lesson quotes.
 
 Many channels, amplifiers and the noise they add, and the Kerr effect once the power is high.
 
+3.1, 3.2, 3.5, 3.6 and 3.9 are written by [`amplified.py`](../examples/python/amplified.py), and
+[`tests/test_amplified.py`](../tests/test_amplified.py) holds each to the numbers its lesson
+quotes. 3.7 and 3.8 are time-domain studies of the amplifier's inversion, which a link graph does
+not run, so they stay scripts.
+
 | # | Example | What it teaches | Status |
 | :-- | :--- | :--- | :--- |
-| 3.1 | One EDFA, before and after | Gain, ASE, noise figure on an OSA | 🟢 EDFA, OpticalSpectrumAnalyzer |
-| 3.2 | Chain of amplified spans | OSNR falls $10\log_{10}N$ | ✅ `amplified_link.py`; studio project to add |
+| 3.1 | One EDFA, before and after | Gain, ASE, noise figure on an OSA | ✅ `edfa_basics.maiman`, with lesson |
+| 3.2 | Chain of amplified spans | OSNR falls $10\log_{10}N$ | ✅ `amplified_chain.maiman`, with lesson |
 | 3.3 | Four channels on the 100 GHz grid | Grid, ASE floor, OSNR and resolution bandwidth | ✅ `wdm_osa.maiman`, with lesson |
 | 3.4 | Eight-channel DWDM with DCF | Dispersion map, XPM, dropping one channel | ✅ `dwdm_link.maiman`, with lesson |
-| 3.5 | Optimum launch power | Noise against nonlinearity: the BER bathtub | 🟢 sweep on the booster of 3.4 |
-| 3.6 | FWM on a zero-dispersion fibre | Why G.653 fibre failed for WDM | ✅ `wdm_nonlinear.py`; studio project to add |
+| 3.5 | Optimum launch power | Noise against nonlinearity: the BER bathtub | ✅ `launch_power.maiman`, with lesson: one channel over five compensated spans, its own booster swept |
+| 3.6 | FWM on a zero-dispersion fibre | Why G.653 fibre failed for WDM | ✅ `fwm_dsf.maiman`, with lesson: G.653 against G.655 on two spectra |
 | 3.7 | EDFA gain tilt and pump control | Spectral gain, a control loop with a bandwidth | ✅ `edfa_gain_tilt.py`, `edfa_pump_control.py` |
 | 3.8 | Channel drop transient | Surviving channels jump when others leave | ✅ `edfa_transient.py` |
-| 3.9 | A ROADM add/drop node | Express, add and drop on a wavelength-selective switch | 🟡 needs a **WSS** block (a mux/demux pair stands in today) |
+| 3.9 | A ROADM add/drop node | Express, add and drop on a wavelength-selective switch | ✅ `roadm.maiman`, with lesson, on the new **Wavelength-Selective Switch** |
 | 3.10 | Distributed Raman amplification | Gain inside the span, lower noise figure | 🟡 needs a **Raman pump / amplifier** block (inter-channel SRS exists) |
 
 ## Phase 4: Coherent transmission
@@ -158,7 +163,7 @@ Collected from the 🟡 and 🔴 rows, in the order the phases need them:
 | :--- | :--- | :--- |
 | Time-domain scope (power or field against time) | 1.4 | ✅ **Optical Oscilloscope**: power and instantaneous frequency against time, in the dock's Scope tab |
 | Burst-mode receiver | 2.7 | Fast settling threshold for PON upstream |
-| Wavelength-selective switch | 3.9 | Per-channel pass, block and attenuate; filter shape per port |
+| Wavelength-selective switch | 3.9 | ✅ **Wavelength-Selective Switch**: express, drop and add on the grid, with its isolation leaking onto the added channel as a field |
 | Raman amplifier | 3.10 | Counter-pumped, using the measured gain shape the SRS model already has |
 | PCS mapper | 4.8 | A block over `maiman.pcs` |
 | Gain-flattening filter | 7.2 | An `OpticalFilter` with an arbitrary measured shape may be enough |
@@ -173,6 +178,12 @@ first. Each entry says which example found it and what was done.
 
 | Date | Example | Finding | Outcome |
 | :--- | :--- | :--- | :--- |
+| 2026-10-06 | 3.10 | Distributed Raman gain needs a pump and its own noise model, not a block over the existing inter-channel SRS | Open: still 🟡, left for a decision before it is built |
+| 2026-10-06 | 3.6 | With modulated channels at +6 dBm on G.653, the receivers showed far less four-wave mixing penalty than the spectra suggest (products 10 dB under the channels) | Open: the lesson stays on the spectra; checking the penalty against theory is still to do |
+| 2026-10-06 | 3.9 | A demultiplexer and a multiplexer back to back cannot stand in for a ROADM: the dropped channel's leak and the added channel share a frequency, and the multiplexer refuses two carriers there | **Wavelength-Selective Switch** added; it adds the two as fields, which is the in-band crosstalk the lesson measures |
+| 2026-10-06 | 2.x, 3.5 | At 8 samples per symbol the eye drew each sample as a flat step, so eyes looked like bars | The Eye Diagram interpolates between samples (band-limited, exact on the periodic window) and draws the transitions |
+| 2026-10-06 | 2.x | Several direct-detection examples had error counters and no eye | Every receiver in phase 2 now has an eye; 1.7 has a spectrum |
+| 2026-10-06 | menu | Twenty-five examples made the Examples menu longer than the window | One submenu per phase |
 | 2026-10-06 | 2.7 | GPON upstream is bursts from 32 ONUs at different powers, which no receiver here can settle on | Open: downstream only, until a **burst-mode receiver** exists |
 | 2026-10-06 | 2.2, 2.7 | A run with only meters and error counters left the dock on an empty plot, and once a run had moved to the log, the next example stayed there | Such a run now opens the Log tab; a run with something to draw leaves a log the studio opened, never one the user picked |
 | 2026-10-06 | phase 1, 2 | Lesson tables never rendered: the lesson panel had no Markdown tables, so every table in phase 1 showed as a paragraph of pipes | Pipe tables added to the lesson renderer |

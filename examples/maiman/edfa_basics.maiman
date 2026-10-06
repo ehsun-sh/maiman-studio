@@ -1,0 +1,202 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 10000000000.0,
+    "samples_per_symbol": 8,
+    "sequence_length": 256,
+    "seed": 0,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "laser",
+      "type": "CWLaser",
+      "params": {
+        "power": -20.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "edfa",
+      "type": "EDFA",
+      "params": {
+        "gain": 20.0,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "pm_in",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+        "x": 180.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "osa_in",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1550.0,
+        "span": 4000.0,
+        "points": 1024.0,
+        "resolution_bandwidth": 12.5
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 240.0
+      }
+    },
+    {
+      "id": "pm_out",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+        "x": 480.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "osa_out",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1550.0,
+        "span": 4000.0,
+        "points": 1024.0,
+        "resolution_bandwidth": 12.5
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 240.0
+      }
+    },
+    {
+      "id": "osnr",
+      "type": "OSNRMeter",
+      "params": {},
+      "ui": {
+        "x": 480.0,
+        "y": 140.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "laser",
+        "out"
+      ],
+      "to": [
+        "edfa",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "laser",
+        "out"
+      ],
+      "to": [
+        "osa_in",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "edfa",
+        "out"
+      ],
+      "to": [
+        "osa_out",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "edfa",
+        "out"
+      ],
+      "to": [
+        "osnr",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "laser",
+        "out"
+      ],
+      "to": [
+        "pm_in",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "edfa",
+        "out"
+      ],
+      "to": [
+        "pm_out",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "3.1 One EDFA, before and after",
+    "body": "A weak CW line [[laser]] at \u221220 dBm goes into an erbium-doped fibre amplifier [[edfa]] with 20 dB\nof gain and a 5 dB noise figure. Meters and spectra read both sides: [[pm_in]] and [[osa_in]]\nbefore, [[pm_out]], [[osnr]] and [[osa_out]] after.\n\n## Gain, and what comes with it\n\nThe signal leaves 20 dB stronger, at 0.00 dBm. The amplifier also adds amplified spontaneous\nemission (ASE): broadband light in both polarisations, with a power per bandwidth $B$ of\n\n$$P_\\text{ASE} = 2\\,n_\\text{sp}\\,h\\nu\\,(G - 1)\\,B, \\qquad NF \\approx 2\\,n_\\text{sp}$$\n\nOn [[osa_out]] it is the flat floor either side of the line.\n\n## Reading the numbers\n\n| Reading | Value |\n| :-- | :-- |\n| [[pm_in]] | \u221220.00 dBm |\n| [[pm_out]] | +0.65 dBm |\n| ASE floor on [[osa_out]], per 0.1 nm | \u221232.95 dBm |\n| [[osnr]] in 0.1 nm | 32.95 dB |\n\n[[pm_out]] reads 0.65 dB more than the signal, because a power meter has no filter. It counts the\nASE across the whole 4 THz band, 0.16 mW of it. The OSNR compares the signal with the ASE in\n0.1 nm (12.5 GHz) only. At 1550 nm, $10\\log_{10}(h\\nu \\cdot 12.5\\,\\text{GHz})$ is \u221258 dBm, so\n\n$$\\text{OSNR} \\approx 58 + P_\\text{in} - NF = 58 - 20 - 5 = 33\\ \\text{dB}$$\n\nThe gain cancels out: the OSNR is set by the power arriving at the amplifier, not the power\nleaving it.\n\n## Try this\n\n- Raise [[laser]] to \u221210 dBm. The OSNR rises by the same 10 dB.\n- Set [[edfa]]'s noise figure to 3 dB, the quantum limit for a phase-insensitive amplifier.\n- Turn on *saturate* on [[edfa]] and raise [[laser]] to +5 dBm. Does it still give 20 dB?"
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 171.0,
+      "y": 13.0,
+      "w": 134.0,
+      "h": 288.0,
+      "text": "Before",
+      "tone": "metric"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 13.0,
+      "w": 134.0,
+      "h": 288.0,
+      "text": "After",
+      "tone": "metric"
+    },
+    {
+      "id": "a3",
+      "kind": "note",
+      "x": 290.0,
+      "y": 252.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "20 dB of gain, and a floor of ASE 33 dB under the signal in every 0.1 nm: $58 + P_\\text{in} - NF$.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a4",
+      "kind": "arrow",
+      "x1": 388.0,
+      "y1": 250.0,
+      "x2": 388.0,
+      "y2": 206.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

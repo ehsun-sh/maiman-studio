@@ -28,6 +28,7 @@ exactly what that device is.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from ..component import Component, Param, PortType
@@ -220,4 +221,113 @@ class Multiplexer(_Grid):
                 walkoff=joined_walkoff(filtered, where=self.label),
                 nonlinear_history=joined_nonlinear_history(filtered, where=self.label),
             )
+        }
+
+
+class WavelengthSelectiveSwitch(_Grid):
+    """A ROADM's add/drop degree: one channel off the line, a new one on in its place.
+
+    ``in`` is the line arriving at the node, ``add`` the local transmitter. Every
+    channel of the line but ``dropped`` leaves by ``out`` through its own
+    passband (express); the ``dropped`` channel leaves by ``drop`` through its
+    passband, and whatever arrives on ``add`` in that slot takes its place on
+    ``out``.
+
+    **The switch does not block perfectly.** ``isolation`` is how far below its
+    arrival the dropped channel still reaches ``out``, and there it lands on the
+    added channel's own frequency: in-band crosstalk, which no filter
+    downstream can remove. The two are added as fields, so the leak beats with
+    the new channel at the receiver -- the reason a node's isolation is
+    specified at 35 dB or more, far beyond a demultiplexer's neighbour
+    rejection.
+
+    The passband of every port is the demultiplexer's, on the same grid, so a
+    channel off the plan is attenuated by the skirt rather than special-cased.
+    """
+
+    display_name = "Wavelength-Selective Switch"
+
+    inputs = {"in": PortType.OPTICAL, "add": PortType.OPTICAL}
+    outputs = {"out": PortType.OPTICAL, "drop": PortType.OPTICAL}
+
+    dropped = Param(1.0, unit="", min=0.0, doc="The channel dropped and re-added, counted from 0")
+    isolation = Param(
+        35.0,
+        unit="dB",
+        min=0.0,
+        doc="How far below its arrival the dropped channel still leaks to `out`",
+    )
+
+    def __init__(self, channels: int = 4, *, label: str | None = None, **params: float) -> None:
+        if channels < 1:
+            raise ValueError(f"a switch needs at least one channel, got {channels}")
+        super().__init__(label=label, **params)
+        self.channels = channels
+        if int(self.dropped) != self.dropped or self.dropped >= channels:
+            raise ValueError(
+                f"{self.label}: dropped={self.dropped:g} is not one of channels 0 to {channels - 1}"
+            )
+
+    def structural_config(self) -> dict[str, Any]:
+        return {"channels": self.channels}
+
+    def _channel_of(self, f0: float) -> int:
+        centres = self.channel_frequencies()
+        return min(range(self.channels), key=lambda index: abs(centres[index] - f0))
+
+    def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
+        line: OpticalSignal = inputs["in"]
+        add: OpticalSignal = inputs["add"]
+        dropped = int(self.dropped)
+
+        def only(signal: OpticalSignal, bands: list[Band], noise: bool) -> OpticalSignal:
+            return replace(signal, bands=tuple(bands), noise=signal.noise if noise else ())
+
+        # Express: each line channel through its own passband. The noise is cut
+        # by every express passband in turn, so the dropped slot's ASE is gone.
+        express: list[OpticalSignal] = []
+        leaked: list[Band] = []
+        for index in range(self.channels):
+            if index == dropped:
+                continue
+            mine = [b for b in line.bands if self._channel_of(b.f0) == index]
+            express.append(self._passband(only(line, mine, noise=True), index))
+        leak = 10.0 ** (-self.isolation / 20.0)
+        for band in line.bands:
+            if self._channel_of(band.f0) == dropped:
+                leaked.append(band.scale_amplitude(leak))
+
+        added = self._passband(add, dropped)
+
+        bands: dict[float, Band] = {}
+        noise: list[NoiseBin] = []
+        for signal in express:
+            bands.update((b.f0, b) for b in signal.bands)
+            noise.extend(signal.noise)
+        noise.extend(added.noise)
+        for band in (*leaked, *added.bands):
+            here = bands.get(band.f0)
+            if here is None:
+                bands[band.f0] = band
+            elif here.fs == band.fs and here.num_samples == band.num_samples:
+                # The same carrier frequency by two paths: added as fields.
+                bands[band.f0] = Band(
+                    Ex=here.Ex + band.Ex, Ey=here.Ey + band.Ey, f0=band.f0, fs=band.fs
+                )
+            else:
+                raise ValueError(
+                    f"{self.label}: two carriers at {band.f0 / 1e12:.6f} THz on different "
+                    f"sample grids cannot be added as fields"
+                )
+
+        joined = [line, add]
+        return {
+            "out": OpticalSignal(
+                bands=tuple(sorted(bands.values(), key=lambda b: b.f0)),
+                noise=tuple(noise),
+                accumulated_gvd=joined_accumulated_gvd(joined, where=self.label),
+                walkoff=joined_walkoff(joined, where=self.label),
+                nonlinear_history=joined_nonlinear_history(joined, where=self.label),
+            ),
+            "drop": self._passband(line, dropped),
         }

@@ -459,6 +459,7 @@ def eye_histogram(
     time_bins: int = 128,
     amplitude_bins: int = 128,
     unit: str = "",
+    interpolate: bool = False,
 ) -> EyeHistogram:
     """Bin a waveform into an eye diagram.
 
@@ -473,11 +474,24 @@ def eye_histogram(
     detail — it interleaves empty columns between populated ones and renders as
     vertical banding rather than an eye. Oversampling is what buys horizontal
     resolution here, not the bin count.
+
+    ``interpolate`` buys it the other way. The waveform is resampled between its
+    samples -- by zero-padding its spectrum, which is exact for a band-limited
+    waveform on the simulation's periodic window -- until a trace has at least
+    ``time_bins`` instants. Each transition is then drawn as the curve it is
+    rather than as a step from one sample to the next, which at 8 samples per
+    symbol is most of what an eye shows. The counts then grow with the
+    interpolation factor; the shape is still set by the bins alone.
     """
     if span_symbols < 1:
         raise ValueError(f"span_symbols must be >= 1, got {span_symbols}")
 
     trace_length = span_symbols * samples_per_symbol
+    if interpolate and time_bins > trace_length and samples.shape[0] >= trace_length:
+        factor = -(-time_bins // trace_length)
+        samples = _band_limited_upsample(np.asarray(samples, dtype=np.float64), factor)
+        samples_per_symbol *= factor
+        trace_length *= factor
     num_traces = samples.shape[0] // trace_length
     if num_traces == 0:
         raise ValueError(
@@ -501,6 +515,21 @@ def eye_histogram(
         amplitude_edges=amplitude_edges,
         unit=unit,
     )
+
+
+def _band_limited_upsample(samples: np.ndarray, factor: int) -> np.ndarray:
+    """``samples`` at ``factor`` times the rate, by zero-padding the spectrum.
+
+    The window is periodic, as the simulation's is. An even length's Nyquist bin
+    is split between its two images so the result stays real and unbiased.
+    """
+    n = samples.shape[0]
+    spectrum = np.fft.rfft(samples)
+    padded = np.zeros(n * factor // 2 + 1, dtype=complex)
+    padded[: spectrum.shape[0]] = spectrum
+    if n % 2 == 0:
+        padded[n // 2] *= 0.5
+    return np.fft.irfft(padded, n * factor) * factor
 
 
 # --------------------------------------------------------------------------

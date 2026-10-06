@@ -1153,8 +1153,13 @@ verdict, and DESIGN.md
         <div class="menu-group">
           <button class="menu-group-btn" role="menuitem" aria-haspopup="true" aria-expanded="false">3 · Amplified and WDM links<span class="menu-key">▸</span></button>
           <div class="menu-pop menu-sub" role="menu">
+            <button role="menuitem" id="example-edfa-basics">3.1 One EDFA, before and after</button>
+            <button role="menuitem" id="example-amplified-chain">3.2 A chain of amplified spans</button>
             <button role="menuitem" id="example-wdm-osa">3.3 WDM spectrum, 4 channels</button>
             <button role="menuitem" id="example-dwdm-link">3.4 DWDM link, 8 × 10 Gb/s</button>
+            <button role="menuitem" id="example-launch-power">3.5 Optimum launch power</button>
+            <button role="menuitem" id="example-fwm-dsf">3.6 Four-wave mixing on G.653 fibre</button>
+            <button role="menuitem" id="example-roadm">3.9 A ROADM add/drop node</button>
           </div>
         </div>
         <div class="menu-group">
@@ -2938,6 +2943,11 @@ verdict, and DESIGN.md
      "unit": "",
      "min": 8.0,
      "doc": "Vertical resolution"
+    },
+    "interpolate": {
+     "type": "bool",
+     "default": true,
+     "doc": "Draw each transition between samples by band-limited interpolation, not as a step"
     }
    },
    "structural": {},
@@ -5549,6 +5559,94 @@ verdict, and DESIGN.md
     },
     "outputs": {
      "out": "optical"
+    }
+   }
+  },
+  "WavelengthSelectiveSwitch": {
+   "name": "Wavelength-Selective Switch",
+   "type": "WavelengthSelectiveSwitch",
+   "class": "maiman.components.wdm.WavelengthSelectiveSwitch",
+   "category": "Passive",
+   "version": "0.1.0",
+   "spectral": false,
+   "parameters": {
+    "first_wavelength": {
+     "type": "float",
+     "default": 1550.0,
+     "unit": "nm",
+     "min": 1200.0,
+     "max": 1700.0,
+     "doc": "Channel 0. The rest are stepped from it up in frequency, down in wavelength"
+    },
+    "spacing": {
+     "type": "float",
+     "default": 100.0,
+     "unit": "GHz",
+     "min": 1.0,
+     "doc": "Channel spacing, in frequency because the grid is"
+    },
+    "wavelength_spacing": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "nm",
+     "min": 0.0,
+     "doc": "A coarse grid's step in wavelength (CWDM: 20 nm), replacing `spacing`; 0 is off"
+    },
+    "bandwidth": {
+     "type": "float",
+     "default": 50.0,
+     "unit": "GHz",
+     "min": 0.0,
+     "doc": "3 dB full width of each channel's passband"
+    },
+    "order": {
+     "type": "float",
+     "default": 3.0,
+     "unit": "",
+     "min": 1.0,
+     "max": 10.0,
+     "doc": "Super-Gaussian order; 3 to 5 is an AWG"
+    },
+    "insertion_loss": {
+     "type": "float",
+     "default": 4.0,
+     "unit": "dB",
+     "min": 0.0,
+     "doc": "Loss per channel. An AWG routes, so this does not grow with the count"
+    },
+    "extinction": {
+     "type": "float",
+     "default": 40.0,
+     "unit": "dB",
+     "min": 0.0,
+     "doc": "Out-of-band rejection floor; 0 disables the floor"
+    },
+    "dropped": {
+     "type": "float",
+     "default": 1.0,
+     "unit": "",
+     "min": 0.0,
+     "doc": "The channel dropped and re-added, counted from 0"
+    },
+    "isolation": {
+     "type": "float",
+     "default": 35.0,
+     "unit": "dB",
+     "min": 0.0,
+     "doc": "How far below its arrival the dropped channel still leaks to `out`"
+    }
+   },
+   "structural": {
+    "channels": 4
+   },
+   "ports": {
+    "inputs": {
+     "in": "optical",
+     "add": "optical"
+    },
+    "outputs": {
+     "out": "optical",
+     "drop": "optical"
     }
    }
   }
@@ -24551,7 +24649,7 @@ verdict, and DESIGN.md
       "kind": "rect",
       "x": 621.0,
       "y": 163.0,
-      "w": 434.0,
+      "w": 584.0,
       "h": 88.0,
       "text": "PIN receiver",
       "tone": "electrical"
@@ -24561,7 +24659,7 @@ verdict, and DESIGN.md
       "kind": "rect",
       "x": 621.0,
       "y": 313.0,
-      "w": 434.0,
+      "w": 584.0,
       "h": 88.0,
       "text": "APD receiver",
       "tone": "electrical"
@@ -25010,7 +25108,7 @@ verdict, and DESIGN.md
       "kind": "rect",
       "x": 621.0,
       "y": 13.0,
-      "w": 434.0,
+      "w": 584.0,
       "h": 388.0,
       "text": "Identical receivers",
       "tone": "electrical"
@@ -25589,7 +25687,7 @@ verdict, and DESIGN.md
       "kind": "rect",
       "x": 771.0,
       "y": 13.0,
-      "w": 434.0,
+      "w": 584.0,
       "h": 288.0,
       "text": "Identical receivers",
       "tone": "electrical"
@@ -25597,7 +25695,7 @@ verdict, and DESIGN.md
      {
       "id": "a4",
       "kind": "note",
-      "x": 1246.0,
+      "x": 1396.0,
       "y": 220.0,
       "w": 240.0,
       "h": 96.0,
@@ -25607,9 +25705,9 @@ verdict, and DESIGN.md
      {
       "id": "a5",
       "kind": "arrow",
-      "x1": 1244.0,
+      "x1": 1394.0,
       "y1": 266.0,
-      "x2": 1210.0,
+      "x2": 1360.0,
       "y2": 266.0,
       "text": "",
       "tone": "metric"
@@ -26631,7 +26729,7 @@ verdict, and DESIGN.md
       "kind": "rect",
       "x": 771.0,
       "y": 13.0,
-      "w": 434.0,
+      "w": 584.0,
       "h": 388.0,
       "text": "4 receivers",
       "tone": "electrical"
@@ -26938,7 +27036,7 @@ verdict, and DESIGN.md
       "kind": "rect",
       "x": 621.0,
       "y": 13.0,
-      "w": 434.0,
+      "w": 584.0,
       "h": 188.0,
       "text": "One ONU, at a home",
       "tone": "electrical"
@@ -26960,6 +27058,765 @@ verdict, and DESIGN.md
       "y1": 250.0,
       "x2": 538.0,
       "y2": 206.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "edfa-basics": {
+   "title": "3.1 One EDFA, before and after",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 10000000000.0,
+     "samples_per_symbol": 8,
+     "sequence_length": 256,
+     "seed": 0,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "laser",
+      "type": "CWLaser",
+      "params": {
+       "power": -20.0,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "edfa",
+      "type": "EDFA",
+      "params": {
+       "gain": 20.0,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "pm_in",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+       "x": 180.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "osa_in",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 4000.0,
+       "points": 1024.0,
+       "resolution_bandwidth": 12.5
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "pm_out",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+       "x": 480.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "osa_out",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 4000.0,
+       "points": 1024.0,
+       "resolution_bandwidth": 12.5
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "osnr",
+      "type": "OSNRMeter",
+      "params": {},
+      "ui": {
+       "x": 480.0,
+       "y": 140.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "laser",
+       "out"
+      ],
+      "to": [
+       "edfa",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "laser",
+       "out"
+      ],
+      "to": [
+       "osa_in",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "edfa",
+       "out"
+      ],
+      "to": [
+       "osa_out",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "edfa",
+       "out"
+      ],
+      "to": [
+       "osnr",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "laser",
+       "out"
+      ],
+      "to": [
+       "pm_in",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "edfa",
+       "out"
+      ],
+      "to": [
+       "pm_out",
+       "in"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "3.1 One EDFA, before and after",
+     "body": "A weak CW line [[laser]] at \u221220 dBm goes into an erbium-doped fibre amplifier [[edfa]] with 20 dB\nof gain and a 5 dB noise figure. Meters and spectra read both sides: [[pm_in]] and [[osa_in]]\nbefore, [[pm_out]], [[osnr]] and [[osa_out]] after.\n\n## Gain, and what comes with it\n\nThe signal leaves 20 dB stronger, at 0.00 dBm. The amplifier also adds amplified spontaneous\nemission (ASE): broadband light in both polarisations, with a power per bandwidth $B$ of\n\n$$P_\\text{ASE} = 2\\,n_\\text{sp}\\,h\\nu\\,(G - 1)\\,B, \\qquad NF \\approx 2\\,n_\\text{sp}$$\n\nOn [[osa_out]] it is the flat floor either side of the line.\n\n## Reading the numbers\n\n| Reading | Value |\n| :-- | :-- |\n| [[pm_in]] | \u221220.00 dBm |\n| [[pm_out]] | +0.65 dBm |\n| ASE floor on [[osa_out]], per 0.1 nm | \u221232.95 dBm |\n| [[osnr]] in 0.1 nm | 32.95 dB |\n\n[[pm_out]] reads 0.65 dB more than the signal, because a power meter has no filter. It counts the\nASE across the whole 4 THz band, 0.16 mW of it. The OSNR compares the signal with the ASE in\n0.1 nm (12.5 GHz) only. At 1550 nm, $10\\log_{10}(h\\nu \\cdot 12.5\\,\\text{GHz})$ is \u221258 dBm, so\n\n$$\\text{OSNR} \\approx 58 + P_\\text{in} - NF = 58 - 20 - 5 = 33\\ \\text{dB}$$\n\nThe gain cancels out: the OSNR is set by the power arriving at the amplifier, not the power\nleaving it.\n\n## Try this\n\n- Raise [[laser]] to \u221210 dBm. The OSNR rises by the same 10 dB.\n- Set [[edfa]]'s noise figure to 3 dB, the quantum limit for a phase-insensitive amplifier.\n- Turn on *saturate* on [[edfa]] and raise [[laser]] to +5 dBm. Does it still give 20 dB?"
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 171.0,
+      "y": 13.0,
+      "w": 134.0,
+      "h": 288.0,
+      "text": "Before",
+      "tone": "metric"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 13.0,
+      "w": 134.0,
+      "h": 288.0,
+      "text": "After",
+      "tone": "metric"
+     },
+     {
+      "id": "a3",
+      "kind": "note",
+      "x": 290.0,
+      "y": 252.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "20 dB of gain, and a floor of ASE 33 dB under the signal in every 0.1 nm: $58 + P_\\text{in} - NF$.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a4",
+      "kind": "arrow",
+      "x1": 388.0,
+      "y1": 250.0,
+      "x2": 388.0,
+      "y2": 206.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "amplified-chain": {
+   "title": "3.2 A chain of amplified spans",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 10000000000.0,
+     "samples_per_symbol": 8,
+     "sequence_length": 256,
+     "seed": 0,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "laser",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "span1",
+      "type": "Fiber",
+      "params": {
+       "length": 80.0,
+       "attenuation": 0.2
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "edfa1",
+      "type": "EDFA",
+      "params": {
+       "gain": 16.0,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "osnr1",
+      "type": "OSNRMeter",
+      "params": {},
+      "ui": {
+       "x": 330.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "osa1",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 4000.0,
+       "points": 1024.0,
+       "resolution_bandwidth": 12.5
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 220.0
+      }
+     },
+     {
+      "id": "span2",
+      "type": "Fiber",
+      "params": {
+       "length": 80.0,
+       "attenuation": 0.2
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "edfa2",
+      "type": "EDFA",
+      "params": {
+       "gain": 16.0,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 630.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "osnr2",
+      "type": "OSNRMeter",
+      "params": {},
+      "ui": {
+       "x": 630.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "span3",
+      "type": "Fiber",
+      "params": {
+       "length": 80.0,
+       "attenuation": 0.2
+      },
+      "ui": {
+       "x": 780.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "edfa3",
+      "type": "EDFA",
+      "params": {
+       "gain": 16.0,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 930.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "span4",
+      "type": "Fiber",
+      "params": {
+       "length": 80.0,
+       "attenuation": 0.2
+      },
+      "ui": {
+       "x": 1080.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "edfa4",
+      "type": "EDFA",
+      "params": {
+       "gain": 16.0,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 1230.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "osnr4",
+      "type": "OSNRMeter",
+      "params": {},
+      "ui": {
+       "x": 1230.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "span5",
+      "type": "Fiber",
+      "params": {
+       "length": 80.0,
+       "attenuation": 0.2
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 290.0
+      }
+     },
+     {
+      "id": "edfa5",
+      "type": "EDFA",
+      "params": {
+       "gain": 16.0,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 290.0
+      }
+     },
+     {
+      "id": "span6",
+      "type": "Fiber",
+      "params": {
+       "length": 80.0,
+       "attenuation": 0.2
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 290.0
+      }
+     },
+     {
+      "id": "edfa6",
+      "type": "EDFA",
+      "params": {
+       "gain": 16.0,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 630.0,
+       "y": 290.0
+      }
+     },
+     {
+      "id": "span7",
+      "type": "Fiber",
+      "params": {
+       "length": 80.0,
+       "attenuation": 0.2
+      },
+      "ui": {
+       "x": 780.0,
+       "y": 290.0
+      }
+     },
+     {
+      "id": "edfa7",
+      "type": "EDFA",
+      "params": {
+       "gain": 16.0,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 930.0,
+       "y": 290.0
+      }
+     },
+     {
+      "id": "span8",
+      "type": "Fiber",
+      "params": {
+       "length": 80.0,
+       "attenuation": 0.2
+      },
+      "ui": {
+       "x": 1080.0,
+       "y": 290.0
+      }
+     },
+     {
+      "id": "edfa8",
+      "type": "EDFA",
+      "params": {
+       "gain": 16.0,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 1230.0,
+       "y": 290.0
+      }
+     },
+     {
+      "id": "osnr8",
+      "type": "OSNRMeter",
+      "params": {},
+      "ui": {
+       "x": 1230.0,
+       "y": 390.0
+      }
+     },
+     {
+      "id": "osa8",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 4000.0,
+       "points": 1024.0,
+       "resolution_bandwidth": 12.5
+      },
+      "ui": {
+       "x": 1230.0,
+       "y": 190.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "span1",
+       "out"
+      ],
+      "to": [
+       "edfa1",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "span2",
+       "out"
+      ],
+      "to": [
+       "edfa2",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "span3",
+       "out"
+      ],
+      "to": [
+       "edfa3",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "span4",
+       "out"
+      ],
+      "to": [
+       "edfa4",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "span5",
+       "out"
+      ],
+      "to": [
+       "edfa5",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "span6",
+       "out"
+      ],
+      "to": [
+       "edfa6",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "span7",
+       "out"
+      ],
+      "to": [
+       "edfa7",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "span8",
+       "out"
+      ],
+      "to": [
+       "edfa8",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "edfa1",
+       "out"
+      ],
+      "to": [
+       "osa1",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "edfa8",
+       "out"
+      ],
+      "to": [
+       "osa8",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "edfa1",
+       "out"
+      ],
+      "to": [
+       "osnr1",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "edfa2",
+       "out"
+      ],
+      "to": [
+       "osnr2",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "edfa4",
+       "out"
+      ],
+      "to": [
+       "osnr4",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "edfa8",
+       "out"
+      ],
+      "to": [
+       "osnr8",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "laser",
+       "out"
+      ],
+      "to": [
+       "span1",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "edfa1",
+       "out"
+      ],
+      "to": [
+       "span2",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "edfa2",
+       "out"
+      ],
+      "to": [
+       "span3",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "edfa3",
+       "out"
+      ],
+      "to": [
+       "span4",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "edfa4",
+       "out"
+      ],
+      "to": [
+       "span5",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "edfa5",
+       "out"
+      ],
+      "to": [
+       "span6",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "edfa6",
+       "out"
+      ],
+      "to": [
+       "span7",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "edfa7",
+       "out"
+      ],
+      "to": [
+       "span8",
+       "in"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "3.2 A chain of amplified spans",
+     "body": "A 0 dBm line [[laser]] goes through eight 80 km spans, [[span1]] to [[span8]]. After each one an\nEDFA ([[edfa1]] to [[edfa8]]) makes up exactly the 16 dB that span lost. The OSNR is read after 1,\n2, 4 and 8 spans by [[osnr1]], [[osnr2]], [[osnr4]] and [[osnr8]], and the spectrum after the\nfirst and the last by [[osa1]] and [[osa8]].\n\n## Noise adds up, the signal does not\n\nEvery span is identical, so every amplifier receives the same \u221216 dBm and adds the same ASE.\nThe signal leaves each amplifier at 0 dBm again, but the ASE from earlier amplifiers is carried\nalong. After $N$ spans there is $N$ times the noise of one:\n\n$$\\text{OSNR}_N = \\text{OSNR}_1 - 10\\log_{10}N$$\n\n| Spans | Reach | OSNR in 0.1 nm |\n| :-- | :-- | :-- |\n| 1 | 80 km | 36.95 dB |\n| 2 | 160 km | 33.94 dB |\n| 4 | 320 km | 30.93 dB |\n| 8 | 640 km | 27.92 dB |\n\nEach doubling costs 3.01 dB. On [[osa1]] the ASE floor is 37 dB under the line, and on\n[[osa8]] it has risen to 28 dB under it.\n\n## Try this\n\n- Lengthen every span to 100 km and raise every gain to 20 dB. How much OSNR does the extra\n  4 dB of span loss cost?\n- Raise [[laser]] to +3 dBm. Every OSNR rises by 3 dB. 3.5 is why that cannot go on."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 171.0,
+      "y": 13.0,
+      "w": 1184.0,
+      "h": 88.0,
+      "text": "Spans 1 to 4",
+      "tone": "binary"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 171.0,
+      "y": 263.0,
+      "w": 1184.0,
+      "h": 88.0,
+      "text": "Spans 5 to 8",
+      "tone": "binary"
+     },
+     {
+      "id": "a3",
+      "kind": "note",
+      "x": 1396.0,
+      "y": 170.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "Every amplifier adds the same noise; the signal stays the same. Twice the spans, half the OSNR: 3 dB.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a4",
+      "kind": "arrow",
+      "x1": 1394.0,
+      "y1": 216.0,
+      "x2": 1360.0,
+      "y2": 216.0,
       "text": "",
       "tone": "metric"
      }
@@ -28238,6 +29095,1774 @@ verdict, and DESIGN.md
       "y1": 288.0,
       "x2": 916.0,
       "y2": 346.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "launch-power": {
+   "title": "3.5 Optimum launch power",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 10000000000.0,
+     "samples_per_symbol": 8,
+     "sequence_length": 512,
+     "seed": 7,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "prbs",
+      "type": "PRBSGenerator",
+      "params": {
+       "order": 9.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "drv",
+      "type": "NRZDriver",
+      "params": {
+       "v_low": 4.0,
+       "v_high": 0.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "tx",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "mzm",
+      "type": "MachZehnderModulator",
+      "params": {
+       "v_pi": 4.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "booster",
+      "type": "EDFA",
+      "params": {
+       "gain": 6.0,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "pm_launch",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+       "x": 330.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "span1",
+      "type": "Fiber",
+      "params": {
+       "length": 80.0,
+       "attenuation": 0.2,
+       "dispersion": 17.0,
+       "nonlinearity": 1.3
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "dcf1",
+      "type": "Fiber",
+      "params": {
+       "length": 13.6,
+       "attenuation": 0.5,
+       "dispersion": -100.0
+      },
+      "ui": {
+       "x": 630.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "edfa1",
+      "type": "EDFA",
+      "params": {
+       "gain": 22.8,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 780.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "span2",
+      "type": "Fiber",
+      "params": {
+       "length": 80.0,
+       "attenuation": 0.2,
+       "dispersion": 17.0,
+       "nonlinearity": 1.3
+      },
+      "ui": {
+       "x": 930.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "dcf2",
+      "type": "Fiber",
+      "params": {
+       "length": 13.6,
+       "attenuation": 0.5,
+       "dispersion": -100.0
+      },
+      "ui": {
+       "x": 1080.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "edfa2",
+      "type": "EDFA",
+      "params": {
+       "gain": 22.8,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 1230.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "span3",
+      "type": "Fiber",
+      "params": {
+       "length": 80.0,
+       "attenuation": 0.2,
+       "dispersion": 17.0,
+       "nonlinearity": 1.3
+      },
+      "ui": {
+       "x": 1380.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "dcf3",
+      "type": "Fiber",
+      "params": {
+       "length": 13.6,
+       "attenuation": 0.5,
+       "dispersion": -100.0
+      },
+      "ui": {
+       "x": 1530.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "edfa3",
+      "type": "EDFA",
+      "params": {
+       "gain": 22.8,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 1680.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "span4",
+      "type": "Fiber",
+      "params": {
+       "length": 80.0,
+       "attenuation": 0.2,
+       "dispersion": 17.0,
+       "nonlinearity": 1.3
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 360.0
+      }
+     },
+     {
+      "id": "dcf4",
+      "type": "Fiber",
+      "params": {
+       "length": 13.6,
+       "attenuation": 0.5,
+       "dispersion": -100.0
+      },
+      "ui": {
+       "x": 630.0,
+       "y": 360.0
+      }
+     },
+     {
+      "id": "edfa4",
+      "type": "EDFA",
+      "params": {
+       "gain": 22.8,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 780.0,
+       "y": 360.0
+      }
+     },
+     {
+      "id": "span5",
+      "type": "Fiber",
+      "params": {
+       "length": 80.0,
+       "attenuation": 0.2,
+       "dispersion": 17.0,
+       "nonlinearity": 1.3
+      },
+      "ui": {
+       "x": 930.0,
+       "y": 360.0
+      }
+     },
+     {
+      "id": "dcf5",
+      "type": "Fiber",
+      "params": {
+       "length": 13.6,
+       "attenuation": 0.5,
+       "dispersion": -100.0
+      },
+      "ui": {
+       "x": 1080.0,
+       "y": 360.0
+      }
+     },
+     {
+      "id": "edfa5",
+      "type": "EDFA",
+      "params": {
+       "gain": 22.8,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 1230.0,
+       "y": 360.0
+      }
+     },
+     {
+      "id": "osnr",
+      "type": "OSNRMeter",
+      "params": {},
+      "ui": {
+       "x": 1380.0,
+       "y": 360.0
+      }
+     },
+     {
+      "id": "pin",
+      "type": "PINPhotodiode",
+      "params": {},
+      "ui": {
+       "x": 1380.0,
+       "y": 460.0
+      }
+     },
+     {
+      "id": "lpf",
+      "type": "ElectricalFilter",
+      "params": {
+       "bandwidth": 7.0
+      },
+      "ui": {
+       "x": 1530.0,
+       "y": 460.0
+      }
+     },
+     {
+      "id": "ber",
+      "type": "BERAnalyzer",
+      "params": {},
+      "ui": {
+       "x": 1680.0,
+       "y": 460.0
+      }
+     },
+     {
+      "id": "eye",
+      "type": "EyeDiagram",
+      "params": {},
+      "ui": {
+       "x": 1830.0,
+       "y": 460.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "lpf",
+       "out"
+      ],
+      "to": [
+       "ber",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "prbs",
+       "out"
+      ],
+      "to": [
+       "ber",
+       "reference"
+      ]
+     },
+     {
+      "from": [
+       "mzm",
+       "out"
+      ],
+      "to": [
+       "booster",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "span1",
+       "out"
+      ],
+      "to": [
+       "dcf1",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "span2",
+       "out"
+      ],
+      "to": [
+       "dcf2",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "span3",
+       "out"
+      ],
+      "to": [
+       "dcf3",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "span4",
+       "out"
+      ],
+      "to": [
+       "dcf4",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "span5",
+       "out"
+      ],
+      "to": [
+       "dcf5",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "prbs",
+       "out"
+      ],
+      "to": [
+       "drv",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "dcf1",
+       "out"
+      ],
+      "to": [
+       "edfa1",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "dcf2",
+       "out"
+      ],
+      "to": [
+       "edfa2",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "dcf3",
+       "out"
+      ],
+      "to": [
+       "edfa3",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "dcf4",
+       "out"
+      ],
+      "to": [
+       "edfa4",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "dcf5",
+       "out"
+      ],
+      "to": [
+       "edfa5",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "lpf",
+       "out"
+      ],
+      "to": [
+       "eye",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "pin",
+       "out"
+      ],
+      "to": [
+       "lpf",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "drv",
+       "out"
+      ],
+      "to": [
+       "mzm",
+       "electrical_in"
+      ]
+     },
+     {
+      "from": [
+       "tx",
+       "out"
+      ],
+      "to": [
+       "mzm",
+       "optical_in"
+      ]
+     },
+     {
+      "from": [
+       "edfa5",
+       "out"
+      ],
+      "to": [
+       "osnr",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "edfa5",
+       "out"
+      ],
+      "to": [
+       "pin",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "booster",
+       "out"
+      ],
+      "to": [
+       "pm_launch",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "booster",
+       "out"
+      ],
+      "to": [
+       "span1",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "edfa1",
+       "out"
+      ],
+      "to": [
+       "span2",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "edfa2",
+       "out"
+      ],
+      "to": [
+       "span3",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "edfa3",
+       "out"
+      ],
+      "to": [
+       "span4",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "edfa4",
+       "out"
+      ],
+      "to": [
+       "span5",
+       "in"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "3.5 Optimum launch power",
+     "body": "A 10 Gb/s OOK signal [[tx]] [[mzm]] is launched by a booster [[booster]] into five 80 km spans of\nstandard fibre. Each span is followed by a spool of dispersion-compensating fibre ([[dcf1]] to\n[[dcf5]]) that undoes its 1360 ps/nm, and an amplifier that makes up the 22.8 dB the two lost.\nThe launch power is read on [[pm_launch]], and the receiver ends in [[osnr]], [[ber]] and [[eye]].\n\n## Two limits\n\nMore launch power means more OSNR, decibel for decibel. But standard fibre's Kerr\nnonlinearity, $\\gamma = 1.3$ /(W\u00b7km), shifts the phase of the signal by its own power:\n\n$$\\phi_\\text{NL} = \\gamma P L_\\text{eff}, \\qquad L_\\text{eff} = \\frac{1 - e^{-\\alpha L}}{\\alpha} \\approx 21\\ \\text{km}$$\n\nThe phase varies with the bit pattern, and the dispersion of the next span turns that phase into\ndistortion of the power. Too little power and the noise closes the eye; too much and the\ndistortion does.\n\n## The bathtub\n\nSweep the gain of [[booster]] from 0 to 15 dB in steps of 3 (*Sweep* in the toolbar):\n\n| Booster gain | Launch | OSNR | Q |\n| :-- | :-- | :-- | :-- |\n| 0 dB | \u22123.0 dBm | 20.2 dB | 5.90 |\n| 3 dB | 0.0 dBm | 23.1 dB | 9.74 |\n| 6 dB | +3.0 dBm | 26.1 dB | 12.24 |\n| 9 dB | +6.0 dBm | 29.1 dB | 8.71 |\n| 12 dB | +9.0 dBm | 32.1 dB | 4.18 |\n| 15 dB | +12.0 dBm | 35.0 dB | 1.67 |\n\nThe OSNR keeps rising to the last row, but the Q peaks at +3 dBm and falls on either side.\nDesigning a line system starts from this curve.\n\n## Try this\n\n- Set the nonlinearity of every span to 0 and sweep again. The Q now only rises.\n- Compare [[eye]] at 6 dB of gain with 12 dB."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 284.0,
+      "h": 188.0,
+      "text": "10 Gb/s transmitter",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 113.0,
+      "w": 1334.0,
+      "h": 88.0,
+      "text": "Spans 1 to 3, each compensated",
+      "tone": "binary"
+     },
+     {
+      "id": "a3",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 333.0,
+      "w": 884.0,
+      "h": 88.0,
+      "text": "Spans 4 and 5",
+      "tone": "binary"
+     },
+     {
+      "id": "a4",
+      "kind": "rect",
+      "x": 1371.0,
+      "y": 433.0,
+      "w": 584.0,
+      "h": 88.0,
+      "text": "Receiver",
+      "tone": "electrical"
+     },
+     {
+      "id": "a5",
+      "kind": "note",
+      "x": 290.0,
+      "y": 252.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "Sweep this gain from 0 to 15 dB. Too little and noise wins; too much and the Kerr effect does. The best launch is near +3 dBm.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a6",
+      "kind": "arrow",
+      "x1": 388.0,
+      "y1": 250.0,
+      "x2": 388.0,
+      "y2": 206.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "fwm-dsf": {
+   "title": "3.6 Four-wave mixing on G.653 fibre",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 10000000000.0,
+     "samples_per_symbol": 8,
+     "sequence_length": 256,
+     "seed": 0,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "mux",
+      "type": "Multiplexer",
+      "params": {
+       "first_wavelength": 1550.0,
+       "spacing": 100.0,
+       "insertion_loss": 0.0
+      },
+      "config": {
+       "channels": 4
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 190.0
+      }
+     },
+     {
+      "id": "ch0",
+      "type": "CWLaser",
+      "params": {
+       "power": 6.0,
+       "wavelength": 1550.0000000000002
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "ch1",
+      "type": "CWLaser",
+      "params": {
+       "power": 6.0,
+       "wavelength": 1549.1990263841478
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "ch2",
+      "type": "CWLaser",
+      "params": {
+       "power": 6.0,
+       "wavelength": 1548.398880158456
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "ch3",
+      "type": "CWLaser",
+      "params": {
+       "power": 6.0,
+       "wavelength": 1547.5995600415697
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "split",
+      "type": "Splitter",
+      "params": {},
+      "config": {
+       "num_outputs": 2
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 190.0
+      }
+     },
+     {
+      "id": "fibre_dsf",
+      "type": "Fiber",
+      "params": {
+       "length": 80.0,
+       "attenuation": 0.2,
+       "dispersion": 0.0,
+       "nonlinearity": 1.3,
+       "mixing_floor": 100.0
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 90.0
+      }
+     },
+     {
+      "id": "osa_dsf",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1548.7988499276787,
+       "span": 1000.0,
+       "points": 2048.0,
+       "resolution_bandwidth": 12.5
+      },
+      "ui": {
+       "x": 630.0,
+       "y": 90.0
+      }
+     },
+     {
+      "id": "fibre_nzdsf",
+      "type": "Fiber",
+      "params": {
+       "length": 80.0,
+       "attenuation": 0.2,
+       "dispersion": 4.0,
+       "nonlinearity": 1.3,
+       "mixing_floor": 100.0
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 290.0
+      }
+     },
+     {
+      "id": "osa_nzdsf",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1548.7988499276787,
+       "span": 1000.0,
+       "points": 2048.0,
+       "resolution_bandwidth": 12.5
+      },
+      "ui": {
+       "x": 630.0,
+       "y": 290.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "split",
+       "out0"
+      ],
+      "to": [
+       "fibre_dsf",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "split",
+       "out1"
+      ],
+      "to": [
+       "fibre_nzdsf",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "ch0",
+       "out"
+      ],
+      "to": [
+       "mux",
+       "in0"
+      ]
+     },
+     {
+      "from": [
+       "ch1",
+       "out"
+      ],
+      "to": [
+       "mux",
+       "in1"
+      ]
+     },
+     {
+      "from": [
+       "ch2",
+       "out"
+      ],
+      "to": [
+       "mux",
+       "in2"
+      ]
+     },
+     {
+      "from": [
+       "ch3",
+       "out"
+      ],
+      "to": [
+       "mux",
+       "in3"
+      ]
+     },
+     {
+      "from": [
+       "fibre_dsf",
+       "out"
+      ],
+      "to": [
+       "osa_dsf",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "fibre_nzdsf",
+       "out"
+      ],
+      "to": [
+       "osa_nzdsf",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "mux",
+       "out"
+      ],
+      "to": [
+       "split",
+       "in"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "3.6 Four-wave mixing on a zero-dispersion fibre",
+     "body": "Four CW channels [[ch0]] to [[ch3]], 100 GHz apart from 1550 nm at +6 dBm each, are combined by\n[[mux]] and split [[split]] into two fibres of 80 km. [[fibre_dsf]] is dispersion-shifted fibre\n(G.653), with its zero dispersion at 1550 nm. [[fibre_nzdsf]] is non-zero dispersion-shifted\nfibre (G.655), with 4 ps/(nm\u00b7km). The spectra are on [[osa_dsf]] and [[osa_nzdsf]].\n\n## Light nobody launched\n\nThe Kerr effect mixes every three channels into a fourth at\n\n$$f_{ijk} = f_i + f_j - f_k$$\n\nWith four channels on a uniform grid, those frequencies are the channels themselves and the\ngrid slots on either side. The mixing is efficient only while the channels stay in phase with\neach other, and dispersion is what moves them out of phase:\n\n$$\\Delta\\beta = \\frac{2\\pi\\lambda^2}{c}\\,D\\,\\Delta f_{ik}\\,\\Delta f_{jk}$$\n\nAt $D = 0$ nothing dephases them.\n\n## The two spectra\n\nEach channel arrives at about \u221213 dBm per 0.1 nm.\n\n| Slot | G.653 | G.655 |\n| :-- | :-- | :-- |\n| below the channels | \u221224.1 dBm | \u221263.2 dBm |\n| above the channels | \u221223.4 dBm | \u221262.0 dBm |\n| channels | \u221213.4 to \u221213.7 dBm | \u221213.0 dBm |\n\nOn G.653 the mixing products are only about 10 dB below the channels, and the channels\nthemselves have changed: products landed on them and beat with them. A few ps/(nm\u00b7km) of\ndispersion suppresses the products by 39 dB. That is why G.653, built to have no dispersion\nat 1550 nm, was abandoned for WDM, and why G.655 was designed to keep a little.\n\n## Try this\n\n- Lower every channel to 0 dBm. Each product falls by 3 dB per 1 dB of channel power.\n- Set [[fibre_nzdsf]]'s dispersion to 17, standard fibre. How far down do the products go?"
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 134.0,
+      "h": 388.0,
+      "text": "4 \u00d7 CW, 100 GHz apart, +6 dBm",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 63.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "G.653: D = 0 at 1550 nm",
+      "tone": "binary"
+     },
+     {
+      "id": "a3",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 263.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "G.655: D = 4 ps/(nm\u00b7km)",
+      "tone": "binary"
+     },
+     {
+      "id": "a4",
+      "kind": "note",
+      "x": 796.0,
+      "y": 70.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "New lines at $f_i + f_j - f_k$: on a uniform grid they also land on the channels, where no filter can take them out.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 794.0,
+      "y1": 116.0,
+      "x2": 760.0,
+      "y2": 116.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "roadm": {
+   "title": "3.9 A ROADM add/drop node",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 10000000000.0,
+     "samples_per_symbol": 8,
+     "sequence_length": 512,
+     "seed": 9,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "prbs",
+      "type": "PRBSGenerator",
+      "params": {
+       "order": 9.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 490.0
+      }
+     },
+     {
+      "id": "drv",
+      "type": "NRZDriver",
+      "params": {
+       "v_low": 4.0,
+       "v_high": 0.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 490.0
+      }
+     },
+     {
+      "id": "mux_a",
+      "type": "Multiplexer",
+      "params": {
+       "first_wavelength": 1550.0,
+       "spacing": 100.0
+      },
+      "config": {
+       "channels": 4
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 190.0
+      }
+     },
+     {
+      "id": "tx0",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1550.0000000000002
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "mzm0",
+      "type": "MachZehnderModulator",
+      "params": {
+       "v_pi": 4.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "tx1",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1549.1990263841478
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "mzm1",
+      "type": "MachZehnderModulator",
+      "params": {
+       "v_pi": 4.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "tx2",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1548.398880158456
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "mzm2",
+      "type": "MachZehnderModulator",
+      "params": {
+       "v_pi": 4.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "tx3",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1547.5995600415697
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "mzm3",
+      "type": "MachZehnderModulator",
+      "params": {
+       "v_pi": 4.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "span_a",
+      "type": "Fiber",
+      "params": {
+       "length": 80.0,
+       "attenuation": 0.2
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 190.0
+      }
+     },
+     {
+      "id": "edfa_a",
+      "type": "EDFA",
+      "params": {
+       "gain": 22.0,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 630.0,
+       "y": 190.0
+      }
+     },
+     {
+      "id": "osa_a",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1548.8,
+       "span": 600.0,
+       "points": 1024.0,
+       "resolution_bandwidth": 12.5
+      },
+      "ui": {
+       "x": 630.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "wss",
+      "type": "WavelengthSelectiveSwitch",
+      "params": {
+       "dropped": 1.0,
+       "first_wavelength": 1550.0,
+       "spacing": 100.0
+      },
+      "config": {
+       "channels": 4
+      },
+      "ui": {
+       "x": 780.0,
+       "y": 190.0
+      }
+     },
+     {
+      "id": "pin_drop",
+      "type": "PINPhotodiode",
+      "params": {},
+      "ui": {
+       "x": 930.0,
+       "y": 390.0
+      }
+     },
+     {
+      "id": "lpf_drop",
+      "type": "ElectricalFilter",
+      "params": {
+       "bandwidth": 7.0
+      },
+      "ui": {
+       "x": 1080.0,
+       "y": 390.0
+      }
+     },
+     {
+      "id": "ber_drop",
+      "type": "BERAnalyzer",
+      "params": {},
+      "ui": {
+       "x": 1230.0,
+       "y": 390.0
+      }
+     },
+     {
+      "id": "eye_drop",
+      "type": "EyeDiagram",
+      "params": {},
+      "ui": {
+       "x": 1380.0,
+       "y": 390.0
+      }
+     },
+     {
+      "id": "prbs_add",
+      "type": "PRBSGenerator",
+      "params": {
+       "order": 11.0
+      },
+      "ui": {
+       "x": 780.0,
+       "y": 540.0
+      }
+     },
+     {
+      "id": "drv_add",
+      "type": "NRZDriver",
+      "params": {
+       "v_low": 4.0,
+       "v_high": 0.0
+      },
+      "ui": {
+       "x": 930.0,
+       "y": 540.0
+      }
+     },
+     {
+      "id": "tx_add",
+      "type": "CWLaser",
+      "params": {
+       "power": 2.0,
+       "wavelength": 1549.1990263841478
+      },
+      "ui": {
+       "x": 780.0,
+       "y": 640.0
+      }
+     },
+     {
+      "id": "mzm_add",
+      "type": "MachZehnderModulator",
+      "params": {
+       "v_pi": 4.0
+      },
+      "ui": {
+       "x": 930.0,
+       "y": 640.0
+      }
+     },
+     {
+      "id": "span_b",
+      "type": "Fiber",
+      "params": {
+       "length": 80.0,
+       "attenuation": 0.2
+      },
+      "ui": {
+       "x": 1230.0,
+       "y": 190.0
+      }
+     },
+     {
+      "id": "edfa_b",
+      "type": "EDFA",
+      "params": {
+       "gain": 22.0,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 1380.0,
+       "y": 190.0
+      }
+     },
+     {
+      "id": "osa_b",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1548.8,
+       "span": 600.0,
+       "points": 1024.0,
+       "resolution_bandwidth": 12.5
+      },
+      "ui": {
+       "x": 1230.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "demux_b",
+      "type": "Demultiplexer",
+      "params": {
+       "first_wavelength": 1550.0,
+       "spacing": 100.0
+      },
+      "config": {
+       "channels": 4
+      },
+      "ui": {
+       "x": 1530.0,
+       "y": 190.0
+      }
+     },
+     {
+      "id": "pin_add",
+      "type": "PINPhotodiode",
+      "params": {},
+      "ui": {
+       "x": 1680.0,
+       "y": 390.0
+      }
+     },
+     {
+      "id": "lpf_add",
+      "type": "ElectricalFilter",
+      "params": {
+       "bandwidth": 7.0
+      },
+      "ui": {
+       "x": 1830.0,
+       "y": 390.0
+      }
+     },
+     {
+      "id": "ber_add",
+      "type": "BERAnalyzer",
+      "params": {},
+      "ui": {
+       "x": 1980.0,
+       "y": 390.0
+      }
+     },
+     {
+      "id": "eye_add",
+      "type": "EyeDiagram",
+      "params": {},
+      "ui": {
+       "x": 2130.0,
+       "y": 390.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "lpf_add",
+       "out"
+      ],
+      "to": [
+       "ber_add",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "prbs_add",
+       "out"
+      ],
+      "to": [
+       "ber_add",
+       "reference"
+      ]
+     },
+     {
+      "from": [
+       "lpf_drop",
+       "out"
+      ],
+      "to": [
+       "ber_drop",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "prbs",
+       "out"
+      ],
+      "to": [
+       "ber_drop",
+       "reference"
+      ]
+     },
+     {
+      "from": [
+       "edfa_b",
+       "out"
+      ],
+      "to": [
+       "demux_b",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "prbs",
+       "out"
+      ],
+      "to": [
+       "drv",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "prbs_add",
+       "out"
+      ],
+      "to": [
+       "drv_add",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "span_a",
+       "out"
+      ],
+      "to": [
+       "edfa_a",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "span_b",
+       "out"
+      ],
+      "to": [
+       "edfa_b",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "lpf_add",
+       "out"
+      ],
+      "to": [
+       "eye_add",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "lpf_drop",
+       "out"
+      ],
+      "to": [
+       "eye_drop",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "pin_add",
+       "out"
+      ],
+      "to": [
+       "lpf_add",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "pin_drop",
+       "out"
+      ],
+      "to": [
+       "lpf_drop",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "mzm0",
+       "out"
+      ],
+      "to": [
+       "mux_a",
+       "in0"
+      ]
+     },
+     {
+      "from": [
+       "mzm1",
+       "out"
+      ],
+      "to": [
+       "mux_a",
+       "in1"
+      ]
+     },
+     {
+      "from": [
+       "mzm2",
+       "out"
+      ],
+      "to": [
+       "mux_a",
+       "in2"
+      ]
+     },
+     {
+      "from": [
+       "mzm3",
+       "out"
+      ],
+      "to": [
+       "mux_a",
+       "in3"
+      ]
+     },
+     {
+      "from": [
+       "drv",
+       "out"
+      ],
+      "to": [
+       "mzm0",
+       "electrical_in"
+      ]
+     },
+     {
+      "from": [
+       "tx0",
+       "out"
+      ],
+      "to": [
+       "mzm0",
+       "optical_in"
+      ]
+     },
+     {
+      "from": [
+       "drv",
+       "out"
+      ],
+      "to": [
+       "mzm1",
+       "electrical_in"
+      ]
+     },
+     {
+      "from": [
+       "tx1",
+       "out"
+      ],
+      "to": [
+       "mzm1",
+       "optical_in"
+      ]
+     },
+     {
+      "from": [
+       "drv",
+       "out"
+      ],
+      "to": [
+       "mzm2",
+       "electrical_in"
+      ]
+     },
+     {
+      "from": [
+       "tx2",
+       "out"
+      ],
+      "to": [
+       "mzm2",
+       "optical_in"
+      ]
+     },
+     {
+      "from": [
+       "drv",
+       "out"
+      ],
+      "to": [
+       "mzm3",
+       "electrical_in"
+      ]
+     },
+     {
+      "from": [
+       "tx3",
+       "out"
+      ],
+      "to": [
+       "mzm3",
+       "optical_in"
+      ]
+     },
+     {
+      "from": [
+       "drv_add",
+       "out"
+      ],
+      "to": [
+       "mzm_add",
+       "electrical_in"
+      ]
+     },
+     {
+      "from": [
+       "tx_add",
+       "out"
+      ],
+      "to": [
+       "mzm_add",
+       "optical_in"
+      ]
+     },
+     {
+      "from": [
+       "edfa_a",
+       "out"
+      ],
+      "to": [
+       "osa_a",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "wss",
+       "out"
+      ],
+      "to": [
+       "osa_b",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "demux_b",
+       "out1"
+      ],
+      "to": [
+       "pin_add",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "wss",
+       "drop"
+      ],
+      "to": [
+       "pin_drop",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "mux_a",
+       "out"
+      ],
+      "to": [
+       "span_a",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "wss",
+       "out"
+      ],
+      "to": [
+       "span_b",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "mzm_add",
+       "out"
+      ],
+      "to": [
+       "wss",
+       "add"
+      ]
+     },
+     {
+      "from": [
+       "edfa_a",
+       "out"
+      ],
+      "to": [
+       "wss",
+       "in"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "3.9 A ROADM add/drop node",
+     "body": "Four 10 Gb/s channels [[tx0]] to [[tx3]], 100 GHz apart, cross a span [[span_a]] [[edfa_a]] and\nreach a node. There a wavelength-selective switch [[wss]] lets three channels through\n(*express*), takes channel 1 off to a local receiver (*drop*, [[ber_drop]]) and puts a new\nchannel with different data on the same wavelength (*add*, [[tx_add]]). The line continues\nthrough [[span_b]] [[edfa_b]] to [[demux_b]], where the added channel is received by\n[[ber_add]]. The spectra on [[osa_a]] and [[osa_b]] look alike, but channel 1 now carries other\ndata.\n\n## In-band crosstalk\n\nA switch does not block perfectly. What it leaks of the dropped channel, its *isolation* below\nthe arrival, reaches the out port on exactly the frequency of the added channel. There no filter\ncan separate them. The two fields add, and the receiver sees their beat:\n\n$$P = |E_\\text{add} + E_\\text{leak}|^2 = P_\\text{add} + P_\\text{leak} + 2\\sqrt{P_\\text{add}P_\\text{leak}}\\cos\\Delta\\phi$$\n\nThe beat term is in amplitude, so crosstalk 35 dB down in power is only 17.5 dB down in field.\n\n| [[wss]] isolation | Q, added channel |\n| :-- | :-- |\n| 80 dB | 41.2 |\n| 35 dB | 26.2 |\n| 25 dB | 10.8 |\n| 20 dB | 6.2 |\n\nThe dropped channel reads Q 32.1 on [[ber_drop]] whatever the isolation is. The leak only\nharms the channel that takes its place.\n\n## Try this\n\n- Sweep the *isolation* of [[wss]] from 15 to 40 dB.\n- Lower [[tx_add]]'s power by 5 dB. The leak is now 5 dB closer to the added channel."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 284.0,
+      "h": 538.0,
+      "text": "4 channels",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 163.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "Span in",
+      "tone": "binary"
+     },
+     {
+      "id": "a3",
+      "kind": "rect",
+      "x": 921.0,
+      "y": 363.0,
+      "w": 584.0,
+      "h": 88.0,
+      "text": "Drop",
+      "tone": "electrical"
+     },
+     {
+      "id": "a4",
+      "kind": "rect",
+      "x": 771.0,
+      "y": 513.0,
+      "w": 284.0,
+      "h": 188.0,
+      "text": "Add, new data",
+      "tone": "optical"
+     },
+     {
+      "id": "a5",
+      "kind": "rect",
+      "x": 1221.0,
+      "y": 163.0,
+      "w": 434.0,
+      "h": 88.0,
+      "text": "Span out",
+      "tone": "binary"
+     },
+     {
+      "id": "a6",
+      "kind": "rect",
+      "x": 1671.0,
+      "y": 363.0,
+      "w": 584.0,
+      "h": 88.0,
+      "text": "Added channel",
+      "tone": "electrical"
+     },
+     {
+      "id": "a7",
+      "kind": "note",
+      "x": 740.0,
+      "y": 40.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "Express three, drop one, add one in its slot. What leaks of the dropped channel sits on top of the new one.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a8",
+      "kind": "arrow",
+      "x1": 838.0,
+      "y1": 138.0,
+      "x2": 838.0,
+      "y2": 178.0,
       "text": "",
       "tone": "metric"
      }

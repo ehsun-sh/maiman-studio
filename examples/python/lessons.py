@@ -276,8 +276,8 @@ def _receiver_sensitivity(at: Layout) -> list[dict[str, Any]]:
     return [
         frame(at, ["prbs", "drv", "tx", "mzm"], "10 Gb/s transmitter", "optical"),
         frame(at, ["att", "split"], "Variable loss", "binary"),
-        frame(at, ["pin", "lpf_pin", "ber_pin"], "PIN receiver", "electrical"),
-        frame(at, ["apd", "lpf_apd", "ber_apd"], "APD receiver", "electrical"),
+        frame(at, ["pin", "lpf_pin", "ber_pin", "eye_pin"], "PIN receiver", "electrical"),
+        frame(at, ["apd", "lpf_apd", "ber_apd", "eye_apd"], "APD receiver", "electrical"),
         below_note(
             apd,
             "Gain $M$ lifts the signal over the thermal noise; it also multiplies shot "
@@ -295,7 +295,7 @@ def _dml_reach(at: Layout) -> list[dict[str, Any]]:
         frame(at, ["fibre_dml", "fibre_ext"], "20 km each", "binary"),
         frame(
             at,
-            ["pin_dml", "lpf_dml", "ber_dml", "pin_ext", "lpf_ext", "ber_ext"],
+            ["pin_dml", "eye_dml", "pin_ext", "eye_ext"],
             "Identical receivers",
             "electrical",
         ),
@@ -309,7 +309,7 @@ def _dml_reach(at: Layout) -> list[dict[str, Any]]:
 
 
 def _mode_partition(at: Layout) -> list[dict[str, Any]]:
-    fp = at["ber_fp"]
+    fp = at["eye_fp"]
     return [
         frame(at, ["tx_dfb", "tx_fp_steady", "tx_fp"], "Three lasers", "optical"),
         frame(
@@ -320,7 +320,7 @@ def _mode_partition(at: Layout) -> list[dict[str, Any]]:
         ),
         frame(
             at,
-            ["pin_dfb", "pin_fp", "lpf_dfb", "lpf_fp", "ber_dfb", "ber_fp"],
+            ["pin_dfb", "pin_fp", "eye_dfb", "eye_fp"],
             "Identical receivers",
             "electrical",
         ),
@@ -359,7 +359,7 @@ def _cwdm4(at: Layout) -> list[dict[str, Any]]:
         frame(at, ["mux", "fibre", "demux"], "One fibre, no amplifier", "binary"),
         frame(
             at,
-            ["pin0", "pin3", "lpf0", "lpf3", "ber0", "ber3"],
+            ["pin0", "pin3", "eye0", "eye3"],
             "4 receivers",
             "electrical",
         ),
@@ -377,13 +377,94 @@ def _gpon(at: Layout) -> list[dict[str, Any]]:
     return [
         frame(at, ["prbs", "drv", "olt", "mzm"], "OLT, at the exchange", "optical"),
         frame(at, ["feeder", "split32"], "Outside plant", "binary"),
-        frame(at, ["pm_onu", "apd", "lpf", "ber"], "One ONU, at a home", "electrical"),
+        frame(at, ["pm_onu", "apd", "lpf", "ber", "eye"], "One ONU, at a home", "electrical"),
         below_note(
             split,
             "1:32 costs $10\\log_{10}32 = 15.05$ dB before any excess loss: more than "
             "the 20 km of fibre.",
         ),
         below_arrow(split),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: amplified and WDM links
+
+
+def _edfa_basics(at: Layout) -> list[dict[str, Any]]:
+    edfa = at["edfa"]
+    return [
+        frame(at, ["pm_in", "osa_in"], "Before", "metric"),
+        frame(at, ["pm_out", "osnr", "osa_out"], "After", "metric"),
+        below_note(
+            edfa,
+            "20 dB of gain, and a floor of ASE 33 dB under the signal in every 0.1 nm: "
+            "$58 + P_\\text{in} - NF$.",
+        ),
+        below_arrow(edfa),
+    ]
+
+
+def _amplified_chain(at: Layout) -> list[dict[str, Any]]:
+    return [
+        frame(at, ["span1", "edfa4"], "Spans 1 to 4", "binary"),
+        frame(at, ["span5", "edfa8"], "Spans 5 to 8", "binary"),
+        side_note(
+            at["osa8"],
+            "Every amplifier adds the same noise; the signal stays the same. "
+            "Twice the spans, half the OSNR: 3 dB.",
+        ),
+        side_arrow(at["osa8"]),
+    ]
+
+
+def _launch_power(at: Layout) -> list[dict[str, Any]]:
+    booster = at["booster"]
+    return [
+        frame(at, ["prbs", "drv", "tx", "mzm"], "10 Gb/s transmitter", "optical"),
+        frame(at, ["span1", "edfa3"], "Spans 1 to 3, each compensated", "binary"),
+        frame(at, ["span4", "edfa5"], "Spans 4 and 5", "binary"),
+        frame(at, ["pin", "lpf", "ber", "eye"], "Receiver", "electrical"),
+        below_note(
+            booster,
+            "Sweep this gain from 0 to 15 dB. Too little and noise wins; too much and "
+            "the Kerr effect does. The best launch is near +3 dBm.",
+        ),
+        below_arrow(booster),
+    ]
+
+
+def _fwm_dsf(at: Layout) -> list[dict[str, Any]]:
+    return [
+        frame(at, ["ch0", "ch1", "ch2", "ch3"], "4 × CW, 100 GHz apart, +6 dBm", "optical"),
+        frame(at, ["fibre_dsf", "osa_dsf"], "G.653: D = 0 at 1550 nm", "binary"),
+        frame(at, ["fibre_nzdsf", "osa_nzdsf"], "G.655: D = 4 ps/(nm·km)", "binary"),
+        side_note(
+            at["osa_dsf"],
+            "New lines at $f_i + f_j - f_k$: on a uniform grid they also land on the "
+            "channels, where no filter can take them out.",
+        ),
+        side_arrow(at["osa_dsf"]),
+    ]
+
+
+def _roadm(at: Layout) -> list[dict[str, Any]]:
+    wss = at["wss"]
+    return [
+        frame(at, ["prbs", "drv", "tx0", "tx3", "mzm0", "mzm3"], "4 channels", "optical"),
+        frame(at, ["span_a", "edfa_a"], "Span in", "binary"),
+        frame(at, ["pin_drop", "lpf_drop", "ber_drop", "eye_drop"], "Drop", "electrical"),
+        frame(at, ["prbs_add", "drv_add", "tx_add", "mzm_add"], "Add, new data", "optical"),
+        frame(at, ["span_b", "edfa_b", "demux_b"], "Span out", "binary"),
+        frame(at, ["pin_add", "lpf_add", "ber_add", "eye_add"], "Added channel", "electrical"),
+        note(
+            wss["x"] - 40.0,
+            wss["y"] - 150.0,
+            "Express three, drop one, add one in its slot. What leaks of the dropped "
+            "channel sits on top of the new one.",
+            w=240.0,
+        ),
+        arrow(wss["x"] + 58.0, wss["y"] - 52.0, wss["x"] + 58.0, wss["y"] - 12.0),
     ]
 
 
@@ -405,6 +486,11 @@ _MARKS = {
     "pam4_lane": _pam4_lane,
     "cwdm4": _cwdm4,
     "gpon": _gpon,
+    "edfa_basics": _edfa_basics,
+    "amplified_chain": _amplified_chain,
+    "launch_power": _launch_power,
+    "fwm_dsf": _fwm_dsf,
+    "roadm": _roadm,
 }
 
 
@@ -1210,6 +1296,201 @@ a few bits. That needs a **burst-mode receiver**, which is not in the palette ye
 - Add 3 dB to the excess loss of [[split32]]: that is a 1:64 split. What is left of the margin?
 - Lengthen [[feeder]] to 40 km. Does the APD still hold $Q = 6$?
 - Swap [[apd]] for a PIN photodiode and find the longest feeder that still works.
+""".strip(),
+    },
+    "edfa_basics": {
+        "title": "3.1 One EDFA, before and after",
+        "body": r"""
+A weak CW line [[laser]] at −20 dBm goes into an erbium-doped fibre amplifier [[edfa]] with 20 dB
+of gain and a 5 dB noise figure. Meters and spectra read both sides: [[pm_in]] and [[osa_in]]
+before, [[pm_out]], [[osnr]] and [[osa_out]] after.
+
+## Gain, and what comes with it
+
+The signal leaves 20 dB stronger, at 0.00 dBm. The amplifier also adds amplified spontaneous
+emission (ASE): broadband light in both polarisations, with a power per bandwidth $B$ of
+
+$$P_\text{ASE} = 2\,n_\text{sp}\,h\nu\,(G - 1)\,B, \qquad NF \approx 2\,n_\text{sp}$$
+
+On [[osa_out]] it is the flat floor either side of the line.
+
+## Reading the numbers
+
+| Reading | Value |
+| :-- | :-- |
+| [[pm_in]] | −20.00 dBm |
+| [[pm_out]] | +0.65 dBm |
+| ASE floor on [[osa_out]], per 0.1 nm | −32.95 dBm |
+| [[osnr]] in 0.1 nm | 32.95 dB |
+
+[[pm_out]] reads 0.65 dB more than the signal, because a power meter has no filter. It counts the
+ASE across the whole 4 THz band, 0.16 mW of it. The OSNR compares the signal with the ASE in
+0.1 nm (12.5 GHz) only. At 1550 nm, $10\log_{10}(h\nu \cdot 12.5\,\text{GHz})$ is −58 dBm, so
+
+$$\text{OSNR} \approx 58 + P_\text{in} - NF = 58 - 20 - 5 = 33\ \text{dB}$$
+
+The gain cancels out: the OSNR is set by the power arriving at the amplifier, not the power
+leaving it.
+
+## Try this
+
+- Raise [[laser]] to −10 dBm. The OSNR rises by the same 10 dB.
+- Set [[edfa]]'s noise figure to 3 dB, the quantum limit for a phase-insensitive amplifier.
+- Turn on *saturate* on [[edfa]] and raise [[laser]] to +5 dBm. Does it still give 20 dB?
+""".strip(),
+    },
+    "amplified_chain": {
+        "title": "3.2 A chain of amplified spans",
+        "body": r"""
+A 0 dBm line [[laser]] goes through eight 80 km spans, [[span1]] to [[span8]]. After each one an
+EDFA ([[edfa1]] to [[edfa8]]) makes up exactly the 16 dB that span lost. The OSNR is read after 1,
+2, 4 and 8 spans by [[osnr1]], [[osnr2]], [[osnr4]] and [[osnr8]], and the spectrum after the
+first and the last by [[osa1]] and [[osa8]].
+
+## Noise adds up, the signal does not
+
+Every span is identical, so every amplifier receives the same −16 dBm and adds the same ASE.
+The signal leaves each amplifier at 0 dBm again, but the ASE from earlier amplifiers is carried
+along. After $N$ spans there is $N$ times the noise of one:
+
+$$\text{OSNR}_N = \text{OSNR}_1 - 10\log_{10}N$$
+
+| Spans | Reach | OSNR in 0.1 nm |
+| :-- | :-- | :-- |
+| 1 | 80 km | 36.95 dB |
+| 2 | 160 km | 33.94 dB |
+| 4 | 320 km | 30.93 dB |
+| 8 | 640 km | 27.92 dB |
+
+Each doubling costs 3.01 dB. On [[osa1]] the ASE floor is 37 dB under the line, and on
+[[osa8]] it has risen to 28 dB under it.
+
+## Try this
+
+- Lengthen every span to 100 km and raise every gain to 20 dB. How much OSNR does the extra
+  4 dB of span loss cost?
+- Raise [[laser]] to +3 dBm. Every OSNR rises by 3 dB. 3.5 is why that cannot go on.
+""".strip(),
+    },
+    "launch_power": {
+        "title": "3.5 Optimum launch power",
+        "body": r"""
+A 10 Gb/s OOK signal [[tx]] [[mzm]] is launched by a booster [[booster]] into five 80 km spans of
+standard fibre. Each span is followed by a spool of dispersion-compensating fibre ([[dcf1]] to
+[[dcf5]]) that undoes its 1360 ps/nm, and an amplifier that makes up the 22.8 dB the two lost.
+The launch power is read on [[pm_launch]], and the receiver ends in [[osnr]], [[ber]] and [[eye]].
+
+## Two limits
+
+More launch power means more OSNR, decibel for decibel. But standard fibre's Kerr
+nonlinearity, $\gamma = 1.3$ /(W·km), shifts the phase of the signal by its own power:
+
+$$\phi_\text{NL} = \gamma P L_\text{eff}, \qquad L_\text{eff} = \frac{1 - e^{-\alpha L}}{\alpha} \approx 21\ \text{km}$$
+
+The phase varies with the bit pattern, and the dispersion of the next span turns that phase into
+distortion of the power. Too little power and the noise closes the eye; too much and the
+distortion does.
+
+## The bathtub
+
+Sweep the gain of [[booster]] from 0 to 15 dB in steps of 3 (*Sweep* in the toolbar):
+
+| Booster gain | Launch | OSNR | Q |
+| :-- | :-- | :-- | :-- |
+| 0 dB | −3.0 dBm | 20.2 dB | 5.90 |
+| 3 dB | 0.0 dBm | 23.1 dB | 9.74 |
+| 6 dB | +3.0 dBm | 26.1 dB | 12.24 |
+| 9 dB | +6.0 dBm | 29.1 dB | 8.71 |
+| 12 dB | +9.0 dBm | 32.1 dB | 4.18 |
+| 15 dB | +12.0 dBm | 35.0 dB | 1.67 |
+
+The OSNR keeps rising to the last row, but the Q peaks at +3 dBm and falls on either side.
+Designing a line system starts from this curve.
+
+## Try this
+
+- Set the nonlinearity of every span to 0 and sweep again. The Q now only rises.
+- Compare [[eye]] at 6 dB of gain with 12 dB.
+""".strip(),
+    },
+    "fwm_dsf": {
+        "title": "3.6 Four-wave mixing on a zero-dispersion fibre",
+        "body": r"""
+Four CW channels [[ch0]] to [[ch3]], 100 GHz apart from 1550 nm at +6 dBm each, are combined by
+[[mux]] and split [[split]] into two fibres of 80 km. [[fibre_dsf]] is dispersion-shifted fibre
+(G.653), with its zero dispersion at 1550 nm. [[fibre_nzdsf]] is non-zero dispersion-shifted
+fibre (G.655), with 4 ps/(nm·km). The spectra are on [[osa_dsf]] and [[osa_nzdsf]].
+
+## Light nobody launched
+
+The Kerr effect mixes every three channels into a fourth at
+
+$$f_{ijk} = f_i + f_j - f_k$$
+
+With four channels on a uniform grid, those frequencies are the channels themselves and the
+grid slots on either side. The mixing is efficient only while the channels stay in phase with
+each other, and dispersion is what moves them out of phase:
+
+$$\Delta\beta = \frac{2\pi\lambda^2}{c}\,D\,\Delta f_{ik}\,\Delta f_{jk}$$
+
+At $D = 0$ nothing dephases them.
+
+## The two spectra
+
+Each channel arrives at about −13 dBm per 0.1 nm.
+
+| Slot | G.653 | G.655 |
+| :-- | :-- | :-- |
+| below the channels | −24.1 dBm | −63.2 dBm |
+| above the channels | −23.4 dBm | −62.0 dBm |
+| channels | −13.4 to −13.7 dBm | −13.0 dBm |
+
+On G.653 the mixing products are only about 10 dB below the channels, and the channels
+themselves have changed: products landed on them and beat with them. A few ps/(nm·km) of
+dispersion suppresses the products by 39 dB. That is why G.653, built to have no dispersion
+at 1550 nm, was abandoned for WDM, and why G.655 was designed to keep a little.
+
+## Try this
+
+- Lower every channel to 0 dBm. Each product falls by 3 dB per 1 dB of channel power.
+- Set [[fibre_nzdsf]]'s dispersion to 17, standard fibre. How far down do the products go?
+""".strip(),
+    },
+    "roadm": {
+        "title": "3.9 A ROADM add/drop node",
+        "body": r"""
+Four 10 Gb/s channels [[tx0]] to [[tx3]], 100 GHz apart, cross a span [[span_a]] [[edfa_a]] and
+reach a node. There a wavelength-selective switch [[wss]] lets three channels through
+(*express*), takes channel 1 off to a local receiver (*drop*, [[ber_drop]]) and puts a new
+channel with different data on the same wavelength (*add*, [[tx_add]]). The line continues
+through [[span_b]] [[edfa_b]] to [[demux_b]], where the added channel is received by
+[[ber_add]]. The spectra on [[osa_a]] and [[osa_b]] look alike, but channel 1 now carries other
+data.
+
+## In-band crosstalk
+
+A switch does not block perfectly. What it leaks of the dropped channel, its *isolation* below
+the arrival, reaches the out port on exactly the frequency of the added channel. There no filter
+can separate them. The two fields add, and the receiver sees their beat:
+
+$$P = |E_\text{add} + E_\text{leak}|^2 = P_\text{add} + P_\text{leak} + 2\sqrt{P_\text{add}P_\text{leak}}\cos\Delta\phi$$
+
+The beat term is in amplitude, so crosstalk 35 dB down in power is only 17.5 dB down in field.
+
+| [[wss]] isolation | Q, added channel |
+| :-- | :-- |
+| 80 dB | 41.2 |
+| 35 dB | 26.2 |
+| 25 dB | 10.8 |
+| 20 dB | 6.2 |
+
+The dropped channel reads Q 32.1 on [[ber_drop]] whatever the isolation is. The leak only
+harms the channel that takes its place.
+
+## Try this
+
+- Sweep the *isolation* of [[wss]] from 15 to 40 dB.
+- Lower [[tx_add]]'s power by 5 dB. The leak is now 5 dB closer to the added channel.
 """.strip(),
     },
 }

@@ -20,7 +20,7 @@ link in this simulator descends from.*
 > ### Project status: 0.16.0 — released, and still moving.
 >
 > `pip install maiman`, then `maiman serve` — or [start from no Python at
-> all](#installing-and-running-it). Phases 0 through 5 are done: **66 components, more than 2250 tests, and
+> all](#installing-and-running-it). Phases 0 through 5 are done: **67 components, more than 2250 tests, and
 > every physics block checked against a closed-form result in CI.**
 >
 > **Links run end to end.** Direct detection — PRBS → NRZ → laser → MZM → fiber → PIN → filter →
@@ -140,7 +140,7 @@ You will see:
 
 ```
 Maiman Studio session server
-  66 components
+  67 components
   http://127.0.0.1:8765/
 ```
 
@@ -162,13 +162,15 @@ anything to see it work.
 3. **Change one and press Run again.** Set the fiber's length to 200 km and the received power
    drops by exactly the amount its attenuation says it should. Every number on screen is computed,
    not drawn.
-4. **The Examples menu opens complete projects**, numbered and grouped as in
-   [the examples roadmap](docs/EXAMPLES_ROADMAP.md): first light (a laser on a meter, a loss budget,
-   the Mach–Zehnder's cosine, a pulse spreading, compressing and travelling as a soliton on the
-   oscilloscope, splitters and couplers), then direct-detection links (an eye diagram, PIN against
-   APD sensitivity, a DML's chirp limiting its reach, mode partition noise, a PAM4 lane with an
-   equaliser, CWDM4 in the O-band and a 1:32 GPON downstream), a WDM spectrum, an eight-channel DWDM link, and coherent links with the full DSP chain and with
-   soft-decision FEC. Each is a `.maiman` file in `examples/maiman/`, written by a script in
+4. **The Examples menu opens complete projects**, one submenu per phase of
+   [the examples roadmap](docs/EXAMPLES_ROADMAP.md) and numbered as there: first light (a laser on
+   a meter, a loss budget, the Mach–Zehnder's cosine, a pulse spreading, compressing and travelling
+   as a soliton on the oscilloscope, splitters and couplers), then direct-detection links (an eye
+   diagram, PIN against APD sensitivity, a DML's chirp limiting its reach, mode partition noise, a
+   PAM4 lane with an equaliser, CWDM4 in the O-band and a 1:32 GPON downstream), amplified and WDM
+   links (one EDFA on a spectrum, the OSNR of a chain of spans, a WDM spectrum, an eight-channel
+   DWDM link, the optimum launch power, four-wave mixing on G.653 fibre and a ROADM add/drop
+   node), and coherent links with the full DSP chain and with soft-decision FEC. Each is a `.maiman` file in `examples/maiman/`, written by a script in
    `examples/python/`.
 5. **Read the notes.** Every project the Examples menu opens comes with a lesson in a panel on the
    left of the canvas: what the link is for, the formulas behind each stage, and what to try next. A
@@ -1941,6 +1943,16 @@ lifted out of `OpticalFilter` for that reason and a test asserts the two agree s
 multi-port device whose per-channel response drifted from the single-filter block's would be the
 worst kind of disagreement, since both would look right alone and the crosstalk number would depend
 on which one happened to be used.
+
+### A ROADM node: the add/drop switch
+
+`WavelengthSelectiveSwitch` is one degree of a ROADM on the same grid. Every channel of the line
+but one leaves by `out` through its own passband, the `dropped` one leaves by `drop`, and what
+arrives on `add` takes its slot. Its `isolation` is how far below its arrival the dropped channel
+still reaches `out`, and there it lands on the added channel's own frequency. The two are added
+as fields, so the leak beats with the new channel at the receiver: in-band crosstalk, which no
+filter downstream can remove. In example 3.9, 35 dB of isolation takes the added channel from
+Q 41 to 26, and 20 dB takes it to 6.
 
 ### Which of two things sets the crosstalk
 

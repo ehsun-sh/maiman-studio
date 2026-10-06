@@ -390,3 +390,22 @@ def test_eye_histogram_counts_every_sample_it_is_given() -> None:
 def test_eye_histogram_needs_at_least_one_trace() -> None:
     with pytest.raises(ValueError, match="shorter than one"):
         eye_histogram(np.zeros(4), 8, 10e9, span_symbols=2)
+
+
+def test_an_interpolated_eye_fills_every_column_it_asks_for() -> None:
+    """Interpolation is the other way to buy columns: between the samples, not more of them."""
+    samples = np.random.default_rng(0).normal(size=16 * 200)
+    histogram = eye_histogram(samples, 8, 10e9, span_symbols=2, time_bins=64, interpolate=True)
+    assert histogram.shape[1] == 64
+    assert (histogram.counts.sum(axis=0) > 0).all()
+    assert histogram.counts.sum() == samples.size * 4
+
+
+def test_interpolation_is_exact_for_a_band_limited_waveform() -> None:
+    from maiman.analysis import _band_limited_upsample
+
+    n, factor = 256, 4
+    tone = lambda k: np.cos(2 * np.pi * 5 * k / n) + 0.5 * np.sin(2 * np.pi * 17 * k / n)  # noqa: E731
+    upsampled = _band_limited_upsample(tone(np.arange(n)), factor)
+    assert upsampled == pytest.approx(tone(np.arange(n * factor) / factor), abs=1e-12)
+    assert upsampled[::factor] == pytest.approx(tone(np.arange(n)), abs=1e-12)

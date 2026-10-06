@@ -1172,8 +1172,13 @@ TEMPLATE_FILES = {
     "pam4-lane": "pam4_lane.maiman",
     "cwdm4": "cwdm4.maiman",
     "gpon": "gpon.maiman",
+    "edfa-basics": "edfa_basics.maiman",
+    "amplified-chain": "amplified_chain.maiman",
     "wdm-osa": "wdm_osa.maiman",
     "dwdm-link": "dwdm_link.maiman",
+    "launch-power": "launch_power.maiman",
+    "fwm-dsf": "fwm_dsf.maiman",
+    "roadm": "roadm.maiman",
     "coherent-sdfec": "coherent_sdfec.maiman",
 }
 
