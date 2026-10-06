@@ -1,0 +1,194 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 10000000000.0,
+    "samples_per_symbol": 256,
+    "sequence_length": 4,
+    "seed": 1,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "soliton",
+      "type": "SechPulse",
+      "params": {
+        "peak_power": 22.221683941259776,
+        "width": 10.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 160.0
+      }
+    },
+    {
+      "id": "kerr_on",
+      "type": "Fiber",
+      "params": {
+        "nonlinearity": 1.3,
+        "length": 14.49,
+        "attenuation": 0.0,
+        "dispersion": 17.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 60.0
+      }
+    },
+    {
+      "id": "kerr_off",
+      "type": "Fiber",
+      "params": {
+        "nonlinearity": 0.0,
+        "length": 14.49,
+        "attenuation": 0.0,
+        "dispersion": 17.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 260.0
+      }
+    },
+    {
+      "id": "launch",
+      "type": "Oscilloscope",
+      "params": {
+        "span": 200.0
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 160.0
+      }
+    },
+    {
+      "id": "with_kerr",
+      "type": "Oscilloscope",
+      "params": {
+        "span": 200.0
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 60.0
+      }
+    },
+    {
+      "id": "dispersion_only",
+      "type": "Oscilloscope",
+      "params": {
+        "span": 200.0
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 260.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "kerr_off",
+        "out"
+      ],
+      "to": [
+        "dispersion_only",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "soliton",
+        "out"
+      ],
+      "to": [
+        "kerr_off",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "soliton",
+        "out"
+      ],
+      "to": [
+        "kerr_on",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "soliton",
+        "out"
+      ],
+      "to": [
+        "launch",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "kerr_on",
+        "out"
+      ],
+      "to": [
+        "with_kerr",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "1.6 The fundamental soliton",
+    "body": "A hyperbolic-secant pulse [[soliton]] with $T_0 = 10$ ps is launched at exactly the power that\nmakes it a soliton, into two identical 14.5 km fibres: [[kerr_on]] with the Kerr effect and\n[[kerr_off]] without it. The **Scope** tab overlays the launch [[launch]] and the two outputs\n[[with_kerr]] [[dispersion_only]].\n\n## Two chirps that cancel\n\nDispersion alone spreads the pulse and chirps it (in anomalous fibre, blue ahead). The Kerr\neffect makes the refractive index depend on intensity, $n = n_0 + n_2 I$, so the pulse imposes\na phase on itself,\n\n$$\\phi_\\text{NL}(T) = \\gamma\\,|A(T)|^2\\,z$$\n\nwhich chirps it the *other* way. At the right peak power the two chirps cancel at every point of\nthe pulse and it travels unchanged.\n\n## The soliton condition\n\n$$N^2 = \\frac{\\gamma P_0 T_0^2}{|\\beta_2|} = 1 \\quad\\Rightarrow\\quad P_0 = \\frac{|\\beta_2|}{\\gamma T_0^2} = \\frac{21.7\\ \\text{ps}^2/\\text{km}}{1.3\\ \\text{W}^{-1}\\text{km}^{-1}\\times(10\\ \\text{ps})^2} = 167\\ \\text{mW}$$\n\nThe fibre is two soliton periods long, $z_0 = \\frac{\\pi}{2}L_D = 7.24$ km each.\n\n| Scope | FWHM | Peak |\n| :-- | :-- | :-- |\n| [[launch]] | 17.6 ps ($1.763\\,T_0$) | 167 mW |\n| [[with_kerr]] | 17.6 ps | 167 mW |\n| [[dispersion_only]] | 49.5 ps | 65 mW |\n\n## Try this\n\n- Double the peak power of [[soliton]] (+3 dB). Now $N = \\sqrt2$: the pulse narrows and breathes.\n- Quadruple it (+6 dB) for $N = 2$, and set [[kerr_on]] to 3.62 km ($z_0/2$). A second-order\n  soliton splits and re-forms once a period.\n- Put 0.2 dB/km of loss on [[kerr_on]]. As the power falls, the soliton slowly widens."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 133.0,
+      "w": 134.0,
+      "h": 88.0,
+      "text": "sech pulse, N = 1",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 171.0,
+      "y": 33.0,
+      "w": 134.0,
+      "h": 288.0,
+      "text": "Kerr on and off",
+      "tone": "binary"
+    },
+    {
+      "id": "a3",
+      "kind": "rect",
+      "x": 321.0,
+      "y": 33.0,
+      "w": 134.0,
+      "h": 288.0,
+      "text": "Scopes",
+      "tone": "metric"
+    },
+    {
+      "id": "a4",
+      "kind": "note",
+      "x": 496.0,
+      "y": 40.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "$N^2 = \\gamma P_0 T_0^2/|\\beta_2| = 1$: self-phase modulation cancels the dispersion's chirp exactly.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 494.0,
+      "y1": 86.0,
+      "x2": 460.0,
+      "y2": 86.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

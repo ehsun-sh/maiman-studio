@@ -1,6 +1,6 @@
 """The DWDM template: eight channels on the ITU grid, one span, one channel received.
 
-It is the link the studio's File menu opens, so what it claims on screen has to
+It is the link the studio's Examples menu opens, so what it claims on screen has to
 be what it does. These pin the grid it sits on and the numbers it produces, from
 the same script that writes the project file.
 """

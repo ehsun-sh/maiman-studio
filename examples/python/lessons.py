@@ -1,7 +1,7 @@
 # ruff: noqa: E501, RUF001 -- prose and formulas, with the dashes and minus signs they need
 """The teaching material the shipped projects carry: a lesson, and marks on the canvas.
 
-Every project the studio opens from the File menu is written by a script in
+Every project the studio opens from the Examples menu is written by a script in
 this folder, and each of those scripts hands its lesson to ``save`` from here.
 Keeping the prose in one module rather than in each script means the physics
 of a script stays readable, and a correction to a formula is made once.
@@ -132,11 +132,142 @@ def _coherent_sdfec(at: Layout) -> list[dict[str, Any]]:
     ]
 
 
+# ---------------------------------------------------------------------------
+# Phase 1: first light
+
+
+def _laser_meters(at: Layout) -> list[dict[str, Any]]:
+    att = at["att"]
+    return [
+        frame(at, ["laser"], "Source", "optical"),
+        frame(at, ["pm_tx", "osa", "pm_rx"], "Instruments", "metric"),
+        note(
+            att["x"] - 20.0,
+            att["y"] + 100.0,
+            "Halving the power is 3 dB: $10\\log_{10}(1/2) = -3.01$ dB. In dBm, losses subtract.",
+            w=230.0,
+        ),
+        arrow(att["x"] + 50.0, att["y"] + 98.0, att["x"] + 58.0, att["y"] + NODE_H + 4.0),
+    ]
+
+
+def _loss_budget(at: Layout) -> list[dict[str, Any]]:
+    span = at["span"]
+    return [
+        frame(at, ["laser"], "Transmitter", "optical"),
+        frame(at, ["patch_tx", "span", "patch_rx"], "Everything between", "binary"),
+        frame(at, ["pm_rx"], "Receiver", "metric"),
+        note(
+            span["x"] - 40.0,
+            span["y"] + 110.0,
+            "$P_\\text{rx} = P_\\text{tx} - \\alpha L - \\sum L_\\text{conn}$, "
+            "all in dB. 0 − 10 − 1 = −11 dBm.",
+            w=240.0,
+        ),
+        arrow(span["x"] + 50.0, span["y"] + 108.0, span["x"] + 58.0, span["y"] + NODE_H + 4.0),
+    ]
+
+
+def _mzm_curve(at: Layout) -> list[dict[str, Any]]:
+    mzm = at["mzm"]
+    return [
+        frame(at, ["laser", "bias"], "Light and a voltage", "optical"),
+        frame(at, ["mzm"], "Modulator", "electrical"),
+        frame(at, ["pm_out"], "Meter", "metric"),
+        note(
+            mzm["x"] - 10.0,
+            mzm["y"] + 120.0,
+            "$P_\\text{out} = P_\\text{in}\\cos^2(\\pi V/2V_\\pi)$. "
+            "Sweep the voltage of bias from 0 to 8 V to draw it.",
+            w=240.0,
+        ),
+        arrow(mzm["x"] + 50.0, mzm["y"] + 118.0, mzm["x"] + 58.0, mzm["y"] + NODE_H + 4.0),
+    ]
+
+
+def _pulse_spreading(at: Layout) -> list[dict[str, Any]]:
+    scope = at["after_10km"]
+    return [
+        frame(at, ["pulse"], "10 ps pulse", "optical"),
+        frame(at, ["fibre_a", "fibre_b"], "2 × 5 km, lossless", "binary"),
+        frame(at, ["launch", "after_5km", "after_10km"], "Scopes", "metric"),
+        side_note(
+            scope,
+            "Run, then open the Scope tab: three pulses, one energy. "
+            "$T_1/T_0 = \\sqrt{1 + (z/L_D)^2}$",
+        ),
+        side_arrow(scope),
+    ]
+
+
+def _chirp_compression(at: Layout) -> list[dict[str, Any]]:
+    up = at["up_out"]
+    return [
+        frame(at, ["up", "down"], "Opposite chirps", "optical"),
+        frame(at, ["fibre_up", "fibre_down"], "Same fibre", "binary"),
+        frame(at, ["up_out", "launch", "down_out"], "Scopes", "metric"),
+        side_note(
+            up,
+            "$C\\beta_2 < 0$: the chirp and the fibre undo each other and the pulse "
+            "narrows. Tick *Show instantaneous frequency* in the Scope tab to see why.",
+            h=112.0,
+        ),
+        side_arrow(up),
+    ]
+
+
+def _soliton(at: Layout) -> list[dict[str, Any]]:
+    kerr = at["with_kerr"]
+    return [
+        frame(at, ["soliton"], "sech pulse, N = 1", "optical"),
+        frame(at, ["kerr_on", "kerr_off"], "Kerr on and off", "binary"),
+        frame(at, ["with_kerr", "launch", "dispersion_only"], "Scopes", "metric"),
+        side_note(
+            kerr,
+            "$N^2 = \\gamma P_0 T_0^2/|\\beta_2| = 1$: self-phase modulation cancels "
+            "the dispersion's chirp exactly.",
+        ),
+        side_arrow(kerr),
+    ]
+
+
+def _splitters(at: Layout) -> list[dict[str, Any]]:
+    total = at["pm_sum"]
+    return [
+        frame(at, ["laser_a", "laser_b"], "Two colours", "optical"),
+        frame(at, ["split4", "tap", "combiner"], "Dividing and joining", "binary"),
+        frame(at, ["pm_quarter", "pm_sum", "pm_tap"], "Meters", "metric"),
+        side_note(
+            total,
+            "Powers add in milliwatts, not in dBm: 0.25 + 0.90 = 1.15 mW = +0.61 dBm.",
+        ),
+        side_arrow(total),
+    ]
+
+
+def side_note(block: dict[str, float], text: str, h: float = 96.0) -> dict[str, Any]:
+    """A note to the right of ``block``, clear of the frame around it."""
+    return note(block["x"] + NODE_W + 50.0, block["y"] - 20.0, text, w=240.0, h=h)
+
+
+def side_arrow(block: dict[str, float]) -> dict[str, Any]:
+    """From a :func:`side_note` back to the block it is about."""
+    y = block["y"] + NODE_H / 2.0
+    return arrow(block["x"] + NODE_W + 48.0, y, block["x"] + NODE_W + 14.0, y)
+
+
 _MARKS = {
     "ook_eye": _ook_eye,
     "wdm_osa": _wdm_osa,
     "dwdm_link": _dwdm_link,
     "coherent_sdfec": _coherent_sdfec,
+    "laser_meters": _laser_meters,
+    "loss_budget": _loss_budget,
+    "mzm_curve": _mzm_curve,
+    "pulse_spreading": _pulse_spreading,
+    "chirp_compression": _chirp_compression,
+    "soliton": _soliton,
+    "splitters": _splitters,
 }
 
 
@@ -362,6 +493,294 @@ The demapper turns each symbol into four log-likelihood ratios and the decoder c
 - Set the linewidth of both lasers to 1000 kHz. What happens to the constellation?
 - Move [[lo]] further from 1550 nm. Where does frequency recovery give up?
 - Change the format to 64-QAM (bits per symbol 6) on [[map]]: every block that cares follows.
+""".strip(),
+    },
+    "laser_meters": {
+        "title": "1.1 A laser, a power meter and a spectrum",
+        "body": r"""
+A laser [[laser]] puts out one milliwatt at 1550 nm. Three instruments read it: a power meter
+[[pm_tx]], an optical spectrum analyser [[osa]], and a second meter [[pm_rx]] behind a 3 dB
+attenuator [[att]].
+
+## dBm
+
+Optical power is quoted against one milliwatt, on a log scale:
+
+$$P_\text{dBm} = 10\log_{10}\frac{P}{1\ \text{mW}}, \qquad P = 1\ \text{mW}\times10^{P_\text{dBm}/10}$$
+
+So 0 dBm is 1 mW, +10 dBm is 10 mW and −30 dBm is 1 µW. A loss in dB *subtracts*: 3 dB halves
+the power, which is why [[pm_rx]] reads −3.00 dBm, 0.501 mW.
+
+## What the analyser draws
+
+An OSA sweeps a narrow filter across the band and reports the power that falls in it. The
+filter's width is the **resolution bandwidth** (RBW), 12.5 GHz here (0.1 nm at 1550 nm).
+
+This laser's linewidth is 100 kHz, five orders of magnitude narrower than the filter. So the line
+on screen is the *filter's* shape, not the laser's, and its height is the laser's whole power:
+0 dBm. Converting a width in frequency to one in wavelength:
+
+$$\Delta\lambda \approx \frac{\lambda^2}{c}\,\Delta\nu \quad\Rightarrow\quad 12.5\ \text{GHz} \approx 0.1\ \text{nm}$$
+
+## Try this
+
+- Set [[laser]] to +3 dBm. What do the two meters read, in mW?
+- Widen the resolution bandwidth of [[osa]] to 50 GHz. The line gets wider; does it get taller?
+- Change [[att]] to 10 dB, then 20 dB. Each 10 dB is a factor of ten.
+""".strip(),
+    },
+    "loss_budget": {
+        "title": "1.2 A loss budget",
+        "body": r"""
+The first sum anyone designing a link does. A 0 dBm laser [[laser]] goes through a patch
+connector [[patch_tx]], 50 km of fibre [[span]] and another connector [[patch_rx]] to a
+meter [[pm_rx]].
+
+## Loss in fibre
+
+Power falls exponentially with length, which is a straight line in decibels:
+
+$$P(L) = P(0)\,10^{-\alpha L/10} \quad\Leftrightarrow\quad P_\text{dBm}(L) = P_\text{dBm}(0) - \alpha L$$
+
+with $\alpha$ in dB/km: 0.2 dB/km is typical of standard fibre at 1550 nm, so 50 km costs 10 dB.
+
+## The budget
+
+Because everything is in dB, the budget is an addition:
+
+$$P_\text{rx} = P_\text{tx} - \alpha L - \sum L_\text{conn} = 0 - 10 - 2\times0.5 = -11\ \text{dBm}$$
+
+The **margin** is what is left over the receiver's sensitivity. A receiver that needs
+−20 dBm leaves 9 dB here, and a designer would keep 3 dB of it for ageing and repairs.
+
+## Sweep it
+
+Open the **Sweep** button, choose [[span]] and its length, and run 0 to 100 km. The meter
+falls 5 dB every 25 km, from −1 dBm (the connectors alone) to −21 dBm:
+
+| Length | 0 km | 25 km | 50 km | 75 km | 100 km |
+| :-- | :-- | :-- | :-- | :-- | :-- |
+| Received | −1 dBm | −6 dBm | −11 dBm | −16 dBm | −21 dBm |
+
+## Try this
+
+- At 1310 nm fibre loses about 0.35 dB/km. Change [[span]]'s attenuation and find the length
+  that leaves −20 dBm.
+- Add a 1:8 splitter: how much shorter must the fibre be for the same received power?
+""".strip(),
+    },
+    "mzm_curve": {
+        "title": "1.3 The Mach–Zehnder transfer curve",
+        "body": r"""
+A Mach–Zehnder modulator [[mzm]] splits the light of [[laser]] into two arms, shifts the phase
+of one against the other with a voltage, and recombines them. A DC source [[bias]] sets that
+voltage and [[pm_out]] measures what comes out.
+
+## The cosine
+
+The two arms interfere. With a phase difference $\Delta\phi = \pi V/V_\pi$,
+
+$$P_\text{out} = P_\text{in}\cos^2\left(\frac{\Delta\phi}{2}\right) = P_\text{in}\cos^2\left(\frac{\pi V}{2V_\pi}\right)$$
+
+$V_\pi$ is the voltage that takes the output from full to dark: 4 V here.
+
+## Bias points
+
+| Drive | Name | Output |
+| :-- | :-- | :-- |
+| $0$ | peak | 0 dBm |
+| $V_\pi/2 = 2$ V | quadrature | −3 dBm |
+| $V_\pi = 4$ V | null | −30 dBm |
+
+Quadrature is where the curve is steepest and most nearly straight, so an analogue or a small
+digital signal is biased there. An on–off keyed signal swings from peak to null instead.
+
+## Extinction ratio
+
+A real modulator never goes fully dark: its arms do not split exactly 50/50. The **extinction
+ratio** says how dark,
+
+$$\mathrm{ER} = 10\log_{10}\frac{P_\text{max}}{P_\text{min}}$$
+
+30 dB on [[mzm]], which is why the null reads −30 dBm and not $-\infty$.
+
+## Sweep it
+
+Open **Sweep**, pick [[bias]] and its voltage, and run 0 to 8 V in 0.25 V steps. The curve
+falls to the null at 4 V and comes back at 8 V: the cosine is periodic in $2V_\pi$.
+
+## Try this
+
+- Lower the extinction ratio of [[mzm]] to 15 dB. Which bias points move?
+- Set $V_\pi$ to 2 V and find the new quadrature point.
+""".strip(),
+    },
+    "pulse_spreading": {
+        "title": "1.4 A pulse spreading in fibre",
+        "body": r"""
+A Gaussian pulse [[pulse]] with $T_0 = 10$ ps goes through two 5 km pieces of standard fibre
+[[fibre_a]] [[fibre_b]]. Three oscilloscopes, [[launch]], [[after_5km]] and [[after_10km]],
+draw it on one time axis in the **Scope** tab. Loss is set to zero so that dispersion is the
+only thing happening.
+
+## Why it spreads
+
+A short pulse is made of many frequencies, and in fibre each travels at its own speed. That is
+group-velocity dispersion, written as $D$ in ps/(nm·km) on a datasheet and $\beta_2$ in the
+equations:
+
+$$\beta_2 = -\frac{D\,\lambda^2}{2\pi c} \approx -21.7\ \text{ps}^2/\text{km} \quad (D = 17,\ \lambda = 1550\ \text{nm})$$
+
+## How fast
+
+The distance over which dispersion matters is the **dispersion length**,
+
+$$L_D = \frac{T_0^2}{|\beta_2|} = \frac{(10\ \text{ps})^2}{21.7\ \text{ps}^2/\text{km}} = 4.6\ \text{km}$$
+
+and an unchirped Gaussian widens as
+
+$$\frac{T_1}{T_0} = \sqrt{1 + \left(\frac{z}{L_D}\right)^2}$$
+
+| Scope | $z$ | $T_1/T_0$ | FWHM ($1.665\,T$) |
+| :-- | :-- | :-- | :-- |
+| [[launch]] | 0 | 1 | 16.65 ps |
+| [[after_5km]] | 5 km | 1.48 | 24.6 ps |
+| [[after_10km]] | 10 km | 2.39 | 39.8 ps |
+
+The scopes' FWHM readings are these numbers. The area under each trace is the same energy, so as
+the pulse widens its peak falls by the same factor.
+
+## Try this
+
+- Halve the width of [[pulse]] to 5 ps. $L_D$ falls four times: how wide is it after 10 km?
+- Set [[fibre_b]]'s dispersion to −17. What does [[after_10km]] show, and why?
+- Tick *Show instantaneous frequency* in the Scope tab: dispersion leaves the pulse chirped. In standard fibre blue
+  travels faster, so the leading edge is bluer than the tail.
+""".strip(),
+    },
+    "chirp_compression": {
+        "title": "1.5 Chirped pulse compression",
+        "body": r"""
+Two Gaussian pulses with the same $T_0 = 10$ ps but opposite chirp, [[up]] ($C = +2$) and
+[[down]] ($C = -2$), go through identical 1.84 km fibres [[fibre_up]] [[fibre_down]]. The
+**Scope** tab overlays the launched pulse [[launch]] and both outputs [[up_out]] [[down_out]].
+
+## Chirp
+
+A chirped pulse has a frequency that changes across it. With
+
+$$A(0, T) = \sqrt{P_0}\,\exp\left(-\frac{1 - jC}{2}\,\frac{T^2}{T_0^2}\right)$$
+
+the instantaneous frequency is $\delta f = C\,T/(2\pi T_0^2)$: for $C > 0$ the tail is bluer than
+the head (an up-chirp). Tick *Show instantaneous frequency* in the
+Scope tab to see that straight line.
+
+## The sign matters
+
+In standard fibre $\beta_2 < 0$, and blue light travels *faster*. An up-chirped pulse has its
+blue at the back, which catches up with the red at the front: the pulse first narrows. A
+down-chirped pulse is already arranged the wrong way and spreads faster than an unchirped one.
+
+$$\frac{T_1}{T_0} = \sqrt{\left(1 + \frac{C\beta_2 z}{T_0^2}\right)^2 + \left(\frac{\beta_2 z}{T_0^2}\right)^2}$$
+
+The narrowest point is at $z = L_D\,C/(1 + C^2) = 0.4\,L_D = 1.84$ km, where the width is
+$T_0/\sqrt{1+C^2}$:
+
+| Scope | $C$ | $T_1/T_0$ | FWHM |
+| :-- | :-- | :-- | :-- |
+| [[launch]] | — | 1 | 16.65 ps |
+| [[up_out]] | +2 | 0.447 | 7.45 ps |
+| [[down_out]] | −2 | 1.84 | 30.7 ps |
+
+This is how a directly modulated laser's chirp limits its reach, and how pulse compressors and
+chirped-pulse amplifiers work.
+
+## Try this
+
+- Make [[fibre_up]] twice as long. The pulse passes its narrowest point and spreads again.
+- Set the chirp of [[up]] to 0. Now both outputs spread the same way.
+""".strip(),
+    },
+    "soliton": {
+        "title": "1.6 The fundamental soliton",
+        "body": r"""
+A hyperbolic-secant pulse [[soliton]] with $T_0 = 10$ ps is launched at exactly the power that
+makes it a soliton, into two identical 14.5 km fibres: [[kerr_on]] with the Kerr effect and
+[[kerr_off]] without it. The **Scope** tab overlays the launch [[launch]] and the two outputs
+[[with_kerr]] [[dispersion_only]].
+
+## Two chirps that cancel
+
+Dispersion alone spreads the pulse and chirps it (in anomalous fibre, blue ahead). The Kerr
+effect makes the refractive index depend on intensity, $n = n_0 + n_2 I$, so the pulse imposes
+a phase on itself,
+
+$$\phi_\text{NL}(T) = \gamma\,|A(T)|^2\,z$$
+
+which chirps it the *other* way. At the right peak power the two chirps cancel at every point of
+the pulse and it travels unchanged.
+
+## The soliton condition
+
+$$N^2 = \frac{\gamma P_0 T_0^2}{|\beta_2|} = 1 \quad\Rightarrow\quad P_0 = \frac{|\beta_2|}{\gamma T_0^2} = \frac{21.7\ \text{ps}^2/\text{km}}{1.3\ \text{W}^{-1}\text{km}^{-1}\times(10\ \text{ps})^2} = 167\ \text{mW}$$
+
+The fibre is two soliton periods long, $z_0 = \frac{\pi}{2}L_D = 7.24$ km each.
+
+| Scope | FWHM | Peak |
+| :-- | :-- | :-- |
+| [[launch]] | 17.6 ps ($1.763\,T_0$) | 167 mW |
+| [[with_kerr]] | 17.6 ps | 167 mW |
+| [[dispersion_only]] | 49.5 ps | 65 mW |
+
+## Try this
+
+- Double the peak power of [[soliton]] (+3 dB). Now $N = \sqrt2$: the pulse narrows and breathes.
+- Quadruple it (+6 dB) for $N = 2$, and set [[kerr_on]] to 3.62 km ($z_0/2$). A second-order
+  soliton splits and re-forms once a period.
+- Put 0.2 dB/km of loss on [[kerr_on]]. As the power falls, the soliton slowly widens.
+""".strip(),
+    },
+    "splitters": {
+        "title": "1.7 Splitters, couplers and a combiner",
+        "body": r"""
+Three ways to divide or join light. A 1:4 splitter [[split4]] shares [[laser_a]] four ways.
+A directional coupler [[tap]] takes 10 % of [[laser_b]] off to a monitor. A combiner
+[[combiner]] puts one quarter of the first laser and the through port of the coupler onto one
+fibre, and [[pm_sum]] measures them together.
+
+## Splitting costs 3 dB per halving
+
+An ideal $1{:}N$ splitter gives each output $1/N$ of the power:
+
+$$L_\text{split} = 10\log_{10}N \quad\Rightarrow\quad 1{:}4 = 6.02\ \text{dB}, \quad 1{:}32 = 15.05\ \text{dB}$$
+
+[[pm_quarter]] reads −6.02 dBm, 0.25 mW. A passive optical network's 1:32 split costs more than
+70 km of fibre.
+
+## A coupler conserves power
+
+A coupler with power coupling $\kappa$ sends $\kappa$ across and keeps $1-\kappa$ on the straight
+path:
+
+$$P_\text{cross} = \kappa P_\text{in}, \qquad P_\text{through} = (1-\kappa)\,P_\text{in}$$
+
+With $\kappa = 0.1$, the monitor [[pm_tap]] gets −10 dBm and the through port keeps 0.9 mW
+(−0.46 dBm). The two add back to the input: nothing is lost in an ideal coupler.
+
+## Powers add in milliwatts
+
+The combiner joins two *different* wavelengths, 1550 and 1551 nm, so their powers simply add:
+
+$$P_\text{sum} = 0.25 + 0.90 = 1.15\ \text{mW} = +0.61\ \text{dBm}$$
+
+Adding the dBm values, −6.02 + (−0.46), would be meaningless. Two beams at the *same* wavelength
+would interfere instead, which is why [[combiner]] refuses them: that needs a coupler.
+
+## Try this
+
+- Change [[split4]]'s excess loss to 0.5 dB, as a real splitter has.
+- Set the coupling of [[tap]] to 0.5 for a 3 dB coupler. What does [[pm_sum]] read?
+- Set [[laser_b]] to 1550 nm and run: read the combiner's message in the Log tab.
 """.strip(),
     },
 }
