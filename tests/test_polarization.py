@@ -350,3 +350,36 @@ def test_wiring_one_polarization_and_not_the_other_is_what_the_helpers_prevent()
         assert np.allclose(
             solved.transmission(f"out@{polarization}", f"in@{polarization}"), through
         )
+
+
+def test_a_birefringent_rings_noise_follows_each_modes_own_comb() -> None:
+    """ASE through the ring: TM's teeth on TM's free spectral range, not TE's.
+
+    The noise used to be sampled across one TE period and repeated, so the TM
+    half of unpolarised ASE came out on TE's 714 GHz spacing.
+    """
+    from maiman.components import EDFA, CWLaser, RingResonator
+    from maiman.signals import NoiseShape
+
+    ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=8, sequence_length=64, seed=1)
+    graph = Graph(ctx)
+    seed = graph.add(CWLaser(power=-60.0, wavelength=1550.0))
+    amp = graph.add(EDFA(gain=30.0))
+    ring = graph.add(
+        RingResonator(length=100.0, coupling=0.05, drop_coupling=0.05, birefringent=True)
+    )
+    graph.connect(seed, amp["in"])
+    graph.connect(amp, ring["in"])
+    (bin_,) = graph.run(keep=[ring]).port(ring, "drop").noise
+    shape = bin_.shape
+    assert isinstance(shape, NoiseShape)
+    frequencies = shape.centre + shape.offsets
+    for weight, n_group in ((shape.weight_x, 4.20), (shape.weight_y, 3.80)):
+        inner = np.arange(1, weight.size - 1)
+        top = inner[
+            (weight[1:-1] > weight[:-2])
+            & (weight[1:-1] >= weight[2:])
+            & (weight[1:-1] > 0.5 * weight.max())
+        ]
+        spacing = float(np.mean(np.diff(frequencies[top])))
+        assert spacing == pytest.approx(C_LIGHT / (n_group * 100e-6), rel=0.01)

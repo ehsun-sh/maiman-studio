@@ -66,6 +66,7 @@ from .passive import (
 )
 from .photonic import (
     MMI,
+    CoupledWaveguides,
     DirectionalCoupler,
     MachZehnderInterferometer,
     RingResonator,
@@ -91,6 +92,7 @@ __all__ = [
     "Combiner",
     "ConstellationAnalyzer",
     "ConstellationDiagram",
+    "CoupledWaveguides",
     "DCVoltage",
     "DelayLine",
     "Demultiplexer",

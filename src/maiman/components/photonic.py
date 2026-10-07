@@ -38,6 +38,7 @@ from ..photonics import (
     SILICON_STRIP_NEFF_TM,
     SILICON_STRIP_NGROUP,
     SILICON_STRIP_NGROUP_TM,
+    coupled_waveguides,
     directional_coupler,
     free_spectral_range,
     mach_zehnder,
@@ -671,6 +672,50 @@ class DirectionalCoupler(ScatteringDevice):
         )
 
 
+class CoupledWaveguides(ScatteringDevice):
+    """A directional coupler drawn by its length, not by its split ratio.
+
+    :class:`DirectionalCoupler` takes the ratio as given. This one derives it:
+    two guides whose even and odd supermodes differ in index by ``delta_n``
+    exchange power as ``sin^2(pi delta_n L / lambda)``, so the length sets the
+    ratio and the wavelength moves it. See
+    :func:`maiman.photonics.coupled_waveguides`.
+    """
+
+    display_name = "Coupled Waveguides"
+    category = "Photonic IC"
+
+    length = Param(10.0, unit="um", min=0.0, doc="Length of the coupling section")
+    delta_n = Param(
+        0.04,
+        unit="",
+        min=1e-4,
+        max=1.0,
+        doc="Index difference between the even and odd supermodes; sets the coupling length",
+    )
+    insertion_loss = Param(0.0, unit="dB", min=0.0, doc="Excess loss through the coupler")
+
+    inputs = {"in1": PortType.OPTICAL}
+    outputs = {"out1": PortType.OPTICAL, "out2": PortType.OPTICAL}
+
+    def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
+        matrix_for = self._matrix_factory()
+        return {
+            out: apply_response(inputs["in1"], port_response(matrix_for, out, "in1"))
+            for out in ("out1", "out2")
+        }
+
+    def _matrix_factory(self, polarization: str = "te") -> Callable[[np.ndarray], SMatrix]:
+        # Like DirectionalCoupler, one polarisation: delta_n is a number per
+        # process and per polarisation, and this block carries one of them.
+        length = self.si("length")
+        delta_n = self.delta_n
+        loss = self.insertion_loss
+        return solve_once(
+            lambda f: coupled_waveguides(f, length=length, delta_n=delta_n, insertion_loss_db=loss)
+        )
+
+
 class MMI(ScatteringDevice):
     """A multimode interference coupler: the splitter a foundry actually ships.
 
@@ -932,7 +977,11 @@ class RingResonator(_Photonic):
         # The comb repeats every free spectral range and its narrowest feature is
         # one resonance: the first says how far the noise average has to reach,
         # the second how finely. See `average_power_response`.
-        period = self.free_spectral_range()
+        # A birefringent ring is two combs on two periods, and a noise shape
+        # repeated on one of them puts the other's teeth in the wrong places:
+        # TM's ASE came out on TE's 714 GHz spacing instead of its own 789. Its
+        # noise is sampled across the whole bin instead.
+        period = None if self.birefringent else self.free_spectral_range()
         resolution = self.linewidth()
         outputs: dict[str, Signal] = {}
         for out in ("through", "drop"):

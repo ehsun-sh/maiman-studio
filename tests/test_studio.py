@@ -1187,6 +1187,12 @@ TEMPLATE_FILES = {
     "zr800": "zr800.maiman",
     "loop": "loop.maiman",
     "pcs": "pcs.maiman",
+    "coupler-length": "coupler_length.maiman",
+    "mzi": "mzi.maiman",
+    "ring": "ring.maiman",
+    "birefringent-ring": "birefringent_ring.maiman",
+    "chip-couplers": "chip_couplers.maiman",
+    "pdk-splitter": "pdk_splitter.maiman",
 }
 
 

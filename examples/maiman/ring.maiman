@@ -1,0 +1,196 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 10000000000.0,
+    "samples_per_symbol": 8,
+    "sequence_length": 256,
+    "seed": 1,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "seed",
+      "type": "CWLaser",
+      "params": {
+        "power": -100.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "ase",
+      "type": "EDFA",
+      "params": {
+        "gain": 30.0,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "osa_in",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1550.0,
+        "span": 2000.0,
+        "points": 2048.0,
+        "resolution_bandwidth": 1.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 290.0
+      }
+    },
+    {
+      "id": "ring",
+      "type": "RingResonator",
+      "params": {
+        "length": 100.0,
+        "coupling": 0.05,
+        "drop_coupling": 0.05
+      },
+      "config": {
+        "add_port": false
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "osa_through",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1550.0,
+        "span": 2000.0,
+        "points": 2048.0,
+        "resolution_bandwidth": 1.0
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "osa_drop",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1550.0,
+        "span": 2000.0,
+        "points": 2048.0,
+        "resolution_bandwidth": 1.0
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 240.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "seed",
+        "out"
+      ],
+      "to": [
+        "ase",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "ring",
+        "drop"
+      ],
+      "to": [
+        "osa_drop",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "ase",
+        "out"
+      ],
+      "to": [
+        "osa_in",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "ring",
+        "through"
+      ],
+      "to": [
+        "osa_through",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "ase",
+        "out"
+      ],
+      "to": [
+        "ring",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "5.3 A ring resonator filter",
+    "body": "A silicon ring [[ring]], 100 \u00b5m round, sits between two bus waveguides. White light from\n[[ase]] enters one bus. Light at a resonance couples into the ring and leaves by the other bus,\nthe *drop* port [[osa_drop]]. Everything else passes by on the *through* port [[osa_through]].\n[[osa_in]] shows what went in.\n\n## Free spectral range\n\nA resonance is a wavelength that fits a whole number of times round the ring. They repeat every\n\n$$\\mathrm{FSR} = \\frac{c}{n_g L} = \\frac{c}{4.20 \\times 100\\ \\mu\\text{m}} = 713.8\\ \\text{GHz}$$\n\nThe drop peaks on [[osa_drop]] are 714.2 GHz apart, which is within one display bin of that.\n\n## Linewidth and extinction\n\nHow sharp a resonance is depends on how fast light leaks out: through the two couplers\n($\\kappa = 0.05$ each) and through loss in the ring (2 dB/cm). Here the couplers dominate and\nthe linewidth is 12.2 GHz. On resonance the drop port passes all but 0.40 dB of the light and\nthe through port falls by 21.7 dB.\n\n## Critical coupling\n\nWith only one bus, the through port goes fully dark when the coupling equals the round-trip\nloss, $\\kappa = 1 - a^2$. Over- or under-coupled, the notch fills in, by the *same* amount on\neither side, so a measured depth does not tell you which side a ring is on.\n\n## Try this\n\n- Set *drop_coupling* of [[ring]] to 0 and *coupling* to 0.0046, near critical. The through\n  notch on [[osa_through]] deepens.\n- Lower *coupling* and *drop_coupling* to 0.01. The peaks narrow and the drop port loses more\n  to the ring's own loss."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 113.0,
+      "w": 284.0,
+      "h": 238.0,
+      "text": "White light",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 13.0,
+      "w": 134.0,
+      "h": 288.0,
+      "text": "Through and drop",
+      "tone": "metric"
+    },
+    {
+      "id": "a3",
+      "kind": "note",
+      "x": 303.0,
+      "y": -10.0,
+      "w": 170.0,
+      "h": 96.0,
+      "text": "A resonance every $c/(n_g L)$ = 714 GHz, 12.2 GHz wide.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a4",
+      "kind": "arrow",
+      "x1": 388.0,
+      "y1": 88.0,
+      "x2": 388.0,
+      "y2": 128.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

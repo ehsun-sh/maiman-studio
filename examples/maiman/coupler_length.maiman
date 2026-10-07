@@ -1,0 +1,230 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 10000000000.0,
+    "samples_per_symbol": 8,
+    "sequence_length": 256,
+    "seed": 1,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "seed",
+      "type": "CWLaser",
+      "params": {
+        "power": -100.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "ase",
+      "type": "EDFA",
+      "params": {
+        "gain": 30.0,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "osa_in",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1550.0,
+        "span": 4000.0,
+        "points": 2048.0,
+        "resolution_bandwidth": 1.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 290.0
+      }
+    },
+    {
+      "id": "dc",
+      "type": "CoupledWaveguides",
+      "params": {
+        "length": 9.69,
+        "delta_n": 0.04
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "pm_bar",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+        "x": 480.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "osa_bar",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1550.0,
+        "span": 4000.0,
+        "points": 2048.0,
+        "resolution_bandwidth": 1.0
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "pm_cross",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+        "x": 480.0,
+        "y": 240.0
+      }
+    },
+    {
+      "id": "osa_cross",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1550.0,
+        "span": 4000.0,
+        "points": 2048.0,
+        "resolution_bandwidth": 1.0
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 240.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "seed",
+        "out"
+      ],
+      "to": [
+        "ase",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "ase",
+        "out"
+      ],
+      "to": [
+        "dc",
+        "in1"
+      ]
+    },
+    {
+      "from": [
+        "dc",
+        "out1"
+      ],
+      "to": [
+        "osa_bar",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "dc",
+        "out2"
+      ],
+      "to": [
+        "osa_cross",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "ase",
+        "out"
+      ],
+      "to": [
+        "osa_in",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "dc",
+        "out1"
+      ],
+      "to": [
+        "pm_bar",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "dc",
+        "out2"
+      ],
+      "to": [
+        "pm_cross",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "5.1 A directional coupler: split ratio against length",
+    "body": "Two waveguides run side by side, close enough for their fields to overlap. [[dc]] is such a\nsection. White light from [[ase]] enters one guide, and [[pm_bar]] and [[pm_cross]] read what\nleaves each. [[osa_in]] shows the source, [[osa_bar]] and [[osa_cross]] the two outputs.\n\n## Two supermodes\n\nTogether the two guides carry two modes of their own: an even one, in phase in both guides,\nand an odd one, out of phase. Their effective indices differ by $\\Delta n$. Light launched in\none guide is the sum of the two, and as they drift out of step the power walks across:\n\n$$\\kappa(L) = \\sin^2\\!\\left(\\frac{\\pi\\,\\Delta n\\,L}{\\lambda}\\right), \\qquad L_c = \\frac{\\lambda}{2\\,\\Delta n}$$\n\nWith $\\Delta n = 0.04$ all of it has crossed after $L_c = 19.375$ \u00b5m at 1550 nm, and half of it\nafter 9.69 \u00b5m. The project opens there, a 3 dB coupler.\n\n| *length* of [[dc]] | cross |\n| :-- | :-- |\n| 0 \u00b5m | 0.000 |\n| 4.84 \u00b5m | 0.146 |\n| 9.69 \u00b5m | 0.500 |\n| 14.53 \u00b5m | 0.853 |\n| 19.38 \u00b5m | 1.000 |\n| 29.06 \u00b5m | 0.500 |\n| 38.75 \u00b5m | 0.000 |\n\nPast $L_c$ the power walks back. At $2L_c$ it is home again.\n\n## The ratio depends on the wavelength\n\n$\\lambda$ is in the formula, so a coupler cut for 3 dB at 1550 nm is not 3 dB elsewhere. At\n1534 nm it crosses 0.508 and at 1566 nm 0.492. On [[osa_bar]] and [[osa_cross]], divided by\n[[osa_in]], the two outputs tilt in opposite directions across the band, from \u22122.94 to\n\u22123.08 dB. A real coupler drifts more, because $\\Delta n$ itself changes with wavelength.\n\n## Try this\n\n- Sweep the *length* of [[dc]] from 0 to 40 \u00b5m and watch [[pm_cross]].\n- Open the S-matrix tab, pick [[dc]], and widen the window to 1300\u20131700 nm."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 113.0,
+      "w": 284.0,
+      "h": 238.0,
+      "text": "White light",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 13.0,
+      "w": 284.0,
+      "h": 288.0,
+      "text": "Bar and cross",
+      "tone": "metric"
+    },
+    {
+      "id": "a3",
+      "kind": "note",
+      "x": 303.0,
+      "y": -10.0,
+      "w": 170.0,
+      "h": 96.0,
+      "text": "$\\kappa = \\sin^2(\\pi\\,\\Delta n\\,L/\\lambda)$: 9.69 \u00b5m is half of $L_c$.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a4",
+      "kind": "arrow",
+      "x1": 388.0,
+      "y1": 88.0,
+      "x2": 388.0,
+      "y2": 128.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

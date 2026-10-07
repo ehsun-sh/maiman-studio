@@ -501,6 +501,48 @@
     }
    }
   },
+  "CoupledWaveguides": {
+   "name": "Coupled Waveguides",
+   "type": "CoupledWaveguides",
+   "class": "maiman.components.photonic.CoupledWaveguides",
+   "category": "Photonic IC",
+   "version": "0.1.0",
+   "spectral": true,
+   "parameters": {
+    "length": {
+     "type": "float",
+     "default": 10.0,
+     "unit": "um",
+     "min": 0.0,
+     "doc": "Length of the coupling section"
+    },
+    "delta_n": {
+     "type": "float",
+     "default": 0.04,
+     "unit": "",
+     "min": 0.0001,
+     "max": 1.0,
+     "doc": "Index difference between the even and odd supermodes; sets the coupling length"
+    },
+    "insertion_loss": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "dB",
+     "min": 0.0,
+     "doc": "Excess loss through the coupler"
+    }
+   },
+   "structural": {},
+   "ports": {
+    "inputs": {
+     "in1": "optical"
+    },
+    "outputs": {
+     "out1": "optical",
+     "out2": "optical"
+    }
+   }
+  },
   "DCVoltage": {
    "name": "DC Voltage",
    "type": "DCVoltage",
@@ -29300,7 +29342,7 @@
       "params": {
        "auto_span": false,
        "center_wavelength": 1550.0,
-       "span": 1.6,
+       "span": 200.0,
        "points": 512.0,
        "resolution_bandwidth": 12.5
       },
@@ -33367,6 +33409,1536 @@
       "y1": 530.0,
       "x2": 238.0,
       "y2": 406.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "coupler-length": {
+   "title": "5.1 Directional coupler against length",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 10000000000.0,
+     "samples_per_symbol": 8,
+     "sequence_length": 256,
+     "seed": 1,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "seed",
+      "type": "CWLaser",
+      "params": {
+       "power": -100.0,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "ase",
+      "type": "EDFA",
+      "params": {
+       "gain": 30.0,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "osa_in",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 4000.0,
+       "points": 2048.0,
+       "resolution_bandwidth": 1.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 290.0
+      }
+     },
+     {
+      "id": "dc",
+      "type": "CoupledWaveguides",
+      "params": {
+       "length": 9.69,
+       "delta_n": 0.04
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "pm_bar",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+       "x": 480.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "osa_bar",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 4000.0,
+       "points": 2048.0,
+       "resolution_bandwidth": 1.0
+      },
+      "ui": {
+       "x": 630.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "pm_cross",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+       "x": 480.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "osa_cross",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 4000.0,
+       "points": 2048.0,
+       "resolution_bandwidth": 1.0
+      },
+      "ui": {
+       "x": 630.0,
+       "y": 240.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "seed",
+       "out"
+      ],
+      "to": [
+       "ase",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "ase",
+       "out"
+      ],
+      "to": [
+       "dc",
+       "in1"
+      ]
+     },
+     {
+      "from": [
+       "dc",
+       "out1"
+      ],
+      "to": [
+       "osa_bar",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "dc",
+       "out2"
+      ],
+      "to": [
+       "osa_cross",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "ase",
+       "out"
+      ],
+      "to": [
+       "osa_in",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "dc",
+       "out1"
+      ],
+      "to": [
+       "pm_bar",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "dc",
+       "out2"
+      ],
+      "to": [
+       "pm_cross",
+       "in"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "5.1 A directional coupler: split ratio against length",
+     "body": "Two waveguides run side by side, close enough for their fields to overlap. [[dc]] is such a\nsection. White light from [[ase]] enters one guide, and [[pm_bar]] and [[pm_cross]] read what\nleaves each. [[osa_in]] shows the source, [[osa_bar]] and [[osa_cross]] the two outputs.\n\n## Two supermodes\n\nTogether the two guides carry two modes of their own: an even one, in phase in both guides,\nand an odd one, out of phase. Their effective indices differ by $\\Delta n$. Light launched in\none guide is the sum of the two, and as they drift out of step the power walks across:\n\n$$\\kappa(L) = \\sin^2\\!\\left(\\frac{\\pi\\,\\Delta n\\,L}{\\lambda}\\right), \\qquad L_c = \\frac{\\lambda}{2\\,\\Delta n}$$\n\nWith $\\Delta n = 0.04$ all of it has crossed after $L_c = 19.375$ \u00b5m at 1550 nm, and half of it\nafter 9.69 \u00b5m. The project opens there, a 3 dB coupler.\n\n| *length* of [[dc]] | cross |\n| :-- | :-- |\n| 0 \u00b5m | 0.000 |\n| 4.84 \u00b5m | 0.146 |\n| 9.69 \u00b5m | 0.500 |\n| 14.53 \u00b5m | 0.853 |\n| 19.38 \u00b5m | 1.000 |\n| 29.06 \u00b5m | 0.500 |\n| 38.75 \u00b5m | 0.000 |\n\nPast $L_c$ the power walks back. At $2L_c$ it is home again.\n\n## The ratio depends on the wavelength\n\n$\\lambda$ is in the formula, so a coupler cut for 3 dB at 1550 nm is not 3 dB elsewhere. At\n1534 nm it crosses 0.508 and at 1566 nm 0.492. On [[osa_bar]] and [[osa_cross]], divided by\n[[osa_in]], the two outputs tilt in opposite directions across the band, from \u22122.94 to\n\u22123.08 dB. A real coupler drifts more, because $\\Delta n$ itself changes with wavelength.\n\n## Try this\n\n- Sweep the *length* of [[dc]] from 0 to 40 \u00b5m and watch [[pm_cross]].\n- Open the S-matrix tab, pick [[dc]], and widen the window to 1300\u20131700 nm."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 113.0,
+      "w": 284.0,
+      "h": 238.0,
+      "text": "White light",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 13.0,
+      "w": 284.0,
+      "h": 288.0,
+      "text": "Bar and cross",
+      "tone": "metric"
+     },
+     {
+      "id": "a3",
+      "kind": "note",
+      "x": 303.0,
+      "y": -10.0,
+      "w": 170.0,
+      "h": 96.0,
+      "text": "$\\kappa = \\sin^2(\\pi\\,\\Delta n\\,L/\\lambda)$: 9.69 \u00b5m is half of $L_c$.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a4",
+      "kind": "arrow",
+      "x1": 388.0,
+      "y1": 88.0,
+      "x2": 388.0,
+      "y2": 128.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "mzi": {
+   "title": "5.2 MZI interleaver",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 10000000000.0,
+     "samples_per_symbol": 8,
+     "sequence_length": 256,
+     "seed": 1,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "seed",
+      "type": "CWLaser",
+      "params": {
+       "power": -100.0,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "ase",
+      "type": "EDFA",
+      "params": {
+       "gain": 30.0,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "osa_in",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 2000.0,
+       "points": 2048.0,
+       "resolution_bandwidth": 1.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 290.0
+      }
+     },
+     {
+      "id": "mzi",
+      "type": "MachZehnderInterferometer",
+      "params": {
+       "arm_length": 100.0,
+       "length_difference": 200.0,
+       "propagation_loss": 0.0
+      },
+      "config": {
+       "second_input": false,
+       "use_mmi": false
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "osa_bar",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 2000.0,
+       "points": 2048.0,
+       "resolution_bandwidth": 1.0
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "osa_cross",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 2000.0,
+       "points": 2048.0,
+       "resolution_bandwidth": 1.0
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 240.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "seed",
+       "out"
+      ],
+      "to": [
+       "ase",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "ase",
+       "out"
+      ],
+      "to": [
+       "mzi",
+       "in1"
+      ]
+     },
+     {
+      "from": [
+       "mzi",
+       "out1"
+      ],
+      "to": [
+       "osa_bar",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "mzi",
+       "out2"
+      ],
+      "to": [
+       "osa_cross",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "ase",
+       "out"
+      ],
+      "to": [
+       "osa_in",
+       "in"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "5.2 An MZI interleaver",
+     "body": "A Mach\u2013Zehnder interferometer [[mzi]] splits the light in two, sends it down two arms and\nrecombines it. Here one arm is 200 \u00b5m longer than the other. White light from [[ase]] goes in;\n[[osa_bar]] and [[osa_cross]] show the two outputs, and [[osa_in]] the light that went in.\n\n## A delay is a filter\n\nThe extra length delays one arm by $\\Delta\\tau = n_g\\,\\Delta L / c$. The phase that delay adds\ngrows with frequency, so the two arms come back in phase, then out of phase, then in phase\nagain. Each output is a comb with a period of\n\n$$\\mathrm{FSR} = \\frac{c}{n_g\\,\\Delta L} = \\frac{c}{4.20 \\times 200\\ \\mu\\text{m}} = 356.9\\ \\text{GHz}$$\n\nThe two outputs are complementary: where [[osa_bar]] peaks, [[osa_cross]] has a null, so\nalternate channels of a 357 GHz grid leave by alternate ports. That is an interleaver.\n\nMeasured on the traces divided by [[osa_in]], the peaks are 357.0 GHz apart on [[osa_bar]] and\n356.9 GHz apart on [[osa_cross]], and the nulls are 46 dB deep.\n\n## Group index, not effective index\n\nThe period is set by $n_g$, how fast the envelope travels. The effective index $n_\\text{eff} = 2.44$\nwould give 614 GHz instead. Using it is a common way to be wrong about an interleaver while the\nplot still looks right.\n\n## Try this\n\n- Set the *phase_shift* of [[mzi]] to $\\pi/2$. The comb slides sideways and keeps its period.\n- Set *length_difference* to 0. The device is now a switch, not a filter."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 113.0,
+      "w": 284.0,
+      "h": 238.0,
+      "text": "White light",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 13.0,
+      "w": 134.0,
+      "h": 288.0,
+      "text": "Two complementary combs",
+      "tone": "metric"
+     },
+     {
+      "id": "a3",
+      "kind": "note",
+      "x": 303.0,
+      "y": -10.0,
+      "w": 170.0,
+      "h": 96.0,
+      "text": "One arm 200 \u00b5m longer: a comb every $c/(n_g\\,\\Delta L)$ = 357 GHz.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a4",
+      "kind": "arrow",
+      "x1": 388.0,
+      "y1": 88.0,
+      "x2": 388.0,
+      "y2": 128.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "ring": {
+   "title": "5.3 Ring resonator filter",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 10000000000.0,
+     "samples_per_symbol": 8,
+     "sequence_length": 256,
+     "seed": 1,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "seed",
+      "type": "CWLaser",
+      "params": {
+       "power": -100.0,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "ase",
+      "type": "EDFA",
+      "params": {
+       "gain": 30.0,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "osa_in",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 2000.0,
+       "points": 2048.0,
+       "resolution_bandwidth": 1.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 290.0
+      }
+     },
+     {
+      "id": "ring",
+      "type": "RingResonator",
+      "params": {
+       "length": 100.0,
+       "coupling": 0.05,
+       "drop_coupling": 0.05
+      },
+      "config": {
+       "add_port": false
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "osa_through",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 2000.0,
+       "points": 2048.0,
+       "resolution_bandwidth": 1.0
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "osa_drop",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 2000.0,
+       "points": 2048.0,
+       "resolution_bandwidth": 1.0
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 240.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "seed",
+       "out"
+      ],
+      "to": [
+       "ase",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "ring",
+       "drop"
+      ],
+      "to": [
+       "osa_drop",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "ase",
+       "out"
+      ],
+      "to": [
+       "osa_in",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "ring",
+       "through"
+      ],
+      "to": [
+       "osa_through",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "ase",
+       "out"
+      ],
+      "to": [
+       "ring",
+       "in"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "5.3 A ring resonator filter",
+     "body": "A silicon ring [[ring]], 100 \u00b5m round, sits between two bus waveguides. White light from\n[[ase]] enters one bus. Light at a resonance couples into the ring and leaves by the other bus,\nthe *drop* port [[osa_drop]]. Everything else passes by on the *through* port [[osa_through]].\n[[osa_in]] shows what went in.\n\n## Free spectral range\n\nA resonance is a wavelength that fits a whole number of times round the ring. They repeat every\n\n$$\\mathrm{FSR} = \\frac{c}{n_g L} = \\frac{c}{4.20 \\times 100\\ \\mu\\text{m}} = 713.8\\ \\text{GHz}$$\n\nThe drop peaks on [[osa_drop]] are 714.2 GHz apart, which is within one display bin of that.\n\n## Linewidth and extinction\n\nHow sharp a resonance is depends on how fast light leaks out: through the two couplers\n($\\kappa = 0.05$ each) and through loss in the ring (2 dB/cm). Here the couplers dominate and\nthe linewidth is 12.2 GHz. On resonance the drop port passes all but 0.40 dB of the light and\nthe through port falls by 21.7 dB.\n\n## Critical coupling\n\nWith only one bus, the through port goes fully dark when the coupling equals the round-trip\nloss, $\\kappa = 1 - a^2$. Over- or under-coupled, the notch fills in, by the *same* amount on\neither side, so a measured depth does not tell you which side a ring is on.\n\n## Try this\n\n- Set *drop_coupling* of [[ring]] to 0 and *coupling* to 0.0046, near critical. The through\n  notch on [[osa_through]] deepens.\n- Lower *coupling* and *drop_coupling* to 0.01. The peaks narrow and the drop port loses more\n  to the ring's own loss."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 113.0,
+      "w": 284.0,
+      "h": 238.0,
+      "text": "White light",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 13.0,
+      "w": 134.0,
+      "h": 288.0,
+      "text": "Through and drop",
+      "tone": "metric"
+     },
+     {
+      "id": "a3",
+      "kind": "note",
+      "x": 303.0,
+      "y": -10.0,
+      "w": 170.0,
+      "h": 96.0,
+      "text": "A resonance every $c/(n_g L)$ = 714 GHz, 12.2 GHz wide.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a4",
+      "kind": "arrow",
+      "x1": 388.0,
+      "y1": 88.0,
+      "x2": 388.0,
+      "y2": 128.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "birefringent-ring": {
+   "title": "5.4 A birefringent ring",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 10000000000.0,
+     "samples_per_symbol": 8,
+     "sequence_length": 256,
+     "seed": 1,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "seed",
+      "type": "CWLaser",
+      "params": {
+       "power": -100.0,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "ase",
+      "type": "EDFA",
+      "params": {
+       "gain": 30.0,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "osa_in",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 2000.0,
+       "points": 2048.0,
+       "resolution_bandwidth": 1.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 290.0
+      }
+     },
+     {
+      "id": "sp",
+      "type": "Splitter",
+      "params": {},
+      "config": {
+       "num_outputs": 2
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "ring_plain",
+      "type": "RingResonator",
+      "params": {
+       "length": 100.0,
+       "coupling": 0.05,
+       "drop_coupling": 0.05,
+       "birefringent": false
+      },
+      "config": {
+       "add_port": false
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "osa_plain",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 2000.0,
+       "points": 2048.0,
+       "resolution_bandwidth": 1.0
+      },
+      "ui": {
+       "x": 630.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "ring_biref",
+      "type": "RingResonator",
+      "params": {
+       "length": 100.0,
+       "coupling": 0.05,
+       "drop_coupling": 0.05,
+       "birefringent": true
+      },
+      "config": {
+       "add_port": false
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "osa_biref",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 2000.0,
+       "points": 2048.0,
+       "resolution_bandwidth": 1.0
+      },
+      "ui": {
+       "x": 630.0,
+       "y": 240.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "seed",
+       "out"
+      ],
+      "to": [
+       "ase",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "ring_biref",
+       "drop"
+      ],
+      "to": [
+       "osa_biref",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "ase",
+       "out"
+      ],
+      "to": [
+       "osa_in",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "ring_plain",
+       "drop"
+      ],
+      "to": [
+       "osa_plain",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "sp",
+       "out1"
+      ],
+      "to": [
+       "ring_biref",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "sp",
+       "out0"
+      ],
+      "to": [
+       "ring_plain",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "ase",
+       "out"
+      ],
+      "to": [
+       "sp",
+       "in"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "5.4 A birefringent ring",
+     "body": "The same 100 \u00b5m ring twice, lit by the same unpolarised white light [[ase]], split by [[sp]].\n[[ring_plain]] treats both polarisations alike. [[ring_biref]] has *birefringent* on: its TE and\nTM modes have different indices, as in every real silicon strip waveguide.\n\n## Two combs\n\nTE light sees $n_g = 4.20$ and TM light $n_g = 3.80$, so each has its own free spectral range:\n\n$$\\mathrm{FSR}_\\text{TE} = 713.8\\ \\text{GHz}, \\qquad \\mathrm{FSR}_\\text{TM} = 788.9\\ \\text{GHz}$$\n\n[[osa_plain]] shows one comb, peaks 714 GHz apart. [[osa_biref]] shows two combs laid over each\nother. In this window the TE peaks sit at \u2212299 and +415 GHz from 1550 nm, and the TM peaks at\n\u2212661, +128 and +916 GHz. Each polarisation carries half of the unpolarised light, so each comb on\n[[osa_biref]] peaks 3 dB lower than on [[osa_plain]].\n\nA ring like this is a polarisation filter. At a TE resonance the drop port passes TE and not TM.\n\n## Try this\n\n- Open the S-matrix tab on [[ring_biref]] and switch the polarisation between TE and TM.\n- Set *n_group_tm* of [[ring_biref]] to 4.20. The two combs land on top of each other."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 113.0,
+      "w": 284.0,
+      "h": 238.0,
+      "text": "White light",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 13.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "One polarisation model",
+      "tone": "binary"
+     },
+     {
+      "id": "a3",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 213.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "TE and TM apart",
+      "tone": "symbol"
+     },
+     {
+      "id": "a4",
+      "kind": "note",
+      "x": 440.0,
+      "y": 352.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "TE every 714 GHz, TM every 789 GHz.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 538.0,
+      "y1": 350.0,
+      "x2": 538.0,
+      "y2": 306.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "chip-couplers": {
+   "title": "5.5 Edge and grating couplers",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 10000000000.0,
+     "samples_per_symbol": 8,
+     "sequence_length": 256,
+     "seed": 1,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "tx",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "edge_in",
+      "type": "EdgeCoupler",
+      "params": {},
+      "ui": {
+       "x": 180.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "wg_edge",
+      "type": "Waveguide",
+      "params": {
+       "length": 5000.0,
+       "propagation_loss": 2.0
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "edge_out",
+      "type": "EdgeCoupler",
+      "params": {},
+      "ui": {
+       "x": 480.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "pm_edge",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+       "x": 630.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "seed",
+      "type": "CWLaser",
+      "params": {
+       "power": -100.0,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "ase",
+      "type": "EDFA",
+      "params": {
+       "gain": 30.0,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "osa_in",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 8000.0,
+       "points": 2048.0,
+       "resolution_bandwidth": 12.5
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 370.0
+      }
+     },
+     {
+      "id": "pm_ase",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+       "x": 30.0,
+       "y": 370.0
+      }
+     },
+     {
+      "id": "gc_in",
+      "type": "GratingCoupler",
+      "params": {},
+      "ui": {
+       "x": 330.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "wg_gc",
+      "type": "Waveguide",
+      "params": {
+       "length": 5000.0,
+       "propagation_loss": 2.0
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "gc_out",
+      "type": "GratingCoupler",
+      "params": {},
+      "ui": {
+       "x": 630.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "pm_gc",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+       "x": 780.0,
+       "y": 190.0
+      }
+     },
+     {
+      "id": "osa_gc",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 8000.0,
+       "points": 2048.0,
+       "resolution_bandwidth": 12.5
+      },
+      "ui": {
+       "x": 780.0,
+       "y": 290.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "seed",
+       "out"
+      ],
+      "to": [
+       "ase",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "tx",
+       "out"
+      ],
+      "to": [
+       "edge_in",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "wg_edge",
+       "out"
+      ],
+      "to": [
+       "edge_out",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "ase",
+       "out"
+      ],
+      "to": [
+       "gc_in",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "wg_gc",
+       "out"
+      ],
+      "to": [
+       "gc_out",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "gc_out",
+       "out"
+      ],
+      "to": [
+       "osa_gc",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "ase",
+       "out"
+      ],
+      "to": [
+       "osa_in",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "ase",
+       "out"
+      ],
+      "to": [
+       "pm_ase",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "edge_out",
+       "out"
+      ],
+      "to": [
+       "pm_edge",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "gc_out",
+       "out"
+      ],
+      "to": [
+       "pm_gc",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "edge_in",
+       "out"
+      ],
+      "to": [
+       "wg_edge",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "gc_in",
+       "out"
+      ],
+      "to": [
+       "wg_gc",
+       "in"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "5.5 Getting light on and off a chip",
+     "body": "Two ways to get light from a fibre into a silicon waveguide and out again. On top, a laser\n[[tx]] goes through an edge coupler [[edge_in]], 5 mm of waveguide [[wg_edge]] and a second\nedge coupler [[edge_out]] to [[pm_edge]]. Below, white light [[ase]] goes through a grating\ncoupler [[gc_in]], the same waveguide [[wg_gc]] and [[gc_out]] to [[pm_gc]] and [[osa_gc]].\n[[osa_in]] and [[pm_ase]] show what went in.\n\n## The edge coupler: mode overlap\n\nThe fibre's mode is 10.4 \u00b5m wide; the chip's is 3 \u00b5m. The fraction that couples is the overlap\nof two Gaussians, one factor per axis:\n\n$$\\eta = \\left(\\frac{2 w_f w_c}{w_f^2 + w_c^2}\\right)^2 = 0.284 \\quad (-5.47\\ \\text{dB})$$\n\nTwo facets in air reflect a little more, 0.31 dB, so each coupler costs 5.78 dB. With 1 dB of\nwaveguide, [[pm_edge]] reads 0 \u2212 2 \u00d7 5.78 \u2212 1 = \u221212.56 dBm. The loss is flat across the band.\n\n## The grating coupler: a passband\n\nA grating couples light up out of the chip only where its period matches the wavelength. At\n1550 nm each one costs 3 dB, and the loss rises either side. It also passes TE only: the TM half\nof unpolarised light is lost. So on [[osa_gc]], divided by [[osa_in]], the peak is\n\n$$-3 - 3 - 1 - 3 = -10.0\\ \\text{dB}$$\n\nnear 1550 nm, and the passband of the pair is 24.7 nm wide at 1 dB down. [[pm_ase]] reads\n2.10 dBm in and [[pm_gc]] \u22128.44 dBm out: across the whole band the pair costs 10.5 dB, more than\nat its peak.\n\n## Try this\n\n- Set *offset_x* of [[edge_in]] to 2 \u00b5m and watch [[pm_edge]].\n- Set *gap_index* of both edge couplers to 1.45, an index-matching gel. The facets stop\n  reflecting.\n- Change *fibre_angle* of [[gc_in]] and [[gc_out]] to 12\u00b0. The passband moves."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 734.0,
+      "h": 88.0,
+      "text": "Edge couplers",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 321.0,
+      "y": 213.0,
+      "w": 434.0,
+      "h": 88.0,
+      "text": "Grating couplers",
+      "tone": "optical"
+     },
+     {
+      "id": "a3",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 213.0,
+      "w": 284.0,
+      "h": 218.0,
+      "text": "White light",
+      "tone": "binary"
+     },
+     {
+      "id": "a4",
+      "kind": "rect",
+      "x": 771.0,
+      "y": 163.0,
+      "w": 134.0,
+      "h": 188.0,
+      "text": "Out",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "pdk-splitter": {
+   "title": "5.6 A splitter from a foundry kit",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 10000000000.0,
+     "samples_per_symbol": 8,
+     "sequence_length": 256,
+     "seed": 1,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "tx",
+      "type": "CWLaser",
+      "params": {
+       "power": 3.0,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 305.0
+      }
+     },
+     {
+      "id": "sp",
+      "type": "Splitter",
+      "params": {},
+      "config": {
+       "num_outputs": 2
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 305.0
+      }
+     },
+     {
+      "id": "ideal",
+      "type": "MMI",
+      "params": {
+       "excess_loss": 0.0,
+       "imbalance": 0.0
+      },
+      "config": {
+       "ports": 4,
+       "driven": 1
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 145.0
+      }
+     },
+     {
+      "id": "kit",
+      "type": "MMI",
+      "params": {
+       "excess_loss": 0.45,
+       "imbalance": 0.35
+      },
+      "config": {
+       "ports": 4,
+       "driven": 1
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 465.0
+      }
+     },
+     {
+      "id": "pm_ideal1",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+       "x": 480.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "pm_ideal2",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+       "x": 480.0,
+       "y": 110.0
+      }
+     },
+     {
+      "id": "pm_ideal3",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+       "x": 480.0,
+       "y": 180.0
+      }
+     },
+     {
+      "id": "pm_ideal4",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+       "x": 480.0,
+       "y": 249.99999999999997
+      }
+     },
+     {
+      "id": "pm_kit1",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+       "x": 480.0,
+       "y": 360.0
+      }
+     },
+     {
+      "id": "pm_kit2",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+       "x": 480.0,
+       "y": 430.00000000000006
+      }
+     },
+     {
+      "id": "pm_kit3",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+       "x": 480.0,
+       "y": 499.99999999999994
+      }
+     },
+     {
+      "id": "pm_kit4",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+       "x": 480.0,
+       "y": 570.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "sp",
+       "out0"
+      ],
+      "to": [
+       "ideal",
+       "in1"
+      ]
+     },
+     {
+      "from": [
+       "sp",
+       "out1"
+      ],
+      "to": [
+       "kit",
+       "in1"
+      ]
+     },
+     {
+      "from": [
+       "ideal",
+       "out1"
+      ],
+      "to": [
+       "pm_ideal1",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "ideal",
+       "out2"
+      ],
+      "to": [
+       "pm_ideal2",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "ideal",
+       "out3"
+      ],
+      "to": [
+       "pm_ideal3",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "ideal",
+       "out4"
+      ],
+      "to": [
+       "pm_ideal4",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "kit",
+       "out1"
+      ],
+      "to": [
+       "pm_kit1",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "kit",
+       "out2"
+      ],
+      "to": [
+       "pm_kit2",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "kit",
+       "out3"
+      ],
+      "to": [
+       "pm_kit3",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "kit",
+       "out4"
+      ],
+      "to": [
+       "pm_kit4",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "tx",
+       "out"
+      ],
+      "to": [
+       "sp",
+       "in"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "5.6 A splitter from a foundry kit",
+     "body": "Two 1\u00d74 splitters side by side, fed the same 0 dBm each by [[tx]] and [[sp]]. [[ideal]] is an\nMMI as a textbook draws it. [[kit]] is the same device as a foundry's process design kit\ndescribes it, built from `silicon_220nm.pdk.json`.\n\n## What a kit adds\n\nThe engine knows what an MMI *is*: self-imaging divides light evenly, with the phases that keep\nit lossless. It cannot know what a given process makes. A kit is that knowledge, measured on a\nwafer: here 0.45 dB of excess loss and 0.35 dB of imbalance across the four arms.\n\n| arm | [[ideal]] | [[kit]] |\n| :-- | :-- | :-- |\n| 1 | \u22126.03 dBm | \u22126.31 dBm |\n| 2 | \u22126.03 dBm | \u22126.42 dBm |\n| 3 | \u22126.03 dBm | \u22126.54 dBm |\n| 4 | \u22126.03 dBm | \u22126.66 dBm |\n\nThe textbook divides by four exactly, $10\\log_{10}4 = 6.02$ dB. The kit's arms are not equal,\nwhich is what a real splitter tree does to a design margin.\n\n## A kit has a window\n\nEach value in a kit may be a fit in wavelength, valid only where it was measured. The kit\nrefuses to extrapolate: its 3 dB coupler, asked for at 1310 nm, raises an error instead of\nreturning a negative power fraction. `examples/python/pdk_import.py` shows that, and\n`netlist_circuit.py` builds a ring from a layout netlist with the same kit.\n\n## Try this\n\n- Raise *imbalance* of [[kit]] to 1 dB and compare [[pm_kit1]] with [[pm_kit4]]."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 321.0,
+      "y": 13.0,
+      "w": 284.0,
+      "h": 298.0,
+      "text": "Textbook",
+      "tone": "binary"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 321.0,
+      "y": 333.0,
+      "w": 284.0,
+      "h": 298.0,
+      "text": "From the kit",
+      "tone": "optical"
+     },
+     {
+      "id": "a3",
+      "kind": "note",
+      "x": 300.0,
+      "y": 557.0,
+      "w": 150.0,
+      "h": 96.0,
+      "text": "0.45 dB excess loss and 0.35 dB imbalance, measured on a wafer.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a4",
+      "kind": "arrow",
+      "x1": 388.0,
+      "y1": 555.0,
+      "x2": 388.0,
+      "y2": 531.0,
       "text": "",
       "tone": "metric"
      }

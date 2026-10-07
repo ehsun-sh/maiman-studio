@@ -1,0 +1,299 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 10000000000.0,
+    "samples_per_symbol": 8,
+    "sequence_length": 256,
+    "seed": 1,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "tx",
+      "type": "CWLaser",
+      "params": {
+        "power": 3.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 305.0
+      }
+    },
+    {
+      "id": "sp",
+      "type": "Splitter",
+      "params": {},
+      "config": {
+        "num_outputs": 2
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 305.0
+      }
+    },
+    {
+      "id": "ideal",
+      "type": "MMI",
+      "params": {
+        "excess_loss": 0.0,
+        "imbalance": 0.0
+      },
+      "config": {
+        "ports": 4,
+        "driven": 1
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 145.0
+      }
+    },
+    {
+      "id": "kit",
+      "type": "MMI",
+      "params": {
+        "excess_loss": 0.45,
+        "imbalance": 0.35
+      },
+      "config": {
+        "ports": 4,
+        "driven": 1
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 465.0
+      }
+    },
+    {
+      "id": "pm_ideal1",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+        "x": 480.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "pm_ideal2",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+        "x": 480.0,
+        "y": 110.0
+      }
+    },
+    {
+      "id": "pm_ideal3",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+        "x": 480.0,
+        "y": 180.0
+      }
+    },
+    {
+      "id": "pm_ideal4",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+        "x": 480.0,
+        "y": 249.99999999999997
+      }
+    },
+    {
+      "id": "pm_kit1",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+        "x": 480.0,
+        "y": 360.0
+      }
+    },
+    {
+      "id": "pm_kit2",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+        "x": 480.0,
+        "y": 430.00000000000006
+      }
+    },
+    {
+      "id": "pm_kit3",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+        "x": 480.0,
+        "y": 499.99999999999994
+      }
+    },
+    {
+      "id": "pm_kit4",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+        "x": 480.0,
+        "y": 570.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "sp",
+        "out0"
+      ],
+      "to": [
+        "ideal",
+        "in1"
+      ]
+    },
+    {
+      "from": [
+        "sp",
+        "out1"
+      ],
+      "to": [
+        "kit",
+        "in1"
+      ]
+    },
+    {
+      "from": [
+        "ideal",
+        "out1"
+      ],
+      "to": [
+        "pm_ideal1",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "ideal",
+        "out2"
+      ],
+      "to": [
+        "pm_ideal2",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "ideal",
+        "out3"
+      ],
+      "to": [
+        "pm_ideal3",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "ideal",
+        "out4"
+      ],
+      "to": [
+        "pm_ideal4",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "kit",
+        "out1"
+      ],
+      "to": [
+        "pm_kit1",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "kit",
+        "out2"
+      ],
+      "to": [
+        "pm_kit2",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "kit",
+        "out3"
+      ],
+      "to": [
+        "pm_kit3",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "kit",
+        "out4"
+      ],
+      "to": [
+        "pm_kit4",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "tx",
+        "out"
+      ],
+      "to": [
+        "sp",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "5.6 A splitter from a foundry kit",
+    "body": "Two 1\u00d74 splitters side by side, fed the same 0 dBm each by [[tx]] and [[sp]]. [[ideal]] is an\nMMI as a textbook draws it. [[kit]] is the same device as a foundry's process design kit\ndescribes it, built from `silicon_220nm.pdk.json`.\n\n## What a kit adds\n\nThe engine knows what an MMI *is*: self-imaging divides light evenly, with the phases that keep\nit lossless. It cannot know what a given process makes. A kit is that knowledge, measured on a\nwafer: here 0.45 dB of excess loss and 0.35 dB of imbalance across the four arms.\n\n| arm | [[ideal]] | [[kit]] |\n| :-- | :-- | :-- |\n| 1 | \u22126.03 dBm | \u22126.31 dBm |\n| 2 | \u22126.03 dBm | \u22126.42 dBm |\n| 3 | \u22126.03 dBm | \u22126.54 dBm |\n| 4 | \u22126.03 dBm | \u22126.66 dBm |\n\nThe textbook divides by four exactly, $10\\log_{10}4 = 6.02$ dB. The kit's arms are not equal,\nwhich is what a real splitter tree does to a design margin.\n\n## A kit has a window\n\nEach value in a kit may be a fit in wavelength, valid only where it was measured. The kit\nrefuses to extrapolate: its 3 dB coupler, asked for at 1310 nm, raises an error instead of\nreturning a negative power fraction. `examples/python/pdk_import.py` shows that, and\n`netlist_circuit.py` builds a ring from a layout netlist with the same kit.\n\n## Try this\n\n- Raise *imbalance* of [[kit]] to 1 dB and compare [[pm_kit1]] with [[pm_kit4]]."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 321.0,
+      "y": 13.0,
+      "w": 284.0,
+      "h": 298.0,
+      "text": "Textbook",
+      "tone": "binary"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 321.0,
+      "y": 333.0,
+      "w": 284.0,
+      "h": 298.0,
+      "text": "From the kit",
+      "tone": "optical"
+    },
+    {
+      "id": "a3",
+      "kind": "note",
+      "x": 300.0,
+      "y": 557.0,
+      "w": 150.0,
+      "h": 96.0,
+      "text": "0.45 dB excess loss and 0.35 dB imbalance, measured on a wafer.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a4",
+      "kind": "arrow",
+      "x1": 388.0,
+      "y1": 555.0,
+      "x2": 388.0,
+      "y2": 531.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

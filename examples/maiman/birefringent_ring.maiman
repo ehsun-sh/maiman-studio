@@ -1,0 +1,256 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 10000000000.0,
+    "samples_per_symbol": 8,
+    "sequence_length": 256,
+    "seed": 1,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "seed",
+      "type": "CWLaser",
+      "params": {
+        "power": -100.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "ase",
+      "type": "EDFA",
+      "params": {
+        "gain": 30.0,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "osa_in",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1550.0,
+        "span": 2000.0,
+        "points": 2048.0,
+        "resolution_bandwidth": 1.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 290.0
+      }
+    },
+    {
+      "id": "sp",
+      "type": "Splitter",
+      "params": {},
+      "config": {
+        "num_outputs": 2
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "ring_plain",
+      "type": "RingResonator",
+      "params": {
+        "length": 100.0,
+        "coupling": 0.05,
+        "drop_coupling": 0.05,
+        "birefringent": false
+      },
+      "config": {
+        "add_port": false
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "osa_plain",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1550.0,
+        "span": 2000.0,
+        "points": 2048.0,
+        "resolution_bandwidth": 1.0
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "ring_biref",
+      "type": "RingResonator",
+      "params": {
+        "length": 100.0,
+        "coupling": 0.05,
+        "drop_coupling": 0.05,
+        "birefringent": true
+      },
+      "config": {
+        "add_port": false
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 240.0
+      }
+    },
+    {
+      "id": "osa_biref",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1550.0,
+        "span": 2000.0,
+        "points": 2048.0,
+        "resolution_bandwidth": 1.0
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 240.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "seed",
+        "out"
+      ],
+      "to": [
+        "ase",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "ring_biref",
+        "drop"
+      ],
+      "to": [
+        "osa_biref",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "ase",
+        "out"
+      ],
+      "to": [
+        "osa_in",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "ring_plain",
+        "drop"
+      ],
+      "to": [
+        "osa_plain",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "sp",
+        "out1"
+      ],
+      "to": [
+        "ring_biref",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "sp",
+        "out0"
+      ],
+      "to": [
+        "ring_plain",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "ase",
+        "out"
+      ],
+      "to": [
+        "sp",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "5.4 A birefringent ring",
+    "body": "The same 100 \u00b5m ring twice, lit by the same unpolarised white light [[ase]], split by [[sp]].\n[[ring_plain]] treats both polarisations alike. [[ring_biref]] has *birefringent* on: its TE and\nTM modes have different indices, as in every real silicon strip waveguide.\n\n## Two combs\n\nTE light sees $n_g = 4.20$ and TM light $n_g = 3.80$, so each has its own free spectral range:\n\n$$\\mathrm{FSR}_\\text{TE} = 713.8\\ \\text{GHz}, \\qquad \\mathrm{FSR}_\\text{TM} = 788.9\\ \\text{GHz}$$\n\n[[osa_plain]] shows one comb, peaks 714 GHz apart. [[osa_biref]] shows two combs laid over each\nother. In this window the TE peaks sit at \u2212299 and +415 GHz from 1550 nm, and the TM peaks at\n\u2212661, +128 and +916 GHz. Each polarisation carries half of the unpolarised light, so each comb on\n[[osa_biref]] peaks 3 dB lower than on [[osa_plain]].\n\nA ring like this is a polarisation filter. At a TE resonance the drop port passes TE and not TM.\n\n## Try this\n\n- Open the S-matrix tab on [[ring_biref]] and switch the polarisation between TE and TM.\n- Set *n_group_tm* of [[ring_biref]] to 4.20. The two combs land on top of each other."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 113.0,
+      "w": 284.0,
+      "h": 238.0,
+      "text": "White light",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 13.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "One polarisation model",
+      "tone": "binary"
+    },
+    {
+      "id": "a3",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 213.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "TE and TM apart",
+      "tone": "symbol"
+    },
+    {
+      "id": "a4",
+      "kind": "note",
+      "x": 440.0,
+      "y": 352.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "TE every 714 GHz, TM every 789 GHz.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 538.0,
+      "y1": 350.0,
+      "x2": 538.0,
+      "y2": 306.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

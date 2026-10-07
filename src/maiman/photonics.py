@@ -403,6 +403,53 @@ def directional_coupler(
     return SMatrix(ports=ports, frequencies=frequencies, s=s)
 
 
+def coupled_waveguides(
+    frequencies: np.ndarray,
+    *,
+    length: float,
+    delta_n: float,
+    insertion_loss_db: float = 0.0,
+    ports: tuple[str, str, str, str] = ("in1", "in2", "out1", "out2"),
+) -> SMatrix:
+    """A directional coupler of a given length, from its two supermodes.
+
+    Two identical guides side by side carry an even and an odd supermode whose
+    effective indices differ by ``delta_n``. Light launched in one guide is
+    their sum, and as they drift out of phase the power walks to the other guide
+    and back. The fraction across after ``length`` [m] is
+
+        coupling = sin^2(pi * delta_n * length / wavelength)
+
+    so all of it has crossed at the coupling length ``wavelength / (2 delta_n)``,
+    and half of it at half that. ``delta_n`` is held fixed across the band, which
+    is the one approximation: the ratio's drift with wavelength here comes from
+    the wavelength in the phase alone, not from the supermodes' own dispersion.
+    The matrix at each frequency is :func:`directional_coupler`'s, with its
+    factor of j.
+    """
+    if length < 0.0:
+        raise ValueError(f"length must not be negative, got {length}")
+    if delta_n <= 0.0:
+        raise ValueError(f"delta_n must be positive, got {delta_n}")
+    frequencies = np.asarray(frequencies, dtype=np.float64)
+    coupling = np.sin(np.pi * delta_n * length * frequencies / C_LIGHT) ** 2
+    through = np.sqrt(1.0 - coupling)
+    across = 1j * np.sqrt(coupling)
+    amplitude = 10.0 ** (-insertion_loss_db / 20.0)
+    s = np.zeros((frequencies.shape[0], 4, 4), dtype=np.complex128)
+    for out, (a, b) in ((2, (through, across)), (3, (across, through))):
+        s[:, out, 0] = amplitude * a
+        s[:, out, 1] = amplitude * b
+        s[:, 0, out] = amplitude * a
+        s[:, 1, out] = amplitude * b
+    return SMatrix(ports=ports, frequencies=frequencies, s=s)
+
+
+def coupling_length(wavelength: float, delta_n: float) -> float:
+    """Where all the power has crossed [m]: ``wavelength / (2 delta_n)``."""
+    return wavelength / (2.0 * delta_n)
+
+
 def mmi_phase_relations(ports: int) -> np.ndarray:
     """The ``N x N`` self-imaging phase matrix ``phi[i, j]`` [rad], ports from 0.
 

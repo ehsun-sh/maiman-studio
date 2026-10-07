@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import amplified
+import chip
 import coherent
 import direct_detection
 import dwdm_link
@@ -609,6 +610,15 @@ TEMPLATES: dict[str, tuple[str, Path]] = {
     "zr800": ("4.6 800ZR over one span", coherent.project_path("zr800")),
     "loop": ("4.7 A recirculating loop", coherent.project_path("loop")),
     "pcs": ("4.8 Probabilistic shaping, 16-QAM", coherent.project_path("pcs")),
+    "coupler-length": (
+        "5.1 Directional coupler against length",
+        chip.project_path("coupler_length"),
+    ),
+    "mzi": ("5.2 MZI interleaver", chip.project_path("mzi")),
+    "ring": ("5.3 Ring resonator filter", chip.project_path("ring")),
+    "birefringent-ring": ("5.4 A birefringent ring", chip.project_path("birefringent_ring")),
+    "chip-couplers": ("5.5 Edge and grating couplers", chip.project_path("chip_couplers")),
+    "pdk-splitter": ("5.6 A splitter from a foundry kit", chip.project_path("pdk_splitter")),
 }
 
 
@@ -678,6 +688,8 @@ def main() -> None:
         amplified.write(key)
     for key in coherent.EXAMPLES:
         coherent.write(key)
+    for key in chip.EXAMPLES:
+        chip.write(key)
 
     # Required received power per format, from the same graph re-run.
     sensitivity: list[dict[str, Any]] = []
