@@ -1,0 +1,263 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 10000000000.0,
+    "samples_per_symbol": 8,
+    "sequence_length": 2048,
+    "seed": 3,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "prbs",
+      "type": "PRBSGenerator",
+      "params": {
+        "order": 11.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "drv",
+      "type": "NRZDriver",
+      "params": {
+        "v_low": 4.0,
+        "v_high": 0.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "tx",
+      "type": "CWLaser",
+      "params": {
+        "power": 10.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "mzm",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "air",
+      "type": "FreeSpaceChannel",
+      "params": {},
+      "ui": {
+        "x": 330.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "pm_rx",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+        "x": 480.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "pin",
+      "type": "PINPhotodiode",
+      "params": {},
+      "ui": {
+        "x": 480.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "lpf",
+      "type": "ElectricalFilter",
+      "params": {
+        "bandwidth": 7.0
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "ber",
+      "type": "BERAnalyzer",
+      "params": {},
+      "ui": {
+        "x": 780.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "eye",
+      "type": "EyeDiagram",
+      "params": {},
+      "ui": {
+        "x": 780.0,
+        "y": 40.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "mzm",
+        "out"
+      ],
+      "to": [
+        "air",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "lpf",
+        "out"
+      ],
+      "to": [
+        "ber",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "ber",
+        "reference"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "drv",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "lpf",
+        "out"
+      ],
+      "to": [
+        "eye",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "pin",
+        "out"
+      ],
+      "to": [
+        "lpf",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "out"
+      ],
+      "to": [
+        "mzm",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "tx",
+        "out"
+      ],
+      "to": [
+        "mzm",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "air",
+        "out"
+      ],
+      "to": [
+        "pin",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "air",
+        "out"
+      ],
+      "to": [
+        "pm_rx",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "7.5 A free-space optical link",
+    "body": "A laser link between two rooftops needs no fibre in the ground. It does need the air to cooperate.\n\n[[tx]] and [[mzm]] send 10 Gb/s on-off keying at 10 dBm. [[air]] is a kilometre of open air between a\n2.5 cm transmitter and a 10 cm receiving lens. [[pm_rx]] reads the received power and [[ber]] the\nerrors after a PIN photodiode.\n\n## Where the light goes\n\n- **The beam spreads.** At 1 mrad it is 1.025 m across after a kilometre, and the lens catches\n  $(0.1/1.025)^2$ of it: 20.21 dB of geometric loss.\n- **The air absorbs.** 0.5 dB/km on a clear day.\n\nSo 20.71 dB in all, and [[pm_rx]] reads \u221213.72 dBm. The eye is wide open: Q is 20.86.\n\n## Turbulence\n\nWarm and cool cells of air drift across the beam and make the received power flicker. For weak\nturbulence the strength is the Rytov variance:\n\n$$\\sigma_R^2 = 1.23\\,C_n^2\\,k^{7/6}\\,L^{11/6}$$\n\nWith $C_n^2 = 10^{-14}$ m$^{-2/3}$ that is 0.199. The intensity is then log-normal, and the link\nspends 0.1 % of the time below a fade of 6.11 dB. The flicker is milliseconds slow, so *outage*\npicks one moment of it: 0 is the average, 0.001 is the fade a link is designed against.\n\n## Try this\n\n- Set *outage* of [[air]] to 0.001. The received power drops to \u221219.83 dBm, and Q to 5.24: still no\n  errors in this window, but close to the edge.\n- Then set *cn2* to 1e-13, strong turbulence on a hot afternoon. The fade is 16.43 dB, the power\n  \u221230.14 dBm, and 630 of 2040 bits are wrong.\n- Set *outage* back to 0 and *attenuation* to 10, light haze. The power is \u221223.22 dBm and 11 bits are\n  wrong. Fog is 100 dB/km and more, and no margin survives it."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 284.0,
+      "h": 238.0,
+      "text": "10 Gb/s transmitter",
+      "tone": "binary"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 13.0,
+      "w": 434.0,
+      "h": 238.0,
+      "text": "Receiver",
+      "tone": "metric"
+    },
+    {
+      "id": "a3",
+      "kind": "note",
+      "x": 290.0,
+      "y": 302.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "1 km of air costs 20.71 dB on an average day.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a4",
+      "kind": "arrow",
+      "x1": 388.0,
+      "y1": 300.0,
+      "x2": 388.0,
+      "y2": 256.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

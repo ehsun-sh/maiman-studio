@@ -327,6 +327,7 @@ def test_no_metric_port_in_the_library_encodes_as_opaque() -> None:
     from pathlib import Path as _Path
 
     sys.path.insert(0, str(_Path(__file__).resolve().parent.parent / "examples" / "python"))
+    import systems
     from export_ui_data import build as build_coherent
 
     covered: set[tuple[str, str]] = set()
@@ -339,6 +340,8 @@ def test_no_metric_port_in_the_library_encodes_as_opaque() -> None:
         soft_coded_coherent_link(),
         cavity_link(),
         pam4_link(),
+        systems.rof(),
+        systems.qkd(),
     ):
         by_label = {c.label: c for c in graph.components}
         encoded = encode_results(graph.run())

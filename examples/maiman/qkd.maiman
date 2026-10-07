@@ -1,0 +1,144 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 1000000000.0,
+    "samples_per_symbol": 4,
+    "sequence_length": 256,
+    "seed": 1,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "alice",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "attenuate",
+      "type": "Attenuator",
+      "params": {
+        "attenuation": 71.93
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "fib",
+      "type": "Fiber",
+      "params": {
+        "length": 50.0,
+        "attenuation": 0.2
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "bob",
+      "type": "BB84Receiver",
+      "params": {},
+      "ui": {
+        "x": 480.0,
+        "y": 140.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "alice",
+        "out"
+      ],
+      "to": [
+        "attenuate",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "fib",
+        "out"
+      ],
+      "to": [
+        "bob",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "attenuate",
+        "out"
+      ],
+      "to": [
+        "bob",
+        "sent"
+      ]
+    },
+    {
+      "from": [
+        "attenuate",
+        "out"
+      ],
+      "to": [
+        "fib",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "7.7 Quantum key distribution",
+    "body": "In BB84 quantum key distribution, Alice sends a key in pulses so faint that most of them hold no\nphoton at all. An eavesdropper who measures a photon disturbs it, so the error rate Bob sees bounds\nwhat anyone else can know about the key.\n\n[[alice]] is attenuated by [[attenuate]] to $\\mu = 0.5$ photons a pulse at 1 GHz: 71.93 dB below 1 mW.\n[[fib]] is 50 km of 0.2 dB/km fibre. [[bob]] counts photons with a detector of 10 % efficiency and\n$10^{-6}$ dark counts a pulse, and reports the error rate and the key.\n\n## What Bob counts\n\nThe channel is 10 dB, so with the detector each photon has a 1 % chance of a click: $5.0\\times10^{-3}$\nclicks a pulse. A click on the wrong basis is thrown away (sifting halves the rate). Errors come from\nthe optics' 1.5 % misalignment and from dark counts, which click at random. The quantum bit error\nrate (QBER) is 1.51 %.\n\n## How much key is secret\n\nPulses with two or more photons are not safe: an eavesdropper could keep one. Decoy states (pulses\nof other, random intensities) let Alice and Bob measure how many clicks came from single photons.\nOnly those count, and error correction and privacy amplification then take their share:\n\n$$R = \\tfrac12\\big[Q_1(1 - h(e_1)) - Q_\\mu f\\,h(E_\\mu)\\big]$$\n\nThat leaves 1019 kb/s of secret key at 50 km.\n\n## Distance\n\n| Fibre | QBER | Secret key |\n| :-- | :-- | :-- |\n| 25 km | 1.50 % | 3233 kb/s |\n| 50 km | 1.51 % | 1019 kb/s |\n| 100 km | 1.60 % | 100.0 kb/s |\n| 150 km | 2.45 % | 8.26 kb/s |\n| 200 km | 9.58 % | 0 |\n\nThe key falls with the fibre's loss until the dark counts catch up with the signal. Then the\nerrors climb and no key is left.\n\n## Try this\n\n- Set *length* of [[fib]] to 200. The QBER climbs to 9.58 % and the secure key is zero."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 113.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "Alice: 0.5 photons a pulse",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 113.0,
+      "w": 134.0,
+      "h": 88.0,
+      "text": "Bob",
+      "tone": "metric"
+    },
+    {
+      "id": "a3",
+      "kind": "note",
+      "x": 290.0,
+      "y": 252.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "50 km: 10 dB. QBER 1.51 %, key 1019 kb/s.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a4",
+      "kind": "arrow",
+      "x1": 388.0,
+      "y1": 250.0,
+      "x2": 388.0,
+      "y2": 206.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

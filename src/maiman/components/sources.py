@@ -344,3 +344,45 @@ class SechPulse(Component):
             fs=ctx.sample_rate,
         )
         return {"out": OpticalSignal(bands=(band,))}
+
+
+class SweptLaser(Component):
+    """A laser whose frequency ramps linearly across the window, then starts again.
+
+    The source of a frequency-modulated continuous-wave (FMCW) LiDAR. Over the
+    simulated window ``T`` the optical frequency climbs by ``sweep`` from
+    ``-sweep/2`` to ``+sweep/2`` around the carrier, so the field is
+
+        E(t) = sqrt(P) exp(j 2 pi (-B/2 t + B t^2 / (2 T)))
+
+    and the window repeats, which makes it a sawtooth. Light that comes back
+    after a delay ``tau`` meets the outgoing light at a frequency ``B tau / T``
+    lower, and that beat is the range. The ramp is ideal: perfectly linear and
+    with no phase noise, so the beat is as narrow as the window allows.
+    """
+
+    display_name = "Swept Laser"
+    category = "Optical Sources"
+
+    power = Param(0.0, unit="dBm", doc="Average output power")
+    wavelength = Param(1550.0, unit="nm", min=1200.0, max=1700.0, doc="Centre of the sweep")
+    sweep = Param(1.0, unit="GHz", min=0.0, doc="Optical frequency covered in one window")
+
+    outputs = {"out": PortType.OPTICAL}
+
+    def chirp_rate(self, ctx: SimulationContext) -> float:
+        """How fast the frequency climbs [Hz/s]."""
+        return self.si("sweep") / ctx.time_window
+
+    def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
+        t = np.arange(ctx.num_samples) / ctx.sample_rate
+        sweep = self.si("sweep")
+        phase = 2.0 * np.pi * (-sweep / 2.0 * t + sweep * t**2 / (2.0 * ctx.time_window))
+        field = np.sqrt(self.si("power")) * np.exp(1j * phase)
+        band = Band(
+            Ex=field.astype(ctx.complex_dtype),
+            Ey=np.zeros(ctx.num_samples, dtype=ctx.complex_dtype),
+            f0=C_LIGHT / self.si("wavelength"),
+            fs=ctx.sample_rate,
+        )
+        return {"out": OpticalSignal(bands=(band,))}

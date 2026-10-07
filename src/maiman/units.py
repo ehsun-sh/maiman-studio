@@ -85,6 +85,7 @@ _TO_SI: dict[str, Callable[[float], float]] = {
     # factor of a million between them, which is most of why a photonic circuit
     # is measured in micrometres.
     "dB/cm": lambda x: x * 1e2,  # -> dB/m
+    "dB/THz": lambda x: x * 1e-12,  # -> dB/Hz
     # Dispersion: ps/(nm*km) -> s/m^2
     "ps/nm/km": lambda x: x * 1e-6,
     # Accumulated dispersion: ps/nm -> s/m. This is D integrated over a span, so
@@ -114,6 +115,7 @@ _TO_SI: dict[str, Callable[[float], float]] = {
     # A fibre Bragg grating is the thing that lives here: ten to a hundred
     # millimetres, which is four zeros away from a waveguide and six from a span.
     "mm": lambda x: x * 1e-3,
+    "cm": lambda x: x * 1e-2,
     "um": lambda x: x * 1e-6,
     "nm": lambda x: x * 1e-9,
     # Per micrometre: how fast a field decays along a grating on a die.
@@ -153,6 +155,7 @@ _TO_SI: dict[str, Callable[[float], float]] = {
     # are specified on a datasheet, and converted to radians because that is what
     # every trigonometric call downstream needs.
     "rad": lambda x: x,
+    "mrad": lambda x: x * 1e-3,
     "deg": lambda x: x * math.pi / 180.0,
 }
 
@@ -165,6 +168,7 @@ _FROM_SI: dict[str, Callable[[float], float]] = {
     "dB/Hz": linear_to_db,
     "dB/km": lambda x: x * 1e3,
     "dB/cm": lambda x: x * 1e-2,
+    "dB/THz": lambda x: x * 1e12,
     "ps/nm/km": lambda x: x * 1e6,
     "ps/nm": lambda x: x * 1e3,
     "ps/nm^2/km": lambda x: x * 1e-3,
@@ -178,6 +182,7 @@ _FROM_SI: dict[str, Callable[[float], float]] = {
     "m": lambda x: x,
     "km": lambda x: x * 1e-3,
     "mm": lambda x: x * 1e3,
+    "cm": lambda x: x * 1e2,
     "um": lambda x: x * 1e6,
     "nm": lambda x: x * 1e9,
     "1/um": lambda x: x * 1e-6,
@@ -198,6 +203,7 @@ _FROM_SI: dict[str, Callable[[float], float]] = {
     "nm/K": lambda x: x * 1e9,
     "ustrain": lambda x: x * 1e6,
     "rad": lambda x: x,
+    "mrad": lambda x: x * 1e3,
     "deg": lambda x: x * 180.0 / math.pi,
 }
 

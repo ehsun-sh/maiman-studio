@@ -926,6 +926,23 @@ class BandPower:
 
 
 @dataclass(frozen=True)
+class Readout:
+    """A handful of named numbers from an instrument with no plot of its own.
+
+    ``values`` holds them in SI units, keyed by name, for code and tests to read.
+    ``caption`` is the few characters the studio writes under the block, and
+    ``summary`` the sentence it writes in the run log.
+    """
+
+    values: dict[str, float]
+    caption: str
+    summary: str
+
+    def __getitem__(self, name: str) -> float:
+        return self.values[name]
+
+
+@dataclass(frozen=True)
 class PowerReading:
     """Result of a power measurement."""
 

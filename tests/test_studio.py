@@ -553,7 +553,7 @@ def test_the_coherent_link_has_no_spectrum_and_does_not_pretend_to() -> None:
 
     text = STUDIO.read_text(encoding="utf-8")
     assert (
-        'const canProduce = PROJECT.nodes.some((n) => n.type === "OpticalSpectrumAnalyzer");'
+        '(n) => n.type === "OpticalSpectrumAnalyzer" || n.type === "ElectricalSpectrumAnalyzer");'
         in text
     ), "the spectrum pane must show the reference only while the graph could produce one"
     assert 'visibleTraces("spectrum")' in text
@@ -638,7 +638,7 @@ def test_the_spectrum_is_read_in_the_bandwidth_it_was_measured_in() -> None:
     would be a number nobody could act on.
     """
     text = STUDIO.read_text(encoding="utf-8")
-    assert "`dBm / ${fmt(traces[0].source.resolution_bandwidth_ghz)} GHz`" in text
+    assert "`dBm / ${fmt(rbw)} GHz`" in text
     assert "power_per_resolution_w" in text, "the plot must draw what an instrument displays"
 
 
@@ -1219,6 +1219,13 @@ TEMPLATE_FILES = {
     "tilted-grating": "tilted_grating.maiman",
     "lpg-pair": "lpg_pair.maiman",
     "otdr": "otdr.maiman",
+    "metro-ring": "metro_ring.maiman",
+    "submarine": "submarine.maiman",
+    "zr-dwdm": "zr_dwdm.maiman",
+    "rof": "rof.maiman",
+    "free-space": "free_space.maiman",
+    "lidar": "lidar.maiman",
+    "qkd": "qkd.maiman",
 }
 
 
