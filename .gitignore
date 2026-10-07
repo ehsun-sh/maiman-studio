@@ -70,3 +70,8 @@ desktop.ini
 
 # Local agent/tooling config
 .claude/
+
+# Per-machine shortcuts made by tools/make_shortcut.py
+/Maiman App.lnk
+/Maiman App.app/
+/Maiman App.desktop
