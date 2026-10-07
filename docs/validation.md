@@ -1,10 +1,9 @@
-# Validation
-
-[← README](../README.md) · [Getting started](getting-started.md) · [The studio interface](interface.md) · [Models and results](physics.md) · [Design and roadmap](design.md) · [Validation](validation.md)
-
+---
+title: "Validation"
+description: "How every physics block is checked against a closed-form result."
 ---
 
-## Validation
+# Validation
 
 Every physics block ships with a test against a closed-form result, run in CI
 ([`tests/test_physics.py`](../tests/test_physics.py)):

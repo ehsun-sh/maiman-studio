@@ -1,0 +1,35 @@
+# The sidebar of maimanstudio.com/docs, and the one place that says which file is which page.
+# Every page is Markdown in this folder (or the repository root, where GitHub expects it),
+# so the site and GitHub read the same text. Paths are relative to docs/.
+- section: Using Maiman Studio
+  pages:
+    - { title: Overview, url: /docs/, file: index.md }
+    - { title: Installing, url: /install, file: install.md }
+    - { title: Quickstart, url: /docs/quickstart, file: quickstart.md }
+    - { title: The studio, url: /docs/studio, file: studio.md }
+    - { title: "Graphs, ports and runs", url: /docs/graphs, file: graphs.md }
+    - { title: The signal model, url: /docs/signal-model, file: signal-model.md }
+    - { title: Sweeps, url: /docs/sweeps, file: sweeps.md }
+    - { title: Project files, url: /docs/projects, file: projects.md }
+    - { title: Photonic circuits, url: /docs/circuits, file: circuits.md }
+    - { title: The session server, url: /docs/server, file: server.md }
+    - { title: Array back-ends, url: /docs/backends, file: backends.md }
+    - { title: Models and results, url: /docs/models, file: models.md }
+    - { title: Validation, url: /docs/validation, file: validation.md }
+- section: Release news
+  pages:
+    - { title: Release notes, url: /docs/releases, file: releases.md }
+    - { title: Roadmap, url: /roadmap, file: roadmap.md }
+    - { title: Examples roadmap, url: /docs/examples-roadmap, file: EXAMPLES_ROADMAP.md }
+- section: Development
+  pages:
+    - { title: Architecture, url: /docs/architecture, file: ARCHITECTURE.md }
+    - { title: Design decisions, url: /docs/design, file: design.md }
+    - { title: Contributing, url: /docs/contributing, file: ../CONTRIBUTING.md }
+    - { title: Writing a component, url: /docs/writing-components, file: writing-components.md }
+- section: API reference
+  pages:
+    - { title: maiman, url: /docs/api, file: api.md, generated: true }
+    - { title: maiman.components, url: /docs/components/, file: components/index.md, generated: true }
+    # One page per component, components/<Class>.md at /docs/components/<Class>,
+    # written by tools/gen_reference_docs.py.

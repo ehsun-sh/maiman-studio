@@ -54,7 +54,7 @@ On macOS and Linux use `python3 -m pip install maiman`. To update: `pip install 
 From a checkout, `python tools/make_shortcut.py` makes a **Maiman App** shortcut you can
 double-click.
 
-New to Python or the terminal, or hit an error? The [step-by-step guide](docs/getting-started.md)
+New to Python or the terminal, or hit an error? The [step-by-step install guide](docs/install.md)
 starts from nothing and lists every common failure and its fix.
 
 ### From Python
@@ -78,15 +78,18 @@ More in [`examples/python/`](examples/python/).
 
 ## Documentation
 
+The full documentation lives in [`docs/`](docs/index.md) and is published at
+[maimanstudio.com/docs](https://maimanstudio.com/docs/).
+
 | | |
 | :--- | :--- |
-| [Getting started](docs/getting-started.md) | Installing from scratch, the first five minutes, troubleshooting |
-| [The studio interface](docs/interface.md) | The editor, plots, projects, and the session server API |
-| [Models and results](docs/physics.md) | Every model, what it reproduces, and what it does not do |
-| [Validation](docs/validation.md) | How each physics block is checked against closed-form results |
-| [Design and roadmap](docs/design.md) | Why the project exists, design decisions, data model, roadmap |
-| [Architecture](docs/ARCHITECTURE.md) | The full architecture document |
-| [Examples roadmap](docs/EXAMPLES_ROADMAP.md) | Example projects, built and planned |
+| [Installing](docs/install.md) · [Quickstart](docs/quickstart.md) | From no Python at all to a first link, and every error on the way |
+| [The studio](docs/studio.md) | The editor, runs, sweeps, the spectrum dock, lessons |
+| [Graphs, ports and runs](docs/graphs.md) · [The signal model](docs/signal-model.md) | How the engine works |
+| [Models and results](docs/models.md) · [Validation](docs/validation.md) | Every physics model, and how each is checked |
+| [Component reference](docs/components/index.md) · [Python API](docs/api.md) | Generated from the code |
+| [Release notes](docs/releases.md) · [Roadmap](docs/roadmap.md) | What changed, and what is next |
+| [Architecture](docs/ARCHITECTURE.md) · [Writing a component](docs/writing-components.md) | For contributors |
 
 ## Contributing
 
