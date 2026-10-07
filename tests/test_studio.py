@@ -1214,6 +1214,11 @@ TEMPLATE_FILES = {
     "birefringent-ring": "birefringent_ring.maiman",
     "chip-couplers": "chip_couplers.maiman",
     "pdk-splitter": "pdk_splitter.maiman",
+    "fbg-strain": "fbg_strain.maiman",
+    "fbg-drop": "fbg_drop.maiman",
+    "tilted-grating": "tilted_grating.maiman",
+    "lpg-pair": "lpg_pair.maiman",
+    "otdr": "otdr.maiman",
 }
 
 

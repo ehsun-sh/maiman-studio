@@ -8,7 +8,7 @@ import math
 import numpy as np
 
 from ..analysis import OSNR_REFERENCE_BANDWIDTH, osnr
-from ..component import Component, Param, PortType
+from ..component import BoolParam, Component, Param, PortType
 from ..context import SimulationContext
 from ..signals import BandPower, OpticalSignal, PowerReading, ScopeTrace, Signal
 from ..units import frequency_to_wavelength
@@ -103,7 +103,12 @@ class Oscilloscope(Component):
     span = Param(
         0.0, unit="ps", min=0.0, doc="Time shown around `centre`; 0 shows the whole window"
     )
-    centre = Param(0.0, unit="ps", doc="Display centre, from the middle of the window")
+    centre = Param(0.0, unit="ps", doc="Display centre, on the same time axis as the trace")
+    decibels = BoolParam(False, doc="Draw the power in dBm, for a trace that falls over decades")
+    from_start = BoolParam(
+        False,
+        doc="Count time from the start of the window, not its middle: an echo's round trip",
+    )
     points = Param(1024.0, unit="", min=16.0, max=8192.0, doc="Points sent to the display")
 
     inputs = {"in": PortType.OPTICAL}
@@ -117,7 +122,7 @@ class Oscilloscope(Component):
             raise ValueError(f"{self.label}: no band on the simulation's time grid to display")
 
         dt = 1.0 / ctx.sample_rate
-        t = np.arange(n) * dt - n * dt / 2.0
+        t = np.arange(n) * dt - (0.0 if self.from_start else n * dt / 2.0)
         power = np.zeros(n)
         for band in bands:
             power += np.abs(np.asarray(band.Ex)) ** 2 + np.abs(np.asarray(band.Ey)) ** 2
@@ -174,6 +179,7 @@ class Oscilloscope(Component):
                 rms_width=rms,
                 centroid=centroid,
                 energy_j=energy,
+                decibels=bool(self.decibels),
             )
         }
 

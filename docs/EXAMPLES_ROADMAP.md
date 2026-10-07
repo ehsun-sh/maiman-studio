@@ -132,11 +132,11 @@ Gratings and cladding modes as instruments.
 
 | # | Example | What it teaches | Status |
 | :-- | :--- | :--- | :--- |
-| 6.1 | FBG as a strain gauge and thermometer | $\lambda_B = 2 n_\text{eff}\Lambda$ and how it moves | ✅ `fbg_sensor.py` |
-| 6.2 | FBG with a circulator | Reflection as a drop port | ✅ `fbg_circulator.py` |
-| 6.3 | Tilted grating refractometer | Cladding resonances read the outside index | ✅ `tilted_grating_refractometer.py` |
-| 6.4 | Long-period grating pair | Recoupling cladding light | 🟢 LongPeriodGrating |
-| 6.5 | OTDR | Rayleigh backscatter, locating a break | 🔴 needs a **pulsed source and a backscatter model** |
+| 6.1 | FBG as a strain gauge and thermometer | $\lambda_B = 2 n_\text{eff}\Lambda$ and how it moves | ✅ `fbg_strain.maiman`, with lesson; two gratings on ASE, one loose as the temperature reference |
+| 6.2 | FBG with a circulator | Reflection as a drop port | ✅ `fbg_drop.maiman`, with lesson |
+| 6.3 | Tilted grating refractometer | Cladding resonances read the outside index | ✅ `tilted_grating.maiman`, with lesson; the same grating in air and in water |
+| 6.4 | Long-period grating pair | Recoupling cladding light | ✅ `lpg_pair.maiman`, with lesson |
+| 6.5 | OTDR | Rayleigh backscatter, locating a break | ✅ `otdr.maiman`, with lesson; **Fiber with Backscatter** added |
 
 ## Phase 7: Real-world systems
 
@@ -169,7 +169,8 @@ Collected from the 🟡 and 🔴 rows, in the order the phases need them:
 | Gain-flattening filter | 7.2 | An `OpticalFilter` with an arbitrary measured shape may be enough |
 | RF tone source, electrical spectrum analyser | 7.4 | Also useful for 1.3 (harmonics of the MZM) |
 | Swept-frequency source | 7.6 | |
-| Pulsed source with backscatter, single-photon detector, free-space channel | 6.5, 7.7, 7.5 | Each is a model, not just a block |
+| ~~Backscatter model~~ | 6.5 | Done: **Fiber with Backscatter**, probed by the Gaussian Pulse |
+| Single-photon detector, free-space channel | 7.7, 7.5 | Each is a model, not just a block |
 
 ## Found along the way
 
@@ -178,6 +179,9 @@ first. Each entry says which example found it and what was done.
 
 | Date | Example | Finding | Outcome |
 | :--- | :--- | :--- | :--- |
+| 2026-10-07 | 6.5 | No block sent light back towards its source, so an OTDR could not be drawn | **Fiber with Backscatter** added: Rayleigh backscatter, a splice and a break or a cleaved end, returned as the launch pulse convolved with the fibre's response. It is the speckle-free average and has no detector noise, so the trace never meets a floor |
+| 2026-10-07 | 6.5 | The Optical Oscilloscope drew linear power in picoseconds from the middle of the window, which suits a pulse and not an echo 250 µs long falling over decades | The oscilloscope can count time from the window's start and ask for decibels; the Scope tab then draws dBm and picks ps, ns or µs for its axis |
+| 2026-10-07 | 6.4 | The only broadband source is an EDFA's ASE, 1534 to 1566 nm, narrower than a long-period grating's notch | 6.4's period is 485 µm, which puts LP04's notch at 1550 nm; open: a broadband (SLED or supercontinuum) source to show a whole notch |
 | 2026-10-07 | 5.4 | Unpolarised ASE through a birefringent ring put the TM comb on TE's 714 GHz spacing: the noise shape was sampled over one TE period and repeated for both polarisations | Fixed: a birefringent ring samples its noise across the whole bin, so each mode keeps its own free spectral range; a test holds TM to 789 GHz |
 | 2026-10-07 | 5.1 | The Directional Coupler takes its split ratio as given, so nothing could show the ratio following the length | **Coupled Waveguides** added: two supermodes, $\kappa = \sin^2(\pi\,\Delta n\,L/\lambda)$, unitary at every length |
 | 2026-10-07 | 5.x | No block emits broadband light, so a device's passband could not be drawn on an OSA | Each project lights its device with an EDFA's ASE from a −100 dBm seed and divides every trace by a reference OSA, as a lab does; a seed at −60 dBm put its own line in the reference and moved the grating's peak by 0.7 dB |

@@ -1096,6 +1096,10 @@ class ScopeTrace:
     energy_j: float
     """Integral of power over the window [J]."""
 
+    decibels: bool = False
+    """Whether the display should draw the power in dBm: an echo falling over
+    decades, rather than one pulse."""
+
     def __post_init__(self) -> None:
         if not (self.time.shape == self.power_w.shape == self.chirp_hz.shape):
             raise ValueError("time, power_w and chirp_hz must share a shape")

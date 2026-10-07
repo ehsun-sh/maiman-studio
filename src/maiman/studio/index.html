@@ -1187,6 +1187,16 @@ verdict, and DESIGN.md
             <button role="menuitem" id="example-pdk-splitter">5.6 A splitter from a foundry kit</button>
           </div>
         </div>
+        <div class="menu-group">
+          <button class="menu-group-btn" role="menuitem" aria-haspopup="true" aria-expanded="false">6 · Sensing<span class="menu-key">▸</span></button>
+          <div class="menu-pop menu-sub" role="menu">
+            <button role="menuitem" id="example-fbg-strain">6.1 FBG strain gauge and thermometer</button>
+            <button role="menuitem" id="example-fbg-drop">6.2 FBG and circulator: a drop port</button>
+            <button role="menuitem" id="example-tilted-grating">6.3 Tilted grating refractometer</button>
+            <button role="menuitem" id="example-lpg-pair">6.4 Long-period grating pair</button>
+            <button role="menuitem" id="example-otdr">6.5 OTDR: finding a break</button>
+          </div>
+        </div>
       </div>
     </div>
     <!-- Reading a project is a file the user picks, not a path the server is
@@ -1627,6 +1637,10 @@ verdict, and DESIGN.md
               <input type="checkbox" id="scope-chirp">
               <span>Show instantaneous frequency</span>
             </label>
+            <label class="axis-auto">
+              <input type="checkbox" id="scope-db">
+              <span>Power in dBm</span>
+            </label>
             <p class="side-title">Pulse <span id="p-which" class="num"></span></p>
             <dl style="margin:0">
               <div class="stat"><dt>Peak</dt><dd id="p-peak">—</dd></div>
@@ -1875,6 +1889,104 @@ verdict, and DESIGN.md
     },
     "outputs": {
      "out": "metric"
+    }
+   }
+  },
+  "BackscatterFiber": {
+   "name": "Fiber with Backscatter",
+   "type": "BackscatterFiber",
+   "class": "maiman.components.otdr.BackscatterFiber",
+   "category": "Fiber",
+   "version": "0.1.0",
+   "spectral": false,
+   "parameters": {
+    "length": {
+     "type": "float",
+     "default": 25.0,
+     "unit": "km",
+     "min": 0.0,
+     "max": 500.0,
+     "doc": "Length of glass the light can reach"
+    },
+    "attenuation": {
+     "type": "float",
+     "default": 0.2,
+     "unit": "dB/km",
+     "min": 0.0,
+     "max": 10.0,
+     "doc": "Total loss, one way"
+    },
+    "scattering": {
+     "type": "float",
+     "default": 0.17,
+     "unit": "dB/km",
+     "min": 0.0,
+     "max": 10.0,
+     "doc": "The part of the loss that is Rayleigh scattering"
+    },
+    "capture": {
+     "type": "float",
+     "default": 0.0017,
+     "unit": "",
+     "min": 0.0,
+     "max": 1.0,
+     "doc": "Fraction of the scattered light the core guides back: (NA / n)^2 / 4.55"
+    },
+    "group_index": {
+     "type": "float",
+     "default": 1.468,
+     "unit": "",
+     "min": 1.0,
+     "max": 4.0,
+     "doc": "Sets how far a microsecond is"
+    },
+    "splice_at": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "km",
+     "min": 0.0,
+     "max": 500.0,
+     "doc": "Where a splice sits; 0 for none"
+    },
+    "splice_loss": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "dB",
+     "min": 0.0,
+     "max": 20.0,
+     "doc": "Loss of the splice, one way"
+    },
+    "end_reflectance": {
+     "type": "float",
+     "default": -14.7,
+     "unit": "dB",
+     "max": 0.0,
+     "doc": "Fresnel reflection where the glass ends: -14.7 dB is a clean cleave in air"
+    },
+    "break_at": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "km",
+     "min": 0.0,
+     "max": 500.0,
+     "doc": "Where the fibre is broken; 0 if it is whole"
+    },
+    "break_reflectance": {
+     "type": "float",
+     "default": -30.0,
+     "unit": "dB",
+     "max": 0.0,
+     "doc": "What a broken face reflects, if `break_at` is set: rougher than a cleave"
+    }
+   },
+   "structural": {},
+   "ports": {
+    "inputs": {
+     "in": "optical"
+    },
+    "outputs": {
+     "backscatter": "optical",
+     "out": "optical"
     }
    }
   },
@@ -4726,7 +4838,17 @@ verdict, and DESIGN.md
      "type": "float",
      "default": 0.0,
      "unit": "ps",
-     "doc": "Display centre, from the middle of the window"
+     "doc": "Display centre, on the same time axis as the trace"
+    },
+    "decibels": {
+     "type": "bool",
+     "default": false,
+     "doc": "Draw the power in dBm, for a trace that falls over decades"
+    },
+    "from_start": {
+     "type": "bool",
+     "default": false,
+     "doc": "Count time from the start of the window, not its middle: an echo's round trip"
     },
     "points": {
      "type": "float",
@@ -36678,6 +36800,1194 @@ verdict, and DESIGN.md
      }
     ]
    }
+  },
+  "fbg-strain": {
+   "title": "6.1 FBG strain gauge and thermometer",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 10000000000.0,
+     "samples_per_symbol": 8,
+     "sequence_length": 256,
+     "seed": 1,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "seed",
+      "type": "CWLaser",
+      "params": {
+       "power": -100.0,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "ase",
+      "type": "EDFA",
+      "params": {
+       "gain": 30.0,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "osa_in",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 2000.0,
+       "points": 4096.0,
+       "resolution_bandwidth": 1.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 290.0
+      }
+     },
+     {
+      "id": "working",
+      "type": "FiberBraggGrating",
+      "params": {
+       "length": 10.0,
+       "index_modulation": 0.00015,
+       "bragg_wavelength": 1545.0,
+       "strain": 400.0,
+       "temperature_change": 15.0
+      },
+      "config": {
+       "apodization": "uniform"
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "reference",
+      "type": "FiberBraggGrating",
+      "params": {
+       "length": 10.0,
+       "index_modulation": 0.00015,
+       "bragg_wavelength": 1555.0,
+       "strain": 0.0,
+       "temperature_change": 15.0
+      },
+      "config": {
+       "apodization": "uniform"
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "osa_work",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 2000.0,
+       "points": 4096.0,
+       "resolution_bandwidth": 1.0
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 0.0
+      }
+     },
+     {
+      "id": "osa_ref",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 2000.0,
+       "points": 4096.0,
+       "resolution_bandwidth": 1.0
+      },
+      "ui": {
+       "x": 630.0,
+       "y": 0.0
+      }
+     },
+     {
+      "id": "osa_thru",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 2000.0,
+       "points": 4096.0,
+       "resolution_bandwidth": 1.0
+      },
+      "ui": {
+       "x": 630.0,
+       "y": 140.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "seed",
+       "out"
+      ],
+      "to": [
+       "ase",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "ase",
+       "out"
+      ],
+      "to": [
+       "osa_in",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "reference",
+       "reflected"
+      ],
+      "to": [
+       "osa_ref",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "reference",
+       "transmitted"
+      ],
+      "to": [
+       "osa_thru",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "working",
+       "reflected"
+      ],
+      "to": [
+       "osa_work",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "working",
+       "transmitted"
+      ],
+      "to": [
+       "reference",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "ase",
+       "out"
+      ],
+      "to": [
+       "working",
+       "in"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "6.1 A Bragg grating as a strain gauge and a thermometer",
+     "body": "Two Bragg gratings sit in series on one fibre, lit by white light from [[ase]]. [[working]] is\nglued to a part under 400 \u00b5\u03b5 of load. [[reference]] is loose in a tube beside it. Both are\n15 K warmer than when they were written. Each reflects a narrow band, read on [[osa_work]] and\n[[osa_ref]]. Light neither grating reflects goes on to [[osa_thru]].\n\n## What moves the reflection\n\nA grating reflects where its period fits half a wavelength in the glass:\n\n$$\\lambda_B = 2\\,n_\\text{eff}\\,\\Lambda$$\n\nStretching the fibre lengthens $\\Lambda$ and, through the photo-elastic effect, lowers\n$n_\\text{eff}$ a little. Warming it expands the glass and raises its index. Both are a material\nnumber times $\\lambda_B$:\n\n$$\\frac{\\Delta\\lambda_B}{\\lambda_B} = (1 - p_e)\\,\\varepsilon + (\\alpha + \\xi)\\,\\Delta T$$\n\nwith $p_e = 0.22$ and $\\alpha + \\xi = 7.22 \\times 10^{-6}$ /K. At 1545 nm that is 1.21 pm per\nmicrostrain and 11.2 pm per kelvin.\n\n## One wavelength, two unknowns\n\nDivide one sensitivity by the other: 9.26 \u00b5\u03b5 per kelvin. A degree of warming moves the peak as\nfar as 9.26 \u00b5\u03b5 of load, and nothing in the spectrum tells them apart. Read as strain alone,\n[[working]] reports 539 \u00b5\u03b5, not 400: the extra 139 \u00b5\u03b5 is the 15 K.\n\n## The reference grating\n\n[[reference]] feels only the temperature, so its shift is the temperature. The peaks are read\nthe way an interrogator reads them, as the centroid of the top half of each reflection:\n\n| | written at | peak at | shift |\n| :-- | :-- | :-- | :-- |\n| [[working]] | 1545 nm | 1545.6498 nm | 649.8 pm |\n| [[reference]] | 1555 nm | 1555.1692 nm | 169.2 pm |\n\nThe reference's shift gives 15.07 K. Subtract that much drift from [[working]] and what is left\nis 399.7 \u00b5\u03b5 of load.\n\n## Try this\n\n- Set *strain* of [[working]] to 0. Its peak moves back by 0.48 nm and the reference stays put.\n- Set *temperature_change* of both to 0. Now the two peaks shift by the load alone."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 113.0,
+      "w": 284.0,
+      "h": 238.0,
+      "text": "White light",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 321.0,
+      "y": 113.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "One fibre, two gratings",
+      "tone": "binary"
+     },
+     {
+      "id": "a3",
+      "kind": "rect",
+      "x": 471.0,
+      "y": -27.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "Each reflection",
+      "tone": "metric"
+     },
+     {
+      "id": "a4",
+      "kind": "note",
+      "x": 440.0,
+      "y": 252.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "Loose in its tube: it feels the heat and none of the load.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 538.0,
+      "y1": 250.0,
+      "x2": 538.0,
+      "y2": 206.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "fbg-drop": {
+   "title": "6.2 FBG and circulator: a drop port",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 10000000000.0,
+     "samples_per_symbol": 8,
+     "sequence_length": 256,
+     "seed": 1,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "ch1550",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "ch1552",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1552.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 180.0
+      }
+     },
+     {
+      "id": "mux",
+      "type": "Combiner",
+      "params": {},
+      "config": {
+       "num_inputs": 2
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 110.0
+      }
+     },
+     {
+      "id": "circ",
+      "type": "Circulator",
+      "params": {
+       "insertion_loss": 0.7,
+       "isolation": 40.0
+      },
+      "config": {
+       "driven": [
+        1,
+        2
+       ]
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 110.0
+      }
+     },
+     {
+      "id": "fbg",
+      "type": "FiberBraggGrating",
+      "params": {
+       "bragg_wavelength": 1550.0,
+       "length": 10.0,
+       "index_modulation": 0.0001
+      },
+      "config": {
+       "apodization": "uniform"
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 110.0
+      }
+     },
+     {
+      "id": "pm_drop",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+       "x": 480.0,
+       "y": 260.0
+      }
+     },
+     {
+      "id": "osa_drop",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 1000.0,
+       "points": 4096.0,
+       "resolution_bandwidth": 1.0
+      },
+      "ui": {
+       "x": 630.0,
+       "y": 260.0
+      }
+     },
+     {
+      "id": "pm_thru",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+       "x": 630.0,
+       "y": -10.0
+      }
+     },
+     {
+      "id": "osa_thru",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 1000.0,
+       "points": 4096.0,
+       "resolution_bandwidth": 1.0
+      },
+      "ui": {
+       "x": 780.0,
+       "y": 110.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "mux",
+       "out"
+      ],
+      "to": [
+       "circ",
+       "in1"
+      ]
+     },
+     {
+      "from": [
+       "fbg",
+       "reflected"
+      ],
+      "to": [
+       "circ",
+       "in2"
+      ]
+     },
+     {
+      "from": [
+       "circ",
+       "out2"
+      ],
+      "to": [
+       "fbg",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "ch1550",
+       "out"
+      ],
+      "to": [
+       "mux",
+       "in0"
+      ]
+     },
+     {
+      "from": [
+       "ch1552",
+       "out"
+      ],
+      "to": [
+       "mux",
+       "in1"
+      ]
+     },
+     {
+      "from": [
+       "circ",
+       "out3"
+      ],
+      "to": [
+       "osa_drop",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "fbg",
+       "transmitted"
+      ],
+      "to": [
+       "osa_thru",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "circ",
+       "out3"
+      ],
+      "to": [
+       "pm_drop",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "fbg",
+       "transmitted"
+      ],
+      "to": [
+       "pm_thru",
+       "in"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "6.2 A grating and a circulator: dropping a channel",
+     "body": "Two channels, [[ch1550]] and [[ch1552]], share a fibre through [[mux]]. A Bragg grating [[fbg]]\nreflects 1550 nm back the way it came. A circulator [[circ]] sends light from port 1 to port 2\nand from port 2 to port 3, so the reflection leaves by a third fibre: the *drop* port, read on\n[[pm_drop]] and [[osa_drop]]. Everything else passes the grating to [[pm_thru]] and [[osa_thru]].\n\n## The budget\n\nThe grating reflects $R = 0.933$ ($-0.30$ dB) at its centre, over 0.198 nm. Each pass through\nthe circulator costs 0.7 dB, and the dropped light passes twice:\n\n| | 1550 nm | 1552 nm |\n| :-- | :-- | :-- |\n| [[pm_drop]] | \u22121.70 dBm | \u221238.71 dBm |\n| [[pm_thru]] | \u221212.43 dBm | \u22120.70 dBm |\n\n\u22121.70 dBm is $2 \\times 0.7 + 0.30$ dB. The express channel pays one pass. What the grating does\nnot reflect at 1550 nm, $1 - R$ or $-11.73$ dB, carries on to the express port.\n\n## What sets the crosstalk\n\nWith an ideal circulator the 1552 nm channel reaches the drop port only through the grating's\nsidelobes, at \u221247.36 dBm. This circulator has 40 dB of isolation, and the light it leaks from\nport 1 straight to port 3 is stronger: \u221238.71 dBm, so the dropped channel is 37.0 dB above its\nneighbour. Here the circulator, not the grating, limits the drop.\n\n## Try this\n\n- Set *isolation* of [[circ]] to 0, which is ideal. [[pm_drop]] at 1552 nm falls to \u221247.4 dBm.\n- Set *bragg_wavelength* of [[fbg]] to 1552 nm. The other channel is dropped instead."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 284.0,
+      "h": 228.0,
+      "text": "Two channels",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 321.0,
+      "y": 83.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "Drop",
+      "tone": "binary"
+     },
+     {
+      "id": "a3",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 233.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "Dropped",
+      "tone": "metric"
+     },
+     {
+      "id": "a4",
+      "kind": "rect",
+      "x": 621.0,
+      "y": -37.0,
+      "w": 284.0,
+      "h": 208.0,
+      "text": "Express",
+      "tone": "metric"
+     },
+     {
+      "id": "a5",
+      "kind": "note",
+      "x": 303.0,
+      "y": -40.0,
+      "w": 170.0,
+      "h": 96.0,
+      "text": "Through the circulator twice: 2 \u00d7 0.7 dB, plus the grating's 0.30 dB.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a6",
+      "kind": "arrow",
+      "x1": 388.0,
+      "y1": 58.0,
+      "x2": 388.0,
+      "y2": 98.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "tilted-grating": {
+   "title": "6.3 Tilted grating refractometer",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 10000000000.0,
+     "samples_per_symbol": 8,
+     "sequence_length": 256,
+     "seed": 1,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "seed",
+      "type": "CWLaser",
+      "params": {
+       "power": -100.0,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "ase",
+      "type": "EDFA",
+      "params": {
+       "gain": 30.0,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "osa_in",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1544.0,
+       "span": 2000.0,
+       "points": 4096.0,
+       "resolution_bandwidth": 1.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 290.0
+      }
+     },
+     {
+      "id": "sp",
+      "type": "Splitter",
+      "params": {},
+      "config": {
+       "num_outputs": 2
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "tfbg_air",
+      "type": "TiltedFiberBraggGrating",
+      "params": {
+       "period": 535.0,
+       "tilt": 4.0,
+       "length": 10.0,
+       "index_modulation": 0.0005,
+       "surrounding_index": 1.0,
+       "azimuthal_orders": 3.0
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "osa_air",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1544.0,
+       "span": 2000.0,
+       "points": 4096.0,
+       "resolution_bandwidth": 1.0
+      },
+      "ui": {
+       "x": 630.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "tfbg_water",
+      "type": "TiltedFiberBraggGrating",
+      "params": {
+       "period": 535.0,
+       "tilt": 4.0,
+       "length": 10.0,
+       "index_modulation": 0.0005,
+       "surrounding_index": 1.333,
+       "azimuthal_orders": 3.0
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "osa_water",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1544.0,
+       "span": 2000.0,
+       "points": 4096.0,
+       "resolution_bandwidth": 1.0
+      },
+      "ui": {
+       "x": 630.0,
+       "y": 240.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "seed",
+       "out"
+      ],
+      "to": [
+       "ase",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "tfbg_air",
+       "transmitted"
+      ],
+      "to": [
+       "osa_air",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "ase",
+       "out"
+      ],
+      "to": [
+       "osa_in",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "tfbg_water",
+       "transmitted"
+      ],
+      "to": [
+       "osa_water",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "ase",
+       "out"
+      ],
+      "to": [
+       "sp",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "sp",
+       "out0"
+      ],
+      "to": [
+       "tfbg_air",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "sp",
+       "out1"
+      ],
+      "to": [
+       "tfbg_water",
+       "in"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "6.3 A tilted grating reads a liquid",
+     "body": "A Bragg grating written square to the fibre only reflects the core mode into itself, so it is\nblind to what is outside the glass. Tilt its fringes by 4\u00b0 and the core light can also couple\ninto backward *cladding* modes, which run along the outside of the glass and feel what the fibre\nis dipped in. Each one cuts a narrow notch below the Bragg line.\n\nThe same grating is shown twice: [[tfbg_air]] in air and [[tfbg_water]] in water ($n = 1.333$).\n[[osa_air]] and [[osa_water]] show what each transmits.\n\n## Where the notches are\n\nThe core mode couples to a cladding mode $m$ where\n\n$$\\lambda_m = \\left(n_\\text{core} + n_{\\text{clad},m}\\right)\\Lambda$$\n\nwith $\\Lambda = 535$ nm. The Bragg line, where the core couples to itself, is the longest one, at\n1551.24 nm. Cladding modes have lower indices, so their notches form a comb reaching 15 nm below\nit, each about 10 dB deep.\n\n## What water does\n\nWater raises the index outside the glass. That pulls each cladding mode's field outwards and\nraises its effective index, so its notch moves to a longer wavelength. Measured by sliding the\ntwo traces over each other:\n\n| part of the comb | moved by |\n| :-- | :-- |\n| 1536.5 to 1538.5 nm | 88 pm |\n| 1546.5 to 1548.5 nm | 17 pm |\n| the Bragg line | 0 pm |\n\nThe modes deepest in the comb reach furthest out of the glass and move most. The Bragg line never\nleaves the core and does not move at all. Temperature moves the whole comb together, so reading\nthe comb against the Bragg line gives the outside index with its own temperature reference.\n\n## Try this\n\n- Set *surrounding_index* of [[tfbg_water]] to 1.40. The bottom of the comb moves further.\n- Set *tilt* of [[tfbg_air]] to 8\u00b0. The fringes along the axis spread out by $1/\\cos\\theta$,\n  so the Bragg line moves to 1562.6 nm, out of this window, and only the comb is left in it.\n\nThis one takes about half a minute to run: every notch is a mode solve."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 113.0,
+      "w": 284.0,
+      "h": 238.0,
+      "text": "White light",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 13.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "In air",
+      "tone": "binary"
+     },
+     {
+      "id": "a3",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 213.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "In water",
+      "tone": "symbol"
+     },
+     {
+      "id": "a4",
+      "kind": "note",
+      "x": 440.0,
+      "y": 352.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "The comb moves by up to 88 pm. The Bragg line does not move.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 538.0,
+      "y1": 350.0,
+      "x2": 538.0,
+      "y2": 306.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "lpg-pair": {
+   "title": "6.4 Long-period grating pair",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 10000000000.0,
+     "samples_per_symbol": 8,
+     "sequence_length": 256,
+     "seed": 1,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "seed",
+      "type": "CWLaser",
+      "params": {
+       "power": -100.0,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "ase",
+      "type": "EDFA",
+      "params": {
+       "gain": 30.0,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "osa_in",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 4000.0,
+       "points": 4096.0,
+       "resolution_bandwidth": 1.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 290.0
+      }
+     },
+     {
+      "id": "sp",
+      "type": "Splitter",
+      "params": {},
+      "config": {
+       "num_outputs": 2
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "lpg_one",
+      "type": "LongPeriodGrating",
+      "params": {
+       "period": 485.0,
+       "index_modulation": 0.000325
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "lpg_pair",
+      "type": "LongPeriodGrating",
+      "params": {
+       "period": 485.0,
+       "index_modulation": 0.0001625,
+       "pair": true,
+       "separation": 200.0
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "osa_one",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 4000.0,
+       "points": 4096.0,
+       "resolution_bandwidth": 1.0
+      },
+      "ui": {
+       "x": 630.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "osa_pair",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 4000.0,
+       "points": 4096.0,
+       "resolution_bandwidth": 1.0
+      },
+      "ui": {
+       "x": 630.0,
+       "y": 240.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "seed",
+       "out"
+      ],
+      "to": [
+       "ase",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "sp",
+       "out0"
+      ],
+      "to": [
+       "lpg_one",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "sp",
+       "out1"
+      ],
+      "to": [
+       "lpg_pair",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "ase",
+       "out"
+      ],
+      "to": [
+       "osa_in",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "lpg_one",
+       "transmitted"
+      ],
+      "to": [
+       "osa_one",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "lpg_pair",
+       "transmitted"
+      ],
+      "to": [
+       "osa_pair",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "ase",
+       "out"
+      ],
+      "to": [
+       "sp",
+       "in"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "6.4 A long-period grating, and a pair of them",
+     "body": "A long-period grating has a period of hundreds of microns, not half a wavelength. It couples the\ncore mode *forwards*, into a cladding mode, at the wavelength where\n\n$$\\lambda = \\left(n_\\text{core} - n_{\\text{clad},m}\\right)\\Lambda$$\n\nWith $\\Lambda = 485$ \u00b5m that is the LP04 cladding mode near 1550 nm. On bare fibre the cladding\nlight is lost in the coating, so the grating cuts a broad notch in the transmission.\n\n## One grating\n\n[[lpg_one]] is just strong enough to hand all of the core light to the cladding at the centre.\n[[osa_one]] shows a notch at 1550.14 nm, more than 60 dB deep, and many nanometres wide: the core\nand cladding indices part only slowly with wavelength.\n\n## Two gratings\n\n[[lpg_pair]] is the same grating written twice, 200 mm apart, each half as strong. The first sends\nhalf the light into the cladding. Over the gap, core and cladding light travel at different speeds.\nThe second grating then puts the cladding light back into the core, where it meets the light that\nstayed. That is a Mach\u2013Zehnder interferometer inside one fibre, so the notch fills with fringes:\n\n$$\\Delta\\lambda = \\frac{\\lambda^2}{\\Delta n_g\\, d}$$\n\n[[osa_pair]] shows them 2.31 nm apart near the centre, with the deepest at 1549.93 nm. Double the\ngap to 400 mm and they close to 1.24 nm. Since $d$ is a little more than the gap, the spacing does\nnot halve exactly.\n\nEach fringe is a narrow notch that moves with whatever the cladding light felt in the gap, which\nmakes a pair a more sensitive sensor than one grating.\n\n## Try this\n\n- Set *separation* of [[lpg_pair]] to 400 mm and watch the fringes close up.\n- Set *gap_loss* of [[lpg_pair]] to 6 dB. The cladding light no longer cancels the core light and\n  the fringes wash out."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 113.0,
+      "w": 284.0,
+      "h": 238.0,
+      "text": "White light",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 13.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "One grating",
+      "tone": "binary"
+     },
+     {
+      "id": "a3",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 213.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "Two, 200 mm apart",
+      "tone": "symbol"
+     },
+     {
+      "id": "a4",
+      "kind": "note",
+      "x": 440.0,
+      "y": 352.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "Fringes $\\lambda^2/(\\Delta n_g\\,d)$ apart: 2.31 nm here.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 538.0,
+      "y1": 350.0,
+      "x2": 538.0,
+      "y2": 306.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "otdr": {
+   "title": "6.5 OTDR: finding a break",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 12500000.0,
+     "samples_per_symbol": 4,
+     "sequence_length": 4096,
+     "seed": 1,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "pulse",
+      "type": "GaussianPulse",
+      "params": {
+       "peak_power": 20.0,
+       "width": 60000.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "fut",
+      "type": "BackscatterFiber",
+      "params": {
+       "length": 25.0,
+       "group_index": 1.468,
+       "splice_at": 8.0,
+       "splice_loss": 0.5,
+       "break_at": 17.3
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "otdr",
+      "type": "Oscilloscope",
+      "params": {
+       "decibels": true,
+       "from_start": true,
+       "points": 4096.0
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 40.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "pulse",
+       "out"
+      ],
+      "to": [
+       "fut",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "fut",
+       "backscatter"
+      ],
+      "to": [
+       "otdr",
+       "in"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "6.5 An OTDR finds a break",
+     "body": "A 25 km fibre has been cut by a digger. An optical time-domain reflectometer (OTDR) finds where,\nfrom one end, without anyone walking the route.\n\n[[pulse]] sends a 100 ns pulse (FWHM) at 20 dBm peak into the fibre [[fut]]. As it travels, the glass\nscatters a little of it in every direction (Rayleigh scattering), and a small part of that is\ncaught by the core going back. [[otdr]] shows what returns, in dBm, against the time since launch.\n\n## Time is distance\n\nLight scattered at a distance $z$ is back after the round trip, so\n\n$$z = \\frac{c\\,t}{2\\,n_g}$$\n\nWith $n_g = 1.468$, each 9.79 \u00b5s of trace is a kilometre of fibre.\n\n## The slope is the loss\n\nLight scattered at $z$ has crossed $z$ twice, so the trace falls by twice the fibre's loss: 0.4 dB\nper km here, for 0.2 dB/km of fibre. From 1 km to 5 km it falls from \u221241.81 to \u221243.41 dBm.\n\nHow bright it starts is set by the pulse's energy $E$:\n\n$$P(0) = E\\; S\\,\\alpha_s\\,\\frac{v_g}{2}$$\n\nwith $S = 0.0017$ the share the core catches and $\\alpha_s$ the scattering part of the loss. The\ntrace starts near \u221241.4 dBm, about 61 dB below the pulse.\n\n## Events\n\n- **A splice at 8 km.** The trace steps down by 1.0 dB: the splice's 0.5 dB, paid twice.\n- **The break at 17.30 km.** The broken glass reflects a little of the pulse straight back, a spike\n  well above the scatter, and then nothing returns at all. The fibre is 25 km on the drawing. The\n  last echo says it now ends at 17.30 km, and that is where to dig.\n\nA real OTDR's trace would sink into detector noise far below these levels. This one has no\ndetector noise, so it falls forever.\n\n## Try this\n\n- Set *break_at* of [[fut]] to 0. The spike moves to 25 km, the clean far end, and is brighter\n  because a cleave reflects \u221214.7 dB.\n- Set *width* of [[pulse]] to 600000 ps. The trace gets brighter but the splice step smears out:\n  a long pulse trades resolution for range."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 113.0,
+      "w": 134.0,
+      "h": 88.0,
+      "text": "Probe",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 321.0,
+      "y": 13.0,
+      "w": 134.0,
+      "h": 88.0,
+      "text": "Echo",
+      "tone": "metric"
+     },
+     {
+      "id": "a3",
+      "kind": "note",
+      "x": 140.0,
+      "y": 252.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "25 km on the drawing. The echo stops at 17.30 km: dig there.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a4",
+      "kind": "arrow",
+      "x1": 238.0,
+      "y1": 250.0,
+      "x2": 238.0,
+      "y2": 206.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
   }
  },
  "project": {
@@ -37255,6 +38565,10 @@ verdict, and DESIGN.md
        re-running should not bring it back. */
     hidden: { constellation: new Set(), eye: new Set(), spectrum: new Set(), scope: new Set() }
   };
+
+  /* Whether the scope's dB box was ticked by hand, which then outranks what a
+     trace asks for. Declared up here for the same reason as SESSION. */
+  const SCOPE_DB = { touched: false };
 
   async function callApi(path, options) {
     const response = await fetch(path, options);
@@ -38604,15 +39918,34 @@ verdict, and DESIGN.md
 
     const norm = $("#scope-norm").checked;
     const showChirp = $("#scope-chirp").checked;
+    /* An echo falls over decades and only a log axis shows it, so a scope that
+       asks for decibels opens in them; a tick by hand wins after that. */
+    if (!SCOPE_DB.touched) $("#scope-db").checked = shown.some((t) => t.value.decibels);
+    const db = $("#scope-db").checked;
+    /* A pulse lives in picoseconds and an echo in microseconds: the axis takes
+       the unit its span reads best in. */
+    const tSpan = Math.max(...shown.map((t) => {
+      const ts = t.value.time_ps;
+      return ts.length ? Math.abs(ts[ts.length - 1] - ts[0]) : 0;
+    }));
+    const [tDiv, tUnit] = tSpan > 2e8 ? [1e6, "\u00b5s"] : tSpan > 2e5 ? [1e3, "ns"] : [1, "ps"];
     ctx.fillStyle = tok("--plot-bg"); ctx.fillRect(0, 0, w, h);
     const padL = 52, padB = 32, padT = 10, padR = showChirp ? 52 : 12;
     const pw = w - padL - padR, ph = h - padT - padB;
     let t0 = Infinity, t1 = -Infinity, top = 0, f0 = Infinity, f1 = -Infinity;
+    let floor = Infinity;
+    if (db) top = -Infinity;
+    const level = (p) => (db ? 10 * Math.log10(Math.max(p, 1e-30)) : p);
     const series = shown.map((trace, i) => {
       const v = trace.value;
       const scale = norm && v.peak_power_mw > 0 ? 1 / Math.max(...v.power_mw.map((p) => p || 0)) : 1;
       for (let k = 0; k < v.time_ps.length; k++) {
-        t0 = Math.min(t0, v.time_ps[k]); t1 = Math.max(t1, v.time_ps[k]);
+        t0 = Math.min(t0, v.time_ps[k] / tDiv); t1 = Math.max(t1, v.time_ps[k] / tDiv);
+        if (db) {
+          const p = (v.power_mw[k] || 0) * scale;
+          if (p > 0) { top = Math.max(top, level(p)); floor = Math.min(floor, level(p)); }
+          continue;
+        }
         top = Math.max(top, (v.power_mw[k] || 0) * scale);
         const f = v.chirp_ghz[k];
         if (f !== null) { f0 = Math.min(f0, f); f1 = Math.max(f1, f); }
@@ -38620,22 +39953,33 @@ verdict, and DESIGN.md
       return { v, scale, colour: seriesColour(i) };
     });
     if (!(t1 > t0)) { t0 -= 1; t1 += 1; }
-    if (!(top > 0)) top = 1;
-    top *= 1.08;
+    let bottom = 0;
+    if (db) {
+      /* Sixty decibels under the brightest point is as deep as the eye reads a
+         trace; below that is a fall to nothing, which the edge already says. */
+      if (!Number.isFinite(top)) { top = 0; floor = -60; }
+      top = Math.ceil(top / 5) * 5 + 5;
+      bottom = Math.max(Math.floor(floor / 5) * 5, top - 60);
+    } else {
+      if (!(top > 0)) top = 1;
+      top *= 1.08;
+    }
     if (!(f1 > f0)) { f0 = (Number.isFinite(f0) ? f0 : 0) - 1; f1 = f0 + 2; }
-    const X = (t) => padL + ((t - t0) / (t1 - t0)) * pw;
-    const Y = (p) => padT + ph - (p / top) * ph;
+    const X = (t) => padL + ((t / tDiv - t0) / (t1 - t0)) * pw;
+    const Y = (p) => padT + ph - ((level(p) - bottom) / (top - bottom)) * ph;
+    const Yl = (v) => padT + ph - ((v - bottom) / (top - bottom)) * ph;
     const F = (f) => padT + ph - ((f - f0) / (f1 - f0)) * ph;
 
     ctx.font = MONO_10; ctx.lineWidth = 1; ctx.strokeStyle = tok("--rule-soft");
     for (let k = 0; k <= 4; k++) {
-      const p = (top / 1.08) * k / 4, y = Y(p);
+      const p = db ? bottom + (top - bottom) * k / 4 : (top / 1.08) * k / 4;
+      const y = Yl(p);
       ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
       ctx.fillStyle = tok("--ink-4"); ctx.textAlign = "right"; ctx.textBaseline = "middle";
       ctx.fillText(fmt(Number(p.toPrecision(3))), padL - 6, y);
     }
     for (const v of niceTicks(t0, t1, Math.max(3, Math.floor(pw / 90)))) {
-      ctx.beginPath(); ctx.moveTo(X(v), padT); ctx.lineTo(X(v), padT + ph); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(X(v * tDiv), padT); ctx.lineTo(X(v * tDiv), padT + ph); ctx.stroke();
     }
     ctx.save();
     ctx.beginPath(); ctx.rect(padL, padT, pw, ph); ctx.clip();
@@ -38666,11 +40010,12 @@ verdict, and DESIGN.md
     ctx.lineTo(w - padR, padT + ph); ctx.stroke();
     ctx.fillStyle = tok("--ink-3"); ctx.textBaseline = "top"; ctx.textAlign = "center";
     for (const v of niceTicks(t0, t1, Math.max(3, Math.floor(pw / 90)))) {
-      ctx.fillText(fmt(v), X(v), padT + ph + 6);
+      ctx.fillText(fmt(v), X(v * tDiv), padT + ph + 6);
     }
-    ctx.fillText("time (ps)", padL + pw / 2, padT + ph + 18);
+    ctx.fillText(`time (${tUnit})`, padL + pw / 2, padT + ph + 18);
     ctx.save(); ctx.translate(11, padT + ph / 2); ctx.rotate(-Math.PI / 2);
-    ctx.fillText(norm ? "power / peak" : "power (mW)", 0, 0);
+    ctx.fillText(norm ? (db ? "power / peak (dB)" : "power / peak")
+                      : (db ? "power (dBm)" : "power (mW)"), 0, 0);
     ctx.restore();
     if (showChirp) {
       ctx.textAlign = "left"; ctx.textBaseline = "middle";
@@ -38698,6 +40043,7 @@ verdict, and DESIGN.md
   }
   $("#scope-norm").addEventListener("change", () => drawScope());
   $("#scope-chirp").addEventListener("change", () => drawScope());
+  $("#scope-db").addEventListener("change", () => { SCOPE_DB.touched = true; drawScope(); });
 
   function drawNoSpectrum(ctx, w, h) {
     ctx.fillStyle = tok("--plot-bg"); ctx.fillRect(0, 0, w, h);

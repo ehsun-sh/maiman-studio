@@ -228,6 +228,7 @@ def _scope(trace: ScopeTrace) -> dict[str, Any]:
         "rms_width_ps": number(trace.rms_width * 1e12),
         "centroid_ps": number(trace.centroid * 1e12),
         "energy_pj": number(trace.energy_j * 1e12),
+        "decibels": bool(trace.decibels),
     }
 
 
