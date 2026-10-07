@@ -3,8 +3,9 @@
 # Each runner freezes the session server with PyInstaller for its own platform
 # (PyInstaller cannot cross-compile), checks the frozen copy serves the studio
 # and runs a link, then wraps it in Electron with electron-builder. The
-# installers are uploaded as workflow artifacts, and attached to the GitHub
-# release when one is published.
+# installers are uploaded as workflow artifacts only. Releases ship no
+# installers; the Maiman App shortcut (tools/make_shortcut.py) is the way to
+# open the studio.
 #
 # Nothing is signed. A macOS build is quarantined by Gatekeeper and a Windows
 # installer is flagged by SmartScreen until signing certificates exist;
@@ -19,8 +20,6 @@ on:
       - "src/maiman/server.py"
       - "src/maiman/cli.py"
       - ".github/workflows/desktop.yml"
-  release:
-    types: [published]
   workflow_dispatch:
 
 concurrency:
@@ -89,20 +88,3 @@ jobs:
             desktop/dist/*.deb
           if-no-files-found: error
 
-  attach:
-    name: Attach to the release
-    if: github.event_name == 'release'
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@v8
-        with:
-          path: installers
-          merge-multiple: true
-
-      - name: Upload
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" installers/* --repo "${{ github.repository }}" --clobber
