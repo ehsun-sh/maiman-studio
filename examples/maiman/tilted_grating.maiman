@@ -1,0 +1,254 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 10000000000.0,
+    "samples_per_symbol": 8,
+    "sequence_length": 256,
+    "seed": 1,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "seed",
+      "type": "CWLaser",
+      "params": {
+        "power": -100.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "ase",
+      "type": "EDFA",
+      "params": {
+        "gain": 30.0,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "osa_in",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1544.0,
+        "span": 2000.0,
+        "points": 4096.0,
+        "resolution_bandwidth": 1.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 290.0
+      }
+    },
+    {
+      "id": "sp",
+      "type": "Splitter",
+      "params": {},
+      "config": {
+        "num_outputs": 2
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "tfbg_air",
+      "type": "TiltedFiberBraggGrating",
+      "params": {
+        "period": 535.0,
+        "tilt": 4.0,
+        "length": 10.0,
+        "index_modulation": 0.0005,
+        "surrounding_index": 1.0,
+        "azimuthal_orders": 3.0
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "osa_air",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1544.0,
+        "span": 2000.0,
+        "points": 4096.0,
+        "resolution_bandwidth": 1.0
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "tfbg_water",
+      "type": "TiltedFiberBraggGrating",
+      "params": {
+        "period": 535.0,
+        "tilt": 4.0,
+        "length": 10.0,
+        "index_modulation": 0.0005,
+        "surrounding_index": 1.333,
+        "azimuthal_orders": 3.0
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 240.0
+      }
+    },
+    {
+      "id": "osa_water",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1544.0,
+        "span": 2000.0,
+        "points": 4096.0,
+        "resolution_bandwidth": 1.0
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 240.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "seed",
+        "out"
+      ],
+      "to": [
+        "ase",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "tfbg_air",
+        "transmitted"
+      ],
+      "to": [
+        "osa_air",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "ase",
+        "out"
+      ],
+      "to": [
+        "osa_in",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "tfbg_water",
+        "transmitted"
+      ],
+      "to": [
+        "osa_water",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "ase",
+        "out"
+      ],
+      "to": [
+        "sp",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "sp",
+        "out0"
+      ],
+      "to": [
+        "tfbg_air",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "sp",
+        "out1"
+      ],
+      "to": [
+        "tfbg_water",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "6.3 A tilted grating reads a liquid",
+    "body": "A Bragg grating written square to the fibre only reflects the core mode into itself, so it is\nblind to what is outside the glass. Tilt its fringes by 4\u00b0 and the core light can also couple\ninto backward *cladding* modes, which run along the outside of the glass and feel what the fibre\nis dipped in. Each one cuts a narrow notch below the Bragg line.\n\nThe same grating is shown twice: [[tfbg_air]] in air and [[tfbg_water]] in water ($n = 1.333$).\n[[osa_air]] and [[osa_water]] show what each transmits.\n\n## Where the notches are\n\nThe core mode couples to a cladding mode $m$ where\n\n$$\\lambda_m = \\left(n_\\text{core} + n_{\\text{clad},m}\\right)\\Lambda$$\n\nwith $\\Lambda = 535$ nm. The Bragg line, where the core couples to itself, is the longest one, at\n1551.24 nm. Cladding modes have lower indices, so their notches form a comb reaching 15 nm below\nit, each about 10 dB deep.\n\n## What water does\n\nWater raises the index outside the glass. That pulls each cladding mode's field outwards and\nraises its effective index, so its notch moves to a longer wavelength. Measured by sliding the\ntwo traces over each other:\n\n| part of the comb | moved by |\n| :-- | :-- |\n| 1536.5 to 1538.5 nm | 88 pm |\n| 1546.5 to 1548.5 nm | 17 pm |\n| the Bragg line | 0 pm |\n\nThe modes deepest in the comb reach furthest out of the glass and move most. The Bragg line never\nleaves the core and does not move at all. Temperature moves the whole comb together, so reading\nthe comb against the Bragg line gives the outside index with its own temperature reference.\n\n## Try this\n\n- Set *surrounding_index* of [[tfbg_water]] to 1.40. The bottom of the comb moves further.\n- Set *tilt* of [[tfbg_air]] to 8\u00b0. The fringes along the axis spread out by $1/\\cos\\theta$,\n  so the Bragg line moves to 1562.6 nm, out of this window, and only the comb is left in it.\n\nThis one takes about half a minute to run: every notch is a mode solve."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 113.0,
+      "w": 284.0,
+      "h": 238.0,
+      "text": "White light",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 13.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "In air",
+      "tone": "binary"
+    },
+    {
+      "id": "a3",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 213.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "In water",
+      "tone": "symbol"
+    },
+    {
+      "id": "a4",
+      "kind": "note",
+      "x": 440.0,
+      "y": 352.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "The comb moves by up to 88 pm. The Bragg line does not move.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 538.0,
+      "y1": 350.0,
+      "x2": 538.0,
+      "y2": 306.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

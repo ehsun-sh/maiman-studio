@@ -25,6 +25,7 @@ import dwdm_link
 import first_light
 import lessons
 import numpy as np
+import sensing
 
 from maiman import Graph, SimulationContext, manifests, sweep
 from maiman.component import Component
@@ -619,6 +620,11 @@ TEMPLATES: dict[str, tuple[str, Path]] = {
     "birefringent-ring": ("5.4 A birefringent ring", chip.project_path("birefringent_ring")),
     "chip-couplers": ("5.5 Edge and grating couplers", chip.project_path("chip_couplers")),
     "pdk-splitter": ("5.6 A splitter from a foundry kit", chip.project_path("pdk_splitter")),
+    "fbg-strain": ("6.1 FBG strain gauge and thermometer", sensing.project_path("fbg_strain")),
+    "fbg-drop": ("6.2 FBG and circulator: a drop port", sensing.project_path("fbg_drop")),
+    "tilted-grating": ("6.3 Tilted grating refractometer", sensing.project_path("tilted_grating")),
+    "lpg-pair": ("6.4 Long-period grating pair", sensing.project_path("lpg_pair")),
+    "otdr": ("6.5 OTDR: finding a break", sensing.project_path("otdr")),
 }
 
 
@@ -690,6 +696,8 @@ def main() -> None:
         coherent.write(key)
     for key in chip.EXAMPLES:
         chip.write(key)
+    for key in sensing.EXAMPLES:
+        sensing.write(key)
 
     # Required received power per format, from the same graph re-run.
     sensitivity: list[dict[str, Any]] = []

@@ -655,6 +655,63 @@ def _pdk_splitter(at: Layout) -> list[dict[str, Any]]:
     ]
 
 
+# ---------------------------------------------------------------------------
+# Phase 6: sensing
+
+
+def _fbg_strain(at: Layout) -> list[dict[str, Any]]:
+    return [
+        _source(at),
+        frame(at, ["working", "reference"], "One fibre, two gratings", "binary"),
+        frame(at, ["osa_work", "osa_ref"], "Each reflection", "metric"),
+        below_note(at["reference"], "Loose in its tube: it feels the heat and none of the load."),
+        below_arrow(at["reference"]),
+    ]
+
+
+def _fbg_drop(at: Layout) -> list[dict[str, Any]]:
+    circ = at["circ"]
+    return [
+        frame(at, ["ch1550", "ch1552", "mux"], "Two channels", "optical"),
+        frame(at, ["circ", "fbg"], "Drop", "binary"),
+        frame(at, ["pm_drop", "osa_drop"], "Dropped", "metric"),
+        frame(at, ["pm_thru", "osa_thru"], "Express", "metric"),
+        *above_note(circ, "Through the circulator twice: 2 × 0.7 dB, plus the grating's 0.30 dB."),
+    ]
+
+
+def _tilted_grating(at: Layout) -> list[dict[str, Any]]:
+    return [
+        _source(at),
+        frame(at, ["tfbg_air", "osa_air"], "In air", "binary"),
+        frame(at, ["tfbg_water", "osa_water"], "In water", "symbol"),
+        below_note(
+            at["tfbg_water"], "The comb moves by up to 88 pm. The Bragg line does not move."
+        ),
+        below_arrow(at["tfbg_water"]),
+    ]
+
+
+def _lpg_pair(at: Layout) -> list[dict[str, Any]]:
+    return [
+        _source(at),
+        frame(at, ["lpg_one", "osa_one"], "One grating", "binary"),
+        frame(at, ["lpg_pair", "osa_pair"], "Two, 200 mm apart", "symbol"),
+        below_note(at["lpg_pair"], "Fringes $\\lambda^2/(\\Delta n_g\\,d)$ apart: 2.31 nm here."),
+        below_arrow(at["lpg_pair"]),
+    ]
+
+
+def _otdr(at: Layout) -> list[dict[str, Any]]:
+    fut = at["fut"]
+    return [
+        frame(at, ["pulse"], "Probe", "optical"),
+        frame(at, ["otdr"], "Echo", "metric"),
+        below_note(fut, "25 km on the drawing. The echo stops at 17.30 km: dig there."),
+        below_arrow(fut),
+    ]
+
+
 _MARKS = {
     "ook_eye": _ook_eye,
     "wdm_osa": _wdm_osa,
@@ -691,6 +748,11 @@ _MARKS = {
     "birefringent_ring": _birefringent_ring,
     "chip_couplers": _chip_couplers,
     "pdk_splitter": _pdk_splitter,
+    "fbg_strain": _fbg_strain,
+    "fbg_drop": _fbg_drop,
+    "tilted_grating": _tilted_grating,
+    "lpg_pair": _lpg_pair,
+    "otdr": _otdr,
 }
 
 
@@ -2168,6 +2230,222 @@ returning a negative power fraction. `examples/python/pdk_import.py` shows that,
 ## Try this
 
 - Raise *imbalance* of [[kit]] to 1 dB and compare [[pm_kit1]] with [[pm_kit4]].
+""".strip(),
+    },
+    "fbg_strain": {
+        "title": "6.1 A Bragg grating as a strain gauge and a thermometer",
+        "body": r"""
+Two Bragg gratings sit in series on one fibre, lit by white light from [[ase]]. [[working]] is
+glued to a part under 400 µε of load. [[reference]] is loose in a tube beside it. Both are
+15 K warmer than when they were written. Each reflects a narrow band, read on [[osa_work]] and
+[[osa_ref]]. Light neither grating reflects goes on to [[osa_thru]].
+
+## What moves the reflection
+
+A grating reflects where its period fits half a wavelength in the glass:
+
+$$\lambda_B = 2\,n_\text{eff}\,\Lambda$$
+
+Stretching the fibre lengthens $\Lambda$ and, through the photo-elastic effect, lowers
+$n_\text{eff}$ a little. Warming it expands the glass and raises its index. Both are a material
+number times $\lambda_B$:
+
+$$\frac{\Delta\lambda_B}{\lambda_B} = (1 - p_e)\,\varepsilon + (\alpha + \xi)\,\Delta T$$
+
+with $p_e = 0.22$ and $\alpha + \xi = 7.22 \times 10^{-6}$ /K. At 1545 nm that is 1.21 pm per
+microstrain and 11.2 pm per kelvin.
+
+## One wavelength, two unknowns
+
+Divide one sensitivity by the other: 9.26 µε per kelvin. A degree of warming moves the peak as
+far as 9.26 µε of load, and nothing in the spectrum tells them apart. Read as strain alone,
+[[working]] reports 539 µε, not 400: the extra 139 µε is the 15 K.
+
+## The reference grating
+
+[[reference]] feels only the temperature, so its shift is the temperature. The peaks are read
+the way an interrogator reads them, as the centroid of the top half of each reflection:
+
+| | written at | peak at | shift |
+| :-- | :-- | :-- | :-- |
+| [[working]] | 1545 nm | 1545.6498 nm | 649.8 pm |
+| [[reference]] | 1555 nm | 1555.1692 nm | 169.2 pm |
+
+The reference's shift gives 15.07 K. Subtract that much drift from [[working]] and what is left
+is 399.7 µε of load.
+
+## Try this
+
+- Set *strain* of [[working]] to 0. Its peak moves back by 0.48 nm and the reference stays put.
+- Set *temperature_change* of both to 0. Now the two peaks shift by the load alone.
+""".strip(),
+    },
+    "fbg_drop": {
+        "title": "6.2 A grating and a circulator: dropping a channel",
+        "body": r"""
+Two channels, [[ch1550]] and [[ch1552]], share a fibre through [[mux]]. A Bragg grating [[fbg]]
+reflects 1550 nm back the way it came. A circulator [[circ]] sends light from port 1 to port 2
+and from port 2 to port 3, so the reflection leaves by a third fibre: the *drop* port, read on
+[[pm_drop]] and [[osa_drop]]. Everything else passes the grating to [[pm_thru]] and [[osa_thru]].
+
+## The budget
+
+The grating reflects $R = 0.933$ ($-0.30$ dB) at its centre, over 0.198 nm. Each pass through
+the circulator costs 0.7 dB, and the dropped light passes twice:
+
+| | 1550 nm | 1552 nm |
+| :-- | :-- | :-- |
+| [[pm_drop]] | −1.70 dBm | −38.71 dBm |
+| [[pm_thru]] | −12.43 dBm | −0.70 dBm |
+
+−1.70 dBm is $2 \times 0.7 + 0.30$ dB. The express channel pays one pass. What the grating does
+not reflect at 1550 nm, $1 - R$ or $-11.73$ dB, carries on to the express port.
+
+## What sets the crosstalk
+
+With an ideal circulator the 1552 nm channel reaches the drop port only through the grating's
+sidelobes, at −47.36 dBm. This circulator has 40 dB of isolation, and the light it leaks from
+port 1 straight to port 3 is stronger: −38.71 dBm, so the dropped channel is 37.0 dB above its
+neighbour. Here the circulator, not the grating, limits the drop.
+
+## Try this
+
+- Set *isolation* of [[circ]] to 0, which is ideal. [[pm_drop]] at 1552 nm falls to −47.4 dBm.
+- Set *bragg_wavelength* of [[fbg]] to 1552 nm. The other channel is dropped instead.
+""".strip(),
+    },
+    "tilted_grating": {
+        "title": "6.3 A tilted grating reads a liquid",
+        "body": r"""
+A Bragg grating written square to the fibre only reflects the core mode into itself, so it is
+blind to what is outside the glass. Tilt its fringes by 4° and the core light can also couple
+into backward *cladding* modes, which run along the outside of the glass and feel what the fibre
+is dipped in. Each one cuts a narrow notch below the Bragg line.
+
+The same grating is shown twice: [[tfbg_air]] in air and [[tfbg_water]] in water ($n = 1.333$).
+[[osa_air]] and [[osa_water]] show what each transmits.
+
+## Where the notches are
+
+The core mode couples to a cladding mode $m$ where
+
+$$\lambda_m = \left(n_\text{core} + n_{\text{clad},m}\right)\Lambda$$
+
+with $\Lambda = 535$ nm. The Bragg line, where the core couples to itself, is the longest one, at
+1551.24 nm. Cladding modes have lower indices, so their notches form a comb reaching 15 nm below
+it, each about 10 dB deep.
+
+## What water does
+
+Water raises the index outside the glass. That pulls each cladding mode's field outwards and
+raises its effective index, so its notch moves to a longer wavelength. Measured by sliding the
+two traces over each other:
+
+| part of the comb | moved by |
+| :-- | :-- |
+| 1536.5 to 1538.5 nm | 88 pm |
+| 1546.5 to 1548.5 nm | 17 pm |
+| the Bragg line | 0 pm |
+
+The modes deepest in the comb reach furthest out of the glass and move most. The Bragg line never
+leaves the core and does not move at all. Temperature moves the whole comb together, so reading
+the comb against the Bragg line gives the outside index with its own temperature reference.
+
+## Try this
+
+- Set *surrounding_index* of [[tfbg_water]] to 1.40. The bottom of the comb moves further.
+- Set *tilt* of [[tfbg_air]] to 8°. The fringes along the axis spread out by $1/\cos\theta$,
+  so the Bragg line moves to 1562.6 nm, out of this window, and only the comb is left in it.
+
+This one takes about half a minute to run: every notch is a mode solve.
+""".strip(),
+    },
+    "lpg_pair": {
+        "title": "6.4 A long-period grating, and a pair of them",
+        "body": r"""
+A long-period grating has a period of hundreds of microns, not half a wavelength. It couples the
+core mode *forwards*, into a cladding mode, at the wavelength where
+
+$$\lambda = \left(n_\text{core} - n_{\text{clad},m}\right)\Lambda$$
+
+With $\Lambda = 485$ µm that is the LP04 cladding mode near 1550 nm. On bare fibre the cladding
+light is lost in the coating, so the grating cuts a broad notch in the transmission.
+
+## One grating
+
+[[lpg_one]] is just strong enough to hand all of the core light to the cladding at the centre.
+[[osa_one]] shows a notch at 1550.14 nm, more than 60 dB deep, and many nanometres wide: the core
+and cladding indices part only slowly with wavelength.
+
+## Two gratings
+
+[[lpg_pair]] is the same grating written twice, 200 mm apart, each half as strong. The first sends
+half the light into the cladding. Over the gap, core and cladding light travel at different speeds.
+The second grating then puts the cladding light back into the core, where it meets the light that
+stayed. That is a Mach–Zehnder interferometer inside one fibre, so the notch fills with fringes:
+
+$$\Delta\lambda = \frac{\lambda^2}{\Delta n_g\, d}$$
+
+[[osa_pair]] shows them 2.31 nm apart near the centre, with the deepest at 1549.93 nm. Double the
+gap to 400 mm and they close to 1.24 nm. Since $d$ is a little more than the gap, the spacing does
+not halve exactly.
+
+Each fringe is a narrow notch that moves with whatever the cladding light felt in the gap, which
+makes a pair a more sensitive sensor than one grating.
+
+## Try this
+
+- Set *separation* of [[lpg_pair]] to 400 mm and watch the fringes close up.
+- Set *gap_loss* of [[lpg_pair]] to 6 dB. The cladding light no longer cancels the core light and
+  the fringes wash out.
+""".strip(),
+    },
+    "otdr": {
+        "title": "6.5 An OTDR finds a break",
+        "body": r"""
+A 25 km fibre has been cut by a digger. An optical time-domain reflectometer (OTDR) finds where,
+from one end, without anyone walking the route.
+
+[[pulse]] sends a 100 ns pulse (FWHM) at 20 dBm peak into the fibre [[fut]]. As it travels, the glass
+scatters a little of it in every direction (Rayleigh scattering), and a small part of that is
+caught by the core going back. [[otdr]] shows what returns, in dBm, against the time since launch.
+
+## Time is distance
+
+Light scattered at a distance $z$ is back after the round trip, so
+
+$$z = \frac{c\,t}{2\,n_g}$$
+
+With $n_g = 1.468$, each 9.79 µs of trace is a kilometre of fibre.
+
+## The slope is the loss
+
+Light scattered at $z$ has crossed $z$ twice, so the trace falls by twice the fibre's loss: 0.4 dB
+per km here, for 0.2 dB/km of fibre. From 1 km to 5 km it falls from −41.81 to −43.41 dBm.
+
+How bright it starts is set by the pulse's energy $E$:
+
+$$P(0) = E\; S\,\alpha_s\,\frac{v_g}{2}$$
+
+with $S = 0.0017$ the share the core catches and $\alpha_s$ the scattering part of the loss. The
+trace starts near −41.4 dBm, about 61 dB below the pulse.
+
+## Events
+
+- **A splice at 8 km.** The trace steps down by 1.0 dB: the splice's 0.5 dB, paid twice.
+- **The break at 17.30 km.** The broken glass reflects a little of the pulse straight back, a spike
+  well above the scatter, and then nothing returns at all. The fibre is 25 km on the drawing. The
+  last echo says it now ends at 17.30 km, and that is where to dig.
+
+A real OTDR's trace would sink into detector noise far below these levels. This one has no
+detector noise, so it falls forever.
+
+## Try this
+
+- Set *break_at* of [[fut]] to 0. The spike moves to 25 km, the clean far end, and is brighter
+  because a cleave reflects −14.7 dB.
+- Set *width* of [[pulse]] to 600000 ps. The trace gets brighter but the splice step smears out:
+  a long pulse trades resolution for range.
 """.strip(),
     },
 }

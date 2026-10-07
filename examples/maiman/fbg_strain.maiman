@@ -1,0 +1,261 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 10000000000.0,
+    "samples_per_symbol": 8,
+    "sequence_length": 256,
+    "seed": 1,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "seed",
+      "type": "CWLaser",
+      "params": {
+        "power": -100.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "ase",
+      "type": "EDFA",
+      "params": {
+        "gain": 30.0,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "osa_in",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1550.0,
+        "span": 2000.0,
+        "points": 4096.0,
+        "resolution_bandwidth": 1.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 290.0
+      }
+    },
+    {
+      "id": "working",
+      "type": "FiberBraggGrating",
+      "params": {
+        "length": 10.0,
+        "index_modulation": 0.00015,
+        "bragg_wavelength": 1545.0,
+        "strain": 400.0,
+        "temperature_change": 15.0
+      },
+      "config": {
+        "apodization": "uniform"
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "reference",
+      "type": "FiberBraggGrating",
+      "params": {
+        "length": 10.0,
+        "index_modulation": 0.00015,
+        "bragg_wavelength": 1555.0,
+        "strain": 0.0,
+        "temperature_change": 15.0
+      },
+      "config": {
+        "apodization": "uniform"
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "osa_work",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1550.0,
+        "span": 2000.0,
+        "points": 4096.0,
+        "resolution_bandwidth": 1.0
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 0.0
+      }
+    },
+    {
+      "id": "osa_ref",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1550.0,
+        "span": 2000.0,
+        "points": 4096.0,
+        "resolution_bandwidth": 1.0
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 0.0
+      }
+    },
+    {
+      "id": "osa_thru",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1550.0,
+        "span": 2000.0,
+        "points": 4096.0,
+        "resolution_bandwidth": 1.0
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 140.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "seed",
+        "out"
+      ],
+      "to": [
+        "ase",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "ase",
+        "out"
+      ],
+      "to": [
+        "osa_in",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "reference",
+        "reflected"
+      ],
+      "to": [
+        "osa_ref",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "reference",
+        "transmitted"
+      ],
+      "to": [
+        "osa_thru",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "working",
+        "reflected"
+      ],
+      "to": [
+        "osa_work",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "working",
+        "transmitted"
+      ],
+      "to": [
+        "reference",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "ase",
+        "out"
+      ],
+      "to": [
+        "working",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "6.1 A Bragg grating as a strain gauge and a thermometer",
+    "body": "Two Bragg gratings sit in series on one fibre, lit by white light from [[ase]]. [[working]] is\nglued to a part under 400 \u00b5\u03b5 of load. [[reference]] is loose in a tube beside it. Both are\n15 K warmer than when they were written. Each reflects a narrow band, read on [[osa_work]] and\n[[osa_ref]]. Light neither grating reflects goes on to [[osa_thru]].\n\n## What moves the reflection\n\nA grating reflects where its period fits half a wavelength in the glass:\n\n$$\\lambda_B = 2\\,n_\\text{eff}\\,\\Lambda$$\n\nStretching the fibre lengthens $\\Lambda$ and, through the photo-elastic effect, lowers\n$n_\\text{eff}$ a little. Warming it expands the glass and raises its index. Both are a material\nnumber times $\\lambda_B$:\n\n$$\\frac{\\Delta\\lambda_B}{\\lambda_B} = (1 - p_e)\\,\\varepsilon + (\\alpha + \\xi)\\,\\Delta T$$\n\nwith $p_e = 0.22$ and $\\alpha + \\xi = 7.22 \\times 10^{-6}$ /K. At 1545 nm that is 1.21 pm per\nmicrostrain and 11.2 pm per kelvin.\n\n## One wavelength, two unknowns\n\nDivide one sensitivity by the other: 9.26 \u00b5\u03b5 per kelvin. A degree of warming moves the peak as\nfar as 9.26 \u00b5\u03b5 of load, and nothing in the spectrum tells them apart. Read as strain alone,\n[[working]] reports 539 \u00b5\u03b5, not 400: the extra 139 \u00b5\u03b5 is the 15 K.\n\n## The reference grating\n\n[[reference]] feels only the temperature, so its shift is the temperature. The peaks are read\nthe way an interrogator reads them, as the centroid of the top half of each reflection:\n\n| | written at | peak at | shift |\n| :-- | :-- | :-- | :-- |\n| [[working]] | 1545 nm | 1545.6498 nm | 649.8 pm |\n| [[reference]] | 1555 nm | 1555.1692 nm | 169.2 pm |\n\nThe reference's shift gives 15.07 K. Subtract that much drift from [[working]] and what is left\nis 399.7 \u00b5\u03b5 of load.\n\n## Try this\n\n- Set *strain* of [[working]] to 0. Its peak moves back by 0.48 nm and the reference stays put.\n- Set *temperature_change* of both to 0. Now the two peaks shift by the load alone."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 113.0,
+      "w": 284.0,
+      "h": 238.0,
+      "text": "White light",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 321.0,
+      "y": 113.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "One fibre, two gratings",
+      "tone": "binary"
+    },
+    {
+      "id": "a3",
+      "kind": "rect",
+      "x": 471.0,
+      "y": -27.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "Each reflection",
+      "tone": "metric"
+    },
+    {
+      "id": "a4",
+      "kind": "note",
+      "x": 440.0,
+      "y": 252.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "Loose in its tube: it feels the heat and none of the load.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 538.0,
+      "y1": 250.0,
+      "x2": 538.0,
+      "y2": 206.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

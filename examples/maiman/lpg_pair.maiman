@@ -1,0 +1,248 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 10000000000.0,
+    "samples_per_symbol": 8,
+    "sequence_length": 256,
+    "seed": 1,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "seed",
+      "type": "CWLaser",
+      "params": {
+        "power": -100.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "ase",
+      "type": "EDFA",
+      "params": {
+        "gain": 30.0,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "osa_in",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1550.0,
+        "span": 4000.0,
+        "points": 4096.0,
+        "resolution_bandwidth": 1.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 290.0
+      }
+    },
+    {
+      "id": "sp",
+      "type": "Splitter",
+      "params": {},
+      "config": {
+        "num_outputs": 2
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "lpg_one",
+      "type": "LongPeriodGrating",
+      "params": {
+        "period": 485.0,
+        "index_modulation": 0.000325
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "lpg_pair",
+      "type": "LongPeriodGrating",
+      "params": {
+        "period": 485.0,
+        "index_modulation": 0.0001625,
+        "pair": true,
+        "separation": 200.0
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 240.0
+      }
+    },
+    {
+      "id": "osa_one",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1550.0,
+        "span": 4000.0,
+        "points": 4096.0,
+        "resolution_bandwidth": 1.0
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "osa_pair",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1550.0,
+        "span": 4000.0,
+        "points": 4096.0,
+        "resolution_bandwidth": 1.0
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 240.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "seed",
+        "out"
+      ],
+      "to": [
+        "ase",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "sp",
+        "out0"
+      ],
+      "to": [
+        "lpg_one",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "sp",
+        "out1"
+      ],
+      "to": [
+        "lpg_pair",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "ase",
+        "out"
+      ],
+      "to": [
+        "osa_in",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "lpg_one",
+        "transmitted"
+      ],
+      "to": [
+        "osa_one",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "lpg_pair",
+        "transmitted"
+      ],
+      "to": [
+        "osa_pair",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "ase",
+        "out"
+      ],
+      "to": [
+        "sp",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "6.4 A long-period grating, and a pair of them",
+    "body": "A long-period grating has a period of hundreds of microns, not half a wavelength. It couples the\ncore mode *forwards*, into a cladding mode, at the wavelength where\n\n$$\\lambda = \\left(n_\\text{core} - n_{\\text{clad},m}\\right)\\Lambda$$\n\nWith $\\Lambda = 485$ \u00b5m that is the LP04 cladding mode near 1550 nm. On bare fibre the cladding\nlight is lost in the coating, so the grating cuts a broad notch in the transmission.\n\n## One grating\n\n[[lpg_one]] is just strong enough to hand all of the core light to the cladding at the centre.\n[[osa_one]] shows a notch at 1550.14 nm, more than 60 dB deep, and many nanometres wide: the core\nand cladding indices part only slowly with wavelength.\n\n## Two gratings\n\n[[lpg_pair]] is the same grating written twice, 200 mm apart, each half as strong. The first sends\nhalf the light into the cladding. Over the gap, core and cladding light travel at different speeds.\nThe second grating then puts the cladding light back into the core, where it meets the light that\nstayed. That is a Mach\u2013Zehnder interferometer inside one fibre, so the notch fills with fringes:\n\n$$\\Delta\\lambda = \\frac{\\lambda^2}{\\Delta n_g\\, d}$$\n\n[[osa_pair]] shows them 2.31 nm apart near the centre, with the deepest at 1549.93 nm. Double the\ngap to 400 mm and they close to 1.24 nm. Since $d$ is a little more than the gap, the spacing does\nnot halve exactly.\n\nEach fringe is a narrow notch that moves with whatever the cladding light felt in the gap, which\nmakes a pair a more sensitive sensor than one grating.\n\n## Try this\n\n- Set *separation* of [[lpg_pair]] to 400 mm and watch the fringes close up.\n- Set *gap_loss* of [[lpg_pair]] to 6 dB. The cladding light no longer cancels the core light and\n  the fringes wash out."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 113.0,
+      "w": 284.0,
+      "h": 238.0,
+      "text": "White light",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 13.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "One grating",
+      "tone": "binary"
+    },
+    {
+      "id": "a3",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 213.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "Two, 200 mm apart",
+      "tone": "symbol"
+    },
+    {
+      "id": "a4",
+      "kind": "note",
+      "x": 440.0,
+      "y": 352.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "Fringes $\\lambda^2/(\\Delta n_g\\,d)$ apart: 2.31 nm here.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 538.0,
+      "y1": 350.0,
+      "x2": 538.0,
+      "y2": 306.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

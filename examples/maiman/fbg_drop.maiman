@@ -1,0 +1,289 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 10000000000.0,
+    "samples_per_symbol": 8,
+    "sequence_length": 256,
+    "seed": 1,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "ch1550",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "ch1552",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1552.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 180.0
+      }
+    },
+    {
+      "id": "mux",
+      "type": "Combiner",
+      "params": {},
+      "config": {
+        "num_inputs": 2
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 110.0
+      }
+    },
+    {
+      "id": "circ",
+      "type": "Circulator",
+      "params": {
+        "insertion_loss": 0.7,
+        "isolation": 40.0
+      },
+      "config": {
+        "driven": [
+          1,
+          2
+        ]
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 110.0
+      }
+    },
+    {
+      "id": "fbg",
+      "type": "FiberBraggGrating",
+      "params": {
+        "bragg_wavelength": 1550.0,
+        "length": 10.0,
+        "index_modulation": 0.0001
+      },
+      "config": {
+        "apodization": "uniform"
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 110.0
+      }
+    },
+    {
+      "id": "pm_drop",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+        "x": 480.0,
+        "y": 260.0
+      }
+    },
+    {
+      "id": "osa_drop",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1550.0,
+        "span": 1000.0,
+        "points": 4096.0,
+        "resolution_bandwidth": 1.0
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 260.0
+      }
+    },
+    {
+      "id": "pm_thru",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+        "x": 630.0,
+        "y": -10.0
+      }
+    },
+    {
+      "id": "osa_thru",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1550.0,
+        "span": 1000.0,
+        "points": 4096.0,
+        "resolution_bandwidth": 1.0
+      },
+      "ui": {
+        "x": 780.0,
+        "y": 110.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "mux",
+        "out"
+      ],
+      "to": [
+        "circ",
+        "in1"
+      ]
+    },
+    {
+      "from": [
+        "fbg",
+        "reflected"
+      ],
+      "to": [
+        "circ",
+        "in2"
+      ]
+    },
+    {
+      "from": [
+        "circ",
+        "out2"
+      ],
+      "to": [
+        "fbg",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "ch1550",
+        "out"
+      ],
+      "to": [
+        "mux",
+        "in0"
+      ]
+    },
+    {
+      "from": [
+        "ch1552",
+        "out"
+      ],
+      "to": [
+        "mux",
+        "in1"
+      ]
+    },
+    {
+      "from": [
+        "circ",
+        "out3"
+      ],
+      "to": [
+        "osa_drop",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "fbg",
+        "transmitted"
+      ],
+      "to": [
+        "osa_thru",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "circ",
+        "out3"
+      ],
+      "to": [
+        "pm_drop",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "fbg",
+        "transmitted"
+      ],
+      "to": [
+        "pm_thru",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "6.2 A grating and a circulator: dropping a channel",
+    "body": "Two channels, [[ch1550]] and [[ch1552]], share a fibre through [[mux]]. A Bragg grating [[fbg]]\nreflects 1550 nm back the way it came. A circulator [[circ]] sends light from port 1 to port 2\nand from port 2 to port 3, so the reflection leaves by a third fibre: the *drop* port, read on\n[[pm_drop]] and [[osa_drop]]. Everything else passes the grating to [[pm_thru]] and [[osa_thru]].\n\n## The budget\n\nThe grating reflects $R = 0.933$ ($-0.30$ dB) at its centre, over 0.198 nm. Each pass through\nthe circulator costs 0.7 dB, and the dropped light passes twice:\n\n| | 1550 nm | 1552 nm |\n| :-- | :-- | :-- |\n| [[pm_drop]] | \u22121.70 dBm | \u221238.71 dBm |\n| [[pm_thru]] | \u221212.43 dBm | \u22120.70 dBm |\n\n\u22121.70 dBm is $2 \\times 0.7 + 0.30$ dB. The express channel pays one pass. What the grating does\nnot reflect at 1550 nm, $1 - R$ or $-11.73$ dB, carries on to the express port.\n\n## What sets the crosstalk\n\nWith an ideal circulator the 1552 nm channel reaches the drop port only through the grating's\nsidelobes, at \u221247.36 dBm. This circulator has 40 dB of isolation, and the light it leaks from\nport 1 straight to port 3 is stronger: \u221238.71 dBm, so the dropped channel is 37.0 dB above its\nneighbour. Here the circulator, not the grating, limits the drop.\n\n## Try this\n\n- Set *isolation* of [[circ]] to 0, which is ideal. [[pm_drop]] at 1552 nm falls to \u221247.4 dBm.\n- Set *bragg_wavelength* of [[fbg]] to 1552 nm. The other channel is dropped instead."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 284.0,
+      "h": 228.0,
+      "text": "Two channels",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 321.0,
+      "y": 83.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "Drop",
+      "tone": "binary"
+    },
+    {
+      "id": "a3",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 233.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "Dropped",
+      "tone": "metric"
+    },
+    {
+      "id": "a4",
+      "kind": "rect",
+      "x": 621.0,
+      "y": -37.0,
+      "w": 284.0,
+      "h": 208.0,
+      "text": "Express",
+      "tone": "metric"
+    },
+    {
+      "id": "a5",
+      "kind": "note",
+      "x": 303.0,
+      "y": -40.0,
+      "w": 170.0,
+      "h": 96.0,
+      "text": "Through the circulator twice: 2 \u00d7 0.7 dB, plus the grating's 0.30 dB.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a6",
+      "kind": "arrow",
+      "x1": 388.0,
+      "y1": 58.0,
+      "x2": 388.0,
+      "y2": 98.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

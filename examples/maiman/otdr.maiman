@@ -1,0 +1,121 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 12500000.0,
+    "samples_per_symbol": 4,
+    "sequence_length": 4096,
+    "seed": 1,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "pulse",
+      "type": "GaussianPulse",
+      "params": {
+        "peak_power": 20.0,
+        "width": 60000.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "fut",
+      "type": "BackscatterFiber",
+      "params": {
+        "length": 25.0,
+        "group_index": 1.468,
+        "splice_at": 8.0,
+        "splice_loss": 0.5,
+        "break_at": 17.3
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "otdr",
+      "type": "Oscilloscope",
+      "params": {
+        "decibels": true,
+        "from_start": true,
+        "points": 4096.0
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 40.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "pulse",
+        "out"
+      ],
+      "to": [
+        "fut",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "fut",
+        "backscatter"
+      ],
+      "to": [
+        "otdr",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "6.5 An OTDR finds a break",
+    "body": "A 25 km fibre has been cut by a digger. An optical time-domain reflectometer (OTDR) finds where,\nfrom one end, without anyone walking the route.\n\n[[pulse]] sends a 100 ns pulse (FWHM) at 20 dBm peak into the fibre [[fut]]. As it travels, the glass\nscatters a little of it in every direction (Rayleigh scattering), and a small part of that is\ncaught by the core going back. [[otdr]] shows what returns, in dBm, against the time since launch.\n\n## Time is distance\n\nLight scattered at a distance $z$ is back after the round trip, so\n\n$$z = \\frac{c\\,t}{2\\,n_g}$$\n\nWith $n_g = 1.468$, each 9.79 \u00b5s of trace is a kilometre of fibre.\n\n## The slope is the loss\n\nLight scattered at $z$ has crossed $z$ twice, so the trace falls by twice the fibre's loss: 0.4 dB\nper km here, for 0.2 dB/km of fibre. From 1 km to 5 km it falls from \u221241.81 to \u221243.41 dBm.\n\nHow bright it starts is set by the pulse's energy $E$:\n\n$$P(0) = E\\; S\\,\\alpha_s\\,\\frac{v_g}{2}$$\n\nwith $S = 0.0017$ the share the core catches and $\\alpha_s$ the scattering part of the loss. The\ntrace starts near \u221241.4 dBm, about 61 dB below the pulse.\n\n## Events\n\n- **A splice at 8 km.** The trace steps down by 1.0 dB: the splice's 0.5 dB, paid twice.\n- **The break at 17.30 km.** The broken glass reflects a little of the pulse straight back, a spike\n  well above the scatter, and then nothing returns at all. The fibre is 25 km on the drawing. The\n  last echo says it now ends at 17.30 km, and that is where to dig.\n\nA real OTDR's trace would sink into detector noise far below these levels. This one has no\ndetector noise, so it falls forever.\n\n## Try this\n\n- Set *break_at* of [[fut]] to 0. The spike moves to 25 km, the clean far end, and is brighter\n  because a cleave reflects \u221214.7 dB.\n- Set *width* of [[pulse]] to 600000 ps. The trace gets brighter but the splice step smears out:\n  a long pulse trades resolution for range."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 113.0,
+      "w": 134.0,
+      "h": 88.0,
+      "text": "Probe",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 321.0,
+      "y": 13.0,
+      "w": 134.0,
+      "h": 88.0,
+      "text": "Echo",
+      "tone": "metric"
+    },
+    {
+      "id": "a3",
+      "kind": "note",
+      "x": 140.0,
+      "y": 252.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "25 km on the drawing. The echo stops at 17.30 km: dig there.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a4",
+      "kind": "arrow",
+      "x1": 238.0,
+      "y1": 250.0,
+      "x2": 238.0,
+      "y2": 206.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

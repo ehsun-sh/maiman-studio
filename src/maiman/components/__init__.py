@@ -56,6 +56,7 @@ from .mapping import (
 )
 from .meters import Oscilloscope, OSNRMeter, PowerMeter
 from .modulators import IQModulator, MachZehnderModulator
+from .otdr import BackscatterFiber
 from .pam import FFEDFEEqualizer, PAM4Driver
 from .passive import (
     Attenuator,
@@ -83,6 +84,7 @@ __all__ = [
     "APDPhotodiode",
     "Attenuator",
     "BERAnalyzer",
+    "BackscatterFiber",
     "ButterflyEqualizer",
     "CWLaser",
     "CarrierRecovery",
