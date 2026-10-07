@@ -568,6 +568,93 @@ def _pcs(at: Layout) -> list[dict[str, Any]]:
     ]
 
 
+# ---------------------------------------------------------------------------
+# Phase 5: photonic integrated circuits
+
+
+def above_note(block: dict[str, float], text: str) -> list[dict[str, Any]]:
+    """A narrow note over ``block`` and an arrow down to it, clear of its neighbours."""
+    middle = block["x"] + NODE_W / 2.0
+    return [
+        note(block["x"] - 27.0, block["y"] - 150.0, text, w=170.0, h=96.0),
+        arrow(middle, block["y"] - 52.0, middle, block["y"] - 12.0),
+    ]
+
+
+def _source(at: Layout) -> dict[str, Any]:
+    return frame(at, ["seed", "ase", "osa_in"], "White light", "optical")
+
+
+def _coupler_length(at: Layout) -> list[dict[str, Any]]:
+    dc = at["dc"]
+    return [
+        _source(at),
+        frame(at, ["pm_bar", "osa_bar", "pm_cross", "osa_cross"], "Bar and cross", "metric"),
+        *above_note(
+            dc, "$\\kappa = \\sin^2(\\pi\\,\\Delta n\\,L/\\lambda)$: 9.69 µm is half of $L_c$."
+        ),
+    ]
+
+
+def _mzi(at: Layout) -> list[dict[str, Any]]:
+    device = at["mzi"]
+    return [
+        _source(at),
+        frame(at, ["osa_bar", "osa_cross"], "Two complementary combs", "metric"),
+        *above_note(device, "One arm 200 µm longer: a comb every $c/(n_g\\,\\Delta L)$ = 357 GHz."),
+    ]
+
+
+def _ring(at: Layout) -> list[dict[str, Any]]:
+    device = at["ring"]
+    return [
+        _source(at),
+        frame(at, ["osa_through", "osa_drop"], "Through and drop", "metric"),
+        *above_note(device, "A resonance every $c/(n_g L)$ = 714 GHz, 12.2 GHz wide."),
+    ]
+
+
+def _birefringent_ring(at: Layout) -> list[dict[str, Any]]:
+    biref = at["ring_biref"]
+    return [
+        _source(at),
+        frame(at, ["ring_plain", "osa_plain"], "One polarisation model", "binary"),
+        frame(at, ["ring_biref", "osa_biref"], "TE and TM apart", "symbol"),
+        below_note(biref, "TE every 714 GHz, TM every 789 GHz."),
+        below_arrow(biref),
+    ]
+
+
+def _chip_couplers(at: Layout) -> list[dict[str, Any]]:
+    return [
+        frame(at, ["tx", "edge_in", "wg_edge", "edge_out", "pm_edge"], "Edge couplers", "optical"),
+        frame(at, ["gc_in", "wg_gc", "gc_out"], "Grating couplers", "optical"),
+        frame(at, ["seed", "ase", "osa_in", "pm_ase"], "White light", "binary"),
+        frame(at, ["pm_gc", "osa_gc"], "Out", "metric"),
+    ]
+
+
+def _pdk_splitter(at: Layout) -> list[dict[str, Any]]:
+    kit = at["kit"]
+    return [
+        frame(at, ["ideal", "pm_ideal1", "pm_ideal4"], "Textbook", "binary"),
+        frame(at, ["kit", "pm_kit1", "pm_kit4"], "From the kit", "optical"),
+        note(
+            kit["x"] - 30.0,
+            kit["y"] + NODE_H + 40.0,
+            "0.45 dB excess loss and 0.35 dB imbalance, measured on a wafer.",
+            w=150.0,
+            h=96.0,
+        ),
+        arrow(
+            kit["x"] + NODE_W / 2.0,
+            kit["y"] + NODE_H + 38.0,
+            kit["x"] + NODE_W / 2.0,
+            kit["y"] + NODE_H + 14.0,
+        ),
+    ]
+
+
 _MARKS = {
     "ook_eye": _ook_eye,
     "wdm_osa": _wdm_osa,
@@ -598,6 +685,12 @@ _MARKS = {
     "zr800": _zr,
     "loop": _loop,
     "pcs": _pcs,
+    "coupler_length": _coupler_length,
+    "mzi": _mzi,
+    "ring": _ring,
+    "birefringent_ring": _birefringent_ring,
+    "chip_couplers": _chip_couplers,
+    "pdk_splitter": _pdk_splitter,
 }
 
 
@@ -1862,6 +1955,219 @@ raises [[tx_s]] by that amount, so both branches launch the same mean power.
 - Set [[tx_s]] back to the same power as [[tx_u]]. The shaping gain disappears, as it does
   in a transmitter limited by its peak power.
 - Compare [[const_u]] and [[const_s]].
+""".strip(),
+    },
+    "coupler_length": {
+        "title": "5.1 A directional coupler: split ratio against length",
+        "body": r"""
+Two waveguides run side by side, close enough for their fields to overlap. [[dc]] is such a
+section. White light from [[ase]] enters one guide, and [[pm_bar]] and [[pm_cross]] read what
+leaves each. [[osa_in]] shows the source, [[osa_bar]] and [[osa_cross]] the two outputs.
+
+## Two supermodes
+
+Together the two guides carry two modes of their own: an even one, in phase in both guides,
+and an odd one, out of phase. Their effective indices differ by $\Delta n$. Light launched in
+one guide is the sum of the two, and as they drift out of step the power walks across:
+
+$$\kappa(L) = \sin^2\!\left(\frac{\pi\,\Delta n\,L}{\lambda}\right), \qquad L_c = \frac{\lambda}{2\,\Delta n}$$
+
+With $\Delta n = 0.04$ all of it has crossed after $L_c = 19.375$ µm at 1550 nm, and half of it
+after 9.69 µm. The project opens there, a 3 dB coupler.
+
+| *length* of [[dc]] | cross |
+| :-- | :-- |
+| 0 µm | 0.000 |
+| 4.84 µm | 0.146 |
+| 9.69 µm | 0.500 |
+| 14.53 µm | 0.853 |
+| 19.38 µm | 1.000 |
+| 29.06 µm | 0.500 |
+| 38.75 µm | 0.000 |
+
+Past $L_c$ the power walks back. At $2L_c$ it is home again.
+
+## The ratio depends on the wavelength
+
+$\lambda$ is in the formula, so a coupler cut for 3 dB at 1550 nm is not 3 dB elsewhere. At
+1534 nm it crosses 0.508 and at 1566 nm 0.492. On [[osa_bar]] and [[osa_cross]], divided by
+[[osa_in]], the two outputs tilt in opposite directions across the band, from −2.94 to
+−3.08 dB. A real coupler drifts more, because $\Delta n$ itself changes with wavelength.
+
+## Try this
+
+- Sweep the *length* of [[dc]] from 0 to 40 µm and watch [[pm_cross]].
+- Open the S-matrix tab, pick [[dc]], and widen the window to 1300–1700 nm.
+""".strip(),
+    },
+    "mzi": {
+        "title": "5.2 An MZI interleaver",
+        "body": r"""
+A Mach–Zehnder interferometer [[mzi]] splits the light in two, sends it down two arms and
+recombines it. Here one arm is 200 µm longer than the other. White light from [[ase]] goes in;
+[[osa_bar]] and [[osa_cross]] show the two outputs, and [[osa_in]] the light that went in.
+
+## A delay is a filter
+
+The extra length delays one arm by $\Delta\tau = n_g\,\Delta L / c$. The phase that delay adds
+grows with frequency, so the two arms come back in phase, then out of phase, then in phase
+again. Each output is a comb with a period of
+
+$$\mathrm{FSR} = \frac{c}{n_g\,\Delta L} = \frac{c}{4.20 \times 200\ \mu\text{m}} = 356.9\ \text{GHz}$$
+
+The two outputs are complementary: where [[osa_bar]] peaks, [[osa_cross]] has a null, so
+alternate channels of a 357 GHz grid leave by alternate ports. That is an interleaver.
+
+Measured on the traces divided by [[osa_in]], the peaks are 357.0 GHz apart on [[osa_bar]] and
+356.9 GHz apart on [[osa_cross]], and the nulls are 46 dB deep.
+
+## Group index, not effective index
+
+The period is set by $n_g$, how fast the envelope travels. The effective index $n_\text{eff} = 2.44$
+would give 614 GHz instead. Using it is a common way to be wrong about an interleaver while the
+plot still looks right.
+
+## Try this
+
+- Set the *phase_shift* of [[mzi]] to $\pi/2$. The comb slides sideways and keeps its period.
+- Set *length_difference* to 0. The device is now a switch, not a filter.
+""".strip(),
+    },
+    "ring": {
+        "title": "5.3 A ring resonator filter",
+        "body": r"""
+A silicon ring [[ring]], 100 µm round, sits between two bus waveguides. White light from
+[[ase]] enters one bus. Light at a resonance couples into the ring and leaves by the other bus,
+the *drop* port [[osa_drop]]. Everything else passes by on the *through* port [[osa_through]].
+[[osa_in]] shows what went in.
+
+## Free spectral range
+
+A resonance is a wavelength that fits a whole number of times round the ring. They repeat every
+
+$$\mathrm{FSR} = \frac{c}{n_g L} = \frac{c}{4.20 \times 100\ \mu\text{m}} = 713.8\ \text{GHz}$$
+
+The drop peaks on [[osa_drop]] are 714.2 GHz apart, which is within one display bin of that.
+
+## Linewidth and extinction
+
+How sharp a resonance is depends on how fast light leaks out: through the two couplers
+($\kappa = 0.05$ each) and through loss in the ring (2 dB/cm). Here the couplers dominate and
+the linewidth is 12.2 GHz. On resonance the drop port passes all but 0.40 dB of the light and
+the through port falls by 21.7 dB.
+
+## Critical coupling
+
+With only one bus, the through port goes fully dark when the coupling equals the round-trip
+loss, $\kappa = 1 - a^2$. Over- or under-coupled, the notch fills in, by the *same* amount on
+either side, so a measured depth does not tell you which side a ring is on.
+
+## Try this
+
+- Set *drop_coupling* of [[ring]] to 0 and *coupling* to 0.0046, near critical. The through
+  notch on [[osa_through]] deepens.
+- Lower *coupling* and *drop_coupling* to 0.01. The peaks narrow and the drop port loses more
+  to the ring's own loss.
+""".strip(),
+    },
+    "birefringent_ring": {
+        "title": "5.4 A birefringent ring",
+        "body": r"""
+The same 100 µm ring twice, lit by the same unpolarised white light [[ase]], split by [[sp]].
+[[ring_plain]] treats both polarisations alike. [[ring_biref]] has *birefringent* on: its TE and
+TM modes have different indices, as in every real silicon strip waveguide.
+
+## Two combs
+
+TE light sees $n_g = 4.20$ and TM light $n_g = 3.80$, so each has its own free spectral range:
+
+$$\mathrm{FSR}_\text{TE} = 713.8\ \text{GHz}, \qquad \mathrm{FSR}_\text{TM} = 788.9\ \text{GHz}$$
+
+[[osa_plain]] shows one comb, peaks 714 GHz apart. [[osa_biref]] shows two combs laid over each
+other. In this window the TE peaks sit at −299 and +415 GHz from 1550 nm, and the TM peaks at
+−661, +128 and +916 GHz. Each polarisation carries half of the unpolarised light, so each comb on
+[[osa_biref]] peaks 3 dB lower than on [[osa_plain]].
+
+A ring like this is a polarisation filter. At a TE resonance the drop port passes TE and not TM.
+
+## Try this
+
+- Open the S-matrix tab on [[ring_biref]] and switch the polarisation between TE and TM.
+- Set *n_group_tm* of [[ring_biref]] to 4.20. The two combs land on top of each other.
+""".strip(),
+    },
+    "chip_couplers": {
+        "title": "5.5 Getting light on and off a chip",
+        "body": r"""
+Two ways to get light from a fibre into a silicon waveguide and out again. On top, a laser
+[[tx]] goes through an edge coupler [[edge_in]], 5 mm of waveguide [[wg_edge]] and a second
+edge coupler [[edge_out]] to [[pm_edge]]. Below, white light [[ase]] goes through a grating
+coupler [[gc_in]], the same waveguide [[wg_gc]] and [[gc_out]] to [[pm_gc]] and [[osa_gc]].
+[[osa_in]] and [[pm_ase]] show what went in.
+
+## The edge coupler: mode overlap
+
+The fibre's mode is 10.4 µm wide; the chip's is 3 µm. The fraction that couples is the overlap
+of two Gaussians, one factor per axis:
+
+$$\eta = \left(\frac{2 w_f w_c}{w_f^2 + w_c^2}\right)^2 = 0.284 \quad (-5.47\ \text{dB})$$
+
+Two facets in air reflect a little more, 0.31 dB, so each coupler costs 5.78 dB. With 1 dB of
+waveguide, [[pm_edge]] reads 0 − 2 × 5.78 − 1 = −12.56 dBm. The loss is flat across the band.
+
+## The grating coupler: a passband
+
+A grating couples light up out of the chip only where its period matches the wavelength. At
+1550 nm each one costs 3 dB, and the loss rises either side. It also passes TE only: the TM half
+of unpolarised light is lost. So on [[osa_gc]], divided by [[osa_in]], the peak is
+
+$$-3 - 3 - 1 - 3 = -10.0\ \text{dB}$$
+
+near 1550 nm, and the passband of the pair is 24.7 nm wide at 1 dB down. [[pm_ase]] reads
+2.10 dBm in and [[pm_gc]] −8.44 dBm out: across the whole band the pair costs 10.5 dB, more than
+at its peak.
+
+## Try this
+
+- Set *offset_x* of [[edge_in]] to 2 µm and watch [[pm_edge]].
+- Set *gap_index* of both edge couplers to 1.45, an index-matching gel. The facets stop
+  reflecting.
+- Change *fibre_angle* of [[gc_in]] and [[gc_out]] to 12°. The passband moves.
+""".strip(),
+    },
+    "pdk_splitter": {
+        "title": "5.6 A splitter from a foundry kit",
+        "body": r"""
+Two 1×4 splitters side by side, fed the same 0 dBm each by [[tx]] and [[sp]]. [[ideal]] is an
+MMI as a textbook draws it. [[kit]] is the same device as a foundry's process design kit
+describes it, built from `silicon_220nm.pdk.json`.
+
+## What a kit adds
+
+The engine knows what an MMI *is*: self-imaging divides light evenly, with the phases that keep
+it lossless. It cannot know what a given process makes. A kit is that knowledge, measured on a
+wafer: here 0.45 dB of excess loss and 0.35 dB of imbalance across the four arms.
+
+| arm | [[ideal]] | [[kit]] |
+| :-- | :-- | :-- |
+| 1 | −6.03 dBm | −6.31 dBm |
+| 2 | −6.03 dBm | −6.42 dBm |
+| 3 | −6.03 dBm | −6.54 dBm |
+| 4 | −6.03 dBm | −6.66 dBm |
+
+The textbook divides by four exactly, $10\log_{10}4 = 6.02$ dB. The kit's arms are not equal,
+which is what a real splitter tree does to a design margin.
+
+## A kit has a window
+
+Each value in a kit may be a fit in wavelength, valid only where it was measured. The kit
+refuses to extrapolate: its 3 dB coupler, asked for at 1310 nm, raises an error instead of
+returning a negative power fraction. `examples/python/pdk_import.py` shows that, and
+`netlist_circuit.py` builds a ring from a layout netlist with the same kit.
+
+## Try this
+
+- Raise *imbalance* of [[kit]] to 1 dB and compare [[pm_kit1]] with [[pm_kit4]].
 """.strip(),
     },
 }

@@ -118,7 +118,7 @@ def spectrum(label: str) -> OpticalSpectrumAnalyzer:
     return OpticalSpectrumAnalyzer(
         auto_span=False,
         center_wavelength=1550.0,
-        span=1.6,
+        span=200.0,
         points=512.0,
         resolution_bandwidth=12.5,
         label=label,

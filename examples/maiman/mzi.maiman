@@ -1,0 +1,197 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 10000000000.0,
+    "samples_per_symbol": 8,
+    "sequence_length": 256,
+    "seed": 1,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "seed",
+      "type": "CWLaser",
+      "params": {
+        "power": -100.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "ase",
+      "type": "EDFA",
+      "params": {
+        "gain": 30.0,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "osa_in",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1550.0,
+        "span": 2000.0,
+        "points": 2048.0,
+        "resolution_bandwidth": 1.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 290.0
+      }
+    },
+    {
+      "id": "mzi",
+      "type": "MachZehnderInterferometer",
+      "params": {
+        "arm_length": 100.0,
+        "length_difference": 200.0,
+        "propagation_loss": 0.0
+      },
+      "config": {
+        "second_input": false,
+        "use_mmi": false
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "osa_bar",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1550.0,
+        "span": 2000.0,
+        "points": 2048.0,
+        "resolution_bandwidth": 1.0
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "osa_cross",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1550.0,
+        "span": 2000.0,
+        "points": 2048.0,
+        "resolution_bandwidth": 1.0
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 240.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "seed",
+        "out"
+      ],
+      "to": [
+        "ase",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "ase",
+        "out"
+      ],
+      "to": [
+        "mzi",
+        "in1"
+      ]
+    },
+    {
+      "from": [
+        "mzi",
+        "out1"
+      ],
+      "to": [
+        "osa_bar",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "mzi",
+        "out2"
+      ],
+      "to": [
+        "osa_cross",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "ase",
+        "out"
+      ],
+      "to": [
+        "osa_in",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "5.2 An MZI interleaver",
+    "body": "A Mach\u2013Zehnder interferometer [[mzi]] splits the light in two, sends it down two arms and\nrecombines it. Here one arm is 200 \u00b5m longer than the other. White light from [[ase]] goes in;\n[[osa_bar]] and [[osa_cross]] show the two outputs, and [[osa_in]] the light that went in.\n\n## A delay is a filter\n\nThe extra length delays one arm by $\\Delta\\tau = n_g\\,\\Delta L / c$. The phase that delay adds\ngrows with frequency, so the two arms come back in phase, then out of phase, then in phase\nagain. Each output is a comb with a period of\n\n$$\\mathrm{FSR} = \\frac{c}{n_g\\,\\Delta L} = \\frac{c}{4.20 \\times 200\\ \\mu\\text{m}} = 356.9\\ \\text{GHz}$$\n\nThe two outputs are complementary: where [[osa_bar]] peaks, [[osa_cross]] has a null, so\nalternate channels of a 357 GHz grid leave by alternate ports. That is an interleaver.\n\nMeasured on the traces divided by [[osa_in]], the peaks are 357.0 GHz apart on [[osa_bar]] and\n356.9 GHz apart on [[osa_cross]], and the nulls are 46 dB deep.\n\n## Group index, not effective index\n\nThe period is set by $n_g$, how fast the envelope travels. The effective index $n_\\text{eff} = 2.44$\nwould give 614 GHz instead. Using it is a common way to be wrong about an interleaver while the\nplot still looks right.\n\n## Try this\n\n- Set the *phase_shift* of [[mzi]] to $\\pi/2$. The comb slides sideways and keeps its period.\n- Set *length_difference* to 0. The device is now a switch, not a filter."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 113.0,
+      "w": 284.0,
+      "h": 238.0,
+      "text": "White light",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 13.0,
+      "w": 134.0,
+      "h": 288.0,
+      "text": "Two complementary combs",
+      "tone": "metric"
+    },
+    {
+      "id": "a3",
+      "kind": "note",
+      "x": 303.0,
+      "y": -10.0,
+      "w": 170.0,
+      "h": 96.0,
+      "text": "One arm 200 \u00b5m longer: a comb every $c/(n_g\\,\\Delta L)$ = 357 GHz.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a4",
+      "kind": "arrow",
+      "x1": 388.0,
+      "y1": 88.0,
+      "x2": 388.0,
+      "y2": 128.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

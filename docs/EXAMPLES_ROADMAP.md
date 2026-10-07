@@ -119,12 +119,12 @@ The same light, on a chip, solved as S-matrices.
 
 | # | Example | What it teaches | Status |
 | :-- | :--- | :--- | :--- |
-| 5.1 | Directional coupler: split ratio against length | Supermodes, coupling length | 🟢 DirectionalCoupler, sweep |
-| 5.2 | MZI interleaver | Path difference to FSR | ✅ `mzi_interleaver.py` |
-| 5.3 | Ring resonator filter | FSR, Q, extinction, critical coupling | ✅ `microring_filter.py` |
-| 5.4 | A birefringent ring | Two combs on two FSRs | ✅ `birefringent_ring.py` |
-| 5.5 | Getting light on and off a chip | Edge and grating couplers, their passbands | 🟢 EdgeCoupler, GratingCoupler |
-| 5.6 | A circuit from a foundry PDK and a layout netlist | Reading a kit, refusing to extrapolate | ✅ `pdk_import.py`, `netlist_circuit.py` |
+| 5.1 | Directional coupler: split ratio against length | Supermodes, coupling length | ✅ `coupler_length.maiman`, with lesson; **Coupled Waveguides** added, which takes a length instead of a ratio |
+| 5.2 | MZI interleaver | Path difference to FSR | ✅ `mzi.maiman`, with lesson; lit by ASE and read on an OSA |
+| 5.3 | Ring resonator filter | FSR, Q, extinction, critical coupling | ✅ `ring.maiman`, with lesson |
+| 5.4 | A birefringent ring | Two combs on two FSRs | ✅ `birefringent_ring.maiman`, with lesson |
+| 5.5 | Getting light on and off a chip | Edge and grating couplers, their passbands | ✅ `chip_couplers.maiman`, with lesson |
+| 5.6 | A circuit from a foundry PDK and a layout netlist | Reading a kit, refusing to extrapolate | ✅ `pdk_splitter.maiman`, with lesson; the netlist half stays a script (`netlist_circuit.py`) |
 
 ## Phase 6: Sensing
 
@@ -178,6 +178,11 @@ first. Each entry says which example found it and what was done.
 
 | Date | Example | Finding | Outcome |
 | :--- | :--- | :--- | :--- |
+| 2026-10-07 | 5.4 | Unpolarised ASE through a birefringent ring put the TM comb on TE's 714 GHz spacing: the noise shape was sampled over one TE period and repeated for both polarisations | Fixed: a birefringent ring samples its noise across the whole bin, so each mode keeps its own free spectral range; a test holds TM to 789 GHz |
+| 2026-10-07 | 5.1 | The Directional Coupler takes its split ratio as given, so nothing could show the ratio following the length | **Coupled Waveguides** added: two supermodes, $\kappa = \sin^2(\pi\,\Delta n\,L/\lambda)$, unitary at every length |
+| 2026-10-07 | 5.x | No block emits broadband light, so a device's passband could not be drawn on an OSA | Each project lights its device with an EDFA's ASE from a −100 dBm seed and divides every trace by a reference OSA, as a lab does; a seed at −60 dBm put its own line in the reference and moved the grating's peak by 0.7 dB |
+| 2026-10-07 | 5.6 | A layout netlist becomes a circuit in a script, but there is no block that holds one, so it cannot be drawn on the canvas | Open: 5.6's project is the kit half; a **netlist block** would bring the other |
+| 2026-10-07 | 4.1 | 4.1's spectrum analyser was 1.6 GHz wide: its span is in GHz and was written as if in nm | Widened to 200 GHz |
 | 2026-10-07 | 4.8 | `maiman.pcs` builds a FlexO distribution matcher from spec tables the repository cannot ship, so no block could draw a shaped signal | **PCS Mapper** added: a Maxwell–Boltzmann source with probabilities in steps of 1/256. It is a shaped source, not a matcher, so its data bits are not recoverable; the lesson credits it with mutual information instead of a BER |
 | 2026-10-07 | 4.8 | The analyser measured EVM and errors, which say nothing about a shaped alphabet | `ConstellationMeasurement` gains `entropy` and `mutual_information` (Gaussian-channel estimate, capped at the entropy); the studio shows MI beside EVM |
 | 2026-10-07 | 4.8 | The IQ driver scales the outermost point to full swing, so a shaped signal leaves the modulator 1.9 dB weaker at 3.7 bit and loses all its gain | The project raises the shaped laser by that back-off, so both branches launch the same mean power; the lesson says what a peak-limited transmitter loses |
