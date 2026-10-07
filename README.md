@@ -225,6 +225,10 @@ how to build it yourself.
 From a checkout with Node.js installed, double-click `start-studio.bat` (Windows),
 `start-studio.command` (macOS) or `start-studio.sh` (Linux) in the repository root to open it.
 
+Without Node.js, run `python tools/make_shortcut.py` once. It puts a **Maiman App** shortcut with
+the Maiman icon in the repository root; double-clicking it opens the studio in your browser using
+that same Python, and the small window it shows stops Maiman when you close it.
+
 ### If you would rather write Python
 
 The interface and the library are the same engine. Anything the page does, a script can do — and a
