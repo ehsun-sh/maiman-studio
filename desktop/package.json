@@ -2,7 +2,7 @@
   "name": "maiman-studio-desktop",
   "productName": "Maiman Studio",
   "desktopName": "maiman-studio.desktop",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "description": "Maiman Studio as a desktop application: the studio page and its session server in one window.",
   "author": "Ehsan Shahmohammadi",
   "license": "Apache-2.0",
