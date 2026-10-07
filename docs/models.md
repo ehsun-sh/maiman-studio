@@ -1,8 +1,9 @@
-# Models and results
-
-[← README](../README.md) · [Getting started](getting-started.md) · [The studio interface](interface.md) · [Models and results](physics.md) · [Design and roadmap](design.md) · [Validation](validation.md)
-
 ---
+title: "Models and results"
+description: "Every physics model, what it reproduces, and what it does not do."
+---
+
+# Models and results
 
 ## Try it
 
@@ -12,7 +13,7 @@ maiman serve
 ```
 
 Step by step, assuming neither Python nor a terminal:
-**[Installing and running it](getting-started.md#installing-and-running-it)**.
+**[Installing and running it](install.md)**.
 
 Or, to work on it:
 

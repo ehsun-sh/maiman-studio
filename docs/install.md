@@ -1,17 +1,16 @@
-# Getting started
-
-[← README](../README.md) · [Getting started](getting-started.md) · [The studio interface](interface.md) · [Models and results](physics.md) · [Design and roadmap](design.md) · [Validation](validation.md)
-
+---
+title: "Installing"
+description: "From no Python at all to the studio in your browser, with every error you might meet."
 ---
 
-## Installing and running it
+# Installing
 
 **This section assumes you have never used Python or a terminal.** If you have, the whole thing is
-`pip install maiman` then `maiman serve` — skip to [The interface](interface.md#the-interface).
+`pip install maiman` then `maiman serve` — skip to [the studio guide](studio.md).
 
 Everything below was run on a clean machine and the outputs are what actually appears.
 
-### 1. Install Python
+## 1. Install Python
 
 Maiman needs **Python 3.11 or newer**. It is free, and installing it changes nothing else on your
 computer.
@@ -45,7 +44,7 @@ python --version
 You should see something like `Python 3.13.1`. If the number is **3.10 or lower**, install a newer
 one. If you get an error instead, see [When something goes wrong](#when-something-goes-wrong).
 
-### 2. Install Maiman
+## 2. Install Maiman
 
 One command. On Windows:
 
@@ -68,7 +67,7 @@ Successfully installed maiman-0.17.0 numpy-2.3.5
 That is the whole installation. NumPy is the only thing it brings with it, and the interface is
 inside the package — there is nothing else to download and nothing to build.
 
-### 3. Start it
+## 3. Start it
 
 ```
 maiman serve
@@ -89,7 +88,7 @@ Leave the terminal window open. It is running the simulator; closing it stops th
 address is on your own machine only — `127.0.0.1` never leaves your computer, and nothing is sent
 anywhere.
 
-### 4. The first five minutes
+## 4. The first five minutes
 
 A complete coherent link is already on the canvas when the page opens. You do not have to build
 anything to see it work.
@@ -121,7 +120,7 @@ anything to see it work.
 To add blocks of your own: drag one from the palette on the left, then drag from one block's output
 dot to another's input dot to wire them.
 
-### Stopping it
+## Stopping it
 
 Click the terminal window and press <kbd>Ctrl</kbd>+<kbd>C</kbd>. It prints `stopping` and exits.
 Closing the terminal window works too.
@@ -129,13 +128,13 @@ Closing the terminal window works too.
 To use it again another day, you do **not** reinstall — just open a terminal and type
 `maiman serve` again.
 
-### Updating
+## Updating
 
 ```
 pip install --upgrade maiman
 ```
 
-### When something goes wrong
+## When something goes wrong
 
 These are the real failures, in the order they happen to people.
 
@@ -151,7 +150,7 @@ These are the real failures, in the order they happen to people.
 | The browser says it cannot connect | The server is not running, or you typed the address before it started | Check the terminal still shows the `http://127.0.0.1:8765/` line and no error under it |
 | The page loads but Run does nothing | The browser cannot reach the engine | Make sure the address is `127.0.0.1` and not `0.0.0.0`, and that the terminal is still open |
 
-### The desktop application
+## The desktop application
 
 The same studio also comes as a desktop application for Windows, macOS and Linux: one window, no
 terminal, nothing to install first. It starts its own copy of the session server on a free port
@@ -167,44 +166,7 @@ Without Node.js, run `python tools/make_shortcut.py` once. It puts a **Maiman Ap
 the Maiman icon in the repository root; double-clicking it opens the studio in your browser using
 that same Python, and the small window it shows stops Maiman when you close it.
 
-### If you would rather write Python
-
-The interface and the library are the same engine. Anything the page does, a script can do — and a
-sweep of two hundred cases is easier written than clicked.
-
-Put this in a file called `first.py`:
-
-```python
-from maiman import Graph, SimulationContext
-from maiman.components import CWLaser, Fiber, PowerMeter
-
-ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=16, sequence_length=64)
-link = Graph(ctx)
-
-laser = link.add(CWLaser(power=0.0, wavelength=1550.0))
-fiber = link.add(Fiber(length=80.0, attenuation=0.2))
-meter = link.add(PowerMeter())
-link.chain(laser, fiber, meter)
-
-print(f"received power: {link.run()[meter].power_dbm:.2f} dBm")
-```
-
-Run it with `python first.py`, and it prints:
-
-```
-received power: -16.00 dBm
-```
-
-0 dBm launched, 80 km at 0.2 dB/km, so −16.00 dBm out. Nothing in that number is a lookup: the
-laser makes a field, the fiber attenuates it, the meter integrates it.
-
-The [`examples/python/`](../examples/python/) folder has two dozen more, each one runnable with
-`python examples/python/<name>.py`; the projects the studio opens are beside it in
-[`examples/maiman/`](../examples/maiman/). [The examples roadmap](EXAMPLES_ROADMAP.md) lists the
-ones still to build, from a laser on a power meter to a submarine cable, in the order we mean to
-build them.
-
-### Checking your machine
+## Checking your machine
 
 ```
 maiman devices
@@ -224,3 +186,5 @@ A GPU needs `pip install cupy-cuda12x` and a CUDA device.
 NumPy is enough for everything in this README. A GPU only matters for long split-step runs.
 
 ---
+
+Then read the [quickstart](quickstart.md).
