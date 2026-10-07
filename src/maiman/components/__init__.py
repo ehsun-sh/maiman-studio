@@ -76,6 +76,7 @@ from .photonic import (
     Waveguide,
 )
 from .quantum import BB84Receiver
+from .raman import RamanAmplifiedSpan
 from .reflective import Circulator, FiberBraggGrating
 from .rf import ElectricalSpectrumAnalyzer, RFTone
 from .sources import CWLaser, FabryPerotLaser, GaussianPulse, SechPulse, SweptLaser
@@ -147,6 +148,7 @@ __all__ = [
     "PowerMeter",
     "QAMMapper",
     "RFTone",
+    "RamanAmplifiedSpan",
     "RingResonator",
     "SechPulse",
     "Slicer",

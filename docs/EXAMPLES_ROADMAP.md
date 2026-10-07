@@ -96,7 +96,7 @@ not run, so they stay scripts.
 | 3.7 | EDFA gain tilt and pump control | Spectral gain, a control loop with a bandwidth | ✅ `edfa_gain_tilt.py`, `edfa_pump_control.py` |
 | 3.8 | Channel drop transient | Surviving channels jump when others leave | ✅ `edfa_transient.py` |
 | 3.9 | A ROADM add/drop node | Express, add and drop on a wavelength-selective switch | ✅ `roadm.maiman`, with lesson, on the new **Wavelength-Selective Switch** |
-| 3.10 | Distributed Raman amplification | Gain inside the span, lower noise figure | 🟡 needs a **Raman pump / amplifier** block (inter-channel SRS exists) |
+| 3.10 | Distributed Raman amplification | Gain inside the span, lower noise figure | ✅ `raman.maiman`, with lesson, on the new **Raman-Amplified Span** |
 
 ## Phase 4: Coherent transmission
 
@@ -164,7 +164,7 @@ Collected from the 🟡 and 🔴 rows, in the order the phases need them:
 | Time-domain scope (power or field against time) | 1.4 | ✅ **Optical Oscilloscope**: power and instantaneous frequency against time, in the dock's Scope tab |
 | Burst-mode receiver | 2.7 | Fast settling threshold for PON upstream |
 | Wavelength-selective switch | 3.9 | ✅ **Wavelength-Selective Switch**: express, drop and add on the grid, with its isolation leaking onto the added channel as a field |
-| Raman amplifier | 3.10 | Counter-pumped, using the measured gain shape the SRS model already has |
+| ~~Raman amplifier~~ | 3.10 | Done: **Raman-Amplified Span**, an undepleted co- or counter-pump on silica's measured gain shape, with spontaneous Raman noise |
 | ~~PCS mapper~~ | 4.8 | Done: **PCS Mapper**, a Maxwell–Boltzmann source |
 | ~~Gain-flattening filter~~ | 7.2 | Done: **Amplified Line**, N spans with a tilted gain and an optional flattening filter in every repeater |
 | ~~RF tone source, electrical spectrum analyser~~ | 7.4 | Done: **RF Tone** and **Electrical Spectrum Analyzer**, drawn in the Spectrum tab on a GHz axis |
@@ -198,7 +198,7 @@ first. Each entry says which example found it and what was done.
 | 2026-10-07 | 4.8 | The studio edits `bits_per_symbol` link-wide, but a shaped source draws 8 bits a symbol for a 4-bit alphabet | The PCS Mapper names its format `alphabet` instead. Changing bits per symbol anywhere in 4.8 still sets the shaped branch's generator too; open: let a block opt out of the link-wide edit |
 | 2026-10-07 | 4.8 | At 1/256 resolution every 64-QAM point gets at least one count, which distorts strong shaping | Open: a finer table, or a real distribution matcher, for 64-QAM |
 | 2026-10-07 | 4.1 | Without a matched filter the sampler reads noise over the whole simulated bandwidth, so SNR sat 7.1 dB under OSNR instead of 1.07 | 4.1 shapes its pulses and matches the filter; the lesson's table then follows $\mathrm{SNR} = \mathrm{OSNR} - 1.07$ dB with the transmitter's 21.2 dB floor added |
-| 2026-10-06 | 3.10 | Distributed Raman gain needs a pump and its own noise model, not a block over the existing inter-channel SRS | Open: still 🟡, left for a decision before it is built |
+| 2026-10-06 | 3.10 | Distributed Raman gain needs a pump and its own noise model, not a block over the existing inter-channel SRS | Built on 2026-10-07 once approved: **Raman-Amplified Span**. Open: pump depletion, pump-noise transfer and double Rayleigh backscatter |
 | 2026-10-06 | 3.6 | With modulated channels at +6 dBm on G.653, the receivers showed far less four-wave mixing penalty than the spectra suggest (products 10 dB under the channels) | Open: the lesson stays on the spectra; checking the penalty against theory is still to do |
 | 2026-10-06 | 3.9 | A demultiplexer and a multiplexer back to back cannot stand in for a ROADM: the dropped channel's leak and the added channel share a frequency, and the multiplexer refuses two carriers there | **Wavelength-Selective Switch** added; it adds the two as fields, which is the in-band crosstalk the lesson measures |
 | 2026-10-06 | 2.x, 3.5 | At 8 samples per symbol the eye drew each sample as a flat step, so eyes looked like bars | The Eye Diagram interpolates between samples (band-limited, exact on the periodic window) and draws the transitions |

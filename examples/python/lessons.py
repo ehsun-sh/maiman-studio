@@ -468,6 +468,18 @@ def _roadm(at: Layout) -> list[dict[str, Any]]:
     ]
 
 
+def _raman(at: Layout) -> list[dict[str, Any]]:
+    return [
+        frame(at, ["tx_edfa", "span_edfa", "edfa_only"], "EDFA only", "binary"),
+        frame(at, ["tx_raman", "span_raman", "edfa_raman"], "Raman, then EDFA", "symbol"),
+        frame(at, ["osnr_edfa", "osa_edfa", "osnr_raman", "osa_raman"], "OSNR", "metric"),
+        below_note(
+            at["span_raman"], "500 mW pumped from the far end: 13.42 dB of gain inside the span."
+        ),
+        below_arrow(at["span_raman"]),
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Phase 4: coherent links
 
@@ -803,6 +815,7 @@ _MARKS = {
     "launch_power": _launch_power,
     "fwm_dsf": _fwm_dsf,
     "roadm": _roadm,
+    "raman": _raman,
     "qpsk_b2b": _qpsk_b2b,
     "dualpol": _dualpol,
     "acquisition": _acquisition,
@@ -1791,6 +1804,52 @@ at 1550 nm, was abandoned for WDM, and why G.655 was designed to keep a little.
 
 - Lower every channel to 0 dBm. Each product falls by 3 dB per 1 dB of channel power.
 - Set [[fibre_nzdsf]]'s dispersion to 17, standard fibre. How far down do the products go?
+""".strip(),
+    },
+    "raman": {
+        "title": "3.10 Distributed Raman amplification",
+        "body": r"""
+An EDFA makes up a span's loss at the end, after the signal has already fallen as low as it will
+go. A Raman pump gives the gain inside the span itself, and the signal never falls as far.
+
+Both rows send one 0 dBm channel at 1550 nm through 100 km of 0.2 dB/km fibre, 20 dB of loss.
+
+- **Top row.** [[span_edfa]] has no pump. [[edfa_only]] makes up all 20 dB with a 5 dB noise figure.
+- **Bottom row.** [[span_raman]] carries a 500 mW pump at 1450 nm, launched from the far end against
+  the signal. [[edfa_raman]] makes up the 6.58 dB that is left.
+
+## Gain from the fibre
+
+Stimulated Raman scattering moves power from a pump to light about 13 THz below it. 1450 nm is
+13.34 THz above 1550 nm, just past the peak of silica's gain at 13.2 THz. The pump decays as it travels, so the
+gain is concentrated in the last 20 km or so before the far end:
+
+$$G_{\text{on-off}} = \exp\big(g_R\,P_p\,L_{\text{eff},p}\big)$$
+
+That is 13.42 dB here. The gain falls away from the peak: 11.38 dB at 1530 nm and 7.29 dB at
+1565 nm. [[osa_raman]] shows that shape in the noise.
+
+## Less noise for the same gain
+
+The pumped span is also noisy. Spontaneous Raman scattering adds noise all along it. But that
+noise is added where the signal is still well above its lowest point, so less of it counts. Counted
+as one lumped amplifier at the span's end, this span has an equivalent noise figure of −1.08 dB:
+better than any real amplifier could be.
+
+[[osnr_edfa]] reads 32.95 dB, which is the rule of thumb $58 + 0 - 5 - 20$. [[osnr_raman]] reads
+38.54 dB, 5.59 dB better for the same span and the same output power.
+
+This block is a gain and noise budget. It has no dispersion and no Kerr effect, and the pump is not
+drained by the signals.
+
+## Try this
+
+- Set *pump_power* of [[span_raman]] to 250. The on-off gain halves in decibels, to 6.71 dB, and
+  [[osnr_raman]] falls to 36.33 dB.
+- Untick *counter_pumped*, so the pump goes in with the signal. [[osnr_raman]] rises to 45.40 dB:
+  the gain is now given at the start, where the signal is strongest. Real links seldom do this,
+  because the pump's own intensity noise is copied straight onto the signal and the strong signal
+  feels the Kerr effect, two things this block does not model.
 """.strip(),
     },
     "roadm": {

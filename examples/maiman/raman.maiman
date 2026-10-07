@@ -1,0 +1,271 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.17.0",
+  "context": {
+    "bit_rate": 10000000000.0,
+    "samples_per_symbol": 8,
+    "sequence_length": 256,
+    "seed": 1,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "tx_edfa",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "span_edfa",
+      "type": "RamanAmplifiedSpan",
+      "params": {
+        "length": 100.0,
+        "pump_power": 0.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "edfa_only",
+      "type": "EDFA",
+      "params": {
+        "gain": 20.0,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "osnr_edfa",
+      "type": "OSNRMeter",
+      "params": {},
+      "ui": {
+        "x": 480.0,
+        "y": -10.0
+      }
+    },
+    {
+      "id": "osa_edfa",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1547.0,
+        "span": 5000.0,
+        "points": 2048.0,
+        "resolution_bandwidth": 12.5
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 90.0
+      }
+    },
+    {
+      "id": "tx_raman",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 240.0
+      }
+    },
+    {
+      "id": "span_raman",
+      "type": "RamanAmplifiedSpan",
+      "params": {
+        "length": 100.0,
+        "pump_power": 500.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 240.0
+      }
+    },
+    {
+      "id": "edfa_raman",
+      "type": "EDFA",
+      "params": {
+        "gain": 6.58,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 240.0
+      }
+    },
+    {
+      "id": "osnr_raman",
+      "type": "OSNRMeter",
+      "params": {},
+      "ui": {
+        "x": 480.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "osa_raman",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1547.0,
+        "span": 5000.0,
+        "points": 2048.0,
+        "resolution_bandwidth": 12.5
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 290.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "span_edfa",
+        "out"
+      ],
+      "to": [
+        "edfa_only",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "span_raman",
+        "out"
+      ],
+      "to": [
+        "edfa_raman",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "edfa_only",
+        "out"
+      ],
+      "to": [
+        "osa_edfa",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "edfa_raman",
+        "out"
+      ],
+      "to": [
+        "osa_raman",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "edfa_only",
+        "out"
+      ],
+      "to": [
+        "osnr_edfa",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "edfa_raman",
+        "out"
+      ],
+      "to": [
+        "osnr_raman",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "tx_edfa",
+        "out"
+      ],
+      "to": [
+        "span_edfa",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "tx_raman",
+        "out"
+      ],
+      "to": [
+        "span_raman",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "3.10 Distributed Raman amplification",
+    "body": "An EDFA makes up a span's loss at the end, after the signal has already fallen as low as it will\ngo. A Raman pump gives the gain inside the span itself, and the signal never falls as far.\n\nBoth rows send one 0 dBm channel at 1550 nm through 100 km of 0.2 dB/km fibre, 20 dB of loss.\n\n- **Top row.** [[span_edfa]] has no pump. [[edfa_only]] makes up all 20 dB with a 5 dB noise figure.\n- **Bottom row.** [[span_raman]] carries a 500 mW pump at 1450 nm, launched from the far end against\n  the signal. [[edfa_raman]] makes up the 6.58 dB that is left.\n\n## Gain from the fibre\n\nStimulated Raman scattering moves power from a pump to light about 13 THz below it. 1450 nm is\n13.34 THz above 1550 nm, just past the peak of silica's gain at 13.2 THz. The pump decays as it travels, so the\ngain is concentrated in the last 20 km or so before the far end:\n\n$$G_{\\text{on-off}} = \\exp\\big(g_R\\,P_p\\,L_{\\text{eff},p}\\big)$$\n\nThat is 13.42 dB here. The gain falls away from the peak: 11.38 dB at 1530 nm and 7.29 dB at\n1565 nm. [[osa_raman]] shows that shape in the noise.\n\n## Less noise for the same gain\n\nThe pumped span is also noisy. Spontaneous Raman scattering adds noise all along it. But that\nnoise is added where the signal is still well above its lowest point, so less of it counts. Counted\nas one lumped amplifier at the span's end, this span has an equivalent noise figure of \u22121.08 dB:\nbetter than any real amplifier could be.\n\n[[osnr_edfa]] reads 32.95 dB, which is the rule of thumb $58 + 0 - 5 - 20$. [[osnr_raman]] reads\n38.54 dB, 5.59 dB better for the same span and the same output power.\n\nThis block is a gain and noise budget. It has no dispersion and no Kerr effect, and the pump is not\ndrained by the signals.\n\n## Try this\n\n- Set *pump_power* of [[span_raman]] to 250. The on-off gain halves in decibels, to 6.71 dB, and\n  [[osnr_raman]] falls to 36.33 dB.\n- Untick *counter_pumped*, so the pump goes in with the signal. [[osnr_raman]] rises to 45.40 dB:\n  the gain is now given at the start, where the signal is strongest. Real links seldom do this,\n  because the pump's own intensity noise is copied straight onto the signal and the strong signal\n  feels the Kerr effect, two things this block does not model."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 434.0,
+      "h": 88.0,
+      "text": "EDFA only",
+      "tone": "binary"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 213.0,
+      "w": 434.0,
+      "h": 88.0,
+      "text": "Raman, then EDFA",
+      "tone": "symbol"
+    },
+    {
+      "id": "a3",
+      "kind": "rect",
+      "x": 471.0,
+      "y": -37.0,
+      "w": 134.0,
+      "h": 388.0,
+      "text": "OSNR",
+      "tone": "metric"
+    },
+    {
+      "id": "a4",
+      "kind": "note",
+      "x": 140.0,
+      "y": 352.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "500 mW pumped from the far end: 13.42 dB of gain inside the span.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 238.0,
+      "y1": 350.0,
+      "x2": 238.0,
+      "y2": 306.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

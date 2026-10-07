@@ -133,3 +133,48 @@ def test_3_9_the_leak_harms_only_the_channel_in_its_place() -> None:
     dropped = [point.runs[0][by["ber_drop"]].q_factor for point in result.points]
     assert added == pytest.approx([41.2, 26.2, 10.8, 6.2], abs=0.05)
     assert dropped == pytest.approx([32.1] * 4, abs=0.05)
+
+
+# ---------------------------------------------------------------------------
+# 3.10
+
+
+def test_3_10_the_pumped_span() -> None:
+    from maiman.components import RamanAmplifiedSpan
+    from maiman.units import C_LIGHT
+
+    span = RamanAmplifiedSpan(length=100.0, pump_power=500.0)
+    at = {nm: C_LIGHT / (nm * 1e-9) for nm in (1530, 1550, 1565)}
+    assert (C_LIGHT / 1450e-9 - at[1550]) / 1e12 == pytest.approx(13.34, abs=0.005)
+    assert span.on_off_gain_db(at[1550]) == pytest.approx(13.42, abs=0.005)
+    assert span.on_off_gain_db(at[1530]) == pytest.approx(11.38, abs=0.005)
+    assert span.on_off_gain_db(at[1565]) == pytest.approx(7.29, abs=0.005)
+    assert span.noise_figure_db(at[1550]) == pytest.approx(-1.08, abs=0.005)
+    assert amp.raman_makeup_db() == pytest.approx(6.58)
+    # Unpumped, it is a span and nothing else.
+    dark = RamanAmplifiedSpan(length=100.0, pump_power=0.0)
+    assert dark.net_gain_db(at[1550]) == pytest.approx(-20.0)
+    assert dark.ase_density(at[1550]) == 0.0
+
+
+def test_3_10_raman_buys_osnr() -> None:
+    got = results("raman")
+    assert got["osnr_edfa"] == pytest.approx(32.95, abs=0.005)
+    assert got["osnr_raman"] == pytest.approx(38.54, abs=0.005)
+    assert got["osnr_raman"] - got["osnr_edfa"] == pytest.approx(5.59, abs=0.01)  # type: ignore[operator]
+
+
+def test_3_10_try_this() -> None:
+    from maiman.components import RamanAmplifiedSpan
+    from maiman.units import C_LIGHT
+
+    graph = amp.raman()
+    half = {k[0]: v for k, v in graph.run(overrides={("span_raman", "pump_power"): 250.0}).items()}
+    assert half["osnr_raman"] == pytest.approx(36.33, abs=0.005)
+    weaker = RamanAmplifiedSpan(length=100.0, pump_power=250.0)
+    assert weaker.on_off_gain_db(C_LIGHT / 1550e-9) == pytest.approx(6.71, abs=0.005)
+
+    co = {
+        k[0]: v for k, v in graph.run(overrides={("span_raman", "counter_pumped"): False}).items()
+    }
+    assert co["osnr_raman"] == pytest.approx(45.40, abs=0.005)

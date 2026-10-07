@@ -35,6 +35,7 @@ from maiman.components import (
     PINPhotodiode,
     PowerMeter,
     PRBSGenerator,
+    RamanAmplifiedSpan,
     Splitter,
     WavelengthSelectiveSwitch,
 )
@@ -389,12 +390,65 @@ def roadm() -> Graph:
 # ---------------------------------------------------------------------------
 
 #: key -> (builder, layout). The key names the project file and its lesson.
+# ---------------------------------------------------------------------------
+# 3.10  Distributed Raman amplification
+
+RAMAN_KM = 100.0
+RAMAN_PUMP_MW = 500.0
+
+RAMAN_LAYOUT: Layout = {
+    "tx_edfa": at(0, 0),
+    "span_edfa": at(1, 0),
+    "edfa_only": at(2, 0),
+    "osnr_edfa": at(3, -0.5),
+    "osa_edfa": at(3, 0.5),
+    "tx_raman": at(0, 2),
+    "span_raman": at(1, 2),
+    "edfa_raman": at(2, 2),
+    "osnr_raman": at(3, 1.5),
+    "osa_raman": at(3, 2.5),
+}
+
+
+def raman_span(pump_mw: float, label: str) -> RamanAmplifiedSpan:
+    return RamanAmplifiedSpan(length=RAMAN_KM, pump_power=pump_mw, label=label)
+
+
+def raman_makeup_db() -> float:
+    """What the EDFA after the pumped span still has to give, to 0.01 dB."""
+    frequency = wavelength_to_frequency(1550e-9)
+    return round(-raman_span(RAMAN_PUMP_MW, "s").net_gain_db(frequency), 2)
+
+
+def raman() -> Graph:
+    """The same 100 km span twice: an EDFA alone, and a counter-pumped Raman span then an EDFA."""
+    graph = Graph(
+        SimulationContext(bit_rate=10e9, samples_per_symbol=8, sequence_length=256, seed=1)
+    )
+    for suffix, pump, gain in (
+        ("edfa", 0.0, 0.2 * RAMAN_KM),
+        ("raman", RAMAN_PUMP_MW, raman_makeup_db()),
+    ):
+        laser = graph.add(CWLaser(power=0.0, wavelength=1550.0, label=f"tx_{suffix}"))
+        span = graph.add(raman_span(pump, f"span_{suffix}"))
+        amp_label = "edfa_only" if suffix == "edfa" else "edfa_raman"
+        amp = graph.add(EDFA(gain=gain, noise_figure=5.0, label=amp_label))
+        graph.chain(laser, span, amp)
+        graph.connect(amp, graph.add(OSNRMeter(label=f"osnr_{suffix}"))["in"])
+        osa = spectrum(f"osa_{suffix}", centre=1547.0, span=5000.0, points=2048.0)
+        graph.connect(amp, graph.add(osa)["in"])
+    return graph
+
+
+# ---------------------------------------------------------------------------
+
 EXAMPLES: dict[str, tuple[Callable[[], Graph], Layout]] = {
     "edfa_basics": (edfa_basics, EDFA_LAYOUT),
     "amplified_chain": (amplified_chain, CHAIN_LAYOUT),
     "launch_power": (launch_power, with_eyes(LAUNCH_LAYOUT)),
     "fwm_dsf": (fwm_dsf, FWM_LAYOUT),
     "roadm": (roadm, with_eyes(ROADM_LAYOUT)),
+    "raman": (raman, RAMAN_LAYOUT),
 }
 
 
