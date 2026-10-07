@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
@@ -363,5 +364,130 @@ class DifferentialDecoder(Component):
                 symbols=plain[decoded],
                 symbol_rate=received.symbol_rate,
                 constellation=plain,
+            )
+        }
+
+
+#: How many input bits draw one shaped symbol: probabilities in steps of 1/256.
+SHAPING_RESOLUTION = 8
+
+
+def maxwell_boltzmann(points: np.ndarray, entropy: float) -> np.ndarray:
+    """``p(x) ~ exp(-lambda |x|^2)`` over ``points``, with ``lambda`` set for ``entropy`` bits.
+
+    Uniform is ``lambda = 0`` and the alphabet's full ``log2 M`` bits; a larger
+    ``lambda`` favours the inner points and carries fewer. Bisected, since the
+    entropy falls monotonically with ``lambda``.
+    """
+    energy = np.abs(points) ** 2 / np.mean(np.abs(points) ** 2)
+    full = math.log2(points.shape[0])
+    if not 1.0 < entropy <= full:
+        raise ValueError(f"entropy={entropy:g} must be above 1 and at most {full:g} bits")
+
+    def shaped(lam: float) -> tuple[np.ndarray, float]:
+        weights = np.exp(-lam * energy)
+        p = weights / weights.sum()
+        return p, float(-np.sum(p * np.log2(p)))
+
+    low, high = 0.0, 50.0
+    for _ in range(100):
+        middle = 0.5 * (low + high)
+        if shaped(middle)[1] > entropy:
+            low = middle
+        else:
+            high = middle
+    return shaped(0.5 * (low + high))[0]
+
+
+def quantised(p: np.ndarray, steps: int) -> np.ndarray:
+    """``p`` as whole counts out of ``steps``, by largest remainder, none of them zero."""
+    raw = p * steps
+    counts = np.maximum(np.floor(raw).astype(int), 1)
+    while counts.sum() > steps:
+        counts[np.argmax(counts)] -= 1
+    order = np.argsort(-(raw - np.floor(raw)))
+    for index in order[: steps - counts.sum()]:
+        counts[index] += 1
+    return counts
+
+
+class PCSMapper(Component):
+    """Probabilistically shaped QAM: the inner points sent more often than the outer.
+
+    Each symbol is drawn from a Maxwell-Boltzmann distribution over the square
+    alphabet, ``p(x) ~ exp(-lambda |x|^2)``, with ``lambda`` set so a symbol
+    carries ``entropy`` bits instead of ``log2 M``. The alphabet is then scaled
+    to unit mean power under that distribution, so the shaped signal asks the
+    laser for the same power as the uniform one and its points sit further
+    apart -- which is where the gain comes from.
+
+    **A shaped source, not a distribution matcher.** A real transmitter (the
+    FlexO DPO path in :mod:`maiman.pcs`) turns uniform data bits into shaped
+    symbols one-to-one and back. Here each symbol is drawn by inverse
+    transform from 8 input bits, so the probabilities are exact to 1/256 and
+    the symbols are a fixed function of the pattern, but the input bits are not
+    recoverable from them. What a receiver can be credited with is the mutual
+    information a :class:`ConstellationAnalyzer` measures, not a bit error rate
+    on the data.
+    """
+
+    display_name = "PCS Mapper"
+    category = "Modulation"
+
+    # Not ``bits_per_symbol``: the studio edits that link-wide, and the source
+    # feeding this block has to carry 8 bits a symbol whatever the alphabet is.
+    alphabet = Param(16.0, unit="", choices=(16.0, 64.0), doc="16-QAM or 64-QAM")
+    entropy = Param(
+        3.28,
+        unit="",
+        min=1.0,
+        doc="Bits per symbol the shaping leaves; 4 (or 6) is uniform. FlexO-8 DPO is 3.28",
+    )
+
+    inputs = {"in": PortType.BINARY}
+    outputs = {"out": PortType.SYMBOL}
+
+    def validate(self) -> None:
+        full = math.log2(self.alphabet)
+        if not 1.0 < self.entropy <= full:
+            raise ValueError(
+                f"{self.label}: entropy={self.entropy:g} must be above 1 and at most "
+                f"{full:g} bits for {1 << int(full)}-QAM"
+            )
+
+    def bits(self) -> int:
+        """Bits a uniform symbol of this alphabet would carry."""
+        return round(math.log2(self.alphabet))
+
+    def probabilities(self) -> np.ndarray:
+        """How often each point is sent, in steps of 1/256."""
+        points = qam_constellation(self.bits())
+        exact = maxwell_boltzmann(points, float(self.entropy))
+        steps = 1 << SHAPING_RESOLUTION
+        return quantised(exact, steps) / steps
+
+    def constellation(self) -> np.ndarray:
+        """The alphabet at unit mean power under the shaped distribution."""
+        points = qam_constellation(self.bits())
+        power = float(np.sum(self.probabilities() * np.abs(points) ** 2))
+        return points / math.sqrt(power)
+
+    def run(self, ctx: SimulationContext, inputs: dict[str, Signal]) -> dict[str, Signal]:
+        binary: BinarySignal = inputs["in"]
+        expected = ctx.sequence_length * SHAPING_RESOLUTION
+        if binary.num_bits != expected:
+            raise ValueError(
+                f"{self.label}: got {binary.num_bits} bits, but drawing {ctx.sequence_length} "
+                f"shaped symbols takes {SHAPING_RESOLUTION} bits each, {expected} in all. "
+                f"Set the source's bits per symbol to {SHAPING_RESOLUTION}"
+            )
+        steps = 1 << SHAPING_RESOLUTION
+        counts = np.rint(self.probabilities() * steps).astype(int)
+        lookup = np.repeat(np.arange(counts.shape[0]), counts)
+        draws = bits_to_indices(np.asarray(binary.bits), SHAPING_RESOLUTION)
+        points = self.constellation()
+        return {
+            "out": SymbolSignal(
+                symbols=points[lookup[draws]], symbol_rate=ctx.bit_rate, constellation=points
             )
         }

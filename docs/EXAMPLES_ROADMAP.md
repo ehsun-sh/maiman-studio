@@ -104,14 +104,14 @@ Phase and amplitude, and the DSP that recovers them.
 
 | # | Example | What it teaches | Status |
 | :-- | :--- | :--- | :--- |
-| 4.1 | QPSK back to back, ideal carrier | Constellation, EVM, $\mathrm{EVM} \approx 1/\sqrt{\mathrm{SNR}}$ | 🟢 |
+| 4.1 | QPSK back to back, ideal carrier | Constellation, EVM, $\mathrm{EVM} \approx 1/\sqrt{\mathrm{SNR}}$ | ✅ `qpsk_b2b.maiman`, with lesson; noise loaded by a VOA and an EDFA that undoes it |
 | 4.2 | 16-QAM over 80 km with the full DSP chain | CD compensation, timing, frequency and phase recovery | ✅ the studio's own project, with lesson; in the Examples menu |
 | 4.3 | Soft-decision FEC | LLRs, the post-FEC cliff | ✅ `coherent_sdfec.maiman`, with lesson |
-| 4.4 | Dual-polarisation 256 Gb/s | Butterfly equaliser, PMD | ✅ `dualpol_link.py`; studio project to add |
-| 4.5 | Blind acquisition of a large offset | Why the 4th-power estimator folds at $\pm R_s/8$ | ✅ `acquisition_link.py` |
-| 4.6 | 400ZR and 800ZR reference designs | Required OSNR, line rates | ✅ `zr400.maiman`, `zr800.maiman`; lessons to add |
-| 4.7 | 1000 km on a recirculating loop | Lap-by-lap accumulation, as a lab measures it | ✅ `recirculating_loop.py` |
-| 4.8 | Probabilistic shaping (FlexO DPO) | Shaped 16-QAM, 3.28 bit/symbol | 🟡 the shaper exists in `maiman.pcs`; needs a **PCS mapper** block to be drawn |
+| 4.4 | Dual-polarisation 256 Gb/s | Butterfly equaliser, PMD | ✅ `dualpol.maiman`, with lesson; a constellation before and after the equaliser |
+| 4.5 | Blind acquisition of a large offset | Why the 4th-power estimator folds at $\pm R_s/8$ | ✅ `acquisition.maiman`, with lesson; the fine stage alone is quoted from `acquisition_link.py` |
+| 4.6 | 400ZR and 800ZR reference designs | Required OSNR, line rates | ✅ `zr400.maiman`, `zr800.maiman`, with lessons |
+| 4.7 | 1000 km on a recirculating loop | Lap-by-lap accumulation, as a lab measures it | ✅ `loop.maiman`, with lesson; the laps on an oscilloscope |
+| 4.8 | Probabilistic shaping (FlexO DPO) | Shaped 16-QAM, 3.28 bit/symbol | ✅ `pcs.maiman`, with lesson; **PCS Mapper** added, and the analyser measures mutual information |
 
 ## Phase 5: Photonic integrated circuits
 
@@ -165,7 +165,7 @@ Collected from the 🟡 and 🔴 rows, in the order the phases need them:
 | Burst-mode receiver | 2.7 | Fast settling threshold for PON upstream |
 | Wavelength-selective switch | 3.9 | ✅ **Wavelength-Selective Switch**: express, drop and add on the grid, with its isolation leaking onto the added channel as a field |
 | Raman amplifier | 3.10 | Counter-pumped, using the measured gain shape the SRS model already has |
-| PCS mapper | 4.8 | A block over `maiman.pcs` |
+| ~~PCS mapper~~ | 4.8 | Done: **PCS Mapper**, a Maxwell–Boltzmann source |
 | Gain-flattening filter | 7.2 | An `OpticalFilter` with an arbitrary measured shape may be enough |
 | RF tone source, electrical spectrum analyser | 7.4 | Also useful for 1.3 (harmonics of the MZM) |
 | Swept-frequency source | 7.6 | |
@@ -178,6 +178,12 @@ first. Each entry says which example found it and what was done.
 
 | Date | Example | Finding | Outcome |
 | :--- | :--- | :--- | :--- |
+| 2026-10-07 | 4.8 | `maiman.pcs` builds a FlexO distribution matcher from spec tables the repository cannot ship, so no block could draw a shaped signal | **PCS Mapper** added: a Maxwell–Boltzmann source with probabilities in steps of 1/256. It is a shaped source, not a matcher, so its data bits are not recoverable; the lesson credits it with mutual information instead of a BER |
+| 2026-10-07 | 4.8 | The analyser measured EVM and errors, which say nothing about a shaped alphabet | `ConstellationMeasurement` gains `entropy` and `mutual_information` (Gaussian-channel estimate, capped at the entropy); the studio shows MI beside EVM |
+| 2026-10-07 | 4.8 | The IQ driver scales the outermost point to full swing, so a shaped signal leaves the modulator 1.9 dB weaker at 3.7 bit and loses all its gain | The project raises the shaped laser by that back-off, so both branches launch the same mean power; the lesson says what a peak-limited transmitter loses |
+| 2026-10-07 | 4.8 | The studio edits `bits_per_symbol` link-wide, but a shaped source draws 8 bits a symbol for a 4-bit alphabet | The PCS Mapper names its format `alphabet` instead. Changing bits per symbol anywhere in 4.8 still sets the shaped branch's generator too; open: let a block opt out of the link-wide edit |
+| 2026-10-07 | 4.8 | At 1/256 resolution every 64-QAM point gets at least one count, which distorts strong shaping | Open: a finer table, or a real distribution matcher, for 64-QAM |
+| 2026-10-07 | 4.1 | Without a matched filter the sampler reads noise over the whole simulated bandwidth, so SNR sat 7.1 dB under OSNR instead of 1.07 | 4.1 shapes its pulses and matches the filter; the lesson's table then follows $\mathrm{SNR} = \mathrm{OSNR} - 1.07$ dB with the transmitter's 21.2 dB floor added |
 | 2026-10-06 | 3.10 | Distributed Raman gain needs a pump and its own noise model, not a block over the existing inter-channel SRS | Open: still 🟡, left for a decision before it is built |
 | 2026-10-06 | 3.6 | With modulated channels at +6 dBm on G.653, the receivers showed far less four-wave mixing penalty than the spectra suggest (products 10 dB under the channels) | Open: the lesson stays on the spectra; checking the penalty against theory is still to do |
 | 2026-10-06 | 3.9 | A demultiplexer and a multiplexer back to back cannot stand in for a ROADM: the dropped channel's leak and the added channel share a frequency, and the multiplexer refuses two carriers there | **Wavelength-Selective Switch** added; it adds the two as fields, which is the in-band crosstalk the lesson measures |

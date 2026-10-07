@@ -49,6 +49,7 @@ from .filters import ElectricalFilter, OpticalFilter, OpticalSpectrumAnalyzer
 from .long_period import LongPeriodGrating
 from .mapping import (
     DifferentialDecoder,
+    PCSMapper,
     PilotInserter,
     PilotPhaseRecovery,
     QAMMapper,
@@ -124,6 +125,7 @@ __all__ = [
     "OpticalSpectrumAnalyzer",
     "Oscilloscope",
     "PAM4Driver",
+    "PCSMapper",
     "PINPhotodiode",
     "PRBSGenerator",
     "PilotInserter",

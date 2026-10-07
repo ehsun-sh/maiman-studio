@@ -1,0 +1,180 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 10000000000.0,
+    "samples_per_symbol": 16,
+    "sequence_length": 64,
+    "seed": 0,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "pulse",
+      "type": "GaussianPulse",
+      "params": {
+        "width": 10.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "coupler",
+      "type": "DirectionalCoupler",
+      "params": {
+        "coupling": 0.5
+      },
+      "config": {
+        "second_input": true
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "delay",
+      "type": "DelayLine",
+      "params": {
+        "delay": 800.0
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "loss",
+      "type": "Attenuator",
+      "params": {
+        "attenuation": 1.0
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "loop",
+      "type": "Feedback",
+      "params": {
+        "passes": 4.0
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 240.0
+      }
+    },
+    {
+      "id": "scope",
+      "type": "Oscilloscope",
+      "params": {
+        "points": 2048.0
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 140.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "pulse",
+        "out"
+      ],
+      "to": [
+        "coupler",
+        "in1"
+      ]
+    },
+    {
+      "from": [
+        "loop",
+        "out"
+      ],
+      "to": [
+        "coupler",
+        "in2"
+      ]
+    },
+    {
+      "from": [
+        "coupler",
+        "out2"
+      ],
+      "to": [
+        "delay",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "loss",
+        "out"
+      ],
+      "to": [
+        "loop",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "delay",
+        "out"
+      ],
+      "to": [
+        "loss",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "coupler",
+        "out1"
+      ],
+      "to": [
+        "scope",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "4.7 A recirculating loop",
+    "body": "A laboratory tests a transoceanic link without owning one. It closes a few spans on themselves\nand sends the signal round many times. Here the loop is reduced to its bones.\n\n[[pulse]] sends one 10 ps pulse into a 3 dB [[coupler]]. Half leaves straight away, to the\noscilloscope [[scope]]. The other half enters the loop: [[delay]] takes 800 ps, [[loss]] takes\n1 dB, and [[loop]] brings it back to the coupler, which again lets half out and keeps half.\n\n## Lap by lap\n\nEach lap arrives 800 ps after the last. Lap 1 has crossed the coupler twice and the loss once;\nevery lap after has one more half and one more pass:\n\n$$P_0 = \\frac{P}{2}, \\qquad P_1 = \\frac{P}{4} \\cdot 10^{-0.1}, \\qquad P_{n+1} = \\frac{P_n}{2} \\cdot 10^{-0.1}$$\n\n| lap | arrives | peak on [[scope]] |\n| :-- | :-- | :-- |\n| 0 | 0 ps | 0.500 mW |\n| 1 | 800 ps | 0.199 mW |\n| 2 | 1600 ps | 0.079 mW |\n| 3 | 2400 ps | 0.031 mW |\n\nIn a real loop an amplifier replaces the loss, and the lap number is the distance: ten laps of\n100 km are 1000 km.\n\nThe log warns that [[loop]] has not converged. Here that is right: each pass is a new lap, not a\nstep towards a steady state.\n\n## Try this\n\n- Set the *delay* of [[delay]] to 0. Every lap lands on the first and the train disappears.\n- Lower [[loss]] to 0 dB and count how many laps stay visible."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 321.0,
+      "y": 13.0,
+      "w": 284.0,
+      "h": 288.0,
+      "text": "The loop: 800 ps, 1 dB",
+      "tone": "binary"
+    },
+    {
+      "id": "a2",
+      "kind": "note",
+      "x": 590.0,
+      "y": 252.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "One pulse in, a train out: each lap 800 ps later and weaker.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a3",
+      "kind": "arrow",
+      "x1": 688.0,
+      "y1": 250.0,
+      "x2": 688.0,
+      "y2": 206.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

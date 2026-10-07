@@ -20,7 +20,7 @@ link in this simulator descends from.*
 > ### Project status: 0.16.0 — released, and still moving.
 >
 > `pip install maiman`, then `maiman serve` — or [start from no Python at
-> all](#installing-and-running-it). Phases 0 through 5 are done: **67 components, more than 2250 tests, and
+> all](#installing-and-running-it). Phases 0 through 5 are done: **68 components, more than 2250 tests, and
 > every physics block checked against a closed-form result in CI.**
 >
 > **Links run end to end.** Direct detection — PRBS → NRZ → laser → MZM → fiber → PIN → filter →
@@ -140,7 +140,7 @@ You will see:
 
 ```
 Maiman Studio session server
-  67 components
+  68 components
   http://127.0.0.1:8765/
 ```
 

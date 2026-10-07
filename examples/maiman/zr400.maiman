@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "maiman_version": "0.0.1.dev0",
+  "maiman_version": "0.16.0",
   "context": {
     "bit_rate": 59840000000.0,
     "samples_per_symbol": 4,
-    "sequence_length": 1024,
+    "sequence_length": 4096,
     "seed": 2026,
     "precision": "double"
   },
@@ -18,8 +18,8 @@
         "linewidth": 100.0
       },
       "ui": {
-        "x": 190.0,
-        "y": 40.0
+        "x": 180.0,
+        "y": 240.0
       }
     },
     {
@@ -30,8 +30,8 @@
         "num_outputs": 2
       },
       "ui": {
-        "x": 190.0,
-        "y": 130.0
+        "x": 330.0,
+        "y": 240.0
       }
     },
     {
@@ -42,7 +42,7 @@
         "bits_per_symbol": 4.0
       },
       "ui": {
-        "x": 40.0,
+        "x": 30.0,
         "y": 40.0
       }
     },
@@ -53,8 +53,8 @@
         "bits_per_symbol": 4.0
       },
       "ui": {
-        "x": 40.0,
-        "y": 130.0
+        "x": 180.0,
+        "y": 40.0
       }
     },
     {
@@ -68,8 +68,8 @@
         "roll_off": 0.1
       },
       "ui": {
-        "x": 40.0,
-        "y": 220.0
+        "x": 330.0,
+        "y": 40.0
       }
     },
     {
@@ -79,8 +79,8 @@
         "v_pi": 4.0
       },
       "ui": {
-        "x": 190.0,
-        "y": 220.0
+        "x": 480.0,
+        "y": 140.0
       }
     },
     {
@@ -91,8 +91,8 @@
         "bits_per_symbol": 4.0
       },
       "ui": {
-        "x": 40.0,
-        "y": 310.0
+        "x": 30.0,
+        "y": 440.0
       }
     },
     {
@@ -102,8 +102,8 @@
         "bits_per_symbol": 4.0
       },
       "ui": {
-        "x": 40.0,
-        "y": 400.0
+        "x": 180.0,
+        "y": 440.0
       }
     },
     {
@@ -117,8 +117,8 @@
         "roll_off": 0.1
       },
       "ui": {
-        "x": 40.0,
-        "y": 490.0
+        "x": 330.0,
+        "y": 440.0
       }
     },
     {
@@ -128,8 +128,8 @@
         "v_pi": 4.0
       },
       "ui": {
-        "x": 190.0,
-        "y": 310.0
+        "x": 480.0,
+        "y": 340.0
       }
     },
     {
@@ -137,8 +137,8 @@
       "type": "PolarizationCombiner",
       "params": {},
       "ui": {
-        "x": 190.0,
-        "y": 400.0
+        "x": 630.0,
+        "y": 240.0
       }
     },
     {
@@ -150,8 +150,8 @@
         "dispersion": 17.0
       },
       "ui": {
-        "x": 340.0,
-        "y": 40.0
+        "x": 780.0,
+        "y": 240.0
       }
     },
     {
@@ -162,8 +162,8 @@
         "noise_figure": 5.0
       },
       "ui": {
-        "x": 340.0,
-        "y": 130.0
+        "x": 930.0,
+        "y": 240.0
       }
     },
     {
@@ -171,7 +171,7 @@
       "type": "OSNRMeter",
       "params": {},
       "ui": {
-        "x": 490.0,
+        "x": 1080.0,
         "y": 40.0
       }
     },
@@ -184,8 +184,8 @@
         "linewidth": 100.0
       },
       "ui": {
-        "x": 340.0,
-        "y": 220.0
+        "x": 1080.0,
+        "y": 340.0
       }
     },
     {
@@ -195,8 +195,8 @@
         "responsivity": 0.8
       },
       "ui": {
-        "x": 490.0,
-        "y": 130.0
+        "x": 1080.0,
+        "y": 240.0
       }
     },
     {
@@ -207,8 +207,8 @@
         "wavelength": 1550.0
       },
       "ui": {
-        "x": 490.0,
-        "y": 220.0
+        "x": 1230.0,
+        "y": 140.0
       }
     },
     {
@@ -219,8 +219,8 @@
         "roll_off": 0.1
       },
       "ui": {
-        "x": 640.0,
-        "y": 40.0
+        "x": 1380.0,
+        "y": 140.0
       }
     },
     {
@@ -231,8 +231,8 @@
         "wavelength": 1550.0
       },
       "ui": {
-        "x": 490.0,
-        "y": 310.0
+        "x": 1230.0,
+        "y": 340.0
       }
     },
     {
@@ -243,8 +243,8 @@
         "roll_off": 0.1
       },
       "ui": {
-        "x": 640.0,
-        "y": 130.0
+        "x": 1380.0,
+        "y": 340.0
       }
     },
     {
@@ -252,8 +252,8 @@
       "type": "ButterflyEqualizer",
       "params": {},
       "ui": {
-        "x": 640.0,
-        "y": 220.0
+        "x": 1530.0,
+        "y": 240.0
       }
     },
     {
@@ -261,8 +261,8 @@
       "type": "CarrierRecovery",
       "params": {},
       "ui": {
-        "x": 790.0,
-        "y": 40.0
+        "x": 1680.0,
+        "y": 140.0
       }
     },
     {
@@ -272,8 +272,8 @@
         "ignore_edges": 128.0
       },
       "ui": {
-        "x": 790.0,
-        "y": 130.0
+        "x": 1830.0,
+        "y": 140.0
       }
     },
     {
@@ -281,8 +281,8 @@
       "type": "CarrierRecovery",
       "params": {},
       "ui": {
-        "x": 790.0,
-        "y": 220.0
+        "x": 1680.0,
+        "y": 340.0
       }
     },
     {
@@ -292,8 +292,8 @@
         "ignore_edges": 128.0
       },
       "ui": {
-        "x": 790.0,
-        "y": 310.0
+        "x": 1830.0,
+        "y": 340.0
       }
     }
   ],
@@ -657,6 +657,92 @@
         "vsa_y",
         "reference"
       ]
+    }
+  ],
+  "notes": {
+    "title": "4.6 400ZR over one span",
+    "body": "A 400ZR module carries 400 Gb/s on one wavelength as dual-polarisation 16-QAM at 59.84 GBd.\n[[tx]] is split by [[pbs]], [[mod_x]] and [[mod_y]] carry one tributary each, and [[pbc]]\ncombines them. The signal crosses one 80 km span [[fib]] and [[edfa]], then a dual-polarisation\nreceiver [[rx]], dispersion compensation [[cdc_x]] [[cdc_y]], the butterfly equaliser [[eq]] and\ncarrier recovery.\n\n## The line rate\n\n$$R = R_s \\times \\log_2 M \\times 2 = 59.84 \\times 4 \\times 2 = 478.72\\ \\text{Gb/s}$$\n\nThe 78.72 Gb/s above the 400 Gb/s payload pays for forward error correction and framing.\n\n## Required OSNR\n\nThe error rate of 16-QAM depends on the SNR, and the SNR follows from the OSNR as in 4.1, now\nfor two polarisations. For a pre-FEC BER of $2\\times10^{-2}$, the level a soft-decision FEC of\nthis class corrects from:\n\n$$\\mathrm{OSNR}_\\text{req} = 19.47\\ \\text{dB}$$\n\n[[osnr]] reads 23.19 dB after the span, 3.7 dB of margin. [[vsa_x]] and [[vsa_y]] measure\nEVM 16.1 % and 16.2 % and a BER of $2.3\\times10^{-3}$ and $1.8\\times10^{-3}$, ten times below the\nthreshold.\n\n## Try this\n\n- Open 4.6 800ZR. It is the same link at twice the symbol rate.\n- Raise the *length* of [[fib]] to 100 km and set [[edfa]]'s gain to 20 dB."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 434.0,
+      "h": 88.0,
+      "text": "Data x",
+      "tone": "binary"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 413.0,
+      "w": 434.0,
+      "h": 88.0,
+      "text": "Data y",
+      "tone": "binary"
+    },
+    {
+      "id": "a3",
+      "kind": "rect",
+      "x": 171.0,
+      "y": 113.0,
+      "w": 584.0,
+      "h": 288.0,
+      "text": "DP-IQ transmitter",
+      "tone": "optical"
+    },
+    {
+      "id": "a4",
+      "kind": "rect",
+      "x": 771.0,
+      "y": 213.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "One 80 km span",
+      "tone": "binary"
+    },
+    {
+      "id": "a5",
+      "kind": "rect",
+      "x": 1071.0,
+      "y": 113.0,
+      "w": 434.0,
+      "h": 288.0,
+      "text": "Receiver",
+      "tone": "electrical"
+    },
+    {
+      "id": "a6",
+      "kind": "rect",
+      "x": 1521.0,
+      "y": 113.0,
+      "w": 434.0,
+      "h": 288.0,
+      "text": "DSP",
+      "tone": "symbol"
+    },
+    {
+      "id": "a7",
+      "kind": "note",
+      "x": 1246.0,
+      "y": 20.0,
+      "w": 240.0,
+      "h": 70.0,
+      "text": "The span leaves 23.2 dB of OSNR. Compare it with what the rate needs.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a8",
+      "kind": "arrow",
+      "x1": 1244.0,
+      "y1": 66.0,
+      "x2": 1210.0,
+      "y2": 66.0,
+      "text": "",
+      "tone": "metric"
     }
   ]
 }

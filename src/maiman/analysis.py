@@ -659,7 +659,32 @@ def measure_constellation(
         gain=gain,
         frequency_offset=offset,
         bits_per_symbol=bits_per_symbol,
+        **_information(r, s, points, transmitted),
     )
+
+
+def _information(
+    received: np.ndarray, sent: np.ndarray, points: np.ndarray, indices: np.ndarray
+) -> dict[str, float]:
+    """The entropy of what was sent and the mutual information with what arrived.
+
+    The channel is taken as Gaussian with the measured noise, and the prior is
+    how often each point was actually sent, so a shaped alphabet is credited
+    with its shaping. Computed in the log domain: at high SNR every likelihood
+    but one underflows.
+    """
+    counts = np.bincount(indices, minlength=points.shape[0]).astype(np.float64)
+    prior = counts / counts.sum()
+    used = prior > 0.0
+    entropy = float(-np.sum(prior[used] * np.log2(prior[used])))
+    variance = float(np.mean(np.abs(received - sent) ** 2))
+    if variance <= 0.0:
+        return {"entropy": entropy, "mutual_information": entropy}
+    log_q = -(np.abs(received[:, None] - points[None, used]) ** 2) / variance
+    log_mix = np.logaddexp.reduce(log_q + np.log(prior[used])[None, :], axis=1)
+    log_own = -(np.abs(received - sent) ** 2) / variance
+    information = float(np.mean(log_own - log_mix) / math.log(2.0))
+    return {"entropy": entropy, "mutual_information": min(information, entropy)}
 
 
 def constellation_histogram(

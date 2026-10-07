@@ -1,0 +1,421 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 32000000000.0,
+    "samples_per_symbol": 4,
+    "sequence_length": 8192,
+    "seed": 2026,
+    "precision": "double"
+  },
+  "nodes": [
+    {
+      "id": "prbs",
+      "type": "PRBSGenerator",
+      "params": {
+        "order": 23.0,
+        "bits_per_symbol": 2.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "map",
+      "type": "QAMMapper",
+      "params": {
+        "bits_per_symbol": 2.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "drv",
+      "type": "IQDriver",
+      "params": {
+        "v_pi": 4.0,
+        "predistort": true,
+        "pulse_shaping": true,
+        "roll_off": 0.2
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "tx",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "mod",
+      "type": "IQModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "voa",
+      "type": "Attenuator",
+      "params": {
+        "attenuation": 35.0
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "ase",
+      "type": "EDFA",
+      "params": {
+        "gain": 35.0,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 780.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "osnr",
+      "type": "OSNRMeter",
+      "params": {},
+      "ui": {
+        "x": 930.0,
+        "y": 340.0
+      }
+    },
+    {
+      "id": "osa",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1550.0,
+        "span": 1.6,
+        "points": 512.0,
+        "resolution_bandwidth": 12.5
+      },
+      "ui": {
+        "x": 1080.0,
+        "y": 340.0
+      }
+    },
+    {
+      "id": "lo",
+      "type": "CWLaser",
+      "params": {
+        "power": 10.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 930.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "rx",
+      "type": "CoherentReceiver",
+      "params": {
+        "responsivity": 0.8
+      },
+      "ui": {
+        "x": 1080.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "smp",
+      "type": "IQSampler",
+      "params": {
+        "matched_filter": true,
+        "roll_off": 0.2
+      },
+      "ui": {
+        "x": 1230.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "vsa",
+      "type": "ConstellationAnalyzer",
+      "params": {},
+      "ui": {
+        "x": 1380.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "const",
+      "type": "ConstellationDiagram",
+      "params": {},
+      "ui": {
+        "x": 1380.0,
+        "y": 240.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "voa",
+        "out"
+      ],
+      "to": [
+        "ase",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "smp",
+        "out"
+      ],
+      "to": [
+        "const",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "map",
+        "out"
+      ],
+      "to": [
+        "drv",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "map",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "i"
+      ],
+      "to": [
+        "mod",
+        "i"
+      ]
+    },
+    {
+      "from": [
+        "tx",
+        "out"
+      ],
+      "to": [
+        "mod",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "q"
+      ],
+      "to": [
+        "mod",
+        "q"
+      ]
+    },
+    {
+      "from": [
+        "ase",
+        "out"
+      ],
+      "to": [
+        "osa",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "ase",
+        "out"
+      ],
+      "to": [
+        "osnr",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "ase",
+        "out"
+      ],
+      "to": [
+        "rx",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "lo",
+        "out"
+      ],
+      "to": [
+        "rx",
+        "lo"
+      ]
+    },
+    {
+      "from": [
+        "rx",
+        "i"
+      ],
+      "to": [
+        "smp",
+        "i"
+      ]
+    },
+    {
+      "from": [
+        "rx",
+        "q"
+      ],
+      "to": [
+        "smp",
+        "q"
+      ]
+    },
+    {
+      "from": [
+        "map",
+        "out"
+      ],
+      "to": [
+        "smp",
+        "reference"
+      ]
+    },
+    {
+      "from": [
+        "mod",
+        "out"
+      ],
+      "to": [
+        "voa",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "smp",
+        "out"
+      ],
+      "to": [
+        "vsa",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "map",
+        "out"
+      ],
+      "to": [
+        "vsa",
+        "reference"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "4.1 QPSK back to back",
+    "body": "The simplest coherent link. [[prbs]] feeds two bits per symbol to [[map]], which places each\npair on one of four points. [[drv]] shapes the pulses and drives the two arms of [[mod]], so\nthe light from [[tx]] carries the symbol in both its amplitude and its phase. At the far end\n[[rx]] beats the signal against a local oscillator [[lo]] on the same wavelength and recovers\nthe in-phase and quadrature parts. [[smp]] filters and samples them once per symbol, and\n[[vsa]] and [[const]] show where the symbols landed.\n\nThere is no fibre. Between the two ends sits a bench trick: [[voa]] attenuates the signal and\n[[ase]] amplifies it back by exactly as much. The power comes back, the amplifier's noise\nstays, so the attenuation sets the OSNR without changing anything else. [[osnr]] reads it and\n[[osa]] shows the noise floor under the signal.\n\n## From OSNR to SNR\n\nOSNR counts noise in a 12.5 GHz reference bandwidth, both polarisations. The receiver hears\none polarisation through a matched filter as wide as the symbol rate $R_s$:\n\n$$\\mathrm{SNR} = \\mathrm{OSNR} \\cdot \\frac{2 B_\\text{ref}}{R_s}, \\qquad 10\\log_{10}\\frac{2 \\times 12.5}{32} = -1.07\\ \\text{dB}$$\n\nThe transmitter has a floor of its own. With no noise loaded the link reads 21.2 dB, set by\nthe pulse shaping and the modulator. Noise powers add, so the SNR the receiver sees is\n\n$$\\frac{1}{\\mathrm{SNR}} = \\frac{1}{\\mathrm{SNR}_\\text{OSNR}} + \\frac{1}{\\mathrm{SNR}_\\text{tx}}$$\n\n## EVM\n\nThe error vector is the distance from each received symbol to the point it should have been,\nrelative to the RMS amplitude. When noise is all there is, $\\mathrm{EVM} \\approx 1/\\sqrt{\\mathrm{SNR}}$.\n\n| [[voa]] | OSNR | SNR | EVM |\n| :-- | :-- | :-- | :-- |\n| 26 dB | 22.39 dB | 18.21 dB | 12.3 % |\n| 29 dB | 19.39 dB | 16.47 dB | 15.0 % |\n| 32 dB | 16.39 dB | 14.28 dB | 19.3 % |\n| 35 dB | 13.39 dB | 11.75 dB | 25.9 % |\n| 38 dB | 10.39 dB | 9.00 dB | 35.5 % |\n\nThe project opens at 35 dB: a wide cloud on each point, and still not one symbol error.\n\n## Try this\n\n- Set [[voa]] and [[ase]] both to 41 dB and count the errors on [[vsa]].\n- Turn the matched filter of [[smp]] off. The noise is now read over the whole simulated\n  bandwidth instead of the symbol rate, and the SNR falls by several decibels."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 584.0,
+      "h": 188.0,
+      "text": "QPSK transmitter",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 621.0,
+      "y": 113.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "Noise loading",
+      "tone": "binary"
+    },
+    {
+      "id": "a3",
+      "kind": "rect",
+      "x": 921.0,
+      "y": 13.0,
+      "w": 434.0,
+      "h": 188.0,
+      "text": "Coherent receiver",
+      "tone": "electrical"
+    },
+    {
+      "id": "a4",
+      "kind": "rect",
+      "x": 921.0,
+      "y": 313.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "Optical instruments",
+      "tone": "metric"
+    },
+    {
+      "id": "a5",
+      "kind": "rect",
+      "x": 1371.0,
+      "y": 13.0,
+      "w": 134.0,
+      "h": 288.0,
+      "text": "Constellation",
+      "tone": "metric"
+    },
+    {
+      "id": "a6",
+      "kind": "note",
+      "x": 1546.0,
+      "y": 20.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "$\\mathrm{EVM} \\approx 1/\\sqrt{\\mathrm{SNR}}$: 11.75 dB reads 25.9 %.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a7",
+      "kind": "arrow",
+      "x1": 1544.0,
+      "y1": 66.0,
+      "x2": 1510.0,
+      "y2": 66.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

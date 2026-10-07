@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import amplified
+import coherent
 import direct_detection
 import dwdm_link
 import first_light
@@ -600,7 +601,14 @@ TEMPLATES: dict[str, tuple[str, Path]] = {
     "launch-power": ("3.5 Optimum launch power", amplified.project_path("launch_power")),
     "fwm-dsf": ("3.6 Four-wave mixing on G.653 fibre", amplified.project_path("fwm_dsf")),
     "roadm": ("3.9 A ROADM add/drop node", amplified.project_path("roadm")),
+    "qpsk-b2b": ("4.1 QPSK back to back", coherent.project_path("qpsk_b2b")),
     "coherent-sdfec": ("4.3 Coherent link, soft-decision FEC", SDFEC_PROJECT),
+    "dualpol": ("4.4 Dual polarisation, 256 Gb/s", coherent.project_path("dualpol")),
+    "acquisition": ("4.5 Acquiring a carrier 20 GHz away", coherent.project_path("acquisition")),
+    "zr400": ("4.6 400ZR over one span", coherent.project_path("zr400")),
+    "zr800": ("4.6 800ZR over one span", coherent.project_path("zr800")),
+    "loop": ("4.7 A recirculating loop", coherent.project_path("loop")),
+    "pcs": ("4.8 Probabilistic shaping, 16-QAM", coherent.project_path("pcs")),
 }
 
 
@@ -668,6 +676,8 @@ def main() -> None:
         direct_detection.write(key)
     for key in amplified.EXAMPLES:
         amplified.write(key)
+    for key in coherent.EXAMPLES:
+        coherent.write(key)
 
     # Required received power per format, from the same graph re-run.
     sensitivity: list[dict[str, Any]] = []

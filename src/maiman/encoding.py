@@ -302,6 +302,8 @@ def _constellation_measurement(measurement: ConstellationMeasurement) -> dict[st
         "bit_errors": measurement.bit_errors,
         "frequency_offset": number(measurement.frequency_offset),
         "bits_per_symbol": measurement.bits_per_symbol,
+        "entropy": number(measurement.entropy),
+        "mutual_information": number(measurement.mutual_information),
     }
 
 
