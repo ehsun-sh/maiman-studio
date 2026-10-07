@@ -2,7 +2,7 @@
   "schema_version": 1,
   "maiman_version": "0.16.0",
   "context": {
-    "bit_rate": 119680000000.0,
+    "bit_rate": 32000000000.0,
     "samples_per_symbol": 4,
     "sequence_length": 4096,
     "seed": 2026,
@@ -14,23 +14,22 @@
       "type": "CWLaser",
       "params": {
         "power": 0.0,
-        "wavelength": 1550.0,
         "linewidth": 100.0
       },
       "ui": {
-        "x": 180.0,
+        "x": 30.0,
         "y": 240.0
       }
     },
     {
-      "id": "pbs",
+      "id": "sp",
       "type": "Splitter",
       "params": {},
       "config": {
         "num_outputs": 2
       },
       "ui": {
-        "x": 330.0,
+        "x": 180.0,
         "y": 240.0
       }
     },
@@ -60,13 +59,7 @@
     {
       "id": "drv_x",
       "type": "IQDriver",
-      "params": {
-        "v_pi": 4.0,
-        "predistort": true,
-        "drive_ratio": 0.4,
-        "pulse_shaping": true,
-        "roll_off": 0.1
-      },
+      "params": {},
       "ui": {
         "x": 330.0,
         "y": 40.0
@@ -75,9 +68,7 @@
     {
       "id": "mod_x",
       "type": "IQModulator",
-      "params": {
-        "v_pi": 4.0
-      },
+      "params": {},
       "ui": {
         "x": 480.0,
         "y": 140.0
@@ -109,13 +100,7 @@
     {
       "id": "drv_y",
       "type": "IQDriver",
-      "params": {
-        "v_pi": 4.0,
-        "predistort": true,
-        "drive_ratio": 0.4,
-        "pulse_shaping": true,
-        "roll_off": 0.1
-      },
+      "params": {},
       "ui": {
         "x": 330.0,
         "y": 440.0
@@ -124,9 +109,7 @@
     {
       "id": "mod_y",
       "type": "IQModulator",
-      "params": {
-        "v_pi": 4.0
-      },
+      "params": {},
       "ui": {
         "x": 480.0,
         "y": 340.0
@@ -142,12 +125,11 @@
       }
     },
     {
-      "id": "fib",
-      "type": "Fiber",
+      "id": "rot",
+      "type": "PolarizationRotator",
       "params": {
-        "length": 80.0,
-        "attenuation": 0.2,
-        "dispersion": 17.0
+        "angle": 30.0,
+        "phase": 25.0
       },
       "ui": {
         "x": 780.0,
@@ -155,96 +137,51 @@
       }
     },
     {
-      "id": "edfa",
-      "type": "EDFA",
-      "params": {
-        "gain": 16.0,
-        "noise_figure": 5.0
-      },
-      "ui": {
-        "x": 930.0,
-        "y": 240.0
-      }
-    },
-    {
-      "id": "osnr",
-      "type": "OSNRMeter",
-      "params": {},
-      "ui": {
-        "x": 1080.0,
-        "y": 40.0
-      }
-    },
-    {
       "id": "lo",
       "type": "CWLaser",
       "params": {
         "power": 13.0,
-        "wavelength": 1550.0,
         "linewidth": 100.0
       },
       "ui": {
-        "x": 1080.0,
+        "x": 930.0,
         "y": 340.0
       }
     },
     {
       "id": "rx",
       "type": "DualPolarizationReceiver",
-      "params": {
-        "responsivity": 0.8
-      },
+      "params": {},
       "ui": {
-        "x": 1080.0,
+        "x": 930.0,
         "y": 240.0
-      }
-    },
-    {
-      "id": "cdc_x",
-      "type": "DispersionCompensator",
-      "params": {
-        "accumulated_dispersion": 1360.0,
-        "wavelength": 1550.0
-      },
-      "ui": {
-        "x": 1230.0,
-        "y": 140.0
       }
     },
     {
       "id": "smp_x",
       "type": "IQSampler",
-      "params": {
-        "matched_filter": true,
-        "roll_off": 0.1
-      },
+      "params": {},
       "ui": {
-        "x": 1380.0,
+        "x": 1080.0,
         "y": 140.0
-      }
-    },
-    {
-      "id": "cdc_y",
-      "type": "DispersionCompensator",
-      "params": {
-        "accumulated_dispersion": 1360.0,
-        "wavelength": 1550.0
-      },
-      "ui": {
-        "x": 1230.0,
-        "y": 340.0
       }
     },
     {
       "id": "smp_y",
       "type": "IQSampler",
-      "params": {
-        "matched_filter": true,
-        "roll_off": 0.1
-      },
+      "params": {},
       "ui": {
-        "x": 1380.0,
+        "x": 1080.0,
         "y": 340.0
+      }
+    },
+    {
+      "id": "const_raw",
+      "type": "ConstellationDiagram",
+      "params": {},
+      "ui": {
+        "x": 1080.0,
+        "y": 470.0
       }
     },
     {
@@ -252,7 +189,7 @@
       "type": "ButterflyEqualizer",
       "params": {},
       "ui": {
-        "x": 1530.0,
+        "x": 1230.0,
         "y": 240.0
       }
     },
@@ -261,7 +198,7 @@
       "type": "CarrierRecovery",
       "params": {},
       "ui": {
-        "x": 1680.0,
+        "x": 1380.0,
         "y": 140.0
       }
     },
@@ -272,7 +209,16 @@
         "ignore_edges": 128.0
       },
       "ui": {
-        "x": 1830.0,
+        "x": 1530.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "const_x",
+      "type": "ConstellationDiagram",
+      "params": {},
+      "ui": {
+        "x": 1530.0,
         "y": 140.0
       }
     },
@@ -281,7 +227,7 @@
       "type": "CarrierRecovery",
       "params": {},
       "ui": {
-        "x": 1680.0,
+        "x": 1380.0,
         "y": 340.0
       }
     },
@@ -292,50 +238,49 @@
         "ignore_edges": 128.0
       },
       "ui": {
-        "x": 1830.0,
+        "x": 1530.0,
         "y": 340.0
+      }
+    },
+    {
+      "id": "const_y",
+      "type": "ConstellationDiagram",
+      "params": {},
+      "ui": {
+        "x": 1530.0,
+        "y": 440.0
       }
     }
   ],
   "edges": [
     {
       "from": [
-        "rx",
-        "xi"
+        "smp_x",
+        "out"
       ],
       "to": [
-        "cdc_x",
-        "i"
+        "const_raw",
+        "in"
       ]
     },
     {
       "from": [
-        "rx",
-        "xq"
+        "cr_x",
+        "out"
       ],
       "to": [
-        "cdc_x",
-        "q"
+        "const_x",
+        "in"
       ]
     },
     {
       "from": [
-        "rx",
-        "yi"
+        "cr_y",
+        "out"
       ],
       "to": [
-        "cdc_y",
-        "i"
-      ]
-    },
-    {
-      "from": [
-        "rx",
-        "yq"
-      ],
-      "to": [
-        "cdc_y",
-        "q"
+        "const_y",
+        "in"
       ]
     },
     {
@@ -380,16 +325,6 @@
     },
     {
       "from": [
-        "fib",
-        "out"
-      ],
-      "to": [
-        "edfa",
-        "in"
-      ]
-    },
-    {
-      "from": [
         "smp_x",
         "out"
       ],
@@ -406,16 +341,6 @@
       "to": [
         "eq",
         "y"
-      ]
-    },
-    {
-      "from": [
-        "pbc",
-        "out"
-      ],
-      "to": [
-        "fib",
-        "in"
       ]
     },
     {
@@ -450,7 +375,7 @@
     },
     {
       "from": [
-        "pbs",
+        "sp",
         "out0"
       ],
       "to": [
@@ -480,7 +405,7 @@
     },
     {
       "from": [
-        "pbs",
+        "sp",
         "out1"
       ],
       "to": [
@@ -496,16 +421,6 @@
       "to": [
         "mod_y",
         "q"
-      ]
-    },
-    {
-      "from": [
-        "edfa",
-        "out"
-      ],
-      "to": [
-        "osnr",
-        "in"
       ]
     },
     {
@@ -530,17 +445,17 @@
     },
     {
       "from": [
-        "tx",
+        "pbc",
         "out"
       ],
       "to": [
-        "pbs",
+        "rot",
         "in"
       ]
     },
     {
       "from": [
-        "edfa",
+        "rot",
         "out"
       ],
       "to": [
@@ -560,8 +475,8 @@
     },
     {
       "from": [
-        "cdc_x",
-        "i"
+        "rx",
+        "xi"
       ],
       "to": [
         "smp_x",
@@ -570,8 +485,8 @@
     },
     {
       "from": [
-        "cdc_x",
-        "q"
+        "rx",
+        "xq"
       ],
       "to": [
         "smp_x",
@@ -590,8 +505,8 @@
     },
     {
       "from": [
-        "cdc_y",
-        "i"
+        "rx",
+        "yi"
       ],
       "to": [
         "smp_y",
@@ -600,8 +515,8 @@
     },
     {
       "from": [
-        "cdc_y",
-        "q"
+        "rx",
+        "yq"
       ],
       "to": [
         "smp_y",
@@ -616,6 +531,16 @@
       "to": [
         "smp_y",
         "reference"
+      ]
+    },
+    {
+      "from": [
+        "tx",
+        "out"
+      ],
+      "to": [
+        "sp",
+        "in"
       ]
     },
     {
@@ -660,8 +585,8 @@
     }
   ],
   "notes": {
-    "title": "4.6 800ZR over one span",
-    "body": "The same link as 400ZR, at twice the symbol rate: 119.68 GBd dual-polarisation 16-QAM from\n[[tx]] through [[mod_x]], [[mod_y]] and [[pbc]], one 80 km span [[fib]] [[edfa]], and the same\nreceiver [[rx]] and DSP [[eq]].\n\n$$R = 119.68 \\times 4 \\times 2 = 957.44\\ \\text{Gb/s}$$\n\n## What doubling the rate costs\n\nTwice the symbol rate means twice the receiver bandwidth, so twice the noise for the same\nOSNR. The required OSNR rises by $10\\log_{10}2 = 3.01$ dB:\n\n$$\\mathrm{OSNR}_\\text{req} = 22.48\\ \\text{dB}$$\n\nThe span gives the same 23.19 dB on [[osnr]] as for 400ZR, so the margin is down to 0.7 dB.\n[[vsa_x]] and [[vsa_y]] measure EVM 23.3 % and 22.8 % and a BER of $2.1\\times10^{-2}$ and\n$2.0\\times10^{-2}$: right on the threshold.\n\nThe other way to 800 Gb/s is a denser format at a lower symbol rate, such as DP-64QAM at\n79.8 GBd. It needs less spectrum and even more OSNR.\n\n## Try this\n\n- Lower [[fib]] to 60 km and [[edfa]]'s gain to 12 dB, and watch the BER fall."
+    "title": "4.4 Two polarisations, one wavelength",
+    "body": "Two 16-QAM tributaries share one laser [[tx]]. [[sp]] splits it, [[mod_x]] and [[mod_y]]\nmodulate each half with its own data, and [[pbc]] combines them on orthogonal polarisations.\nThat doubles the rate to $2 \\times 4 \\times 32 = 256$ Gb/s on the same wavelength.\n\nA fibre does not keep the polarisation. [[rot]] turns it by 30\u00b0 and adds a phase between the\naxes, so each branch of the receiver [[rx]] now holds a mixture of both tributaries. The\nconstellation [[const_raw]] shows it: sixteen points become a smear.\n\n## The butterfly equaliser\n\nThe channel is a 2\u00d72 matrix $\\mathbf{J}$ acting on the field. [[eq]] learns its inverse with\nfour filters, one from each input to each output ($*$ is convolution):\n\n$$x' = h_{xx} * x + h_{xy} * y, \\qquad y' = h_{yx} * x + h_{yy} * y$$\n\nIt has no training sequence. It adapts until each output has the constant-modulus shape a\nQAM signal should have, then [[cr_x]] and [[cr_y]] remove the remaining phase.\n\n| | EVM x | EVM y | symbol errors |\n| :-- | :-- | :-- | :-- |\n| 0\u00b0, no equaliser | 2.5 % | 2.5 % | 0 |\n| 30\u00b0, no equaliser | 218 % | 123 % | 6217 |\n| 30\u00b0, with [[eq]] | 2.51 % | 2.52 % | 0 |\n\nWithout the equaliser the branches are not degraded. They carry no recoverable data at all.\n\n## Try this\n\n- Sweep the *angle* of [[rot]] from 0\u00b0 to 90\u00b0. At 90\u00b0 the tributaries arrive swapped.\n- Watch [[const_x]] and [[const_y]] while you do."
   },
   "annotations": [
     {
@@ -669,78 +594,68 @@
       "kind": "rect",
       "x": 21.0,
       "y": 13.0,
-      "w": 434.0,
-      "h": 88.0,
-      "text": "Data x",
-      "tone": "binary"
+      "w": 584.0,
+      "h": 188.0,
+      "text": "Tributary x",
+      "tone": "optical"
     },
     {
       "id": "a2",
       "kind": "rect",
       "x": 21.0,
-      "y": 413.0,
-      "w": 434.0,
-      "h": 88.0,
-      "text": "Data y",
-      "tone": "binary"
+      "y": 313.0,
+      "w": 584.0,
+      "h": 188.0,
+      "text": "Tributary y",
+      "tone": "optical"
     },
     {
       "id": "a3",
       "kind": "rect",
-      "x": 171.0,
-      "y": 113.0,
-      "w": 584.0,
-      "h": 288.0,
-      "text": "DP-IQ transmitter",
-      "tone": "optical"
+      "x": 621.0,
+      "y": 213.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "Channel",
+      "tone": "binary"
     },
     {
       "id": "a4",
       "kind": "rect",
-      "x": 771.0,
-      "y": 213.0,
+      "x": 921.0,
+      "y": 113.0,
       "w": 284.0,
-      "h": 88.0,
-      "text": "One 80 km span",
-      "tone": "binary"
+      "h": 288.0,
+      "text": "Dual-pol receiver",
+      "tone": "electrical"
     },
     {
       "id": "a5",
       "kind": "rect",
-      "x": 1071.0,
+      "x": 1221.0,
       "y": 113.0,
-      "w": 434.0,
-      "h": 288.0,
-      "text": "Receiver",
-      "tone": "electrical"
-    },
-    {
-      "id": "a6",
-      "kind": "rect",
-      "x": 1521.0,
-      "y": 113.0,
-      "w": 434.0,
+      "w": 284.0,
       "h": 288.0,
       "text": "DSP",
       "tone": "symbol"
     },
     {
-      "id": "a7",
+      "id": "a6",
       "kind": "note",
-      "x": 1246.0,
-      "y": 20.0,
+      "x": 1220.0,
+      "y": 470.0,
       "w": 240.0,
-      "h": 70.0,
-      "text": "The span leaves 23.2 dB of OSNR. Compare it with what the rate needs.",
+      "h": 80.0,
+      "text": "Four filters, $x$ and $y$ in, $x$ and $y$ out: the inverse of the rotation, learned blind.",
       "tone": "electrical"
     },
     {
-      "id": "a8",
+      "id": "a7",
       "kind": "arrow",
-      "x1": 1244.0,
-      "y1": 66.0,
-      "x2": 1210.0,
-      "y2": 66.0,
+      "x1": 1288.0,
+      "y1": 468.0,
+      "x2": 1288.0,
+      "y2": 306.0,
       "text": "",
       "tone": "metric"
     }

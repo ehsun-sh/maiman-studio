@@ -1033,7 +1033,10 @@ class OpticalSpectrum:
         half = max(1, math.ceil(4.0 * sigma))
         offsets = np.arange(-half, half + 1, dtype=np.float64)
         kernel = np.exp(-0.5 * (offsets / sigma) ** 2)
-        return np.convolve(np.asarray(self.power_w), kernel, mode="same")
+        # Not ``mode="same"``: that returns the longer of the two, so a trace
+        # finer than its resolution bandwidth came back longer than its own axis.
+        power = np.asarray(self.power_w)
+        return np.convolve(power, kernel)[half : half + power.size]
 
     def power_dbm(self, floor_w: float = 1e-18) -> np.ndarray:
         """The trace in dBm, floored so an empty region plots instead of diverging."""
@@ -1249,6 +1252,17 @@ class ConstellationMeasurement:
     """Carrier frequency offset estimated and removed [Hz]."""
 
     bits_per_symbol: int
+
+    entropy: float = 0.0
+    """How many bits a transmitted symbol carries [bit]: the entropy of how often
+    each point was sent. ``bits_per_symbol`` for a uniform alphabet, less for a
+    shaped one."""
+
+    mutual_information: float = 0.0
+    """How many of those bits survive the channel [bit/symbol], estimated with a
+    Gaussian channel of the measured noise and the transmitted points' own
+    frequencies as the prior. What a capacity-approaching code can recover, and
+    the measure shaping is designed to raise."""
 
     @property
     def snr(self) -> float:

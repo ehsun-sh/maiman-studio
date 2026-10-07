@@ -1,0 +1,654 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 32000000000.0,
+    "samples_per_symbol": 4,
+    "sequence_length": 8192,
+    "seed": 2026,
+    "precision": "double"
+  },
+  "nodes": [
+    {
+      "id": "prbs_u",
+      "type": "PRBSGenerator",
+      "params": {
+        "order": 23.0,
+        "bits_per_symbol": 4.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "map_u",
+      "type": "QAMMapper",
+      "params": {
+        "bits_per_symbol": 4.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "drv_u",
+      "type": "IQDriver",
+      "params": {
+        "v_pi": 4.0,
+        "predistort": true,
+        "pulse_shaping": true,
+        "roll_off": 0.2
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "tx_u",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "mod_u",
+      "type": "IQModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "voa_u",
+      "type": "Attenuator",
+      "params": {
+        "attenuation": 36.0
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "ase_u",
+      "type": "EDFA",
+      "params": {
+        "gain": 36.0,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 780.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "lo_u",
+      "type": "CWLaser",
+      "params": {
+        "power": 10.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 780.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "rx_u",
+      "type": "CoherentReceiver",
+      "params": {
+        "responsivity": 0.8
+      },
+      "ui": {
+        "x": 930.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "smp_u",
+      "type": "IQSampler",
+      "params": {
+        "matched_filter": true,
+        "roll_off": 0.2
+      },
+      "ui": {
+        "x": 1080.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "vsa_u",
+      "type": "ConstellationAnalyzer",
+      "params": {},
+      "ui": {
+        "x": 1230.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "const_u",
+      "type": "ConstellationDiagram",
+      "params": {},
+      "ui": {
+        "x": 1230.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "prbs_s",
+      "type": "PRBSGenerator",
+      "params": {
+        "order": 23.0,
+        "bits_per_symbol": 8.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 340.0
+      }
+    },
+    {
+      "id": "map_s",
+      "type": "PCSMapper",
+      "params": {
+        "alphabet": 16.0,
+        "entropy": 3.7
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 340.0
+      }
+    },
+    {
+      "id": "drv_s",
+      "type": "IQDriver",
+      "params": {
+        "v_pi": 4.0,
+        "predistort": true,
+        "pulse_shaping": true,
+        "roll_off": 0.2
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 340.0
+      }
+    },
+    {
+      "id": "tx_s",
+      "type": "CWLaser",
+      "params": {
+        "power": 1.87,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 440.0
+      }
+    },
+    {
+      "id": "mod_s",
+      "type": "IQModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 440.0
+      }
+    },
+    {
+      "id": "voa_s",
+      "type": "Attenuator",
+      "params": {
+        "attenuation": 36.0
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 440.0
+      }
+    },
+    {
+      "id": "ase_s",
+      "type": "EDFA",
+      "params": {
+        "gain": 36.0,
+        "noise_figure": 5.0
+      },
+      "ui": {
+        "x": 780.0,
+        "y": 440.0
+      }
+    },
+    {
+      "id": "lo_s",
+      "type": "CWLaser",
+      "params": {
+        "power": 10.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 780.0,
+        "y": 340.0
+      }
+    },
+    {
+      "id": "rx_s",
+      "type": "CoherentReceiver",
+      "params": {
+        "responsivity": 0.8
+      },
+      "ui": {
+        "x": 930.0,
+        "y": 440.0
+      }
+    },
+    {
+      "id": "smp_s",
+      "type": "IQSampler",
+      "params": {
+        "matched_filter": true,
+        "roll_off": 0.2
+      },
+      "ui": {
+        "x": 1080.0,
+        "y": 440.0
+      }
+    },
+    {
+      "id": "vsa_s",
+      "type": "ConstellationAnalyzer",
+      "params": {},
+      "ui": {
+        "x": 1230.0,
+        "y": 340.0
+      }
+    },
+    {
+      "id": "const_s",
+      "type": "ConstellationDiagram",
+      "params": {},
+      "ui": {
+        "x": 1230.0,
+        "y": 440.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "voa_s",
+        "out"
+      ],
+      "to": [
+        "ase_s",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "voa_u",
+        "out"
+      ],
+      "to": [
+        "ase_u",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "smp_s",
+        "out"
+      ],
+      "to": [
+        "const_s",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "smp_u",
+        "out"
+      ],
+      "to": [
+        "const_u",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "map_s",
+        "out"
+      ],
+      "to": [
+        "drv_s",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "map_u",
+        "out"
+      ],
+      "to": [
+        "drv_u",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs_s",
+        "out"
+      ],
+      "to": [
+        "map_s",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs_u",
+        "out"
+      ],
+      "to": [
+        "map_u",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "drv_s",
+        "i"
+      ],
+      "to": [
+        "mod_s",
+        "i"
+      ]
+    },
+    {
+      "from": [
+        "tx_s",
+        "out"
+      ],
+      "to": [
+        "mod_s",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "drv_s",
+        "q"
+      ],
+      "to": [
+        "mod_s",
+        "q"
+      ]
+    },
+    {
+      "from": [
+        "drv_u",
+        "i"
+      ],
+      "to": [
+        "mod_u",
+        "i"
+      ]
+    },
+    {
+      "from": [
+        "tx_u",
+        "out"
+      ],
+      "to": [
+        "mod_u",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "drv_u",
+        "q"
+      ],
+      "to": [
+        "mod_u",
+        "q"
+      ]
+    },
+    {
+      "from": [
+        "ase_s",
+        "out"
+      ],
+      "to": [
+        "rx_s",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "lo_s",
+        "out"
+      ],
+      "to": [
+        "rx_s",
+        "lo"
+      ]
+    },
+    {
+      "from": [
+        "ase_u",
+        "out"
+      ],
+      "to": [
+        "rx_u",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "lo_u",
+        "out"
+      ],
+      "to": [
+        "rx_u",
+        "lo"
+      ]
+    },
+    {
+      "from": [
+        "rx_s",
+        "i"
+      ],
+      "to": [
+        "smp_s",
+        "i"
+      ]
+    },
+    {
+      "from": [
+        "rx_s",
+        "q"
+      ],
+      "to": [
+        "smp_s",
+        "q"
+      ]
+    },
+    {
+      "from": [
+        "map_s",
+        "out"
+      ],
+      "to": [
+        "smp_s",
+        "reference"
+      ]
+    },
+    {
+      "from": [
+        "rx_u",
+        "i"
+      ],
+      "to": [
+        "smp_u",
+        "i"
+      ]
+    },
+    {
+      "from": [
+        "rx_u",
+        "q"
+      ],
+      "to": [
+        "smp_u",
+        "q"
+      ]
+    },
+    {
+      "from": [
+        "map_u",
+        "out"
+      ],
+      "to": [
+        "smp_u",
+        "reference"
+      ]
+    },
+    {
+      "from": [
+        "mod_s",
+        "out"
+      ],
+      "to": [
+        "voa_s",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "mod_u",
+        "out"
+      ],
+      "to": [
+        "voa_u",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "smp_s",
+        "out"
+      ],
+      "to": [
+        "vsa_s",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "map_s",
+        "out"
+      ],
+      "to": [
+        "vsa_s",
+        "reference"
+      ]
+    },
+    {
+      "from": [
+        "smp_u",
+        "out"
+      ],
+      "to": [
+        "vsa_u",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "map_u",
+        "out"
+      ],
+      "to": [
+        "vsa_u",
+        "reference"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "4.8 Probabilistic shaping",
+    "body": "Two 16-QAM transmitters through the same noise. The top one, [[map_u]], sends all sixteen\npoints equally often. The bottom one, [[map_s]], sends the inner points more often than the\nouter ones, with a Maxwell\u2013Boltzmann distribution:\n\n$$p(x) \\propto e^{-\\lambda |x|^2}$$\n\n$\\lambda$ is set so a symbol carries an entropy of 3.7 bit instead of 4. Both branches are\nloaded to the same OSNR by [[voa_u]] [[ase_u]] and [[voa_s]] [[ase_s]].\n\n## Why it helps\n\nAt the same mean power, the shaped alphabet's points sit further apart, because the rare outer\npoints carry most of the energy. The signal looks more like Gaussian noise, which is what a\nnoisy channel carries best. The measure is the mutual information, the bits per symbol the\nreceiver can really get through:\n\n$$I(X;Y) = \\mathbb{E}\\left[\\log_2 \\frac{q(y \\mid x)}{\\sum_{x'} p(x')\\, q(y \\mid x')}\\right]$$\n\n[[vsa_u]] and [[vsa_s]] compute it from the received symbols. The uniform branch gets\n2.96 bit per symbol at an SNR of 9.1 dB.\n\n| [[map_s]] entropy | back-off at [[tx_s]] | MI |\n| :-- | :-- | :-- |\n| 3.85 bit | 1.25 dB | 3.08 bit |\n| 3.70 bit | 1.87 dB | 3.10 bit |\n| 3.50 bit | 2.60 dB | 3.05 bit |\n| 3.28 bit | 3.47 dB | 2.94 bit |\n\nToo much shaping costs more than it gives: a symbol can never carry more than its entropy.\nFlexO-8's 3.28 bit per symbol is matched to a higher SNR and a code rate of its own.\n\n## The back-off\n\n[[drv_s]] scales the outermost point to the modulator's full swing. A shaped signal's outer\npoints are further out at the same mean power, so it leaves [[mod_s]] weaker. The project\nraises [[tx_s]] by that amount, so both branches launch the same mean power.\n\n## Try this\n\n- Set [[tx_s]] back to the same power as [[tx_u]]. The shaping gain disappears, as it does\n  in a transmitter limited by its peak power.\n- Compare [[const_u]] and [[const_s]]."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 584.0,
+      "h": 188.0,
+      "text": "Uniform 16-QAM",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 313.0,
+      "w": 584.0,
+      "h": 188.0,
+      "text": "Shaped 16-QAM",
+      "tone": "optical"
+    },
+    {
+      "id": "a3",
+      "kind": "rect",
+      "x": 621.0,
+      "y": 113.0,
+      "w": 284.0,
+      "h": 388.0,
+      "text": "Same noise",
+      "tone": "binary"
+    },
+    {
+      "id": "a4",
+      "kind": "rect",
+      "x": 1221.0,
+      "y": 13.0,
+      "w": 134.0,
+      "h": 488.0,
+      "text": "Mutual information",
+      "tone": "metric"
+    },
+    {
+      "id": "a5",
+      "kind": "note",
+      "x": 120.0,
+      "y": 532.0,
+      "w": 240.0,
+      "h": 80.0,
+      "text": "Inner points more often: $p(x) \\propto e^{-\\lambda |x|^2}$, 3.7 bit per symbol instead of 4.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a6",
+      "kind": "arrow",
+      "x1": 238.0,
+      "y1": 530.0,
+      "x2": 238.0,
+      "y2": 406.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

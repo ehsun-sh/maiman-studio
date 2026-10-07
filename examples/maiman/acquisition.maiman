@@ -1,0 +1,393 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 32000000000.0,
+    "samples_per_symbol": 16,
+    "sequence_length": 2048,
+    "seed": 7,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "prbs",
+      "type": "PRBSGenerator",
+      "params": {
+        "order": 15.0,
+        "bits_per_symbol": 4.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "map",
+      "type": "QAMMapper",
+      "params": {
+        "bits_per_symbol": 4.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "drv",
+      "type": "IQDriver",
+      "params": {
+        "v_pi": 4.0,
+        "predistort": true,
+        "pulse_shaping": true,
+        "roll_off": 0.2
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "tx",
+      "type": "CWLaser",
+      "params": {
+        "power": 2.0,
+        "wavelength": 1550.0
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "mod",
+      "type": "IQModulator",
+      "params": {
+        "v_pi": 4.0
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "lo",
+      "type": "CWLaser",
+      "params": {
+        "power": 10.0,
+        "wavelength": 1550.1602941229355
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "rx",
+      "type": "CoherentReceiver",
+      "params": {
+        "responsivity": 0.8
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "acq",
+      "type": "CoarseFrequencyRecovery",
+      "params": {},
+      "ui": {
+        "x": 780.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "tr",
+      "type": "TimingRecovery",
+      "params": {},
+      "ui": {
+        "x": 930.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "smp",
+      "type": "IQSampler",
+      "params": {
+        "matched_filter": true,
+        "roll_off": 0.2
+      },
+      "ui": {
+        "x": 1080.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "fo",
+      "type": "FrequencyRecovery",
+      "params": {},
+      "ui": {
+        "x": 1230.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "vsa",
+      "type": "ConstellationAnalyzer",
+      "params": {
+        "ignore_edges": 64.0
+      },
+      "ui": {
+        "x": 1380.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "const",
+      "type": "ConstellationDiagram",
+      "params": {},
+      "ui": {
+        "x": 1380.0,
+        "y": 240.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "rx",
+        "i"
+      ],
+      "to": [
+        "acq",
+        "i"
+      ]
+    },
+    {
+      "from": [
+        "rx",
+        "q"
+      ],
+      "to": [
+        "acq",
+        "q"
+      ]
+    },
+    {
+      "from": [
+        "fo",
+        "out"
+      ],
+      "to": [
+        "const",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "map",
+        "out"
+      ],
+      "to": [
+        "drv",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "smp",
+        "out"
+      ],
+      "to": [
+        "fo",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "prbs",
+        "out"
+      ],
+      "to": [
+        "map",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "i"
+      ],
+      "to": [
+        "mod",
+        "i"
+      ]
+    },
+    {
+      "from": [
+        "tx",
+        "out"
+      ],
+      "to": [
+        "mod",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "drv",
+        "q"
+      ],
+      "to": [
+        "mod",
+        "q"
+      ]
+    },
+    {
+      "from": [
+        "mod",
+        "out"
+      ],
+      "to": [
+        "rx",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "lo",
+        "out"
+      ],
+      "to": [
+        "rx",
+        "lo"
+      ]
+    },
+    {
+      "from": [
+        "tr",
+        "i"
+      ],
+      "to": [
+        "smp",
+        "i"
+      ]
+    },
+    {
+      "from": [
+        "tr",
+        "q"
+      ],
+      "to": [
+        "smp",
+        "q"
+      ]
+    },
+    {
+      "from": [
+        "map",
+        "out"
+      ],
+      "to": [
+        "smp",
+        "reference"
+      ]
+    },
+    {
+      "from": [
+        "acq",
+        "i"
+      ],
+      "to": [
+        "tr",
+        "i"
+      ]
+    },
+    {
+      "from": [
+        "acq",
+        "q"
+      ],
+      "to": [
+        "tr",
+        "q"
+      ]
+    },
+    {
+      "from": [
+        "fo",
+        "out"
+      ],
+      "to": [
+        "vsa",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "map",
+        "out"
+      ],
+      "to": [
+        "vsa",
+        "reference"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "4.5 Acquiring a carrier 20 GHz away",
+    "body": "The transmitter [[tx]] sends 16-QAM at 32 GBd. The local oscillator [[lo]] is a free laser\ntuned 20 GHz away, as a receiver is before it has locked. [[rx]] mixes them, so the symbols\ncome out spinning at 20 GHz.\n\n## Why one estimator is not enough\n\nThe fine stage [[fo]] raises each symbol to the fourth power. That removes the 16-QAM phase\npattern and leaves $e^{j 4 \\cdot 2\\pi \\Delta f\\, t}$, whose frequency gives $\\Delta f$. A phase\nmeasured once per symbol can only tell frequencies apart within $\\pm R_s/2$, and after the\nfourth power that range shrinks to\n\n$$|\\Delta f| < \\frac{R_s}{2 \\times 4} = \\frac{32\\ \\text{GHz}}{8} = 4\\ \\text{GHz}$$\n\nBeyond it the estimate folds back and reports a wrong offset with full confidence. A rotation\nby a quarter turn per symbol is invisible, because the alphabet looks the same after it.\n\nThe coarse stage [[acq]] works on the waveform instead, before [[tr]] and the matched filter\nin [[smp]]. It finds where the band sits in the spectrum and shifts it to zero. What is left\nis small enough for [[fo]].\n\n| LO 20 GHz away | offset found | EVM | symbol errors |\n| :-- | :-- | :-- | :-- |\n| [[fo]] alone | +2.97 GHz (folded) | 8300 % | 1797 |\n| [[acq]] then [[fo]] | 20.07 GHz, then \u221271 MHz | 6.7 % | 0 |\n\nIn the first row nothing is left of the constellation.\n\n## Try this\n\n- Retune [[lo]] to 0.2 GHz away. Both stages work; [[acq]] then has almost nothing to do.\n- Watch [[const]] while you move [[lo]] 3, 4 and 5 GHz away."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 584.0,
+      "h": 188.0,
+      "text": "16-QAM transmitter",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 621.0,
+      "y": 13.0,
+      "w": 134.0,
+      "h": 188.0,
+      "text": "LO 20 GHz away",
+      "tone": "electrical"
+    },
+    {
+      "id": "a3",
+      "kind": "rect",
+      "x": 771.0,
+      "y": 113.0,
+      "w": 584.0,
+      "h": 88.0,
+      "text": "Coarse, then fine",
+      "tone": "symbol"
+    },
+    {
+      "id": "a4",
+      "kind": "note",
+      "x": 740.0,
+      "y": 252.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "Finds the band on the waveform's spectrum, before the matched filter throws it away.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 838.0,
+      "y1": 250.0,
+      "x2": 838.0,
+      "y2": 206.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

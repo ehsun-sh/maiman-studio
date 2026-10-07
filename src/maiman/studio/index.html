@@ -1165,8 +1165,15 @@ verdict, and DESIGN.md
         <div class="menu-group">
           <button class="menu-group-btn" role="menuitem" aria-haspopup="true" aria-expanded="false">4 · Coherent transmission<span class="menu-key">▸</span></button>
           <div class="menu-pop menu-sub" role="menu">
+            <button role="menuitem" id="example-qpsk-b2b">4.1 QPSK back to back</button>
             <button role="menuitem" id="examples-flagship">4.2 Coherent 16-QAM over 80 km</button>
             <button role="menuitem" id="example-coherent-sdfec">4.3 Coherent link, soft-decision FEC</button>
+            <button role="menuitem" id="example-dualpol">4.4 Dual polarisation, 256 Gb/s</button>
+            <button role="menuitem" id="example-acquisition">4.5 Acquiring a carrier 20 GHz away</button>
+            <button role="menuitem" id="example-zr400">4.6 400ZR over one span</button>
+            <button role="menuitem" id="example-zr800">4.6 800ZR over one span</button>
+            <button role="menuitem" id="example-loop">4.7 A recirculating loop</button>
+            <button role="menuitem" id="example-pcs">4.8 Probabilistic shaping, 16-QAM</button>
           </div>
         </div>
       </div>
@@ -4728,6 +4735,42 @@ verdict, and DESIGN.md
     },
     "outputs": {
      "out": "electrical"
+    }
+   }
+  },
+  "PCSMapper": {
+   "name": "PCS Mapper",
+   "type": "PCSMapper",
+   "class": "maiman.components.mapping.PCSMapper",
+   "category": "Modulation",
+   "version": "0.1.0",
+   "spectral": false,
+   "parameters": {
+    "alphabet": {
+     "type": "float",
+     "default": 16.0,
+     "unit": "",
+     "choices": [
+      16.0,
+      64.0
+     ],
+     "doc": "16-QAM or 64-QAM"
+    },
+    "entropy": {
+     "type": "float",
+     "default": 3.28,
+     "unit": "",
+     "min": 1.0,
+     "doc": "Bits per symbol the shaping leaves; 4 (or 6) is uniform. FlexO-8 DPO is 3.28"
+    }
+   },
+   "structural": {},
+   "ports": {
+    "inputs": {
+     "in": "binary"
+    },
+    "outputs": {
+     "out": "symbol"
     }
    }
   },
@@ -30869,6 +30912,430 @@ verdict, and DESIGN.md
     ]
    }
   },
+  "qpsk-b2b": {
+   "title": "4.1 QPSK back to back",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 32000000000.0,
+     "samples_per_symbol": 4,
+     "sequence_length": 8192,
+     "seed": 2026,
+     "precision": "double"
+    },
+    "nodes": [
+     {
+      "id": "prbs",
+      "type": "PRBSGenerator",
+      "params": {
+       "order": 23.0,
+       "bits_per_symbol": 2.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "map",
+      "type": "QAMMapper",
+      "params": {
+       "bits_per_symbol": 2.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "drv",
+      "type": "IQDriver",
+      "params": {
+       "v_pi": 4.0,
+       "predistort": true,
+       "pulse_shaping": true,
+       "roll_off": 0.2
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "tx",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "mod",
+      "type": "IQModulator",
+      "params": {
+       "v_pi": 4.0
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "voa",
+      "type": "Attenuator",
+      "params": {
+       "attenuation": 35.0
+      },
+      "ui": {
+       "x": 630.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "ase",
+      "type": "EDFA",
+      "params": {
+       "gain": 35.0,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 780.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "osnr",
+      "type": "OSNRMeter",
+      "params": {},
+      "ui": {
+       "x": 930.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "osa",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 1.6,
+       "points": 512.0,
+       "resolution_bandwidth": 12.5
+      },
+      "ui": {
+       "x": 1080.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "lo",
+      "type": "CWLaser",
+      "params": {
+       "power": 10.0,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 930.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "rx",
+      "type": "CoherentReceiver",
+      "params": {
+       "responsivity": 0.8
+      },
+      "ui": {
+       "x": 1080.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "smp",
+      "type": "IQSampler",
+      "params": {
+       "matched_filter": true,
+       "roll_off": 0.2
+      },
+      "ui": {
+       "x": 1230.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "vsa",
+      "type": "ConstellationAnalyzer",
+      "params": {},
+      "ui": {
+       "x": 1380.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "const",
+      "type": "ConstellationDiagram",
+      "params": {},
+      "ui": {
+       "x": 1380.0,
+       "y": 240.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "voa",
+       "out"
+      ],
+      "to": [
+       "ase",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "smp",
+       "out"
+      ],
+      "to": [
+       "const",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "map",
+       "out"
+      ],
+      "to": [
+       "drv",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "prbs",
+       "out"
+      ],
+      "to": [
+       "map",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "drv",
+       "i"
+      ],
+      "to": [
+       "mod",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "tx",
+       "out"
+      ],
+      "to": [
+       "mod",
+       "optical_in"
+      ]
+     },
+     {
+      "from": [
+       "drv",
+       "q"
+      ],
+      "to": [
+       "mod",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "ase",
+       "out"
+      ],
+      "to": [
+       "osa",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "ase",
+       "out"
+      ],
+      "to": [
+       "osnr",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "ase",
+       "out"
+      ],
+      "to": [
+       "rx",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "lo",
+       "out"
+      ],
+      "to": [
+       "rx",
+       "lo"
+      ]
+     },
+     {
+      "from": [
+       "rx",
+       "i"
+      ],
+      "to": [
+       "smp",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "rx",
+       "q"
+      ],
+      "to": [
+       "smp",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "map",
+       "out"
+      ],
+      "to": [
+       "smp",
+       "reference"
+      ]
+     },
+     {
+      "from": [
+       "mod",
+       "out"
+      ],
+      "to": [
+       "voa",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "smp",
+       "out"
+      ],
+      "to": [
+       "vsa",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "map",
+       "out"
+      ],
+      "to": [
+       "vsa",
+       "reference"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "4.1 QPSK back to back",
+     "body": "The simplest coherent link. [[prbs]] feeds two bits per symbol to [[map]], which places each\npair on one of four points. [[drv]] shapes the pulses and drives the two arms of [[mod]], so\nthe light from [[tx]] carries the symbol in both its amplitude and its phase. At the far end\n[[rx]] beats the signal against a local oscillator [[lo]] on the same wavelength and recovers\nthe in-phase and quadrature parts. [[smp]] filters and samples them once per symbol, and\n[[vsa]] and [[const]] show where the symbols landed.\n\nThere is no fibre. Between the two ends sits a bench trick: [[voa]] attenuates the signal and\n[[ase]] amplifies it back by exactly as much. The power comes back, the amplifier's noise\nstays, so the attenuation sets the OSNR without changing anything else. [[osnr]] reads it and\n[[osa]] shows the noise floor under the signal.\n\n## From OSNR to SNR\n\nOSNR counts noise in a 12.5 GHz reference bandwidth, both polarisations. The receiver hears\none polarisation through a matched filter as wide as the symbol rate $R_s$:\n\n$$\\mathrm{SNR} = \\mathrm{OSNR} \\cdot \\frac{2 B_\\text{ref}}{R_s}, \\qquad 10\\log_{10}\\frac{2 \\times 12.5}{32} = -1.07\\ \\text{dB}$$\n\nThe transmitter has a floor of its own. With no noise loaded the link reads 21.2 dB, set by\nthe pulse shaping and the modulator. Noise powers add, so the SNR the receiver sees is\n\n$$\\frac{1}{\\mathrm{SNR}} = \\frac{1}{\\mathrm{SNR}_\\text{OSNR}} + \\frac{1}{\\mathrm{SNR}_\\text{tx}}$$\n\n## EVM\n\nThe error vector is the distance from each received symbol to the point it should have been,\nrelative to the RMS amplitude. When noise is all there is, $\\mathrm{EVM} \\approx 1/\\sqrt{\\mathrm{SNR}}$.\n\n| [[voa]] | OSNR | SNR | EVM |\n| :-- | :-- | :-- | :-- |\n| 26 dB | 22.39 dB | 18.21 dB | 12.3 % |\n| 29 dB | 19.39 dB | 16.47 dB | 15.0 % |\n| 32 dB | 16.39 dB | 14.28 dB | 19.3 % |\n| 35 dB | 13.39 dB | 11.75 dB | 25.9 % |\n| 38 dB | 10.39 dB | 9.00 dB | 35.5 % |\n\nThe project opens at 35 dB: a wide cloud on each point, and still not one symbol error.\n\n## Try this\n\n- Set [[voa]] and [[ase]] both to 41 dB and count the errors on [[vsa]].\n- Turn the matched filter of [[smp]] off. The noise is now read over the whole simulated\n  bandwidth instead of the symbol rate, and the SNR falls by several decibels."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 584.0,
+      "h": 188.0,
+      "text": "QPSK transmitter",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 621.0,
+      "y": 113.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "Noise loading",
+      "tone": "binary"
+     },
+     {
+      "id": "a3",
+      "kind": "rect",
+      "x": 921.0,
+      "y": 13.0,
+      "w": 434.0,
+      "h": 188.0,
+      "text": "Coherent receiver",
+      "tone": "electrical"
+     },
+     {
+      "id": "a4",
+      "kind": "rect",
+      "x": 921.0,
+      "y": 313.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "Optical instruments",
+      "tone": "metric"
+     },
+     {
+      "id": "a5",
+      "kind": "rect",
+      "x": 1371.0,
+      "y": 13.0,
+      "w": 134.0,
+      "h": 288.0,
+      "text": "Constellation",
+      "tone": "metric"
+     },
+     {
+      "id": "a6",
+      "kind": "note",
+      "x": 1546.0,
+      "y": 20.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "$\\mathrm{EVM} \\approx 1/\\sqrt{\\mathrm{SNR}}$: 11.75 dB reads 25.9 %.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a7",
+      "kind": "arrow",
+      "x1": 1544.0,
+      "y1": 66.0,
+      "x2": 1510.0,
+      "y2": 66.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
   "coherent-sdfec": {
    "title": "4.3 Coherent link, soft-decision FEC",
    "project": {
@@ -31219,6 +31686,3410 @@ verdict, and DESIGN.md
       "y1": 498.0,
       "x2": 226.0,
       "y2": 456.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "dualpol": {
+   "title": "4.4 Dual polarisation, 256 Gb/s",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 32000000000.0,
+     "samples_per_symbol": 4,
+     "sequence_length": 4096,
+     "seed": 2026,
+     "precision": "double"
+    },
+    "nodes": [
+     {
+      "id": "tx",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "linewidth": 100.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "sp",
+      "type": "Splitter",
+      "params": {},
+      "config": {
+       "num_outputs": 2
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "prbs_x",
+      "type": "PRBSGenerator",
+      "params": {
+       "order": 23.0,
+       "bits_per_symbol": 4.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "map_x",
+      "type": "QAMMapper",
+      "params": {
+       "bits_per_symbol": 4.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "drv_x",
+      "type": "IQDriver",
+      "params": {},
+      "ui": {
+       "x": 330.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "mod_x",
+      "type": "IQModulator",
+      "params": {},
+      "ui": {
+       "x": 480.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "prbs_y",
+      "type": "PRBSGenerator",
+      "params": {
+       "order": 15.0,
+       "bits_per_symbol": 4.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 440.0
+      }
+     },
+     {
+      "id": "map_y",
+      "type": "QAMMapper",
+      "params": {
+       "bits_per_symbol": 4.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 440.0
+      }
+     },
+     {
+      "id": "drv_y",
+      "type": "IQDriver",
+      "params": {},
+      "ui": {
+       "x": 330.0,
+       "y": 440.0
+      }
+     },
+     {
+      "id": "mod_y",
+      "type": "IQModulator",
+      "params": {},
+      "ui": {
+       "x": 480.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "pbc",
+      "type": "PolarizationCombiner",
+      "params": {},
+      "ui": {
+       "x": 630.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "rot",
+      "type": "PolarizationRotator",
+      "params": {
+       "angle": 30.0,
+       "phase": 25.0
+      },
+      "ui": {
+       "x": 780.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "lo",
+      "type": "CWLaser",
+      "params": {
+       "power": 13.0,
+       "linewidth": 100.0
+      },
+      "ui": {
+       "x": 930.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "rx",
+      "type": "DualPolarizationReceiver",
+      "params": {},
+      "ui": {
+       "x": 930.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "smp_x",
+      "type": "IQSampler",
+      "params": {},
+      "ui": {
+       "x": 1080.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "smp_y",
+      "type": "IQSampler",
+      "params": {},
+      "ui": {
+       "x": 1080.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "const_raw",
+      "type": "ConstellationDiagram",
+      "params": {},
+      "ui": {
+       "x": 1080.0,
+       "y": 470.0
+      }
+     },
+     {
+      "id": "eq",
+      "type": "ButterflyEqualizer",
+      "params": {},
+      "ui": {
+       "x": 1230.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "cr_x",
+      "type": "CarrierRecovery",
+      "params": {},
+      "ui": {
+       "x": 1380.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "vsa_x",
+      "type": "ConstellationAnalyzer",
+      "params": {
+       "ignore_edges": 128.0
+      },
+      "ui": {
+       "x": 1530.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "const_x",
+      "type": "ConstellationDiagram",
+      "params": {},
+      "ui": {
+       "x": 1530.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "cr_y",
+      "type": "CarrierRecovery",
+      "params": {},
+      "ui": {
+       "x": 1380.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "vsa_y",
+      "type": "ConstellationAnalyzer",
+      "params": {
+       "ignore_edges": 128.0
+      },
+      "ui": {
+       "x": 1530.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "const_y",
+      "type": "ConstellationDiagram",
+      "params": {},
+      "ui": {
+       "x": 1530.0,
+       "y": 440.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "smp_x",
+       "out"
+      ],
+      "to": [
+       "const_raw",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "cr_x",
+       "out"
+      ],
+      "to": [
+       "const_x",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "cr_y",
+       "out"
+      ],
+      "to": [
+       "const_y",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "eq",
+       "x_out"
+      ],
+      "to": [
+       "cr_x",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "eq",
+       "y_out"
+      ],
+      "to": [
+       "cr_y",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "map_x",
+       "out"
+      ],
+      "to": [
+       "drv_x",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "map_y",
+       "out"
+      ],
+      "to": [
+       "drv_y",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "smp_x",
+       "out"
+      ],
+      "to": [
+       "eq",
+       "x"
+      ]
+     },
+     {
+      "from": [
+       "smp_y",
+       "out"
+      ],
+      "to": [
+       "eq",
+       "y"
+      ]
+     },
+     {
+      "from": [
+       "prbs_x",
+       "out"
+      ],
+      "to": [
+       "map_x",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "prbs_y",
+       "out"
+      ],
+      "to": [
+       "map_y",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "drv_x",
+       "i"
+      ],
+      "to": [
+       "mod_x",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "sp",
+       "out0"
+      ],
+      "to": [
+       "mod_x",
+       "optical_in"
+      ]
+     },
+     {
+      "from": [
+       "drv_x",
+       "q"
+      ],
+      "to": [
+       "mod_x",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "drv_y",
+       "i"
+      ],
+      "to": [
+       "mod_y",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "sp",
+       "out1"
+      ],
+      "to": [
+       "mod_y",
+       "optical_in"
+      ]
+     },
+     {
+      "from": [
+       "drv_y",
+       "q"
+      ],
+      "to": [
+       "mod_y",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "mod_x",
+       "out"
+      ],
+      "to": [
+       "pbc",
+       "x"
+      ]
+     },
+     {
+      "from": [
+       "mod_y",
+       "out"
+      ],
+      "to": [
+       "pbc",
+       "y"
+      ]
+     },
+     {
+      "from": [
+       "pbc",
+       "out"
+      ],
+      "to": [
+       "rot",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "rot",
+       "out"
+      ],
+      "to": [
+       "rx",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "lo",
+       "out"
+      ],
+      "to": [
+       "rx",
+       "lo"
+      ]
+     },
+     {
+      "from": [
+       "rx",
+       "xi"
+      ],
+      "to": [
+       "smp_x",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "rx",
+       "xq"
+      ],
+      "to": [
+       "smp_x",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "map_x",
+       "out"
+      ],
+      "to": [
+       "smp_x",
+       "reference"
+      ]
+     },
+     {
+      "from": [
+       "rx",
+       "yi"
+      ],
+      "to": [
+       "smp_y",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "rx",
+       "yq"
+      ],
+      "to": [
+       "smp_y",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "map_y",
+       "out"
+      ],
+      "to": [
+       "smp_y",
+       "reference"
+      ]
+     },
+     {
+      "from": [
+       "tx",
+       "out"
+      ],
+      "to": [
+       "sp",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "cr_x",
+       "out"
+      ],
+      "to": [
+       "vsa_x",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "map_x",
+       "out"
+      ],
+      "to": [
+       "vsa_x",
+       "reference"
+      ]
+     },
+     {
+      "from": [
+       "cr_y",
+       "out"
+      ],
+      "to": [
+       "vsa_y",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "map_y",
+       "out"
+      ],
+      "to": [
+       "vsa_y",
+       "reference"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "4.4 Two polarisations, one wavelength",
+     "body": "Two 16-QAM tributaries share one laser [[tx]]. [[sp]] splits it, [[mod_x]] and [[mod_y]]\nmodulate each half with its own data, and [[pbc]] combines them on orthogonal polarisations.\nThat doubles the rate to $2 \\times 4 \\times 32 = 256$ Gb/s on the same wavelength.\n\nA fibre does not keep the polarisation. [[rot]] turns it by 30\u00b0 and adds a phase between the\naxes, so each branch of the receiver [[rx]] now holds a mixture of both tributaries. The\nconstellation [[const_raw]] shows it: sixteen points become a smear.\n\n## The butterfly equaliser\n\nThe channel is a 2\u00d72 matrix $\\mathbf{J}$ acting on the field. [[eq]] learns its inverse with\nfour filters, one from each input to each output ($*$ is convolution):\n\n$$x' = h_{xx} * x + h_{xy} * y, \\qquad y' = h_{yx} * x + h_{yy} * y$$\n\nIt has no training sequence. It adapts until each output has the constant-modulus shape a\nQAM signal should have, then [[cr_x]] and [[cr_y]] remove the remaining phase.\n\n| | EVM x | EVM y | symbol errors |\n| :-- | :-- | :-- | :-- |\n| 0\u00b0, no equaliser | 2.5 % | 2.5 % | 0 |\n| 30\u00b0, no equaliser | 218 % | 123 % | 6217 |\n| 30\u00b0, with [[eq]] | 2.51 % | 2.52 % | 0 |\n\nWithout the equaliser the branches are not degraded. They carry no recoverable data at all.\n\n## Try this\n\n- Sweep the *angle* of [[rot]] from 0\u00b0 to 90\u00b0. At 90\u00b0 the tributaries arrive swapped.\n- Watch [[const_x]] and [[const_y]] while you do."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 584.0,
+      "h": 188.0,
+      "text": "Tributary x",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 313.0,
+      "w": 584.0,
+      "h": 188.0,
+      "text": "Tributary y",
+      "tone": "optical"
+     },
+     {
+      "id": "a3",
+      "kind": "rect",
+      "x": 621.0,
+      "y": 213.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "Channel",
+      "tone": "binary"
+     },
+     {
+      "id": "a4",
+      "kind": "rect",
+      "x": 921.0,
+      "y": 113.0,
+      "w": 284.0,
+      "h": 288.0,
+      "text": "Dual-pol receiver",
+      "tone": "electrical"
+     },
+     {
+      "id": "a5",
+      "kind": "rect",
+      "x": 1221.0,
+      "y": 113.0,
+      "w": 284.0,
+      "h": 288.0,
+      "text": "DSP",
+      "tone": "symbol"
+     },
+     {
+      "id": "a6",
+      "kind": "note",
+      "x": 1220.0,
+      "y": 470.0,
+      "w": 240.0,
+      "h": 80.0,
+      "text": "Four filters, $x$ and $y$ in, $x$ and $y$ out: the inverse of the rotation, learned blind.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a7",
+      "kind": "arrow",
+      "x1": 1288.0,
+      "y1": 468.0,
+      "x2": 1288.0,
+      "y2": 306.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "acquisition": {
+   "title": "4.5 Acquiring a carrier 20 GHz away",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 32000000000.0,
+     "samples_per_symbol": 16,
+     "sequence_length": 2048,
+     "seed": 7,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "prbs",
+      "type": "PRBSGenerator",
+      "params": {
+       "order": 15.0,
+       "bits_per_symbol": 4.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "map",
+      "type": "QAMMapper",
+      "params": {
+       "bits_per_symbol": 4.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "drv",
+      "type": "IQDriver",
+      "params": {
+       "v_pi": 4.0,
+       "predistort": true,
+       "pulse_shaping": true,
+       "roll_off": 0.2
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "tx",
+      "type": "CWLaser",
+      "params": {
+       "power": 2.0,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "mod",
+      "type": "IQModulator",
+      "params": {
+       "v_pi": 4.0
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "lo",
+      "type": "CWLaser",
+      "params": {
+       "power": 10.0,
+       "wavelength": 1550.1602941229355
+      },
+      "ui": {
+       "x": 630.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "rx",
+      "type": "CoherentReceiver",
+      "params": {
+       "responsivity": 0.8
+      },
+      "ui": {
+       "x": 630.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "acq",
+      "type": "CoarseFrequencyRecovery",
+      "params": {},
+      "ui": {
+       "x": 780.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "tr",
+      "type": "TimingRecovery",
+      "params": {},
+      "ui": {
+       "x": 930.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "smp",
+      "type": "IQSampler",
+      "params": {
+       "matched_filter": true,
+       "roll_off": 0.2
+      },
+      "ui": {
+       "x": 1080.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "fo",
+      "type": "FrequencyRecovery",
+      "params": {},
+      "ui": {
+       "x": 1230.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "vsa",
+      "type": "ConstellationAnalyzer",
+      "params": {
+       "ignore_edges": 64.0
+      },
+      "ui": {
+       "x": 1380.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "const",
+      "type": "ConstellationDiagram",
+      "params": {},
+      "ui": {
+       "x": 1380.0,
+       "y": 240.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "rx",
+       "i"
+      ],
+      "to": [
+       "acq",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "rx",
+       "q"
+      ],
+      "to": [
+       "acq",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "fo",
+       "out"
+      ],
+      "to": [
+       "const",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "map",
+       "out"
+      ],
+      "to": [
+       "drv",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "smp",
+       "out"
+      ],
+      "to": [
+       "fo",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "prbs",
+       "out"
+      ],
+      "to": [
+       "map",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "drv",
+       "i"
+      ],
+      "to": [
+       "mod",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "tx",
+       "out"
+      ],
+      "to": [
+       "mod",
+       "optical_in"
+      ]
+     },
+     {
+      "from": [
+       "drv",
+       "q"
+      ],
+      "to": [
+       "mod",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "mod",
+       "out"
+      ],
+      "to": [
+       "rx",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "lo",
+       "out"
+      ],
+      "to": [
+       "rx",
+       "lo"
+      ]
+     },
+     {
+      "from": [
+       "tr",
+       "i"
+      ],
+      "to": [
+       "smp",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "tr",
+       "q"
+      ],
+      "to": [
+       "smp",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "map",
+       "out"
+      ],
+      "to": [
+       "smp",
+       "reference"
+      ]
+     },
+     {
+      "from": [
+       "acq",
+       "i"
+      ],
+      "to": [
+       "tr",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "acq",
+       "q"
+      ],
+      "to": [
+       "tr",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "fo",
+       "out"
+      ],
+      "to": [
+       "vsa",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "map",
+       "out"
+      ],
+      "to": [
+       "vsa",
+       "reference"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "4.5 Acquiring a carrier 20 GHz away",
+     "body": "The transmitter [[tx]] sends 16-QAM at 32 GBd. The local oscillator [[lo]] is a free laser\ntuned 20 GHz away, as a receiver is before it has locked. [[rx]] mixes them, so the symbols\ncome out spinning at 20 GHz.\n\n## Why one estimator is not enough\n\nThe fine stage [[fo]] raises each symbol to the fourth power. That removes the 16-QAM phase\npattern and leaves $e^{j 4 \\cdot 2\\pi \\Delta f\\, t}$, whose frequency gives $\\Delta f$. A phase\nmeasured once per symbol can only tell frequencies apart within $\\pm R_s/2$, and after the\nfourth power that range shrinks to\n\n$$|\\Delta f| < \\frac{R_s}{2 \\times 4} = \\frac{32\\ \\text{GHz}}{8} = 4\\ \\text{GHz}$$\n\nBeyond it the estimate folds back and reports a wrong offset with full confidence. A rotation\nby a quarter turn per symbol is invisible, because the alphabet looks the same after it.\n\nThe coarse stage [[acq]] works on the waveform instead, before [[tr]] and the matched filter\nin [[smp]]. It finds where the band sits in the spectrum and shifts it to zero. What is left\nis small enough for [[fo]].\n\n| LO 20 GHz away | offset found | EVM | symbol errors |\n| :-- | :-- | :-- | :-- |\n| [[fo]] alone | +2.97 GHz (folded) | 8300 % | 1797 |\n| [[acq]] then [[fo]] | 20.07 GHz, then \u221271 MHz | 6.7 % | 0 |\n\nIn the first row nothing is left of the constellation.\n\n## Try this\n\n- Retune [[lo]] to 0.2 GHz away. Both stages work; [[acq]] then has almost nothing to do.\n- Watch [[const]] while you move [[lo]] 3, 4 and 5 GHz away."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 584.0,
+      "h": 188.0,
+      "text": "16-QAM transmitter",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 621.0,
+      "y": 13.0,
+      "w": 134.0,
+      "h": 188.0,
+      "text": "LO 20 GHz away",
+      "tone": "electrical"
+     },
+     {
+      "id": "a3",
+      "kind": "rect",
+      "x": 771.0,
+      "y": 113.0,
+      "w": 584.0,
+      "h": 88.0,
+      "text": "Coarse, then fine",
+      "tone": "symbol"
+     },
+     {
+      "id": "a4",
+      "kind": "note",
+      "x": 740.0,
+      "y": 252.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "Finds the band on the waveform's spectrum, before the matched filter throws it away.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a5",
+      "kind": "arrow",
+      "x1": 838.0,
+      "y1": 250.0,
+      "x2": 838.0,
+      "y2": 206.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "zr400": {
+   "title": "4.6 400ZR over one span",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 59840000000.0,
+     "samples_per_symbol": 4,
+     "sequence_length": 4096,
+     "seed": 2026,
+     "precision": "double"
+    },
+    "nodes": [
+     {
+      "id": "tx",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1550.0,
+       "linewidth": 100.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "pbs",
+      "type": "Splitter",
+      "params": {},
+      "config": {
+       "num_outputs": 2
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "prbs_x",
+      "type": "PRBSGenerator",
+      "params": {
+       "order": 23.0,
+       "bits_per_symbol": 4.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "map_x",
+      "type": "QAMMapper",
+      "params": {
+       "bits_per_symbol": 4.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "drv_x",
+      "type": "IQDriver",
+      "params": {
+       "v_pi": 4.0,
+       "predistort": true,
+       "drive_ratio": 0.4,
+       "pulse_shaping": true,
+       "roll_off": 0.1
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "mod_x",
+      "type": "IQModulator",
+      "params": {
+       "v_pi": 4.0
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "prbs_y",
+      "type": "PRBSGenerator",
+      "params": {
+       "order": 15.0,
+       "bits_per_symbol": 4.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 440.0
+      }
+     },
+     {
+      "id": "map_y",
+      "type": "QAMMapper",
+      "params": {
+       "bits_per_symbol": 4.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 440.0
+      }
+     },
+     {
+      "id": "drv_y",
+      "type": "IQDriver",
+      "params": {
+       "v_pi": 4.0,
+       "predistort": true,
+       "drive_ratio": 0.4,
+       "pulse_shaping": true,
+       "roll_off": 0.1
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 440.0
+      }
+     },
+     {
+      "id": "mod_y",
+      "type": "IQModulator",
+      "params": {
+       "v_pi": 4.0
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "pbc",
+      "type": "PolarizationCombiner",
+      "params": {},
+      "ui": {
+       "x": 630.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "fib",
+      "type": "Fiber",
+      "params": {
+       "length": 80.0,
+       "attenuation": 0.2,
+       "dispersion": 17.0
+      },
+      "ui": {
+       "x": 780.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "edfa",
+      "type": "EDFA",
+      "params": {
+       "gain": 16.0,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 930.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "osnr",
+      "type": "OSNRMeter",
+      "params": {},
+      "ui": {
+       "x": 1080.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "lo",
+      "type": "CWLaser",
+      "params": {
+       "power": 13.0,
+       "wavelength": 1550.0,
+       "linewidth": 100.0
+      },
+      "ui": {
+       "x": 1080.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "rx",
+      "type": "DualPolarizationReceiver",
+      "params": {
+       "responsivity": 0.8
+      },
+      "ui": {
+       "x": 1080.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "cdc_x",
+      "type": "DispersionCompensator",
+      "params": {
+       "accumulated_dispersion": 1360.0,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 1230.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "smp_x",
+      "type": "IQSampler",
+      "params": {
+       "matched_filter": true,
+       "roll_off": 0.1
+      },
+      "ui": {
+       "x": 1380.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "cdc_y",
+      "type": "DispersionCompensator",
+      "params": {
+       "accumulated_dispersion": 1360.0,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 1230.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "smp_y",
+      "type": "IQSampler",
+      "params": {
+       "matched_filter": true,
+       "roll_off": 0.1
+      },
+      "ui": {
+       "x": 1380.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "eq",
+      "type": "ButterflyEqualizer",
+      "params": {},
+      "ui": {
+       "x": 1530.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "cr_x",
+      "type": "CarrierRecovery",
+      "params": {},
+      "ui": {
+       "x": 1680.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "vsa_x",
+      "type": "ConstellationAnalyzer",
+      "params": {
+       "ignore_edges": 128.0
+      },
+      "ui": {
+       "x": 1830.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "cr_y",
+      "type": "CarrierRecovery",
+      "params": {},
+      "ui": {
+       "x": 1680.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "vsa_y",
+      "type": "ConstellationAnalyzer",
+      "params": {
+       "ignore_edges": 128.0
+      },
+      "ui": {
+       "x": 1830.0,
+       "y": 340.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "rx",
+       "xi"
+      ],
+      "to": [
+       "cdc_x",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "rx",
+       "xq"
+      ],
+      "to": [
+       "cdc_x",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "rx",
+       "yi"
+      ],
+      "to": [
+       "cdc_y",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "rx",
+       "yq"
+      ],
+      "to": [
+       "cdc_y",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "eq",
+       "x_out"
+      ],
+      "to": [
+       "cr_x",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "eq",
+       "y_out"
+      ],
+      "to": [
+       "cr_y",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "map_x",
+       "out"
+      ],
+      "to": [
+       "drv_x",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "map_y",
+       "out"
+      ],
+      "to": [
+       "drv_y",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "fib",
+       "out"
+      ],
+      "to": [
+       "edfa",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "smp_x",
+       "out"
+      ],
+      "to": [
+       "eq",
+       "x"
+      ]
+     },
+     {
+      "from": [
+       "smp_y",
+       "out"
+      ],
+      "to": [
+       "eq",
+       "y"
+      ]
+     },
+     {
+      "from": [
+       "pbc",
+       "out"
+      ],
+      "to": [
+       "fib",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "prbs_x",
+       "out"
+      ],
+      "to": [
+       "map_x",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "prbs_y",
+       "out"
+      ],
+      "to": [
+       "map_y",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "drv_x",
+       "i"
+      ],
+      "to": [
+       "mod_x",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "pbs",
+       "out0"
+      ],
+      "to": [
+       "mod_x",
+       "optical_in"
+      ]
+     },
+     {
+      "from": [
+       "drv_x",
+       "q"
+      ],
+      "to": [
+       "mod_x",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "drv_y",
+       "i"
+      ],
+      "to": [
+       "mod_y",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "pbs",
+       "out1"
+      ],
+      "to": [
+       "mod_y",
+       "optical_in"
+      ]
+     },
+     {
+      "from": [
+       "drv_y",
+       "q"
+      ],
+      "to": [
+       "mod_y",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "edfa",
+       "out"
+      ],
+      "to": [
+       "osnr",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "mod_x",
+       "out"
+      ],
+      "to": [
+       "pbc",
+       "x"
+      ]
+     },
+     {
+      "from": [
+       "mod_y",
+       "out"
+      ],
+      "to": [
+       "pbc",
+       "y"
+      ]
+     },
+     {
+      "from": [
+       "tx",
+       "out"
+      ],
+      "to": [
+       "pbs",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "edfa",
+       "out"
+      ],
+      "to": [
+       "rx",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "lo",
+       "out"
+      ],
+      "to": [
+       "rx",
+       "lo"
+      ]
+     },
+     {
+      "from": [
+       "cdc_x",
+       "i"
+      ],
+      "to": [
+       "smp_x",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "cdc_x",
+       "q"
+      ],
+      "to": [
+       "smp_x",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "map_x",
+       "out"
+      ],
+      "to": [
+       "smp_x",
+       "reference"
+      ]
+     },
+     {
+      "from": [
+       "cdc_y",
+       "i"
+      ],
+      "to": [
+       "smp_y",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "cdc_y",
+       "q"
+      ],
+      "to": [
+       "smp_y",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "map_y",
+       "out"
+      ],
+      "to": [
+       "smp_y",
+       "reference"
+      ]
+     },
+     {
+      "from": [
+       "cr_x",
+       "out"
+      ],
+      "to": [
+       "vsa_x",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "map_x",
+       "out"
+      ],
+      "to": [
+       "vsa_x",
+       "reference"
+      ]
+     },
+     {
+      "from": [
+       "cr_y",
+       "out"
+      ],
+      "to": [
+       "vsa_y",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "map_y",
+       "out"
+      ],
+      "to": [
+       "vsa_y",
+       "reference"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "4.6 400ZR over one span",
+     "body": "A 400ZR module carries 400 Gb/s on one wavelength as dual-polarisation 16-QAM at 59.84 GBd.\n[[tx]] is split by [[pbs]], [[mod_x]] and [[mod_y]] carry one tributary each, and [[pbc]]\ncombines them. The signal crosses one 80 km span [[fib]] and [[edfa]], then a dual-polarisation\nreceiver [[rx]], dispersion compensation [[cdc_x]] [[cdc_y]], the butterfly equaliser [[eq]] and\ncarrier recovery.\n\n## The line rate\n\n$$R = R_s \\times \\log_2 M \\times 2 = 59.84 \\times 4 \\times 2 = 478.72\\ \\text{Gb/s}$$\n\nThe 78.72 Gb/s above the 400 Gb/s payload pays for forward error correction and framing.\n\n## Required OSNR\n\nThe error rate of 16-QAM depends on the SNR, and the SNR follows from the OSNR as in 4.1, now\nfor two polarisations. For a pre-FEC BER of $2\\times10^{-2}$, the level a soft-decision FEC of\nthis class corrects from:\n\n$$\\mathrm{OSNR}_\\text{req} = 19.47\\ \\text{dB}$$\n\n[[osnr]] reads 23.19 dB after the span, 3.7 dB of margin. [[vsa_x]] and [[vsa_y]] measure\nEVM 16.1 % and 16.2 % and a BER of $2.3\\times10^{-3}$ and $1.8\\times10^{-3}$, ten times below the\nthreshold.\n\n## Try this\n\n- Open 4.6 800ZR. It is the same link at twice the symbol rate.\n- Raise the *length* of [[fib]] to 100 km and set [[edfa]]'s gain to 20 dB."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 434.0,
+      "h": 88.0,
+      "text": "Data x",
+      "tone": "binary"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 413.0,
+      "w": 434.0,
+      "h": 88.0,
+      "text": "Data y",
+      "tone": "binary"
+     },
+     {
+      "id": "a3",
+      "kind": "rect",
+      "x": 171.0,
+      "y": 113.0,
+      "w": 584.0,
+      "h": 288.0,
+      "text": "DP-IQ transmitter",
+      "tone": "optical"
+     },
+     {
+      "id": "a4",
+      "kind": "rect",
+      "x": 771.0,
+      "y": 213.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "One 80 km span",
+      "tone": "binary"
+     },
+     {
+      "id": "a5",
+      "kind": "rect",
+      "x": 1071.0,
+      "y": 113.0,
+      "w": 434.0,
+      "h": 288.0,
+      "text": "Receiver",
+      "tone": "electrical"
+     },
+     {
+      "id": "a6",
+      "kind": "rect",
+      "x": 1521.0,
+      "y": 113.0,
+      "w": 434.0,
+      "h": 288.0,
+      "text": "DSP",
+      "tone": "symbol"
+     },
+     {
+      "id": "a7",
+      "kind": "note",
+      "x": 1246.0,
+      "y": 20.0,
+      "w": 240.0,
+      "h": 70.0,
+      "text": "The span leaves 23.2 dB of OSNR. Compare it with what the rate needs.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a8",
+      "kind": "arrow",
+      "x1": 1244.0,
+      "y1": 66.0,
+      "x2": 1210.0,
+      "y2": 66.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "zr800": {
+   "title": "4.6 800ZR over one span",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 119680000000.0,
+     "samples_per_symbol": 4,
+     "sequence_length": 4096,
+     "seed": 2026,
+     "precision": "double"
+    },
+    "nodes": [
+     {
+      "id": "tx",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1550.0,
+       "linewidth": 100.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "pbs",
+      "type": "Splitter",
+      "params": {},
+      "config": {
+       "num_outputs": 2
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "prbs_x",
+      "type": "PRBSGenerator",
+      "params": {
+       "order": 23.0,
+       "bits_per_symbol": 4.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "map_x",
+      "type": "QAMMapper",
+      "params": {
+       "bits_per_symbol": 4.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "drv_x",
+      "type": "IQDriver",
+      "params": {
+       "v_pi": 4.0,
+       "predistort": true,
+       "drive_ratio": 0.4,
+       "pulse_shaping": true,
+       "roll_off": 0.1
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "mod_x",
+      "type": "IQModulator",
+      "params": {
+       "v_pi": 4.0
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "prbs_y",
+      "type": "PRBSGenerator",
+      "params": {
+       "order": 15.0,
+       "bits_per_symbol": 4.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 440.0
+      }
+     },
+     {
+      "id": "map_y",
+      "type": "QAMMapper",
+      "params": {
+       "bits_per_symbol": 4.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 440.0
+      }
+     },
+     {
+      "id": "drv_y",
+      "type": "IQDriver",
+      "params": {
+       "v_pi": 4.0,
+       "predistort": true,
+       "drive_ratio": 0.4,
+       "pulse_shaping": true,
+       "roll_off": 0.1
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 440.0
+      }
+     },
+     {
+      "id": "mod_y",
+      "type": "IQModulator",
+      "params": {
+       "v_pi": 4.0
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "pbc",
+      "type": "PolarizationCombiner",
+      "params": {},
+      "ui": {
+       "x": 630.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "fib",
+      "type": "Fiber",
+      "params": {
+       "length": 80.0,
+       "attenuation": 0.2,
+       "dispersion": 17.0
+      },
+      "ui": {
+       "x": 780.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "edfa",
+      "type": "EDFA",
+      "params": {
+       "gain": 16.0,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 930.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "osnr",
+      "type": "OSNRMeter",
+      "params": {},
+      "ui": {
+       "x": 1080.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "lo",
+      "type": "CWLaser",
+      "params": {
+       "power": 13.0,
+       "wavelength": 1550.0,
+       "linewidth": 100.0
+      },
+      "ui": {
+       "x": 1080.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "rx",
+      "type": "DualPolarizationReceiver",
+      "params": {
+       "responsivity": 0.8
+      },
+      "ui": {
+       "x": 1080.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "cdc_x",
+      "type": "DispersionCompensator",
+      "params": {
+       "accumulated_dispersion": 1360.0,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 1230.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "smp_x",
+      "type": "IQSampler",
+      "params": {
+       "matched_filter": true,
+       "roll_off": 0.1
+      },
+      "ui": {
+       "x": 1380.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "cdc_y",
+      "type": "DispersionCompensator",
+      "params": {
+       "accumulated_dispersion": 1360.0,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 1230.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "smp_y",
+      "type": "IQSampler",
+      "params": {
+       "matched_filter": true,
+       "roll_off": 0.1
+      },
+      "ui": {
+       "x": 1380.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "eq",
+      "type": "ButterflyEqualizer",
+      "params": {},
+      "ui": {
+       "x": 1530.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "cr_x",
+      "type": "CarrierRecovery",
+      "params": {},
+      "ui": {
+       "x": 1680.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "vsa_x",
+      "type": "ConstellationAnalyzer",
+      "params": {
+       "ignore_edges": 128.0
+      },
+      "ui": {
+       "x": 1830.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "cr_y",
+      "type": "CarrierRecovery",
+      "params": {},
+      "ui": {
+       "x": 1680.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "vsa_y",
+      "type": "ConstellationAnalyzer",
+      "params": {
+       "ignore_edges": 128.0
+      },
+      "ui": {
+       "x": 1830.0,
+       "y": 340.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "rx",
+       "xi"
+      ],
+      "to": [
+       "cdc_x",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "rx",
+       "xq"
+      ],
+      "to": [
+       "cdc_x",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "rx",
+       "yi"
+      ],
+      "to": [
+       "cdc_y",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "rx",
+       "yq"
+      ],
+      "to": [
+       "cdc_y",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "eq",
+       "x_out"
+      ],
+      "to": [
+       "cr_x",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "eq",
+       "y_out"
+      ],
+      "to": [
+       "cr_y",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "map_x",
+       "out"
+      ],
+      "to": [
+       "drv_x",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "map_y",
+       "out"
+      ],
+      "to": [
+       "drv_y",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "fib",
+       "out"
+      ],
+      "to": [
+       "edfa",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "smp_x",
+       "out"
+      ],
+      "to": [
+       "eq",
+       "x"
+      ]
+     },
+     {
+      "from": [
+       "smp_y",
+       "out"
+      ],
+      "to": [
+       "eq",
+       "y"
+      ]
+     },
+     {
+      "from": [
+       "pbc",
+       "out"
+      ],
+      "to": [
+       "fib",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "prbs_x",
+       "out"
+      ],
+      "to": [
+       "map_x",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "prbs_y",
+       "out"
+      ],
+      "to": [
+       "map_y",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "drv_x",
+       "i"
+      ],
+      "to": [
+       "mod_x",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "pbs",
+       "out0"
+      ],
+      "to": [
+       "mod_x",
+       "optical_in"
+      ]
+     },
+     {
+      "from": [
+       "drv_x",
+       "q"
+      ],
+      "to": [
+       "mod_x",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "drv_y",
+       "i"
+      ],
+      "to": [
+       "mod_y",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "pbs",
+       "out1"
+      ],
+      "to": [
+       "mod_y",
+       "optical_in"
+      ]
+     },
+     {
+      "from": [
+       "drv_y",
+       "q"
+      ],
+      "to": [
+       "mod_y",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "edfa",
+       "out"
+      ],
+      "to": [
+       "osnr",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "mod_x",
+       "out"
+      ],
+      "to": [
+       "pbc",
+       "x"
+      ]
+     },
+     {
+      "from": [
+       "mod_y",
+       "out"
+      ],
+      "to": [
+       "pbc",
+       "y"
+      ]
+     },
+     {
+      "from": [
+       "tx",
+       "out"
+      ],
+      "to": [
+       "pbs",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "edfa",
+       "out"
+      ],
+      "to": [
+       "rx",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "lo",
+       "out"
+      ],
+      "to": [
+       "rx",
+       "lo"
+      ]
+     },
+     {
+      "from": [
+       "cdc_x",
+       "i"
+      ],
+      "to": [
+       "smp_x",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "cdc_x",
+       "q"
+      ],
+      "to": [
+       "smp_x",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "map_x",
+       "out"
+      ],
+      "to": [
+       "smp_x",
+       "reference"
+      ]
+     },
+     {
+      "from": [
+       "cdc_y",
+       "i"
+      ],
+      "to": [
+       "smp_y",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "cdc_y",
+       "q"
+      ],
+      "to": [
+       "smp_y",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "map_y",
+       "out"
+      ],
+      "to": [
+       "smp_y",
+       "reference"
+      ]
+     },
+     {
+      "from": [
+       "cr_x",
+       "out"
+      ],
+      "to": [
+       "vsa_x",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "map_x",
+       "out"
+      ],
+      "to": [
+       "vsa_x",
+       "reference"
+      ]
+     },
+     {
+      "from": [
+       "cr_y",
+       "out"
+      ],
+      "to": [
+       "vsa_y",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "map_y",
+       "out"
+      ],
+      "to": [
+       "vsa_y",
+       "reference"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "4.6 800ZR over one span",
+     "body": "The same link as 400ZR, at twice the symbol rate: 119.68 GBd dual-polarisation 16-QAM from\n[[tx]] through [[mod_x]], [[mod_y]] and [[pbc]], one 80 km span [[fib]] [[edfa]], and the same\nreceiver [[rx]] and DSP [[eq]].\n\n$$R = 119.68 \\times 4 \\times 2 = 957.44\\ \\text{Gb/s}$$\n\n## What doubling the rate costs\n\nTwice the symbol rate means twice the receiver bandwidth, so twice the noise for the same\nOSNR. The required OSNR rises by $10\\log_{10}2 = 3.01$ dB:\n\n$$\\mathrm{OSNR}_\\text{req} = 22.48\\ \\text{dB}$$\n\nThe span gives the same 23.19 dB on [[osnr]] as for 400ZR, so the margin is down to 0.7 dB.\n[[vsa_x]] and [[vsa_y]] measure EVM 23.3 % and 22.8 % and a BER of $2.1\\times10^{-2}$ and\n$2.0\\times10^{-2}$: right on the threshold.\n\nThe other way to 800 Gb/s is a denser format at a lower symbol rate, such as DP-64QAM at\n79.8 GBd. It needs less spectrum and even more OSNR.\n\n## Try this\n\n- Lower [[fib]] to 60 km and [[edfa]]'s gain to 12 dB, and watch the BER fall."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 434.0,
+      "h": 88.0,
+      "text": "Data x",
+      "tone": "binary"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 413.0,
+      "w": 434.0,
+      "h": 88.0,
+      "text": "Data y",
+      "tone": "binary"
+     },
+     {
+      "id": "a3",
+      "kind": "rect",
+      "x": 171.0,
+      "y": 113.0,
+      "w": 584.0,
+      "h": 288.0,
+      "text": "DP-IQ transmitter",
+      "tone": "optical"
+     },
+     {
+      "id": "a4",
+      "kind": "rect",
+      "x": 771.0,
+      "y": 213.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "One 80 km span",
+      "tone": "binary"
+     },
+     {
+      "id": "a5",
+      "kind": "rect",
+      "x": 1071.0,
+      "y": 113.0,
+      "w": 434.0,
+      "h": 288.0,
+      "text": "Receiver",
+      "tone": "electrical"
+     },
+     {
+      "id": "a6",
+      "kind": "rect",
+      "x": 1521.0,
+      "y": 113.0,
+      "w": 434.0,
+      "h": 288.0,
+      "text": "DSP",
+      "tone": "symbol"
+     },
+     {
+      "id": "a7",
+      "kind": "note",
+      "x": 1246.0,
+      "y": 20.0,
+      "w": 240.0,
+      "h": 70.0,
+      "text": "The span leaves 23.2 dB of OSNR. Compare it with what the rate needs.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a8",
+      "kind": "arrow",
+      "x1": 1244.0,
+      "y1": 66.0,
+      "x2": 1210.0,
+      "y2": 66.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "loop": {
+   "title": "4.7 A recirculating loop",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 10000000000.0,
+     "samples_per_symbol": 16,
+     "sequence_length": 64,
+     "seed": 0,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "pulse",
+      "type": "GaussianPulse",
+      "params": {
+       "width": 10.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "coupler",
+      "type": "DirectionalCoupler",
+      "params": {
+       "coupling": 0.5
+      },
+      "config": {
+       "second_input": true
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "delay",
+      "type": "DelayLine",
+      "params": {
+       "delay": 800.0
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "loss",
+      "type": "Attenuator",
+      "params": {
+       "attenuation": 1.0
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "loop",
+      "type": "Feedback",
+      "params": {
+       "passes": 4.0
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "scope",
+      "type": "Oscilloscope",
+      "params": {
+       "points": 2048.0
+      },
+      "ui": {
+       "x": 630.0,
+       "y": 140.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "pulse",
+       "out"
+      ],
+      "to": [
+       "coupler",
+       "in1"
+      ]
+     },
+     {
+      "from": [
+       "loop",
+       "out"
+      ],
+      "to": [
+       "coupler",
+       "in2"
+      ]
+     },
+     {
+      "from": [
+       "coupler",
+       "out2"
+      ],
+      "to": [
+       "delay",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "loss",
+       "out"
+      ],
+      "to": [
+       "loop",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "delay",
+       "out"
+      ],
+      "to": [
+       "loss",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "coupler",
+       "out1"
+      ],
+      "to": [
+       "scope",
+       "in"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "4.7 A recirculating loop",
+     "body": "A laboratory tests a transoceanic link without owning one. It closes a few spans on themselves\nand sends the signal round many times. Here the loop is reduced to its bones.\n\n[[pulse]] sends one 10 ps pulse into a 3 dB [[coupler]]. Half leaves straight away, to the\noscilloscope [[scope]]. The other half enters the loop: [[delay]] takes 800 ps, [[loss]] takes\n1 dB, and [[loop]] brings it back to the coupler, which again lets half out and keeps half.\n\n## Lap by lap\n\nEach lap arrives 800 ps after the last. Lap 1 has crossed the coupler twice and the loss once;\nevery lap after has one more half and one more pass:\n\n$$P_0 = \\frac{P}{2}, \\qquad P_1 = \\frac{P}{4} \\cdot 10^{-0.1}, \\qquad P_{n+1} = \\frac{P_n}{2} \\cdot 10^{-0.1}$$\n\n| lap | arrives | peak on [[scope]] |\n| :-- | :-- | :-- |\n| 0 | 0 ps | 0.500 mW |\n| 1 | 800 ps | 0.199 mW |\n| 2 | 1600 ps | 0.079 mW |\n| 3 | 2400 ps | 0.031 mW |\n\nIn a real loop an amplifier replaces the loss, and the lap number is the distance: ten laps of\n100 km are 1000 km.\n\nThe log warns that [[loop]] has not converged. Here that is right: each pass is a new lap, not a\nstep towards a steady state.\n\n## Try this\n\n- Set the *delay* of [[delay]] to 0. Every lap lands on the first and the train disappears.\n- Lower [[loss]] to 0 dB and count how many laps stay visible."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 321.0,
+      "y": 13.0,
+      "w": 284.0,
+      "h": 288.0,
+      "text": "The loop: 800 ps, 1 dB",
+      "tone": "binary"
+     },
+     {
+      "id": "a2",
+      "kind": "note",
+      "x": 590.0,
+      "y": 252.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "One pulse in, a train out: each lap 800 ps later and weaker.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a3",
+      "kind": "arrow",
+      "x1": 688.0,
+      "y1": 250.0,
+      "x2": 688.0,
+      "y2": 206.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "pcs": {
+   "title": "4.8 Probabilistic shaping, 16-QAM",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 32000000000.0,
+     "samples_per_symbol": 4,
+     "sequence_length": 8192,
+     "seed": 2026,
+     "precision": "double"
+    },
+    "nodes": [
+     {
+      "id": "prbs_u",
+      "type": "PRBSGenerator",
+      "params": {
+       "order": 23.0,
+       "bits_per_symbol": 4.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "map_u",
+      "type": "QAMMapper",
+      "params": {
+       "bits_per_symbol": 4.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "drv_u",
+      "type": "IQDriver",
+      "params": {
+       "v_pi": 4.0,
+       "predistort": true,
+       "pulse_shaping": true,
+       "roll_off": 0.2
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "tx_u",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "mod_u",
+      "type": "IQModulator",
+      "params": {
+       "v_pi": 4.0
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "voa_u",
+      "type": "Attenuator",
+      "params": {
+       "attenuation": 36.0
+      },
+      "ui": {
+       "x": 630.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "ase_u",
+      "type": "EDFA",
+      "params": {
+       "gain": 36.0,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 780.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "lo_u",
+      "type": "CWLaser",
+      "params": {
+       "power": 10.0,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 780.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "rx_u",
+      "type": "CoherentReceiver",
+      "params": {
+       "responsivity": 0.8
+      },
+      "ui": {
+       "x": 930.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "smp_u",
+      "type": "IQSampler",
+      "params": {
+       "matched_filter": true,
+       "roll_off": 0.2
+      },
+      "ui": {
+       "x": 1080.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "vsa_u",
+      "type": "ConstellationAnalyzer",
+      "params": {},
+      "ui": {
+       "x": 1230.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "const_u",
+      "type": "ConstellationDiagram",
+      "params": {},
+      "ui": {
+       "x": 1230.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "prbs_s",
+      "type": "PRBSGenerator",
+      "params": {
+       "order": 23.0,
+       "bits_per_symbol": 8.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "map_s",
+      "type": "PCSMapper",
+      "params": {
+       "alphabet": 16.0,
+       "entropy": 3.7
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "drv_s",
+      "type": "IQDriver",
+      "params": {
+       "v_pi": 4.0,
+       "predistort": true,
+       "pulse_shaping": true,
+       "roll_off": 0.2
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "tx_s",
+      "type": "CWLaser",
+      "params": {
+       "power": 1.87,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 440.0
+      }
+     },
+     {
+      "id": "mod_s",
+      "type": "IQModulator",
+      "params": {
+       "v_pi": 4.0
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 440.0
+      }
+     },
+     {
+      "id": "voa_s",
+      "type": "Attenuator",
+      "params": {
+       "attenuation": 36.0
+      },
+      "ui": {
+       "x": 630.0,
+       "y": 440.0
+      }
+     },
+     {
+      "id": "ase_s",
+      "type": "EDFA",
+      "params": {
+       "gain": 36.0,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 780.0,
+       "y": 440.0
+      }
+     },
+     {
+      "id": "lo_s",
+      "type": "CWLaser",
+      "params": {
+       "power": 10.0,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 780.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "rx_s",
+      "type": "CoherentReceiver",
+      "params": {
+       "responsivity": 0.8
+      },
+      "ui": {
+       "x": 930.0,
+       "y": 440.0
+      }
+     },
+     {
+      "id": "smp_s",
+      "type": "IQSampler",
+      "params": {
+       "matched_filter": true,
+       "roll_off": 0.2
+      },
+      "ui": {
+       "x": 1080.0,
+       "y": 440.0
+      }
+     },
+     {
+      "id": "vsa_s",
+      "type": "ConstellationAnalyzer",
+      "params": {},
+      "ui": {
+       "x": 1230.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "const_s",
+      "type": "ConstellationDiagram",
+      "params": {},
+      "ui": {
+       "x": 1230.0,
+       "y": 440.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "voa_s",
+       "out"
+      ],
+      "to": [
+       "ase_s",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "voa_u",
+       "out"
+      ],
+      "to": [
+       "ase_u",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "smp_s",
+       "out"
+      ],
+      "to": [
+       "const_s",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "smp_u",
+       "out"
+      ],
+      "to": [
+       "const_u",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "map_s",
+       "out"
+      ],
+      "to": [
+       "drv_s",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "map_u",
+       "out"
+      ],
+      "to": [
+       "drv_u",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "prbs_s",
+       "out"
+      ],
+      "to": [
+       "map_s",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "prbs_u",
+       "out"
+      ],
+      "to": [
+       "map_u",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "drv_s",
+       "i"
+      ],
+      "to": [
+       "mod_s",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "tx_s",
+       "out"
+      ],
+      "to": [
+       "mod_s",
+       "optical_in"
+      ]
+     },
+     {
+      "from": [
+       "drv_s",
+       "q"
+      ],
+      "to": [
+       "mod_s",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "drv_u",
+       "i"
+      ],
+      "to": [
+       "mod_u",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "tx_u",
+       "out"
+      ],
+      "to": [
+       "mod_u",
+       "optical_in"
+      ]
+     },
+     {
+      "from": [
+       "drv_u",
+       "q"
+      ],
+      "to": [
+       "mod_u",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "ase_s",
+       "out"
+      ],
+      "to": [
+       "rx_s",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "lo_s",
+       "out"
+      ],
+      "to": [
+       "rx_s",
+       "lo"
+      ]
+     },
+     {
+      "from": [
+       "ase_u",
+       "out"
+      ],
+      "to": [
+       "rx_u",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "lo_u",
+       "out"
+      ],
+      "to": [
+       "rx_u",
+       "lo"
+      ]
+     },
+     {
+      "from": [
+       "rx_s",
+       "i"
+      ],
+      "to": [
+       "smp_s",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "rx_s",
+       "q"
+      ],
+      "to": [
+       "smp_s",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "map_s",
+       "out"
+      ],
+      "to": [
+       "smp_s",
+       "reference"
+      ]
+     },
+     {
+      "from": [
+       "rx_u",
+       "i"
+      ],
+      "to": [
+       "smp_u",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "rx_u",
+       "q"
+      ],
+      "to": [
+       "smp_u",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "map_u",
+       "out"
+      ],
+      "to": [
+       "smp_u",
+       "reference"
+      ]
+     },
+     {
+      "from": [
+       "mod_s",
+       "out"
+      ],
+      "to": [
+       "voa_s",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "mod_u",
+       "out"
+      ],
+      "to": [
+       "voa_u",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "smp_s",
+       "out"
+      ],
+      "to": [
+       "vsa_s",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "map_s",
+       "out"
+      ],
+      "to": [
+       "vsa_s",
+       "reference"
+      ]
+     },
+     {
+      "from": [
+       "smp_u",
+       "out"
+      ],
+      "to": [
+       "vsa_u",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "map_u",
+       "out"
+      ],
+      "to": [
+       "vsa_u",
+       "reference"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "4.8 Probabilistic shaping",
+     "body": "Two 16-QAM transmitters through the same noise. The top one, [[map_u]], sends all sixteen\npoints equally often. The bottom one, [[map_s]], sends the inner points more often than the\nouter ones, with a Maxwell\u2013Boltzmann distribution:\n\n$$p(x) \\propto e^{-\\lambda |x|^2}$$\n\n$\\lambda$ is set so a symbol carries an entropy of 3.7 bit instead of 4. Both branches are\nloaded to the same OSNR by [[voa_u]] [[ase_u]] and [[voa_s]] [[ase_s]].\n\n## Why it helps\n\nAt the same mean power, the shaped alphabet's points sit further apart, because the rare outer\npoints carry most of the energy. The signal looks more like Gaussian noise, which is what a\nnoisy channel carries best. The measure is the mutual information, the bits per symbol the\nreceiver can really get through:\n\n$$I(X;Y) = \\mathbb{E}\\left[\\log_2 \\frac{q(y \\mid x)}{\\sum_{x'} p(x')\\, q(y \\mid x')}\\right]$$\n\n[[vsa_u]] and [[vsa_s]] compute it from the received symbols. The uniform branch gets\n2.96 bit per symbol at an SNR of 9.1 dB.\n\n| [[map_s]] entropy | back-off at [[tx_s]] | MI |\n| :-- | :-- | :-- |\n| 3.85 bit | 1.25 dB | 3.08 bit |\n| 3.70 bit | 1.87 dB | 3.10 bit |\n| 3.50 bit | 2.60 dB | 3.05 bit |\n| 3.28 bit | 3.47 dB | 2.94 bit |\n\nToo much shaping costs more than it gives: a symbol can never carry more than its entropy.\nFlexO-8's 3.28 bit per symbol is matched to a higher SNR and a code rate of its own.\n\n## The back-off\n\n[[drv_s]] scales the outermost point to the modulator's full swing. A shaped signal's outer\npoints are further out at the same mean power, so it leaves [[mod_s]] weaker. The project\nraises [[tx_s]] by that amount, so both branches launch the same mean power.\n\n## Try this\n\n- Set [[tx_s]] back to the same power as [[tx_u]]. The shaping gain disappears, as it does\n  in a transmitter limited by its peak power.\n- Compare [[const_u]] and [[const_s]]."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 584.0,
+      "h": 188.0,
+      "text": "Uniform 16-QAM",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 313.0,
+      "w": 584.0,
+      "h": 188.0,
+      "text": "Shaped 16-QAM",
+      "tone": "optical"
+     },
+     {
+      "id": "a3",
+      "kind": "rect",
+      "x": 621.0,
+      "y": 113.0,
+      "w": 284.0,
+      "h": 388.0,
+      "text": "Same noise",
+      "tone": "binary"
+     },
+     {
+      "id": "a4",
+      "kind": "rect",
+      "x": 1221.0,
+      "y": 13.0,
+      "w": 134.0,
+      "h": 488.0,
+      "text": "Mutual information",
+      "tone": "metric"
+     },
+     {
+      "id": "a5",
+      "kind": "note",
+      "x": 120.0,
+      "y": 532.0,
+      "w": 240.0,
+      "h": 80.0,
+      "text": "Inner points more often: $p(x) \\propto e^{-\\lambda |x|^2}$, 3.7 bit per symbol instead of 4.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a6",
+      "kind": "arrow",
+      "x1": 238.0,
+      "y1": 530.0,
+      "x2": 238.0,
+      "y2": 406.0,
       "text": "",
       "tone": "metric"
      }
@@ -33617,7 +37488,8 @@ verdict, and DESIGN.md
       case "scalar":  return value.value === null ? "∞" : scalarText(value.value, 4);
       case "constellation_measurement":
         return `EVM ${(value.evm * 100).toFixed(2)} %, ` +
-               `${value.symbol_errors}/${value.symbols_evaluated} symbol errors`;
+               `${value.symbol_errors}/${value.symbols_evaluated} symbol errors, ` +
+               `MI ${value.mutual_information.toFixed(3)} bit`;
       case "constellation": return `${value.counts.length}×${value.counts[0].length} histogram`;
       case "eye":     return `${value.counts.length}×${value.counts[0].length} histogram`;
       case "eye_measurement": return `Q ${value.q_factor.toFixed(3)}`;

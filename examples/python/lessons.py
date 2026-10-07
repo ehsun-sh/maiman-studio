@@ -468,6 +468,106 @@ def _roadm(at: Layout) -> list[dict[str, Any]]:
     ]
 
 
+# ---------------------------------------------------------------------------
+# Phase 4: coherent links
+
+
+def _qpsk_b2b(at: Layout) -> list[dict[str, Any]]:
+    vsa = at["vsa"]
+    return [
+        frame(at, ["prbs", "map", "drv", "tx", "mod"], "QPSK transmitter", "optical"),
+        frame(at, ["voa", "ase"], "Noise loading", "binary"),
+        frame(at, ["lo", "rx", "smp"], "Coherent receiver", "electrical"),
+        frame(at, ["osnr", "osa"], "Optical instruments", "metric"),
+        frame(at, ["vsa", "const"], "Constellation", "metric"),
+        side_note(vsa, "$\\mathrm{EVM} \\approx 1/\\sqrt{\\mathrm{SNR}}$: 11.75 dB reads 25.9 %."),
+        side_arrow(vsa),
+    ]
+
+
+def _dualpol(at: Layout) -> list[dict[str, Any]]:
+    eq = at["eq"]
+    middle = eq["x"] + NODE_W / 2.0
+    return [
+        frame(at, ["prbs_x", "map_x", "drv_x", "mod_x"], "Tributary x", "optical"),
+        frame(at, ["prbs_y", "map_y", "drv_y", "mod_y"], "Tributary y", "optical"),
+        frame(at, ["pbc", "rot"], "Channel", "binary"),
+        frame(at, ["lo", "rx", "smp_x", "smp_y"], "Dual-pol receiver", "electrical"),
+        frame(at, ["eq", "cr_x", "cr_y"], "DSP", "symbol"),
+        note(
+            eq["x"] - 10.0,
+            eq["y"] + 230.0,
+            "Four filters, $x$ and $y$ in, $x$ and $y$ out: the inverse of the "
+            "rotation, learned blind.",
+            w=240.0,
+            h=80.0,
+        ),
+        arrow(middle, eq["y"] + 228.0, middle, eq["y"] + NODE_H + 14.0),
+    ]
+
+
+def _acquisition(at: Layout) -> list[dict[str, Any]]:
+    acq = at["acq"]
+    return [
+        frame(at, ["prbs", "map", "drv", "tx", "mod"], "16-QAM transmitter", "optical"),
+        frame(at, ["lo", "rx"], "LO 20 GHz away", "electrical"),
+        frame(at, ["acq", "tr", "smp", "fo"], "Coarse, then fine", "symbol"),
+        below_note(
+            acq,
+            "Finds the band on the waveform's spectrum, before the matched filter throws it away.",
+        ),
+        below_arrow(acq),
+    ]
+
+
+def _zr(at: Layout) -> list[dict[str, Any]]:
+    osnr = at["osnr"]
+    return [
+        frame(at, ["prbs_x", "map_x", "drv_x"], "Data x", "binary"),
+        frame(at, ["prbs_y", "map_y", "drv_y"], "Data y", "binary"),
+        frame(at, ["tx", "pbs", "mod_x", "mod_y", "pbc"], "DP-IQ transmitter", "optical"),
+        frame(at, ["fib", "edfa"], "One 80 km span", "binary"),
+        frame(at, ["lo", "rx", "cdc_x", "cdc_y", "smp_x", "smp_y"], "Receiver", "electrical"),
+        frame(at, ["eq", "cr_x", "cr_y", "vsa_x", "vsa_y"], "DSP", "symbol"),
+        side_note(
+            osnr,
+            "The span leaves 23.2 dB of OSNR. Compare it with what the rate needs.",
+            h=70.0,
+        ),
+        side_arrow(osnr),
+    ]
+
+
+def _loop(at: Layout) -> list[dict[str, Any]]:
+    scope = at["scope"]
+    return [
+        frame(at, ["delay", "loss", "loop"], "The loop: 800 ps, 1 dB", "binary"),
+        below_note(scope, "One pulse in, a train out: each lap 800 ps later and weaker."),
+        below_arrow(scope),
+    ]
+
+
+def _pcs(at: Layout) -> list[dict[str, Any]]:
+    shaped = at["map_s"]
+    bottom = at["mod_s"]["y"] + NODE_H + 40.0
+    middle = shaped["x"] + NODE_W / 2.0
+    return [
+        frame(at, ["prbs_u", "map_u", "drv_u", "tx_u", "mod_u"], "Uniform 16-QAM", "optical"),
+        frame(at, ["prbs_s", "map_s", "drv_s", "tx_s", "mod_s"], "Shaped 16-QAM", "optical"),
+        frame(at, ["voa_u", "ase_u", "voa_s", "ase_s"], "Same noise", "binary"),
+        frame(at, ["vsa_u", "const_u", "vsa_s", "const_s"], "Mutual information", "metric"),
+        note(
+            shaped["x"] - 60.0,
+            bottom,
+            "Inner points more often: $p(x) \\propto e^{-\\lambda |x|^2}$, "
+            "3.7 bit per symbol instead of 4.",
+            w=240.0,
+            h=80.0,
+        ),
+        arrow(middle, bottom - 2.0, middle, shaped["y"] + NODE_H + 14.0),
+    ]
+
+
 _MARKS = {
     "ook_eye": _ook_eye,
     "wdm_osa": _wdm_osa,
@@ -491,6 +591,13 @@ _MARKS = {
     "launch_power": _launch_power,
     "fwm_dsf": _fwm_dsf,
     "roadm": _roadm,
+    "qpsk_b2b": _qpsk_b2b,
+    "dualpol": _dualpol,
+    "acquisition": _acquisition,
+    "zr400": _zr,
+    "zr800": _zr,
+    "loop": _loop,
+    "pcs": _pcs,
 }
 
 
@@ -1491,6 +1598,270 @@ harms the channel that takes its place.
 
 - Sweep the *isolation* of [[wss]] from 15 to 40 dB.
 - Lower [[tx_add]]'s power by 5 dB. The leak is now 5 dB closer to the added channel.
+""".strip(),
+    },
+    "qpsk_b2b": {
+        "title": "4.1 QPSK back to back",
+        "body": r"""
+The simplest coherent link. [[prbs]] feeds two bits per symbol to [[map]], which places each
+pair on one of four points. [[drv]] shapes the pulses and drives the two arms of [[mod]], so
+the light from [[tx]] carries the symbol in both its amplitude and its phase. At the far end
+[[rx]] beats the signal against a local oscillator [[lo]] on the same wavelength and recovers
+the in-phase and quadrature parts. [[smp]] filters and samples them once per symbol, and
+[[vsa]] and [[const]] show where the symbols landed.
+
+There is no fibre. Between the two ends sits a bench trick: [[voa]] attenuates the signal and
+[[ase]] amplifies it back by exactly as much. The power comes back, the amplifier's noise
+stays, so the attenuation sets the OSNR without changing anything else. [[osnr]] reads it and
+[[osa]] shows the noise floor under the signal.
+
+## From OSNR to SNR
+
+OSNR counts noise in a 12.5 GHz reference bandwidth, both polarisations. The receiver hears
+one polarisation through a matched filter as wide as the symbol rate $R_s$:
+
+$$\mathrm{SNR} = \mathrm{OSNR} \cdot \frac{2 B_\text{ref}}{R_s}, \qquad 10\log_{10}\frac{2 \times 12.5}{32} = -1.07\ \text{dB}$$
+
+The transmitter has a floor of its own. With no noise loaded the link reads 21.2 dB, set by
+the pulse shaping and the modulator. Noise powers add, so the SNR the receiver sees is
+
+$$\frac{1}{\mathrm{SNR}} = \frac{1}{\mathrm{SNR}_\text{OSNR}} + \frac{1}{\mathrm{SNR}_\text{tx}}$$
+
+## EVM
+
+The error vector is the distance from each received symbol to the point it should have been,
+relative to the RMS amplitude. When noise is all there is, $\mathrm{EVM} \approx 1/\sqrt{\mathrm{SNR}}$.
+
+| [[voa]] | OSNR | SNR | EVM |
+| :-- | :-- | :-- | :-- |
+| 26 dB | 22.39 dB | 18.21 dB | 12.3 % |
+| 29 dB | 19.39 dB | 16.47 dB | 15.0 % |
+| 32 dB | 16.39 dB | 14.28 dB | 19.3 % |
+| 35 dB | 13.39 dB | 11.75 dB | 25.9 % |
+| 38 dB | 10.39 dB | 9.00 dB | 35.5 % |
+
+The project opens at 35 dB: a wide cloud on each point, and still not one symbol error.
+
+## Try this
+
+- Set [[voa]] and [[ase]] both to 41 dB and count the errors on [[vsa]].
+- Turn the matched filter of [[smp]] off. The noise is now read over the whole simulated
+  bandwidth instead of the symbol rate, and the SNR falls by several decibels.
+""".strip(),
+    },
+    "dualpol": {
+        "title": "4.4 Two polarisations, one wavelength",
+        "body": r"""
+Two 16-QAM tributaries share one laser [[tx]]. [[sp]] splits it, [[mod_x]] and [[mod_y]]
+modulate each half with its own data, and [[pbc]] combines them on orthogonal polarisations.
+That doubles the rate to $2 \times 4 \times 32 = 256$ Gb/s on the same wavelength.
+
+A fibre does not keep the polarisation. [[rot]] turns it by 30° and adds a phase between the
+axes, so each branch of the receiver [[rx]] now holds a mixture of both tributaries. The
+constellation [[const_raw]] shows it: sixteen points become a smear.
+
+## The butterfly equaliser
+
+The channel is a 2×2 matrix $\mathbf{J}$ acting on the field. [[eq]] learns its inverse with
+four filters, one from each input to each output ($*$ is convolution):
+
+$$x' = h_{xx} * x + h_{xy} * y, \qquad y' = h_{yx} * x + h_{yy} * y$$
+
+It has no training sequence. It adapts until each output has the constant-modulus shape a
+QAM signal should have, then [[cr_x]] and [[cr_y]] remove the remaining phase.
+
+| | EVM x | EVM y | symbol errors |
+| :-- | :-- | :-- | :-- |
+| 0°, no equaliser | 2.5 % | 2.5 % | 0 |
+| 30°, no equaliser | 218 % | 123 % | 6217 |
+| 30°, with [[eq]] | 2.51 % | 2.52 % | 0 |
+
+Without the equaliser the branches are not degraded. They carry no recoverable data at all.
+
+## Try this
+
+- Sweep the *angle* of [[rot]] from 0° to 90°. At 90° the tributaries arrive swapped.
+- Watch [[const_x]] and [[const_y]] while you do.
+""".strip(),
+    },
+    "acquisition": {
+        "title": "4.5 Acquiring a carrier 20 GHz away",
+        "body": r"""
+The transmitter [[tx]] sends 16-QAM at 32 GBd. The local oscillator [[lo]] is a free laser
+tuned 20 GHz away, as a receiver is before it has locked. [[rx]] mixes them, so the symbols
+come out spinning at 20 GHz.
+
+## Why one estimator is not enough
+
+The fine stage [[fo]] raises each symbol to the fourth power. That removes the 16-QAM phase
+pattern and leaves $e^{j 4 \cdot 2\pi \Delta f\, t}$, whose frequency gives $\Delta f$. A phase
+measured once per symbol can only tell frequencies apart within $\pm R_s/2$, and after the
+fourth power that range shrinks to
+
+$$|\Delta f| < \frac{R_s}{2 \times 4} = \frac{32\ \text{GHz}}{8} = 4\ \text{GHz}$$
+
+Beyond it the estimate folds back and reports a wrong offset with full confidence. A rotation
+by a quarter turn per symbol is invisible, because the alphabet looks the same after it.
+
+The coarse stage [[acq]] works on the waveform instead, before [[tr]] and the matched filter
+in [[smp]]. It finds where the band sits in the spectrum and shifts it to zero. What is left
+is small enough for [[fo]].
+
+| LO 20 GHz away | offset found | EVM | symbol errors |
+| :-- | :-- | :-- | :-- |
+| [[fo]] alone | +2.97 GHz (folded) | 8300 % | 1797 |
+| [[acq]] then [[fo]] | 20.07 GHz, then −71 MHz | 6.7 % | 0 |
+
+In the first row nothing is left of the constellation.
+
+## Try this
+
+- Retune [[lo]] to 0.2 GHz away. Both stages work; [[acq]] then has almost nothing to do.
+- Watch [[const]] while you move [[lo]] 3, 4 and 5 GHz away.
+""".strip(),
+    },
+    "zr400": {
+        "title": "4.6 400ZR over one span",
+        "body": r"""
+A 400ZR module carries 400 Gb/s on one wavelength as dual-polarisation 16-QAM at 59.84 GBd.
+[[tx]] is split by [[pbs]], [[mod_x]] and [[mod_y]] carry one tributary each, and [[pbc]]
+combines them. The signal crosses one 80 km span [[fib]] and [[edfa]], then a dual-polarisation
+receiver [[rx]], dispersion compensation [[cdc_x]] [[cdc_y]], the butterfly equaliser [[eq]] and
+carrier recovery.
+
+## The line rate
+
+$$R = R_s \times \log_2 M \times 2 = 59.84 \times 4 \times 2 = 478.72\ \text{Gb/s}$$
+
+The 78.72 Gb/s above the 400 Gb/s payload pays for forward error correction and framing.
+
+## Required OSNR
+
+The error rate of 16-QAM depends on the SNR, and the SNR follows from the OSNR as in 4.1, now
+for two polarisations. For a pre-FEC BER of $2\times10^{-2}$, the level a soft-decision FEC of
+this class corrects from:
+
+$$\mathrm{OSNR}_\text{req} = 19.47\ \text{dB}$$
+
+[[osnr]] reads 23.19 dB after the span, 3.7 dB of margin. [[vsa_x]] and [[vsa_y]] measure
+EVM 16.1 % and 16.2 % and a BER of $2.3\times10^{-3}$ and $1.8\times10^{-3}$, ten times below the
+threshold.
+
+## Try this
+
+- Open 4.6 800ZR. It is the same link at twice the symbol rate.
+- Raise the *length* of [[fib]] to 100 km and set [[edfa]]'s gain to 20 dB.
+""".strip(),
+    },
+    "zr800": {
+        "title": "4.6 800ZR over one span",
+        "body": r"""
+The same link as 400ZR, at twice the symbol rate: 119.68 GBd dual-polarisation 16-QAM from
+[[tx]] through [[mod_x]], [[mod_y]] and [[pbc]], one 80 km span [[fib]] [[edfa]], and the same
+receiver [[rx]] and DSP [[eq]].
+
+$$R = 119.68 \times 4 \times 2 = 957.44\ \text{Gb/s}$$
+
+## What doubling the rate costs
+
+Twice the symbol rate means twice the receiver bandwidth, so twice the noise for the same
+OSNR. The required OSNR rises by $10\log_{10}2 = 3.01$ dB:
+
+$$\mathrm{OSNR}_\text{req} = 22.48\ \text{dB}$$
+
+The span gives the same 23.19 dB on [[osnr]] as for 400ZR, so the margin is down to 0.7 dB.
+[[vsa_x]] and [[vsa_y]] measure EVM 23.3 % and 22.8 % and a BER of $2.1\times10^{-2}$ and
+$2.0\times10^{-2}$: right on the threshold.
+
+The other way to 800 Gb/s is a denser format at a lower symbol rate, such as DP-64QAM at
+79.8 GBd. It needs less spectrum and even more OSNR.
+
+## Try this
+
+- Lower [[fib]] to 60 km and [[edfa]]'s gain to 12 dB, and watch the BER fall.
+""".strip(),
+    },
+    "loop": {
+        "title": "4.7 A recirculating loop",
+        "body": r"""
+A laboratory tests a transoceanic link without owning one. It closes a few spans on themselves
+and sends the signal round many times. Here the loop is reduced to its bones.
+
+[[pulse]] sends one 10 ps pulse into a 3 dB [[coupler]]. Half leaves straight away, to the
+oscilloscope [[scope]]. The other half enters the loop: [[delay]] takes 800 ps, [[loss]] takes
+1 dB, and [[loop]] brings it back to the coupler, which again lets half out and keeps half.
+
+## Lap by lap
+
+Each lap arrives 800 ps after the last. Lap 1 has crossed the coupler twice and the loss once;
+every lap after has one more half and one more pass:
+
+$$P_0 = \frac{P}{2}, \qquad P_1 = \frac{P}{4} \cdot 10^{-0.1}, \qquad P_{n+1} = \frac{P_n}{2} \cdot 10^{-0.1}$$
+
+| lap | arrives | peak on [[scope]] |
+| :-- | :-- | :-- |
+| 0 | 0 ps | 0.500 mW |
+| 1 | 800 ps | 0.199 mW |
+| 2 | 1600 ps | 0.079 mW |
+| 3 | 2400 ps | 0.031 mW |
+
+In a real loop an amplifier replaces the loss, and the lap number is the distance: ten laps of
+100 km are 1000 km.
+
+The log warns that [[loop]] has not converged. Here that is right: each pass is a new lap, not a
+step towards a steady state.
+
+## Try this
+
+- Set the *delay* of [[delay]] to 0. Every lap lands on the first and the train disappears.
+- Lower [[loss]] to 0 dB and count how many laps stay visible.
+""".strip(),
+    },
+    "pcs": {
+        "title": "4.8 Probabilistic shaping",
+        "body": r"""
+Two 16-QAM transmitters through the same noise. The top one, [[map_u]], sends all sixteen
+points equally often. The bottom one, [[map_s]], sends the inner points more often than the
+outer ones, with a Maxwell–Boltzmann distribution:
+
+$$p(x) \propto e^{-\lambda |x|^2}$$
+
+$\lambda$ is set so a symbol carries an entropy of 3.7 bit instead of 4. Both branches are
+loaded to the same OSNR by [[voa_u]] [[ase_u]] and [[voa_s]] [[ase_s]].
+
+## Why it helps
+
+At the same mean power, the shaped alphabet's points sit further apart, because the rare outer
+points carry most of the energy. The signal looks more like Gaussian noise, which is what a
+noisy channel carries best. The measure is the mutual information, the bits per symbol the
+receiver can really get through:
+
+$$I(X;Y) = \mathbb{E}\left[\log_2 \frac{q(y \mid x)}{\sum_{x'} p(x')\, q(y \mid x')}\right]$$
+
+[[vsa_u]] and [[vsa_s]] compute it from the received symbols. The uniform branch gets
+2.96 bit per symbol at an SNR of 9.1 dB.
+
+| [[map_s]] entropy | back-off at [[tx_s]] | MI |
+| :-- | :-- | :-- |
+| 3.85 bit | 1.25 dB | 3.08 bit |
+| 3.70 bit | 1.87 dB | 3.10 bit |
+| 3.50 bit | 2.60 dB | 3.05 bit |
+| 3.28 bit | 3.47 dB | 2.94 bit |
+
+Too much shaping costs more than it gives: a symbol can never carry more than its entropy.
+FlexO-8's 3.28 bit per symbol is matched to a higher SNR and a code rate of its own.
+
+## The back-off
+
+[[drv_s]] scales the outermost point to the modulator's full swing. A shaped signal's outer
+points are further out at the same mean power, so it leaves [[mod_s]] weaker. The project
+raises [[tx_s]] by that amount, so both branches launch the same mean power.
+
+## Try this
+
+- Set [[tx_s]] back to the same power as [[tx_u]]. The shaping gain disappears, as it does
+  in a transmitter limited by its peak power.
+- Compare [[const_u]] and [[const_s]].
 """.strip(),
     },
 }

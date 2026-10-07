@@ -43,7 +43,7 @@ from maiman.kernels import (
     super_gaussian_noise_bandwidth,
     super_gaussian_response,
 )
-from maiman.signals import OpticalSignal
+from maiman.signals import OpticalSignal, OpticalSpectrum
 from maiman.units import C_LIGHT, wavelength_to_frequency
 
 CHANNEL = 1550.0  # nm
@@ -583,3 +583,20 @@ def test_an_analyser_with_nothing_to_look_at_falls_back_to_its_declared_window()
     centre = C_LIGHT / frequencies[frequencies.size // 2] * 1e9
     assert centre == pytest.approx(1550.0, abs=0.5)
     del graph
+
+
+def test_a_trace_finer_than_its_resolution_keeps_its_own_length() -> None:
+    """Bins narrower than a quarter of the RBW made the kernel the longer array.
+
+    ``np.convolve(..., mode="same")`` returns the longer of its two inputs, so a
+    1.6 nm window of 512 points under a 12.5 GHz filter came back 12743 long and
+    the studio indexed past the end of its wavelength axis.
+    """
+    frequencies = 193.4e12 + np.arange(64) * 0.1e9
+    power = np.zeros(64)
+    power[32] = 1e-3
+    spectrum = OpticalSpectrum(frequencies=frequencies, power_w=power, resolution_bandwidth=12.5e9)
+    displayed = spectrum.power_per_resolution()
+    assert displayed.shape == power.shape
+    assert int(np.argmax(displayed)) == 32
+    assert displayed[32] == pytest.approx(1e-3)

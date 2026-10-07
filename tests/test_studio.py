@@ -1179,7 +1179,14 @@ TEMPLATE_FILES = {
     "launch-power": "launch_power.maiman",
     "fwm-dsf": "fwm_dsf.maiman",
     "roadm": "roadm.maiman",
+    "qpsk-b2b": "qpsk_b2b.maiman",
     "coherent-sdfec": "coherent_sdfec.maiman",
+    "dualpol": "dualpol.maiman",
+    "acquisition": "acquisition.maiman",
+    "zr400": "zr400.maiman",
+    "zr800": "zr800.maiman",
+    "loop": "loop.maiman",
+    "pcs": "pcs.maiman",
 }
 
 
