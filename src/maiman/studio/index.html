@@ -37234,6 +37234,10 @@ verdict, and DESIGN.md
     api: location.protocol === "http:" || location.protocol === "https:",
     live: false,      // are the numbers on screen from this session's last run?
     hasRun: false,    // has this session ever run?
+    /* Is the project on the canvas still the one the bundled reference run was
+       made from? Loading or starting a project ends that: the reference plots
+       describe the demo link, not the one now open. */
+    reference: true,
     autoLog: false,   // did a run, not the user, open the log?
     running: false,
     /* What /api/health said it was. Null when the page was opened off disk with
@@ -38287,6 +38291,14 @@ verdict, and DESIGN.md
     lines.forEach((line, i) => ctx.fillText(line, w / 2, h / 2 + 10 + i * 16));
   }
 
+  /* A project just opened or started has no results yet, and the bundled
+     reference ones belong to another link, so the pane waits for a run. */
+  function drawNotRun(ctx, w, h, what) {
+    drawNothing(ctx, w, h, `No ${what} yet`,
+                [SESSION.api ? "Press Run to measure this project."
+                             : "Serve the studio with python -m maiman serve to run it."]);
+  }
+
   function drawNoEye(ctx, w, h) {
     ctx.fillStyle = tok("--plot-bg"); ctx.fillRect(0, 0, w, h);
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
@@ -38321,6 +38333,7 @@ verdict, and DESIGN.md
     }
     if (!shown.length && !canProduce) { drawNoEye(ctx, w, h); return; }
     if (!shown.length && SESSION.hasRun) { drawNoEye(ctx, w, h); return; }
+    if (!shown.length && !SESSION.reference) { drawNotRun(ctx, w, h, "eye"); return; }
     if (!shown.length) {
       drawTiles(ctx, w, h, [{ label: "reference", value: DATA.eye }], drawEyeInto);
       return;
@@ -38418,6 +38431,9 @@ verdict, and DESIGN.md
        used to apply here too, so a link with no constellation analyser left the
        demo's 16-QAM cloud on screen looking exactly like a result. */
     const shown = visibleTraces("constellation");
+    if (!SESSION.hasRun && !shown.length && !SESSION.reference) {
+      drawNotRun(ctx, w, h, "constellation"); return;
+    }
     if (!SESSION.hasRun && !shown.length) {
       drawTiles(ctx, w, h, [{ label: "reference", value: DATA.constellation }],
                 drawConstellationInto);
@@ -38721,6 +38737,9 @@ verdict, and DESIGN.md
     if (!shown.length && SESSION.hasRun) {
       clearSpectrumPanel(); drawNoSpectrum(ctx, w, h); return;
     }
+    if (!shown.length && !SESSION.reference) {
+      clearSpectrumPanel(); drawNotRun(ctx, w, h, "spectrum"); return;
+    }
     /* The readings beside the plot belong to one trace, so they follow the
        first ticked one and the legend's colours say which is which. */
     const traces = (shown.length ? shown : [{ label: "reference", value: DATA.spectrum }])
@@ -38884,7 +38903,7 @@ verdict, and DESIGN.md
        has been swept. Once this session has run, showing them again would be
        claiming a result for the link on the canvas, which is not what they are
        — and a sweep is the thing that fills this pane, so say so. */
-    if (SESSION.hasRun && !SWEEP.points) {
+    if ((SESSION.hasRun || !SESSION.reference) && !SWEEP.points) {
       drawNothing(ctx, w, h, "No sweep in this session", [
         "Simulate \u2192 Parameter sweep, or the Sweep button above,",
         "to plot a metric against a parameter for this link.",
@@ -38960,6 +38979,17 @@ verdict, and DESIGN.md
   /* ---------- Results ---------------------------------------------------- */
   const m = DATA.measurement;
   const ctxInfo = DATA.context;
+  /* Every number in the dock back to a dash: before a run writes its own, and
+     when a project is opened or started, whose numbers do not exist yet. */
+  function clearReadouts() {
+    for (const id of ["m-evm", "m-snr", "m-ber", "m-err", "c-fmt", "c-rate", "c-rx",
+                      "c-mer", "c-sym", "c-bit", "c-off", "s-lvl"]) {
+      const cell = $("#" + id);
+      if (cell) cell.textContent = "—";
+    }
+    $("#m-ber").classList.remove("pass");
+  }
+
   function fillResults() {
     $("#m-evm").textContent = (m.evm * 100).toFixed(2) + " %";
     $("#m-snr").textContent = m.snr_db.toFixed(1) + " dB";
@@ -39226,6 +39256,10 @@ verdict, and DESIGN.md
          loudest. */
       badge.textContent = "stale — graph edited";
       badge.title = "These numbers came from a run of an earlier version of this graph";
+    } else if (!SESSION.reference) {
+      badge.textContent = "not run yet";
+      badge.title = SESSION.api ? "Press Run for numbers from the engine."
+                                : "Serve it with python -m maiman.server to run.";
     } else {
       badge.textContent = SESSION.api ? "reference — not run yet" : "reference — no session server";
       badge.title = SESSION.api
@@ -40787,6 +40821,11 @@ verdict, and DESIGN.md
     SESSION.plots.spectrum = [];
     SESSION.plots.scope = [];
     SESSION.plots.osnr = null;
+    SESSION.results = null;
+    SESSION.unconverged = [];
+    for (const hidden of Object.values(SESSION.hidden)) hidden.clear();
+    SESSION.reference = false;
+    clearReadouts();
     SWEEP.points = null;
     afterEdit({ record: false });
     /* A project that carries a lesson opens with it, and with the schematic
@@ -40794,6 +40833,7 @@ verdict, and DESIGN.md
        panel: the last project's notes are not about this one. */
     setLessonOpen(Boolean(notes));
     if (notes) requestAnimationFrame(fitContent);
+    redrawActivePlot();
     flashHint(`opened ${projectName}.maiman — ${PROJECT.nodes.length} blocks`);
     logLine("—", `opened ${projectName}.maiman: ${PROJECT.nodes.length} blocks, ` +
                  `${PROJECT.edges.length} links`, "ok");
@@ -40839,6 +40879,11 @@ verdict, and DESIGN.md
     SESSION.plots.spectrum = [];
     SESSION.plots.scope = [];
     SESSION.plots.osnr = null;
+    SESSION.results = null;
+    SESSION.unconverged = [];
+    for (const hidden of Object.values(SESSION.hidden)) hidden.clear();
+    SESSION.reference = false;
+    clearReadouts();
     SWEEP.points = null;
     /* A new document gets a new window onto it. Keeping the old pan would open
        an empty canvas scrolled to wherever the last schematic happened to be,
@@ -42035,12 +42080,7 @@ verdict, and DESIGN.md
        direct-detection link over a coherent one left EVM, SNR and BER reading
        the coherent link's values under a badge saying "live", and the error
        count reading "undefined / undefined" — that one at least was visible. */
-    for (const id of ["m-evm", "m-snr", "m-ber", "m-err", "c-fmt", "c-rate", "c-rx",
-                      "c-mer", "c-sym", "c-bit", "c-off", "s-lvl"]) {
-      const cell = $("#" + id);
-      if (cell) cell.textContent = "—";
-    }
-    $("#m-ber").classList.remove("pass");
+    clearReadouts();
 
     /* Found by kind, not by block label: which analyser a link happens to
        contain is the link's business, and a graph someone built themselves will

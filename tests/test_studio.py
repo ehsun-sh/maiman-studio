@@ -842,7 +842,7 @@ def test_no_pane_shows_the_bundled_reference_after_a_run() -> None:
     for guard in (
         "if (!shown.length && SESSION.hasRun) { drawNoEye(ctx, w, h); return; }",
         "if (!shown.length && SESSION.hasRun) {" + chr(10) + "      clearSpectrumPanel();",
-        "if (SESSION.hasRun && !SWEEP.points) {",
+        "if ((SESSION.hasRun || !SESSION.reference) && !SWEEP.points) {",
     ):
         assert guard in text, f"a pane lost its post-run guard: {guard}"
     # The constellation's is the one that was missing and caused the bug.
@@ -854,6 +854,27 @@ def test_no_pane_shows_the_bundled_reference_after_a_run() -> None:
     # the canvas.
     new_project = text.split("function newProject()", 1)[1].split("\n  }", 1)[0]
     assert "redrawActivePlot()" in new_project, "New leaves the old plots painted"
+
+
+def test_opening_or_starting_a_project_leaves_no_instrument_reading() -> None:
+    """Load a project after a run and the spectrum pane showed a trace anyway.
+
+    Opening a project set ``hasRun`` back to false, and before any run every
+    pane falls back to the reference baked into the page, which is a trace of
+    the demo link, not of the project now open. Load and New now end the
+    reference, empty every reading in the dock, and repaint the open pane.
+    """
+    text = STUDIO.read_text(encoding="utf-8")
+    load = text.split("function loadProject(", 1)[1].split("\n  }", 1)[0]
+    new = text.split("function newProject()", 1)[1].split("\n  }", 1)[0]
+    for body in (load, new):
+        assert "SESSION.reference = false;" in body
+        assert "clearReadouts();" in body
+        assert "redrawActivePlot()" in body
+        for kind in ("constellation", "eye", "spectrum", "scope"):
+            assert f"SESSION.plots.{kind} = [];" in body
+    for pane in ("eye", "constellation", "spectrum"):
+        assert f'drawNotRun(ctx, w, h, "{pane}")' in text
 
 
 def test_the_canvas_can_be_dragged_and_says_so() -> None:
