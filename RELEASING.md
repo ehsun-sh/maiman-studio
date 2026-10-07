@@ -135,8 +135,8 @@ call in CI:
   the version was bumped. Its `version` is already checked against the package on every commit.
 * The version in `pyproject.toml`, `src/maiman/__init__.py`, `CITATION.cff` and
   `desktop/package.json` must move together for the next release — that one *is* checked.
-* Publishing the GitHub release also runs the **Desktop** workflow, which builds the Windows,
-  macOS and Linux installers and attaches them to that release.
+* Releases carry no desktop installers. The **Desktop** workflow still builds them on demand as
+  workflow artifacts; users open the studio with the Maiman App shortcut instead.
 
 ## When the upload fails with `invalid-publisher`
 
