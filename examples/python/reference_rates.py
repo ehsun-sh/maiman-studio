@@ -18,6 +18,7 @@ Run: ``python examples/python/reference_rates.py``
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from maiman import Component, Graph, SimulationContext
@@ -75,6 +76,7 @@ def build(
     span_km: float = 0.0,
     equalize: bool = True,
     sequence_length: int = 4096,
+    line: Callable[[Graph, Component], Component] | None = None,
 ) -> tuple[Graph, dict[str, ConstellationAnalyzer], OSNRMeter]:
     """One transceiver, optionally over a span, optionally noise loaded.
 
@@ -86,6 +88,11 @@ def build(
     Nothing rotates the polarization here, so an ideal separator would be the
     identity and leaving it out costs nothing — which makes the difference
     between the two a measurement of the blind equaliser itself.
+
+    ``line``, if given, is handed the graph and the transmitter's output and
+    returns what the receiver should see instead: a whole DWDM line between
+    the two, in place of the single span. ``span_km`` then only sets the
+    dispersion the receiver compensates, so it should be the line's length.
     """
     ctx = SimulationContext(
         bit_rate=symbol_rate,
@@ -131,8 +138,8 @@ def build(
     graph.connect(modulators["x"], combiner["x"])
     graph.connect(modulators["y"], combiner["y"])
 
-    tail: Component = combiner
-    if span_km:
+    tail: Component = combiner if line is None else line(graph, combiner)
+    if span_km and line is None:
         fiber = graph.add(Fiber(length=span_km, attenuation=0.2, dispersion=17.0, label="fib"))
         booster = graph.add(EDFA(gain=0.2 * span_km, noise_figure=5.0, label="edfa"))
         graph.connect(combiner, fiber["in"])

@@ -1197,6 +1197,18 @@ verdict, and DESIGN.md
             <button role="menuitem" id="example-otdr">6.5 OTDR: finding a break</button>
           </div>
         </div>
+        <div class="menu-group">
+          <button class="menu-group-btn" role="menuitem" aria-haspopup="true" aria-expanded="false">7 · Real-world systems<span class="menu-key">▸</span></button>
+          <div class="menu-pop menu-sub" role="menu">
+            <button role="menuitem" id="example-metro-ring">7.1 Metro ring: filter narrowing</button>
+            <button role="menuitem" id="example-submarine">7.2 Submarine segment, 6000 km</button>
+            <button role="menuitem" id="example-zr-dwdm">7.3 400ZR over a DWDM line</button>
+            <button role="menuitem" id="example-rof">7.4 Radio over fibre</button>
+            <button role="menuitem" id="example-free-space">7.5 Free-space optical link</button>
+            <button role="menuitem" id="example-lidar">7.6 FMCW LiDAR</button>
+            <button role="menuitem" id="example-qkd">7.7 Quantum key distribution (BB84)</button>
+          </div>
+        </div>
       </div>
     </div>
     <!-- Reading a project is a file the user picks, not a path the server is
@@ -1581,7 +1593,7 @@ verdict, and DESIGN.md
             <div class="plot-wrap"><canvas id="osa-canvas"></canvas></div>
           </div>
           <div class="plot-side">
-            <p class="side-title">Wavelength axis</p>
+            <p class="side-title" id="axis-title">Wavelength axis</p>
             <label class="axis-auto">
               <input type="checkbox" id="axis-auto" checked>
               <span>Fit to the traces</span>
@@ -1827,6 +1839,81 @@ verdict, and DESIGN.md
     }
    }
   },
+  "AmplifiedLine": {
+   "name": "Amplified Line",
+   "type": "AmplifiedLine",
+   "class": "maiman.components.line.AmplifiedLine",
+   "category": "Amplifiers",
+   "version": "0.1.0",
+   "spectral": false,
+   "parameters": {
+    "spans": {
+     "type": "float",
+     "default": 10.0,
+     "unit": "",
+     "min": 1.0,
+     "max": 1000.0,
+     "doc": "Number of span-and-repeater pairs"
+    },
+    "span_length": {
+     "type": "float",
+     "default": 80.0,
+     "unit": "km",
+     "min": 0.0,
+     "max": 500.0,
+     "doc": "Fibre between repeaters"
+    },
+    "attenuation": {
+     "type": "float",
+     "default": 0.2,
+     "unit": "dB/km",
+     "min": 0.0,
+     "max": 10.0,
+     "doc": "Fibre loss"
+    },
+    "noise_figure": {
+     "type": "float",
+     "default": 5.0,
+     "unit": "dB",
+     "min": 0.0,
+     "doc": "Each repeater's noise figure"
+    },
+    "tilt": {
+     "type": "float",
+     "default": 0.05,
+     "unit": "dB/THz",
+     "doc": "Each repeater's gain slope: how much more gain one terahertz lower down"
+    },
+    "centre": {
+     "type": "float",
+     "default": 1550.0,
+     "unit": "nm",
+     "doc": "Where the gain is exactly the span loss"
+    },
+    "flatten": {
+     "type": "bool",
+     "default": false,
+     "doc": "A gain-flattening filter in every repeater"
+    },
+    "filter_loss": {
+     "type": "float",
+     "default": 1.0,
+     "unit": "dB",
+     "min": 0.0,
+     "doc": "Loss of each flattening filter, made up by its amplifier",
+     "applies_when": "flatten"
+    }
+   },
+   "structural": {},
+   "ports": {
+    "inputs": {
+     "in": "optical"
+    },
+    "outputs": {
+     "out": "optical"
+    }
+   }
+  },
   "Attenuator": {
    "name": "Attenuator",
    "type": "Attenuator",
@@ -1850,6 +1937,58 @@ verdict, and DESIGN.md
     },
     "outputs": {
      "out": "optical"
+    }
+   }
+  },
+  "BB84Receiver": {
+   "name": "BB84 Receiver",
+   "type": "BB84Receiver",
+   "class": "maiman.components.quantum.BB84Receiver",
+   "category": "Receivers",
+   "version": "0.1.0",
+   "spectral": false,
+   "parameters": {
+    "efficiency": {
+     "type": "float",
+     "default": 0.1,
+     "unit": "",
+     "min": 0.0,
+     "max": 1.0,
+     "doc": "Detector efficiency"
+    },
+    "dark_count": {
+     "type": "float",
+     "default": 1e-06,
+     "unit": "",
+     "min": 0.0,
+     "max": 0.1,
+     "doc": "Probability of a click with no photon, per gate"
+    },
+    "misalignment": {
+     "type": "float",
+     "default": 0.015,
+     "unit": "",
+     "min": 0.0,
+     "max": 0.5,
+     "doc": "Share of photons the optics send to the wrong detector"
+    },
+    "correction": {
+     "type": "float",
+     "default": 1.16,
+     "unit": "",
+     "min": 1.0,
+     "max": 3.0,
+     "doc": "Error correction over the Shannon limit"
+    }
+   },
+   "structural": {},
+   "ports": {
+    "inputs": {
+     "in": "optical",
+     "sent": "optical"
+    },
+    "outputs": {
+     "out": "metric"
     }
    }
   },
@@ -3087,6 +3226,46 @@ verdict, and DESIGN.md
     }
    }
   },
+  "ElectricalSpectrumAnalyzer": {
+   "name": "Electrical Spectrum Analyzer",
+   "type": "ElectricalSpectrumAnalyzer",
+   "class": "maiman.components.rf.ElectricalSpectrumAnalyzer",
+   "category": "Measurements",
+   "version": "0.1.0",
+   "spectral": false,
+   "parameters": {
+    "resolution_bandwidth": {
+     "type": "float",
+     "default": 1.0,
+     "unit": "MHz",
+     "min": 0.0,
+     "doc": "Width each point sums over; at least one FFT bin"
+    },
+    "stop": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "GHz",
+     "min": 0.0,
+     "doc": "Highest frequency shown; 0 shows up to Nyquist"
+    },
+    "load": {
+     "type": "float",
+     "default": 50.0,
+     "unit": "ohm",
+     "min": 0.001,
+     "doc": "Load resistance"
+    }
+   },
+   "structural": {},
+   "ports": {
+    "inputs": {
+     "in": "electrical"
+    },
+    "outputs": {
+     "out": "metric"
+    }
+   }
+  },
   "EyeDiagram": {
    "name": "Eye Diagram",
    "type": "EyeDiagram",
@@ -3745,6 +3924,78 @@ verdict, and DESIGN.md
     "outputs": {
      "reflected": "optical",
      "transmitted": "optical"
+    }
+   }
+  },
+  "FreeSpaceChannel": {
+   "name": "Free-Space Channel",
+   "type": "FreeSpaceChannel",
+   "class": "maiman.components.free_space.FreeSpaceChannel",
+   "category": "Free Space",
+   "version": "0.1.0",
+   "spectral": false,
+   "parameters": {
+    "distance": {
+     "type": "float",
+     "default": 1.0,
+     "unit": "km",
+     "min": 0.0,
+     "max": 1000.0,
+     "doc": "Between the two apertures"
+    },
+    "divergence": {
+     "type": "float",
+     "default": 1.0,
+     "unit": "mrad",
+     "min": 0.0,
+     "doc": "Full angle the beam spreads at"
+    },
+    "tx_aperture": {
+     "type": "float",
+     "default": 2.5,
+     "unit": "cm",
+     "min": 0.0,
+     "doc": "Beam diameter at the transmitter"
+    },
+    "rx_aperture": {
+     "type": "float",
+     "default": 10.0,
+     "unit": "cm",
+     "min": 0.0,
+     "doc": "Diameter of the receiving lens"
+    },
+    "attenuation": {
+     "type": "float",
+     "default": 0.5,
+     "unit": "dB/km",
+     "min": 0.0,
+     "max": 500.0,
+     "doc": "What the air takes: about 0.5 clear, 10 in haze, 100 and more in fog"
+    },
+    "cn2": {
+     "type": "float",
+     "default": 1e-14,
+     "unit": "",
+     "min": 0.0,
+     "max": 1e-11,
+     "doc": "Turbulence strength Cn^2 [m^-2/3]: 1e-15 weak, 1e-13 strong"
+    },
+    "outage": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "",
+     "min": 0.0,
+     "max": 0.5,
+     "doc": "Share of the time the link is below this channel; 0 is the average channel"
+    }
+   },
+   "structural": {},
+   "ports": {
+    "inputs": {
+     "in": "optical"
+    },
+    "outputs": {
+     "out": "optical"
     }
    }
   },
@@ -5230,6 +5481,50 @@ verdict, and DESIGN.md
     }
    }
   },
+  "RFTone": {
+   "name": "RF Tone",
+   "type": "RFTone",
+   "class": "maiman.components.rf.RFTone",
+   "category": "Electrical Sources",
+   "version": "0.1.0",
+   "spectral": false,
+   "parameters": {
+    "frequency": {
+     "type": "float",
+     "default": 1.0,
+     "unit": "GHz",
+     "min": 0.0,
+     "doc": "First tone"
+    },
+    "frequency2": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "GHz",
+     "min": 0.0,
+     "doc": "Second tone; 0 for none"
+    },
+    "amplitude": {
+     "type": "float",
+     "default": 0.5,
+     "unit": "V",
+     "min": 0.0,
+     "doc": "Peak voltage of each tone"
+    },
+    "offset": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "V",
+     "doc": "DC level the tones ride on"
+    }
+   },
+   "structural": {},
+   "ports": {
+    "inputs": {},
+    "outputs": {
+     "out": "electrical"
+    }
+   }
+  },
   "RingResonator": {
    "name": "Ring Resonator",
    "type": "RingResonator",
@@ -5539,6 +5834,44 @@ verdict, and DESIGN.md
     "outputs": {
      "out0": "optical",
      "out1": "optical"
+    }
+   }
+  },
+  "SweptLaser": {
+   "name": "Swept Laser",
+   "type": "SweptLaser",
+   "class": "maiman.components.sources.SweptLaser",
+   "category": "Optical Sources",
+   "version": "0.1.0",
+   "spectral": false,
+   "parameters": {
+    "power": {
+     "type": "float",
+     "default": 0.0,
+     "unit": "dBm",
+     "doc": "Average output power"
+    },
+    "wavelength": {
+     "type": "float",
+     "default": 1550.0,
+     "unit": "nm",
+     "min": 1200.0,
+     "max": 1700.0,
+     "doc": "Centre of the sweep"
+    },
+    "sweep": {
+     "type": "float",
+     "default": 1.0,
+     "unit": "GHz",
+     "min": 0.0,
+     "doc": "Optical frequency covered in one window"
+    }
+   },
+   "structural": {},
+   "ports": {
+    "inputs": {},
+    "outputs": {
+     "out": "optical"
     }
    }
   },
@@ -37988,6 +38321,2415 @@ verdict, and DESIGN.md
      }
     ]
    }
+  },
+  "metro-ring": {
+   "title": "7.1 Metro ring: filter narrowing",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 25000000000.0,
+     "samples_per_symbol": 16,
+     "sequence_length": 64,
+     "seed": 1,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "probe",
+      "type": "GaussianPulse",
+      "params": {
+       "peak_power": 20.0,
+       "width": 4.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "osa_in",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 300.0,
+       "points": 4096.0,
+       "resolution_bandwidth": 1.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 290.0
+      }
+     },
+     {
+      "id": "add",
+      "type": "CWLaser",
+      "params": {
+       "power": -40.0,
+       "wavelength": 1549.1990263841476
+      },
+      "ui": {
+       "x": 30.0,
+       "y": -10.0
+      }
+     },
+     {
+      "id": "node1",
+      "type": "WavelengthSelectiveSwitch",
+      "params": {
+       "bandwidth": 50.0,
+       "order": 3.0
+      },
+      "config": {
+       "channels": 4
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "osa_1",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 300.0,
+       "points": 4096.0,
+       "resolution_bandwidth": 1.0
+      },
+      "ui": {
+       "x": 255.0,
+       "y": 290.0
+      }
+     },
+     {
+      "id": "node2",
+      "type": "WavelengthSelectiveSwitch",
+      "params": {
+       "bandwidth": 50.0,
+       "order": 3.0
+      },
+      "config": {
+       "channels": 4
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "node3",
+      "type": "WavelengthSelectiveSwitch",
+      "params": {
+       "bandwidth": 50.0,
+       "order": 3.0
+      },
+      "config": {
+       "channels": 4
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "node4",
+      "type": "WavelengthSelectiveSwitch",
+      "params": {
+       "bandwidth": 50.0,
+       "order": 3.0
+      },
+      "config": {
+       "channels": 4
+      },
+      "ui": {
+       "x": 630.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "node5",
+      "type": "WavelengthSelectiveSwitch",
+      "params": {
+       "bandwidth": 50.0,
+       "order": 3.0
+      },
+      "config": {
+       "channels": 4
+      },
+      "ui": {
+       "x": 780.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "node6",
+      "type": "WavelengthSelectiveSwitch",
+      "params": {
+       "bandwidth": 50.0,
+       "order": 3.0
+      },
+      "config": {
+       "channels": 4
+      },
+      "ui": {
+       "x": 930.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "node7",
+      "type": "WavelengthSelectiveSwitch",
+      "params": {
+       "bandwidth": 50.0,
+       "order": 3.0
+      },
+      "config": {
+       "channels": 4
+      },
+      "ui": {
+       "x": 1080.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "node8",
+      "type": "WavelengthSelectiveSwitch",
+      "params": {
+       "bandwidth": 50.0,
+       "order": 3.0
+      },
+      "config": {
+       "channels": 4
+      },
+      "ui": {
+       "x": 1230.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "osa_8",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 300.0,
+       "points": 4096.0,
+       "resolution_bandwidth": 1.0
+      },
+      "ui": {
+       "x": 1380.0,
+       "y": 140.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "add",
+       "out"
+      ],
+      "to": [
+       "node1",
+       "add"
+      ]
+     },
+     {
+      "from": [
+       "probe",
+       "out"
+      ],
+      "to": [
+       "node1",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "add",
+       "out"
+      ],
+      "to": [
+       "node2",
+       "add"
+      ]
+     },
+     {
+      "from": [
+       "node1",
+       "out"
+      ],
+      "to": [
+       "node2",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "add",
+       "out"
+      ],
+      "to": [
+       "node3",
+       "add"
+      ]
+     },
+     {
+      "from": [
+       "node2",
+       "out"
+      ],
+      "to": [
+       "node3",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "add",
+       "out"
+      ],
+      "to": [
+       "node4",
+       "add"
+      ]
+     },
+     {
+      "from": [
+       "node3",
+       "out"
+      ],
+      "to": [
+       "node4",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "add",
+       "out"
+      ],
+      "to": [
+       "node5",
+       "add"
+      ]
+     },
+     {
+      "from": [
+       "node4",
+       "out"
+      ],
+      "to": [
+       "node5",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "add",
+       "out"
+      ],
+      "to": [
+       "node6",
+       "add"
+      ]
+     },
+     {
+      "from": [
+       "node5",
+       "out"
+      ],
+      "to": [
+       "node6",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "add",
+       "out"
+      ],
+      "to": [
+       "node7",
+       "add"
+      ]
+     },
+     {
+      "from": [
+       "node6",
+       "out"
+      ],
+      "to": [
+       "node7",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "add",
+       "out"
+      ],
+      "to": [
+       "node8",
+       "add"
+      ]
+     },
+     {
+      "from": [
+       "node7",
+       "out"
+      ],
+      "to": [
+       "node8",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "node1",
+       "out"
+      ],
+      "to": [
+       "osa_1",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "node8",
+       "out"
+      ],
+      "to": [
+       "osa_8",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "probe",
+       "out"
+      ],
+      "to": [
+       "osa_in",
+       "in"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "7.1 A metro ring of ROADM nodes",
+     "body": "A metro ring passes a channel through node after node. At each one a wavelength-selective switch\n(WSS) drops one channel, adds a new one in its place, and expresses the rest through its own\npassband. One passband is 50 GHz wide. Eight of them in a row are narrower than any one of them.\n\n[[probe]] is a 4 ps pulse: its spectrum is far wider than a channel, so it lights the whole\npassband at once, the way a swept laser would on a bench. [[node1]] to [[node8]] are the nodes, each\ndropping and re-adding channel 1 from [[add]]. [[osa_1]] and [[osa_8]] read what is left of\nchannel 0 after one node and after eight, against [[osa_in]].\n\n## Filters in cascade\n\nEach passband is a third-order super-Gaussian, exactly half power at \u00b125 GHz. Eight in a row\nmultiply, so the half-power point moves inwards to where one passband is $2^{-1/8}$:\n\n$$B_N = B\\,N^{-1/2m}$$\n\nWith $B = 50$ GHz, $m = 3$ and $N = 8$ that is 35.36 GHz. The trace measures 49.89 GHz after one\nnode and 35.24 GHz after eight, read on the analyser's 1 GHz grid.\n\nA 32 GBd channel needs about 35 GHz. After eight nodes it is being cut at its edges, and that is\nwhy a metro ring has a node budget as well as a power budget.\n\nEach node also costs its 4 dB of insertion loss, 32.00 dB for eight. A real ring puts an amplifier\nin every node to make it up. The narrowing is not made up by anything.\n\n## Why a pulse and not white light\n\nThe ASE that lit the gratings in Phase 6 cannot show this. The switch passes noise through a flat\nrectangle as wide as its noise bandwidth, which gets the power right but has no shape to narrow.\nThe pulse is a sampled field, and the passband shapes it exactly.\n\n## Try this\n\n- Set *order* of every node to 5. The edges are steeper and the cascade narrows less: 40.51 GHz after\n  eight, against 40.61 GHz from the formula."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 113.0,
+      "w": 134.0,
+      "h": 238.0,
+      "text": "Broadband probe",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 171.0,
+      "y": 113.0,
+      "w": 1184.0,
+      "h": 88.0,
+      "text": "Eight ROADM nodes",
+      "tone": "binary"
+     },
+     {
+      "id": "a3",
+      "kind": "note",
+      "x": 590.0,
+      "y": 252.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "50 GHz at one node, 35.24 GHz after eight: $B\\,N^{-1/2m}$.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a4",
+      "kind": "arrow",
+      "x1": 688.0,
+      "y1": 250.0,
+      "x2": 688.0,
+      "y2": 206.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "submarine": {
+   "title": "7.2 Submarine segment, 6000 km",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 10000000000.0,
+     "samples_per_symbol": 8,
+     "sequence_length": 256,
+     "seed": 1,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "mux",
+      "type": "Combiner",
+      "params": {},
+      "config": {
+       "num_inputs": 8
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 190.0
+      }
+     },
+     {
+      "id": "ch0",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1532.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": -20.0
+      }
+     },
+     {
+      "id": "ch1",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1536.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "ch2",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1540.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 100.0
+      }
+     },
+     {
+      "id": "ch3",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1544.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 159.99999999999997
+      }
+     },
+     {
+      "id": "ch4",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1548.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 219.99999999999997
+      }
+     },
+     {
+      "id": "ch5",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1552.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 280.0
+      }
+     },
+     {
+      "id": "ch6",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1556.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 339.99999999999994
+      }
+     },
+     {
+      "id": "ch7",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1560.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 400.0
+      }
+     },
+     {
+      "id": "cable",
+      "type": "AmplifiedLine",
+      "params": {
+       "spans": 100.0,
+       "span_length": 60.0,
+       "attenuation": 0.16,
+       "noise_figure": 4.5,
+       "flatten": false
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 190.0
+      }
+     },
+     {
+      "id": "osa",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1547.0,
+       "span": 5000.0,
+       "points": 4096.0,
+       "resolution_bandwidth": 12.5
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 190.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "mux",
+       "out"
+      ],
+      "to": [
+       "cable",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "ch0",
+       "out"
+      ],
+      "to": [
+       "mux",
+       "in0"
+      ]
+     },
+     {
+      "from": [
+       "ch1",
+       "out"
+      ],
+      "to": [
+       "mux",
+       "in1"
+      ]
+     },
+     {
+      "from": [
+       "ch2",
+       "out"
+      ],
+      "to": [
+       "mux",
+       "in2"
+      ]
+     },
+     {
+      "from": [
+       "ch3",
+       "out"
+      ],
+      "to": [
+       "mux",
+       "in3"
+      ]
+     },
+     {
+      "from": [
+       "ch4",
+       "out"
+      ],
+      "to": [
+       "mux",
+       "in4"
+      ]
+     },
+     {
+      "from": [
+       "ch5",
+       "out"
+      ],
+      "to": [
+       "mux",
+       "in5"
+      ]
+     },
+     {
+      "from": [
+       "ch6",
+       "out"
+      ],
+      "to": [
+       "mux",
+       "in6"
+      ]
+     },
+     {
+      "from": [
+       "ch7",
+       "out"
+      ],
+      "to": [
+       "mux",
+       "in7"
+      ]
+     },
+     {
+      "from": [
+       "cable",
+       "out"
+      ],
+      "to": [
+       "osa",
+       "in"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "7.2 A transoceanic segment",
+     "body": "A transatlantic cable is about 6000 km of fibre with a repeater every 60 km. [[cable]] is that whole\nline in one block: 100 spans of 0.16 dB/km fibre, each followed by an amplifier with a 4.5 dB noise\nfigure that makes up the span's 9.6 dB. Eight channels [[ch0]] to [[ch7]] from 1532 to 1560 nm go\nin at 0 dBm each. [[osa]] reads what arrives.\n\n## Noise adds up span by span\n\nEvery repeater adds its own ASE, and every later repeater amplifies it as much as the signal. A\nhundred repeaters add a hundred times the noise of one, 20 dB more. The rule of thumb for the\nOSNR in 0.1 nm is\n\n$$\\text{OSNR} \\approx 58 + P_{ch} - NF - L_{span} - 10\\log_{10} N$$\n\nwhich here is $58 + 0 - 4.5 - 9.6 - 20 = 23.9$ dB. The flattened line below measures 23.80 to 23.88 dB.\n\n## The gain is not flat\n\nErbium gives more gain at longer wavelengths. Each repeater here has 0.05 dB more gain for every\nterahertz further down. That is about 0.1 dB from the band's centre to its edge, too small to notice\nonce. After a hundred repeaters it is not small:\n\n| Channel | Power | OSNR |\n| :-- | :-- | :-- |\n| 1532 nm | \u221211.36 dBm | 17.00 dB |\n| 1548 nm | \u22121.25 dBm | 23.20 dB |\n| 1560 nm | +6.20 dBm | 26.61 dB |\n\nThe short-wavelength channel lost 11 dB and the long one gained 6. The worst channel sets the\ncable's capacity, so it is the 17.00 dB that counts.\n\n## The gain-flattening filter\n\nUndersea repeaters carry a passive filter cut to the inverse of the erbium's gain shape. With one in\nevery repeater, every channel arrives at 0.00 dBm and its OSNR is within 0.1 dB of the rule of thumb.\nThe filter's own 1 dB of loss is made up by the amplifier, and that costs only a few hundredths of\na decibel.\n\nThis line is a power budget: no dispersion and no nonlinearity. In a real cable the channels that\narrive at +6 dBm would also be distorted by the Kerr effect, which is another reason to flatten.\n\n## Try this\n\n- Tick *flatten* on [[cable]]. The tilt on [[osa]] disappears, and every channel reads 23.80 to\n  23.88 dB."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": -47.0,
+      "w": 134.0,
+      "h": 508.0,
+      "text": "Eight channels, 0 dBm each",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 163.0,
+      "w": 134.0,
+      "h": 88.0,
+      "text": "At the landing station",
+      "tone": "metric"
+     },
+     {
+      "id": "a3",
+      "kind": "note",
+      "x": 290.0,
+      "y": 302.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "6000 km: 100 spans of 60 km. The edge channels end 17.6 dB apart.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a4",
+      "kind": "arrow",
+      "x1": 388.0,
+      "y1": 300.0,
+      "x2": 388.0,
+      "y2": 256.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "zr-dwdm": {
+   "title": "7.3 400ZR over a DWDM line",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 59840000000.0,
+     "samples_per_symbol": 4,
+     "sequence_length": 4096,
+     "seed": 2026,
+     "precision": "double"
+    },
+    "nodes": [
+     {
+      "id": "tx",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0,
+       "wavelength": 1550.0,
+       "linewidth": 100.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "pbs",
+      "type": "Splitter",
+      "params": {},
+      "config": {
+       "num_outputs": 2
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "prbs_x",
+      "type": "PRBSGenerator",
+      "params": {
+       "order": 23.0,
+       "bits_per_symbol": 4.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "map_x",
+      "type": "QAMMapper",
+      "params": {
+       "bits_per_symbol": 4.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "drv_x",
+      "type": "IQDriver",
+      "params": {
+       "v_pi": 4.0,
+       "predistort": true,
+       "drive_ratio": 0.4,
+       "pulse_shaping": true,
+       "roll_off": 0.1
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "mod_x",
+      "type": "IQModulator",
+      "params": {
+       "v_pi": 4.0
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "prbs_y",
+      "type": "PRBSGenerator",
+      "params": {
+       "order": 15.0,
+       "bits_per_symbol": 4.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 440.0
+      }
+     },
+     {
+      "id": "map_y",
+      "type": "QAMMapper",
+      "params": {
+       "bits_per_symbol": 4.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 440.0
+      }
+     },
+     {
+      "id": "drv_y",
+      "type": "IQDriver",
+      "params": {
+       "v_pi": 4.0,
+       "predistort": true,
+       "drive_ratio": 0.4,
+       "pulse_shaping": true,
+       "roll_off": 0.1
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 440.0
+      }
+     },
+     {
+      "id": "mod_y",
+      "type": "IQModulator",
+      "params": {
+       "v_pi": 4.0
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "pbc",
+      "type": "PolarizationCombiner",
+      "params": {},
+      "ui": {
+       "x": 630.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "mux",
+      "type": "Multiplexer",
+      "params": {
+       "first_wavelength": 1550.6012739589924,
+       "spacing": 75.0,
+       "bandwidth": 75.0,
+       "order": 4.0
+      },
+      "config": {
+       "channels": 3
+      },
+      "ui": {
+       "x": 780.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "nb0",
+      "type": "CWLaser",
+      "params": {
+       "power": -13.8,
+       "wavelength": 1550.6012739589924
+      },
+      "ui": {
+       "x": 630.0,
+       "y": 90.0
+      }
+     },
+     {
+      "id": "nb2",
+      "type": "CWLaser",
+      "params": {
+       "power": -13.8,
+       "wavelength": 1549.399192170172
+      },
+      "ui": {
+       "x": 630.0,
+       "y": 390.0
+      }
+     },
+     {
+      "id": "boost",
+      "type": "EDFA",
+      "params": {
+       "gain": 18.0,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 930.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "fib",
+      "type": "Fiber",
+      "params": {
+       "length": 80.0,
+       "attenuation": 0.2,
+       "dispersion": 17.0
+      },
+      "ui": {
+       "x": 1080.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "pre",
+      "type": "EDFA",
+      "params": {
+       "gain": 16.0,
+       "noise_figure": 5.0
+      },
+      "ui": {
+       "x": 1230.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "osa",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+       "auto_span": false,
+       "center_wavelength": 1550.0,
+       "span": 400.0,
+       "points": 4096.0,
+       "resolution_bandwidth": 1.0
+      },
+      "ui": {
+       "x": 1230.0,
+       "y": 90.0
+      }
+     },
+     {
+      "id": "demux",
+      "type": "Demultiplexer",
+      "params": {
+       "first_wavelength": 1550.6012739589924,
+       "spacing": 75.0,
+       "bandwidth": 75.0,
+       "order": 4.0
+      },
+      "config": {
+       "channels": 3
+      },
+      "ui": {
+       "x": 1380.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "osnr",
+      "type": "OSNRMeter",
+      "params": {},
+      "ui": {
+       "x": 1530.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "lo",
+      "type": "CWLaser",
+      "params": {
+       "power": 13.0,
+       "wavelength": 1550.0,
+       "linewidth": 100.0
+      },
+      "ui": {
+       "x": 1530.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "rx",
+      "type": "DualPolarizationReceiver",
+      "params": {
+       "responsivity": 0.8
+      },
+      "ui": {
+       "x": 1530.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "cdc_x",
+      "type": "DispersionCompensator",
+      "params": {
+       "accumulated_dispersion": 1360.0,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 1680.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "smp_x",
+      "type": "IQSampler",
+      "params": {
+       "matched_filter": true,
+       "roll_off": 0.1
+      },
+      "ui": {
+       "x": 1830.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "cdc_y",
+      "type": "DispersionCompensator",
+      "params": {
+       "accumulated_dispersion": 1360.0,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 1680.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "smp_y",
+      "type": "IQSampler",
+      "params": {
+       "matched_filter": true,
+       "roll_off": 0.1
+      },
+      "ui": {
+       "x": 1830.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "eq",
+      "type": "ButterflyEqualizer",
+      "params": {},
+      "ui": {
+       "x": 1980.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "cr_x",
+      "type": "CarrierRecovery",
+      "params": {},
+      "ui": {
+       "x": 2130.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "vsa_x",
+      "type": "ConstellationAnalyzer",
+      "params": {
+       "ignore_edges": 128.0
+      },
+      "ui": {
+       "x": 2280.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "cr_y",
+      "type": "CarrierRecovery",
+      "params": {},
+      "ui": {
+       "x": 2130.0,
+       "y": 340.0
+      }
+     },
+     {
+      "id": "vsa_y",
+      "type": "ConstellationAnalyzer",
+      "params": {
+       "ignore_edges": 128.0
+      },
+      "ui": {
+       "x": 2280.0,
+       "y": 340.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "mux",
+       "out"
+      ],
+      "to": [
+       "boost",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "rx",
+       "xi"
+      ],
+      "to": [
+       "cdc_x",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "rx",
+       "xq"
+      ],
+      "to": [
+       "cdc_x",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "rx",
+       "yi"
+      ],
+      "to": [
+       "cdc_y",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "rx",
+       "yq"
+      ],
+      "to": [
+       "cdc_y",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "eq",
+       "x_out"
+      ],
+      "to": [
+       "cr_x",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "eq",
+       "y_out"
+      ],
+      "to": [
+       "cr_y",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "pre",
+       "out"
+      ],
+      "to": [
+       "demux",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "map_x",
+       "out"
+      ],
+      "to": [
+       "drv_x",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "map_y",
+       "out"
+      ],
+      "to": [
+       "drv_y",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "smp_x",
+       "out"
+      ],
+      "to": [
+       "eq",
+       "x"
+      ]
+     },
+     {
+      "from": [
+       "smp_y",
+       "out"
+      ],
+      "to": [
+       "eq",
+       "y"
+      ]
+     },
+     {
+      "from": [
+       "boost",
+       "out"
+      ],
+      "to": [
+       "fib",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "prbs_x",
+       "out"
+      ],
+      "to": [
+       "map_x",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "prbs_y",
+       "out"
+      ],
+      "to": [
+       "map_y",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "drv_x",
+       "i"
+      ],
+      "to": [
+       "mod_x",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "pbs",
+       "out0"
+      ],
+      "to": [
+       "mod_x",
+       "optical_in"
+      ]
+     },
+     {
+      "from": [
+       "drv_x",
+       "q"
+      ],
+      "to": [
+       "mod_x",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "drv_y",
+       "i"
+      ],
+      "to": [
+       "mod_y",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "pbs",
+       "out1"
+      ],
+      "to": [
+       "mod_y",
+       "optical_in"
+      ]
+     },
+     {
+      "from": [
+       "drv_y",
+       "q"
+      ],
+      "to": [
+       "mod_y",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "nb0",
+       "out"
+      ],
+      "to": [
+       "mux",
+       "in0"
+      ]
+     },
+     {
+      "from": [
+       "pbc",
+       "out"
+      ],
+      "to": [
+       "mux",
+       "in1"
+      ]
+     },
+     {
+      "from": [
+       "nb2",
+       "out"
+      ],
+      "to": [
+       "mux",
+       "in2"
+      ]
+     },
+     {
+      "from": [
+       "pre",
+       "out"
+      ],
+      "to": [
+       "osa",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "demux",
+       "out1"
+      ],
+      "to": [
+       "osnr",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "mod_x",
+       "out"
+      ],
+      "to": [
+       "pbc",
+       "x"
+      ]
+     },
+     {
+      "from": [
+       "mod_y",
+       "out"
+      ],
+      "to": [
+       "pbc",
+       "y"
+      ]
+     },
+     {
+      "from": [
+       "tx",
+       "out"
+      ],
+      "to": [
+       "pbs",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "fib",
+       "out"
+      ],
+      "to": [
+       "pre",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "demux",
+       "out1"
+      ],
+      "to": [
+       "rx",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "lo",
+       "out"
+      ],
+      "to": [
+       "rx",
+       "lo"
+      ]
+     },
+     {
+      "from": [
+       "cdc_x",
+       "i"
+      ],
+      "to": [
+       "smp_x",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "cdc_x",
+       "q"
+      ],
+      "to": [
+       "smp_x",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "map_x",
+       "out"
+      ],
+      "to": [
+       "smp_x",
+       "reference"
+      ]
+     },
+     {
+      "from": [
+       "cdc_y",
+       "i"
+      ],
+      "to": [
+       "smp_y",
+       "i"
+      ]
+     },
+     {
+      "from": [
+       "cdc_y",
+       "q"
+      ],
+      "to": [
+       "smp_y",
+       "q"
+      ]
+     },
+     {
+      "from": [
+       "map_y",
+       "out"
+      ],
+      "to": [
+       "smp_y",
+       "reference"
+      ]
+     },
+     {
+      "from": [
+       "cr_x",
+       "out"
+      ],
+      "to": [
+       "vsa_x",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "map_x",
+       "out"
+      ],
+      "to": [
+       "vsa_x",
+       "reference"
+      ]
+     },
+     {
+      "from": [
+       "cr_y",
+       "out"
+      ],
+      "to": [
+       "vsa_y",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "map_y",
+       "out"
+      ],
+      "to": [
+       "vsa_y",
+       "reference"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "7.3 400ZR on an open DWDM line",
+     "body": "A 400ZR pluggable puts a whole coherent transceiver in a module the size of a thumb. Data centres\nplug it into a router and run it over someone else's DWDM line. This is the 400ZR from 4.6, on a\n75 GHz slot between two neighbours, over 80 km.\n\nThe transceiver on the left is the same as in 4.6. [[nb0]] and [[nb2]] fill the slots either side.\n[[mux]] puts the three on one fibre. [[boost]] lifts them to the line, [[fib]] is 80 km of fibre,\n[[pre]] makes up its 16 dB, and [[demux]] hands the middle slot back to the receiver.\n\n## Pluggable power\n\nThe pluggable puts out only \u221213.8 dBm. The mux costs another 4 dB, so the booster's 18 dB is what\nsets the launch power and so the OSNR: 32.95 dB at the receiver. The constellations on [[vsa_x]] and\n[[vsa_y]] read an EVM of 6.19 % with no symbol errors.\n\n## The receiver picks its own channel\n\nThe receiver mixes what arrives with its own local oscillator [[lo]], and only light near the LO's\nfrequency lands in its electrical bandwidth. The neighbours, 75 GHz away, beat to 75 GHz and are\nfiltered out after the detector. So a coherent receiver needs no demultiplexer in front of it: it\nis tuned by its laser. Open line systems use this, and a \"colourless\" add/drop port is one with no\nfilter at all.\n\n## Try this\n\n- Delete [[demux]] and wire [[pre]] straight into [[rx]] and [[osnr]]. The receiver now sees all\n  three channels, and the EVM is still 5.99 % with no errors.\n- Set *gain* of [[boost]] to 8. The launch drops by 10 dB, the OSNR falls to 26.43 dB, and the EVM\n  rises to 11.59 % with a few symbol errors."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 621.0,
+      "y": 63.0,
+      "w": 134.0,
+      "h": 388.0,
+      "text": "Neighbours",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 771.0,
+      "y": 213.0,
+      "w": 734.0,
+      "h": 88.0,
+      "text": "Open line system",
+      "tone": "binary"
+     },
+     {
+      "id": "a3",
+      "kind": "note",
+      "x": 1053.0,
+      "y": 90.0,
+      "w": 170.0,
+      "h": 96.0,
+      "text": "The pluggable sends \u221213.8 dBm; the booster lifts it to the line.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a4",
+      "kind": "arrow",
+      "x1": 1138.0,
+      "y1": 188.0,
+      "x2": 1138.0,
+      "y2": 228.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "rof": {
+   "title": "7.4 Radio over fibre",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 1000000000.0,
+     "samples_per_symbol": 16,
+     "sequence_length": 1000,
+     "seed": 1,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "rf",
+      "type": "RFTone",
+      "params": {
+       "frequency": 1.0,
+       "frequency2": 1.1,
+       "amplitude": 0.5
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "tx",
+      "type": "CWLaser",
+      "params": {
+       "power": 10.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "mzm",
+      "type": "MachZehnderModulator",
+      "params": {
+       "v_pi": 4.0,
+       "v_bias": -2.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "fib",
+      "type": "Fiber",
+      "params": {
+       "length": 10.0
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "pd",
+      "type": "PINPhotodiode",
+      "params": {},
+      "ui": {
+       "x": 480.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "esa",
+      "type": "ElectricalSpectrumAnalyzer",
+      "params": {
+       "stop": 3.0
+      },
+      "ui": {
+       "x": 630.0,
+       "y": 140.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "pd",
+       "out"
+      ],
+      "to": [
+       "esa",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "mzm",
+       "out"
+      ],
+      "to": [
+       "fib",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "rf",
+       "out"
+      ],
+      "to": [
+       "mzm",
+       "electrical_in"
+      ]
+     },
+     {
+      "from": [
+       "tx",
+       "out"
+      ],
+      "to": [
+       "mzm",
+       "optical_in"
+      ]
+     },
+     {
+      "from": [
+       "fib",
+       "out"
+      ],
+      "to": [
+       "pd",
+       "in"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "7.4 Radio over fibre",
+     "body": "A 5G fronthaul link can carry the radio signal itself on light, so the antenna site needs only a\nphotodiode and an amplifier. The fibre has to carry the radio waveform without bending it, and\nthe modulator is where it bends.\n\n[[rf]] makes two tones of 0.5 V each, at 1.0 and 1.1 GHz. [[mzm]] is biased at quadrature, halfway\nup its curve, where it is most nearly straight. [[fib]] is 10 km and [[pd]] turns the light back into\ncurrent. [[esa]] is an electrical spectrum analyser: power into 50 \u03a9 against frequency.\n\n## Intermodulation\n\nThe modulator's response is a sine, not a line. Two tones through it make new ones, and the\nthird-order products at $2f_1 - f_2 = 0.9$ GHz and $2f_2 - f_1 = 1.2$ GHz land right beside the\ntones, where no filter can remove them. On [[esa]] the tones read \u221216.61 dBm and the products\n\u221250.71 dBm.\n\nFor a quadrature-biased modulator the ratio follows from Bessel functions of the phase swing\n$\\beta = \\pi A / V_\\pi$:\n\n$$\\frac{C}{I} = 20\\log_{10}\\frac{J_0(\\beta)}{J_2(\\beta)}$$\n\nThat is 34.07 dB for $A = 0.5$ V and $V_\\pi = 4$ V. The trace measures 34.10 dB.\n\nQuadrature bias also cancels every even-order product: the second harmonic at 2 GHz is at\n\u2212110.44 dBm, no higher than the receiver's own noise beside it.\n\n## Try this\n\n- Set *amplitude* of [[rf]] to 1.0. The tones gain 4.45 dB and the products gain 17.23 dB: the\n  ratio falls to 21.32 dB (21.31 dB from the formula). Every decibel of drive costs about three of\n  ratio, which is why analogue links are run gently."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 134.0,
+      "h": 88.0,
+      "text": "Two radio tones",
+      "tone": "electrical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 621.0,
+      "y": 113.0,
+      "w": 134.0,
+      "h": 88.0,
+      "text": "Spectrum",
+      "tone": "metric"
+     },
+     {
+      "id": "a3",
+      "kind": "note",
+      "x": 290.0,
+      "y": 252.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "Third-order products at 0.9 and 1.2 GHz, 34.10 dB under each tone.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a4",
+      "kind": "arrow",
+      "x1": 388.0,
+      "y1": 250.0,
+      "x2": 388.0,
+      "y2": 206.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "free-space": {
+   "title": "7.5 Free-space optical link",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 10000000000.0,
+     "samples_per_symbol": 8,
+     "sequence_length": 2048,
+     "seed": 3,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "prbs",
+      "type": "PRBSGenerator",
+      "params": {
+       "order": 11.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "drv",
+      "type": "NRZDriver",
+      "params": {
+       "v_low": 4.0,
+       "v_high": 0.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "tx",
+      "type": "CWLaser",
+      "params": {
+       "power": 10.0,
+       "wavelength": 1550.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 190.0
+      }
+     },
+     {
+      "id": "mzm",
+      "type": "MachZehnderModulator",
+      "params": {
+       "v_pi": 4.0
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 190.0
+      }
+     },
+     {
+      "id": "air",
+      "type": "FreeSpaceChannel",
+      "params": {},
+      "ui": {
+       "x": 330.0,
+       "y": 190.0
+      }
+     },
+     {
+      "id": "pm_rx",
+      "type": "PowerMeter",
+      "params": {},
+      "ui": {
+       "x": 480.0,
+       "y": 40.0
+      }
+     },
+     {
+      "id": "pin",
+      "type": "PINPhotodiode",
+      "params": {},
+      "ui": {
+       "x": 480.0,
+       "y": 190.0
+      }
+     },
+     {
+      "id": "lpf",
+      "type": "ElectricalFilter",
+      "params": {
+       "bandwidth": 7.0
+      },
+      "ui": {
+       "x": 630.0,
+       "y": 190.0
+      }
+     },
+     {
+      "id": "ber",
+      "type": "BERAnalyzer",
+      "params": {},
+      "ui": {
+       "x": 780.0,
+       "y": 190.0
+      }
+     },
+     {
+      "id": "eye",
+      "type": "EyeDiagram",
+      "params": {},
+      "ui": {
+       "x": 780.0,
+       "y": 40.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "mzm",
+       "out"
+      ],
+      "to": [
+       "air",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "lpf",
+       "out"
+      ],
+      "to": [
+       "ber",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "prbs",
+       "out"
+      ],
+      "to": [
+       "ber",
+       "reference"
+      ]
+     },
+     {
+      "from": [
+       "prbs",
+       "out"
+      ],
+      "to": [
+       "drv",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "lpf",
+       "out"
+      ],
+      "to": [
+       "eye",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "pin",
+       "out"
+      ],
+      "to": [
+       "lpf",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "drv",
+       "out"
+      ],
+      "to": [
+       "mzm",
+       "electrical_in"
+      ]
+     },
+     {
+      "from": [
+       "tx",
+       "out"
+      ],
+      "to": [
+       "mzm",
+       "optical_in"
+      ]
+     },
+     {
+      "from": [
+       "air",
+       "out"
+      ],
+      "to": [
+       "pin",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "air",
+       "out"
+      ],
+      "to": [
+       "pm_rx",
+       "in"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "7.5 A free-space optical link",
+     "body": "A laser link between two rooftops needs no fibre in the ground. It does need the air to cooperate.\n\n[[tx]] and [[mzm]] send 10 Gb/s on-off keying at 10 dBm. [[air]] is a kilometre of open air between a\n2.5 cm transmitter and a 10 cm receiving lens. [[pm_rx]] reads the received power and [[ber]] the\nerrors after a PIN photodiode.\n\n## Where the light goes\n\n- **The beam spreads.** At 1 mrad it is 1.025 m across after a kilometre, and the lens catches\n  $(0.1/1.025)^2$ of it: 20.21 dB of geometric loss.\n- **The air absorbs.** 0.5 dB/km on a clear day.\n\nSo 20.71 dB in all, and [[pm_rx]] reads \u221213.72 dBm. The eye is wide open: Q is 20.86.\n\n## Turbulence\n\nWarm and cool cells of air drift across the beam and make the received power flicker. For weak\nturbulence the strength is the Rytov variance:\n\n$$\\sigma_R^2 = 1.23\\,C_n^2\\,k^{7/6}\\,L^{11/6}$$\n\nWith $C_n^2 = 10^{-14}$ m$^{-2/3}$ that is 0.199. The intensity is then log-normal, and the link\nspends 0.1 % of the time below a fade of 6.11 dB. The flicker is milliseconds slow, so *outage*\npicks one moment of it: 0 is the average, 0.001 is the fade a link is designed against.\n\n## Try this\n\n- Set *outage* of [[air]] to 0.001. The received power drops to \u221219.83 dBm, and Q to 5.24: still no\n  errors in this window, but close to the edge.\n- Then set *cn2* to 1e-13, strong turbulence on a hot afternoon. The fade is 16.43 dB, the power\n  \u221230.14 dBm, and 630 of 2040 bits are wrong.\n- Set *outage* back to 0 and *attenuation* to 10, light haze. The power is \u221223.22 dBm and 11 bits are\n  wrong. Fog is 100 dB/km and more, and no margin survives it."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 284.0,
+      "h": 238.0,
+      "text": "10 Gb/s transmitter",
+      "tone": "binary"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 13.0,
+      "w": 434.0,
+      "h": 238.0,
+      "text": "Receiver",
+      "tone": "metric"
+     },
+     {
+      "id": "a3",
+      "kind": "note",
+      "x": 290.0,
+      "y": 302.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "1 km of air costs 20.71 dB on an average day.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a4",
+      "kind": "arrow",
+      "x1": 388.0,
+      "y1": 300.0,
+      "x2": 388.0,
+      "y2": 256.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "lidar": {
+   "title": "7.6 FMCW LiDAR",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 1000000000.0,
+     "samples_per_symbol": 4,
+     "sequence_length": 1000,
+     "seed": 1,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "tx",
+      "type": "SweptLaser",
+      "params": {
+       "power": 10.0,
+       "sweep": 1.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "tap",
+      "type": "Splitter",
+      "params": {},
+      "config": {
+       "num_outputs": 2
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "target",
+      "type": "DelayLine",
+      "params": {
+       "delay": 200138.4571188912
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "echo",
+      "type": "Attenuator",
+      "params": {
+       "attenuation": 30.0
+      },
+      "ui": {
+       "x": 480.0,
+       "y": 240.0
+      }
+     },
+     {
+      "id": "mix",
+      "type": "DirectionalCoupler",
+      "params": {
+       "coupling": 0.5
+      },
+      "config": {
+       "second_input": true
+      },
+      "ui": {
+       "x": 630.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "pd",
+      "type": "PINPhotodiode",
+      "params": {},
+      "ui": {
+       "x": 780.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "esa",
+      "type": "ElectricalSpectrumAnalyzer",
+      "params": {
+       "stop": 0.5
+      },
+      "ui": {
+       "x": 930.0,
+       "y": 140.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "target",
+       "out"
+      ],
+      "to": [
+       "echo",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "pd",
+       "out"
+      ],
+      "to": [
+       "esa",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "tap",
+       "out0"
+      ],
+      "to": [
+       "mix",
+       "in1"
+      ]
+     },
+     {
+      "from": [
+       "echo",
+       "out"
+      ],
+      "to": [
+       "mix",
+       "in2"
+      ]
+     },
+     {
+      "from": [
+       "mix",
+       "out1"
+      ],
+      "to": [
+       "pd",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "tx",
+       "out"
+      ],
+      "to": [
+       "tap",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "tap",
+       "out1"
+      ],
+      "to": [
+       "target",
+       "in"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "7.6 FMCW LiDAR",
+     "body": "A frequency-modulated continuous-wave (FMCW) LiDAR measures range without timing a pulse. The laser\nsweeps its frequency, and the echo from a target comes back with the frequency the laser had a\nround trip ago.\n\n[[tx]] sweeps 1 GHz in one microsecond. [[tap]] keeps half as a local copy. The other half goes to\nthe target and back: [[target]] is the 200 ns round trip to 30 m, and [[echo]] the 30 dB the target\nand the optics cost. [[mix]] adds the two and [[pd]] detects them. [[esa]] shows the beat.\n\n## Range is a frequency\n\nThe echo is $\\tau = 2R/c$ late, and in that time the sweep has moved on by\n\n$$f_b = \\frac{B}{T}\\,\\tau = \\frac{2BR}{cT}$$\n\nAt 1 GHz per \u00b5s, 30 m is a 200.0 MHz beat. [[esa]] reads its peak at 200.0 MHz, which\ngives back 29.98 m.\n\nThe range resolution is set by the sweep, not by the detector: one analyser bin is $1/T$ = 1 MHz,\nwhich is $c/2B$ = 15 cm of range.\n\nThe echo is 30 dB weaker than the light that left, but it beats against the full-power local copy.\nThat gain is what lets an FMCW LiDAR see a dark target far away, and it is the same trick as the\ncoherent receiver's local oscillator.\n\n## Try this\n\n- Set *delay* of [[target]] to 400277 ps, the round trip to 60 m. The beat moves to 400.0 MHz."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 321.0,
+      "y": 213.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "Target 30 m away",
+      "tone": "binary"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 921.0,
+      "y": 113.0,
+      "w": 134.0,
+      "h": 88.0,
+      "text": "Beat note",
+      "tone": "metric"
+     },
+     {
+      "id": "a3",
+      "kind": "note",
+      "x": 140.0,
+      "y": 252.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "The echo is 200 ns late, so it is 200 MHz behind the sweep.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a4",
+      "kind": "arrow",
+      "x1": 238.0,
+      "y1": 250.0,
+      "x2": 238.0,
+      "y2": 206.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
+  },
+  "qkd": {
+   "title": "7.7 Quantum key distribution (BB84)",
+   "project": {
+    "schema_version": 1,
+    "maiman_version": "0.16.0",
+    "context": {
+     "bit_rate": 1000000000.0,
+     "samples_per_symbol": 4,
+     "sequence_length": 256,
+     "seed": 1,
+     "precision": "single"
+    },
+    "nodes": [
+     {
+      "id": "alice",
+      "type": "CWLaser",
+      "params": {
+       "power": 0.0
+      },
+      "ui": {
+       "x": 30.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "attenuate",
+      "type": "Attenuator",
+      "params": {
+       "attenuation": 71.93
+      },
+      "ui": {
+       "x": 180.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "fib",
+      "type": "Fiber",
+      "params": {
+       "length": 50.0,
+       "attenuation": 0.2
+      },
+      "ui": {
+       "x": 330.0,
+       "y": 140.0
+      }
+     },
+     {
+      "id": "bob",
+      "type": "BB84Receiver",
+      "params": {},
+      "ui": {
+       "x": 480.0,
+       "y": 140.0
+      }
+     }
+    ],
+    "edges": [
+     {
+      "from": [
+       "alice",
+       "out"
+      ],
+      "to": [
+       "attenuate",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "fib",
+       "out"
+      ],
+      "to": [
+       "bob",
+       "in"
+      ]
+     },
+     {
+      "from": [
+       "attenuate",
+       "out"
+      ],
+      "to": [
+       "bob",
+       "sent"
+      ]
+     },
+     {
+      "from": [
+       "attenuate",
+       "out"
+      ],
+      "to": [
+       "fib",
+       "in"
+      ]
+     }
+    ],
+    "notes": {
+     "title": "7.7 Quantum key distribution",
+     "body": "In BB84 quantum key distribution, Alice sends a key in pulses so faint that most of them hold no\nphoton at all. An eavesdropper who measures a photon disturbs it, so the error rate Bob sees bounds\nwhat anyone else can know about the key.\n\n[[alice]] is attenuated by [[attenuate]] to $\\mu = 0.5$ photons a pulse at 1 GHz: 71.93 dB below 1 mW.\n[[fib]] is 50 km of 0.2 dB/km fibre. [[bob]] counts photons with a detector of 10 % efficiency and\n$10^{-6}$ dark counts a pulse, and reports the error rate and the key.\n\n## What Bob counts\n\nThe channel is 10 dB, so with the detector each photon has a 1 % chance of a click: $5.0\\times10^{-3}$\nclicks a pulse. A click on the wrong basis is thrown away (sifting halves the rate). Errors come from\nthe optics' 1.5 % misalignment and from dark counts, which click at random. The quantum bit error\nrate (QBER) is 1.51 %.\n\n## How much key is secret\n\nPulses with two or more photons are not safe: an eavesdropper could keep one. Decoy states (pulses\nof other, random intensities) let Alice and Bob measure how many clicks came from single photons.\nOnly those count, and error correction and privacy amplification then take their share:\n\n$$R = \\tfrac12\\big[Q_1(1 - h(e_1)) - Q_\\mu f\\,h(E_\\mu)\\big]$$\n\nThat leaves 1019 kb/s of secret key at 50 km.\n\n## Distance\n\n| Fibre | QBER | Secret key |\n| :-- | :-- | :-- |\n| 25 km | 1.50 % | 3233 kb/s |\n| 50 km | 1.51 % | 1019 kb/s |\n| 100 km | 1.60 % | 100.0 kb/s |\n| 150 km | 2.45 % | 8.26 kb/s |\n| 200 km | 9.58 % | 0 |\n\nThe key falls with the fibre's loss until the dark counts catch up with the signal. Then the\nerrors climb and no key is left.\n\n## Try this\n\n- Set *length* of [[fib]] to 200. The QBER climbs to 9.58 % and the secure key is zero."
+    },
+    "annotations": [
+     {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 113.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "Alice: 0.5 photons a pulse",
+      "tone": "optical"
+     },
+     {
+      "id": "a2",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 113.0,
+      "w": 134.0,
+      "h": 88.0,
+      "text": "Bob",
+      "tone": "metric"
+     },
+     {
+      "id": "a3",
+      "kind": "note",
+      "x": 290.0,
+      "y": 252.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "50 km: 10 dB. QBER 1.51 %, key 1019 kb/s.",
+      "tone": "electrical"
+     },
+     {
+      "id": "a4",
+      "kind": "arrow",
+      "x1": 388.0,
+      "y1": 250.0,
+      "x2": 388.0,
+      "y2": 206.0,
+      "text": "",
+      "tone": "metric"
+     }
+    ]
+   }
   }
  },
  "project": {
@@ -38454,13 +41196,13 @@ verdict, and DESIGN.md
 
   const CATEGORY_ORDER = [
     "Optical Sources", "Electrical Sources", "Modulation", "Modulators", "Fiber",
-    "Amplifiers", "Passive", "Photonic IC", "Signal Flow", "Receivers", "DSP", "Electrical",
+    "Free Space", "Amplifiers", "Passive", "Photonic IC", "Signal Flow", "Receivers", "DSP", "Electrical",
     "Measurements"
   ];
   // Which port type a category is coloured by in the palette.
   const CATEGORY_PORT = {
     "Optical Sources": "optical", "Electrical Sources": "binary", "Modulation": "symbol",
-    "Modulators": "optical", "Fiber": "optical", "Amplifiers": "optical",
+    "Modulators": "optical", "Fiber": "optical", "Free Space": "optical", "Amplifiers": "optical",
     "Passive": "optical", "Photonic IC": "optical", "Receivers": "electrical", "DSP": "symbol",
     "Electrical": "electrical", "Measurements": "metric", "Signal Flow": "optical"
   };
@@ -39855,6 +42597,22 @@ verdict, and DESIGN.md
      teaching the plot two vocabularies. */
   function spectrumSource(live) {
     if (!live || !live.power_per_resolution_w) return { ...(live || DATA.spectrum), live: false };
+    /* An electrical analyser's trace: frequency in GHz along the axis instead
+       of wavelength, and a floor low enough for a receiver's noise, which sits
+       a hundred dB under a tone rather than forty under a laser. The rest of
+       the pane reads `wavelengths_nm` as "the x values" and `rf` for units. */
+    if (live.axis === "rf") {
+      const dbm = live.power_per_resolution_w.map(
+        (w) => Math.max(10 * Math.log10(Math.max(w, 1e-21) * 1e3), -180));
+      let peak = 0;
+      for (let i = 1; i < dbm.length; i++) if (dbm[i] > dbm[peak]) peak = i;
+      return {
+        wavelengths_nm: live.frequencies_ghz, dbm, rf: true,
+        resolution_bandwidth_ghz: live.resolution_bandwidth / 1e9,
+        total_dbm: null, peak_nm: live.frequencies_ghz[peak], peak_dbm: dbm[peak],
+        osnr_db: null, live: true
+      };
+    }
     /* dBm per resolution bandwidth, which is what an instrument displays and
        what `power_per_resolution_w` already is. Floored at -90 so an empty
        display bin lands on the axis instead of setting the range from a bin
@@ -40064,7 +42822,8 @@ verdict, and DESIGN.md
     /* Same rule as the eye: the bundled trace belongs to a different link from
        the one on the canvas, so it stands only while the current graph could
        produce one of its own and has not yet. Otherwise the pane says so. */
-    const canProduce = PROJECT.nodes.some((n) => n.type === "OpticalSpectrumAnalyzer");
+    const canProduce = PROJECT.nodes.some(
+      (n) => n.type === "OpticalSpectrumAnalyzer" || n.type === "ElectricalSpectrumAnalyzer");
     /* The readings go with the trace. Leaving the bundled ones up beside a pane
        that has just said there is no spectrum is the same lie the plot was
        careful not to tell. */
@@ -40088,8 +42847,11 @@ verdict, and DESIGN.md
     }
     /* The readings beside the plot belong to one trace, so they follow the
        first ticked one and the legend's colours say which is which. */
-    const traces = (shown.length ? shown : [{ label: "reference", value: DATA.spectrum }])
+    /* Optical and electrical traces cannot share an axis; the first ticked
+       one decides which kind is drawn. */
+    const all = (shown.length ? shown : [{ label: "reference", value: DATA.spectrum }])
       .map((t, i) => ({ label: t.label, source: spectrumSource(t.value), colour: seriesColour(i) }));
+    const traces = all.filter((t) => !!t.source.rf === !!all[0].source.rf);
     fillSpectrumPanel(traces[0].source);
     drawSpectrumOverlay(ctx, w, h, traces);
   }
@@ -40139,14 +42901,16 @@ verdict, and DESIGN.md
        fitted to the trace's own minimum: the floor of an unamplified link is
        the encoder's floor and not a measurement, and letting it set the scale
        would plot two runs of the same link at different heights. */
+    const rf = !!traces[0].source.rf;
+    const unit = rf ? "GHz" : "nm";
     const hi = Math.ceil((top + 5) / 10) * 10;
-    const lo = hi - 80;
+    const lo = hi - (rf ? 120 : 80);
     const X = (v) => padL + ((v - nm0) / (nm1 - nm0)) * pw;
     const Y = (d) => padT + ph - ((Math.min(hi, Math.max(lo, d)) - lo) / (hi - lo)) * ph;
 
     ctx.font = MONO_10; ctx.lineWidth = 1;
     ctx.strokeStyle = tok("--rule-soft");
-    for (let d = hi; d >= lo; d -= 10) {
+    for (let d = hi; d >= lo; d -= (rf ? 20 : 10)) {
       const y = Y(d);
       ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
       ctx.fillStyle = tok("--ink-4");
@@ -40186,7 +42950,7 @@ verdict, and DESIGN.md
       const rightish = px > padL + pw * 0.7;
       ctx.textAlign = rightish ? "right" : "left";
       ctx.textBaseline = "bottom";
-      ctx.fillText(`${pn.toFixed(2)} nm  ${pd.toFixed(1)} dBm`,
+      ctx.fillText(`${pn.toFixed(rf ? 3 : 2)} ${unit}  ${pd.toFixed(1)} dBm`,
                    px + (rightish ? -5 : 5), py - 5);
     }
 
@@ -40204,9 +42968,10 @@ verdict, and DESIGN.md
       ctx.fillText(v.toFixed(2), X(v), padT + ph + 6);
     }
     ctx.textAlign = "center";
-    ctx.fillText("wavelength (nm)", padL + pw / 2, padT + ph + 6 + 11);
+    ctx.fillText(rf ? "frequency (GHz)" : "wavelength (nm)", padL + pw / 2, padT + ph + 6 + 11);
     ctx.save(); ctx.translate(11, padT + ph / 2); ctx.rotate(-Math.PI / 2);
-    ctx.fillText(`dBm / ${fmt(traces[0].source.resolution_bandwidth_ghz)} GHz`, 0, 0);
+    const rbw = traces[0].source.resolution_bandwidth_ghz;
+    ctx.fillText(rf ? `dBm / ${fmt(Number((rbw * 1e3).toPrecision(3)))} MHz` : `dBm / ${fmt(rbw)} GHz`, 0, 0);
     ctx.restore();
     /* The side panel is filled by the caller, once, from the first ticked
        trace. Filling it from here would mean the last tile drawn won, which
@@ -40226,10 +42991,15 @@ verdict, and DESIGN.md
     const nm = source.wavelengths_nm;
     const span = Math.abs(nm[nm.length - 1] - nm[0]);
     $("#o-rbw").textContent = fmt(source.resolution_bandwidth_ghz) + " GHz";
-    $("#o-span").textContent = span.toFixed(2) + " nm";
+    /* The axis boxes are in the trace's own unit: GHz on an electrical one. */
+    $("#axis-title").textContent = source.rf ? "Frequency axis" : "Wavelength axis";
+    for (const em of document.querySelectorAll(".axis-grid em"))
+      em.textContent = source.rf ? "GHz" : "nm";
+    const unit = source.rf ? " GHz" : " nm";
+    $("#o-span").textContent = span.toFixed(2) + unit;
     $("#o-pts").textContent = nm.length.toLocaleString("en-US");
     $("#o-peak").textContent = source.peak_dbm.toFixed(2) + " dBm";
-    $("#o-peak-nm").textContent = source.peak_nm.toFixed(3) + " nm";
+    $("#o-peak-nm").textContent = source.peak_nm.toFixed(3) + unit;
     $("#o-total").textContent =
       source.total_dbm === null || source.total_dbm === undefined
         ? "—" : source.total_dbm.toFixed(2) + " dBm";
@@ -40463,11 +43233,15 @@ verdict, and DESIGN.md
         let peak = 0;
         const p = value.power_per_resolution_w;
         for (let i = 1; i < p.length; i++) if (p[i] > p[peak]) peak = i;
+        if (value.axis === "rf")
+          return `${p.length} points, peak ${value.frequencies_ghz[peak].toFixed(3)} GHz at ` +
+                 `${(10 * Math.log10(Math.max(p[peak], 1e-21) * 1e3)).toFixed(2)} dBm`;
         return `${p.length} points, peak ` +
                `${value.wavelengths_nm[peak].toFixed(3)} nm at ` +
                `${(10 * Math.log10(Math.max(p[peak], 1e-18) * 1e3)).toFixed(2)} dBm/` +
                `${fmt(value.resolution_bandwidth / 1e9)} GHz`;
       }
+      case "readout": return value.summary;
       case "scope":
         return `peak ${fmt(Number(value.peak_power_mw.toPrecision(4)))} mW, ` +
                (value.fwhm_ps === null ? "no full width at half maximum in the window"
@@ -43400,6 +46174,8 @@ verdict, and DESIGN.md
         SESSION.captions[node.id] = out.fwhm_ps === null
           ? `${fmt(Number(out.peak_power_mw.toPrecision(3)))} mW`
           : `FWHM ${fmt(Number(out.fwhm_ps.toPrecision(3)))} ps`;
+      else if (out.kind === "readout")
+        SESSION.captions[node.id] = out.caption;
       else if (out.kind === "scalar" && out.value !== null)
         SESSION.captions[node.id] = scalarText(out.value, 2);
     }

@@ -1,0 +1,178 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 1000000000.0,
+    "samples_per_symbol": 16,
+    "sequence_length": 1000,
+    "seed": 1,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "rf",
+      "type": "RFTone",
+      "params": {
+        "frequency": 1.0,
+        "frequency2": 1.1,
+        "amplitude": 0.5
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "tx",
+      "type": "CWLaser",
+      "params": {
+        "power": 10.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 240.0
+      }
+    },
+    {
+      "id": "mzm",
+      "type": "MachZehnderModulator",
+      "params": {
+        "v_pi": 4.0,
+        "v_bias": -2.0
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "fib",
+      "type": "Fiber",
+      "params": {
+        "length": 10.0
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "pd",
+      "type": "PINPhotodiode",
+      "params": {},
+      "ui": {
+        "x": 480.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "esa",
+      "type": "ElectricalSpectrumAnalyzer",
+      "params": {
+        "stop": 3.0
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 140.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "pd",
+        "out"
+      ],
+      "to": [
+        "esa",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "mzm",
+        "out"
+      ],
+      "to": [
+        "fib",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "rf",
+        "out"
+      ],
+      "to": [
+        "mzm",
+        "electrical_in"
+      ]
+    },
+    {
+      "from": [
+        "tx",
+        "out"
+      ],
+      "to": [
+        "mzm",
+        "optical_in"
+      ]
+    },
+    {
+      "from": [
+        "fib",
+        "out"
+      ],
+      "to": [
+        "pd",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "7.4 Radio over fibre",
+    "body": "A 5G fronthaul link can carry the radio signal itself on light, so the antenna site needs only a\nphotodiode and an amplifier. The fibre has to carry the radio waveform without bending it, and\nthe modulator is where it bends.\n\n[[rf]] makes two tones of 0.5 V each, at 1.0 and 1.1 GHz. [[mzm]] is biased at quadrature, halfway\nup its curve, where it is most nearly straight. [[fib]] is 10 km and [[pd]] turns the light back into\ncurrent. [[esa]] is an electrical spectrum analyser: power into 50 \u03a9 against frequency.\n\n## Intermodulation\n\nThe modulator's response is a sine, not a line. Two tones through it make new ones, and the\nthird-order products at $2f_1 - f_2 = 0.9$ GHz and $2f_2 - f_1 = 1.2$ GHz land right beside the\ntones, where no filter can remove them. On [[esa]] the tones read \u221216.61 dBm and the products\n\u221250.71 dBm.\n\nFor a quadrature-biased modulator the ratio follows from Bessel functions of the phase swing\n$\\beta = \\pi A / V_\\pi$:\n\n$$\\frac{C}{I} = 20\\log_{10}\\frac{J_0(\\beta)}{J_2(\\beta)}$$\n\nThat is 34.07 dB for $A = 0.5$ V and $V_\\pi = 4$ V. The trace measures 34.10 dB.\n\nQuadrature bias also cancels every even-order product: the second harmonic at 2 GHz is at\n\u2212110.44 dBm, no higher than the receiver's own noise beside it.\n\n## Try this\n\n- Set *amplitude* of [[rf]] to 1.0. The tones gain 4.45 dB and the products gain 17.23 dB: the\n  ratio falls to 21.32 dB (21.31 dB from the formula). Every decibel of drive costs about three of\n  ratio, which is why analogue links are run gently."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 13.0,
+      "w": 134.0,
+      "h": 88.0,
+      "text": "Two radio tones",
+      "tone": "electrical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 621.0,
+      "y": 113.0,
+      "w": 134.0,
+      "h": 88.0,
+      "text": "Spectrum",
+      "tone": "metric"
+    },
+    {
+      "id": "a3",
+      "kind": "note",
+      "x": 290.0,
+      "y": 252.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "Third-order products at 0.9 and 1.2 GHz, 34.10 dB under each tone.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a4",
+      "kind": "arrow",
+      "x1": 388.0,
+      "y1": 250.0,
+      "x2": 388.0,
+      "y2": 206.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

@@ -26,6 +26,7 @@ import first_light
 import lessons
 import numpy as np
 import sensing
+import systems
 
 from maiman import Graph, SimulationContext, manifests, sweep
 from maiman.component import Component
@@ -625,6 +626,13 @@ TEMPLATES: dict[str, tuple[str, Path]] = {
     "tilted-grating": ("6.3 Tilted grating refractometer", sensing.project_path("tilted_grating")),
     "lpg-pair": ("6.4 Long-period grating pair", sensing.project_path("lpg_pair")),
     "otdr": ("6.5 OTDR: finding a break", sensing.project_path("otdr")),
+    "metro-ring": ("7.1 Metro ring: filter narrowing", systems.project_path("metro_ring")),
+    "submarine": ("7.2 Submarine segment, 6000 km", systems.project_path("submarine")),
+    "zr-dwdm": ("7.3 400ZR over a DWDM line", systems.project_path("zr_dwdm")),
+    "rof": ("7.4 Radio over fibre", systems.project_path("rof")),
+    "free-space": ("7.5 Free-space optical link", systems.project_path("free_space")),
+    "lidar": ("7.6 FMCW LiDAR", systems.project_path("lidar")),
+    "qkd": ("7.7 Quantum key distribution (BB84)", systems.project_path("qkd")),
 }
 
 
@@ -698,6 +706,8 @@ def main() -> None:
         chip.write(key)
     for key in sensing.EXAMPLES:
         sensing.write(key)
+    for key in systems.EXAMPLES:
+        systems.write(key)
 
     # Required received power per format, from the same graph re-run.
     sensitivity: list[dict[str, Any]] = []

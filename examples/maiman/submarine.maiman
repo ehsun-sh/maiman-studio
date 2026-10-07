@@ -1,0 +1,299 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 10000000000.0,
+    "samples_per_symbol": 8,
+    "sequence_length": 256,
+    "seed": 1,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "mux",
+      "type": "Combiner",
+      "params": {},
+      "config": {
+        "num_inputs": 8
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "ch0",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1532.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": -20.0
+      }
+    },
+    {
+      "id": "ch1",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1536.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 40.0
+      }
+    },
+    {
+      "id": "ch2",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1540.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 100.0
+      }
+    },
+    {
+      "id": "ch3",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1544.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 159.99999999999997
+      }
+    },
+    {
+      "id": "ch4",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1548.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 219.99999999999997
+      }
+    },
+    {
+      "id": "ch5",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1552.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 280.0
+      }
+    },
+    {
+      "id": "ch6",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1556.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 339.99999999999994
+      }
+    },
+    {
+      "id": "ch7",
+      "type": "CWLaser",
+      "params": {
+        "power": 0.0,
+        "wavelength": 1560.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 400.0
+      }
+    },
+    {
+      "id": "cable",
+      "type": "AmplifiedLine",
+      "params": {
+        "spans": 100.0,
+        "span_length": 60.0,
+        "attenuation": 0.16,
+        "noise_figure": 4.5,
+        "flatten": false
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 190.0
+      }
+    },
+    {
+      "id": "osa",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1547.0,
+        "span": 5000.0,
+        "points": 4096.0,
+        "resolution_bandwidth": 12.5
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 190.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "mux",
+        "out"
+      ],
+      "to": [
+        "cable",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "ch0",
+        "out"
+      ],
+      "to": [
+        "mux",
+        "in0"
+      ]
+    },
+    {
+      "from": [
+        "ch1",
+        "out"
+      ],
+      "to": [
+        "mux",
+        "in1"
+      ]
+    },
+    {
+      "from": [
+        "ch2",
+        "out"
+      ],
+      "to": [
+        "mux",
+        "in2"
+      ]
+    },
+    {
+      "from": [
+        "ch3",
+        "out"
+      ],
+      "to": [
+        "mux",
+        "in3"
+      ]
+    },
+    {
+      "from": [
+        "ch4",
+        "out"
+      ],
+      "to": [
+        "mux",
+        "in4"
+      ]
+    },
+    {
+      "from": [
+        "ch5",
+        "out"
+      ],
+      "to": [
+        "mux",
+        "in5"
+      ]
+    },
+    {
+      "from": [
+        "ch6",
+        "out"
+      ],
+      "to": [
+        "mux",
+        "in6"
+      ]
+    },
+    {
+      "from": [
+        "ch7",
+        "out"
+      ],
+      "to": [
+        "mux",
+        "in7"
+      ]
+    },
+    {
+      "from": [
+        "cable",
+        "out"
+      ],
+      "to": [
+        "osa",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "7.2 A transoceanic segment",
+    "body": "A transatlantic cable is about 6000 km of fibre with a repeater every 60 km. [[cable]] is that whole\nline in one block: 100 spans of 0.16 dB/km fibre, each followed by an amplifier with a 4.5 dB noise\nfigure that makes up the span's 9.6 dB. Eight channels [[ch0]] to [[ch7]] from 1532 to 1560 nm go\nin at 0 dBm each. [[osa]] reads what arrives.\n\n## Noise adds up span by span\n\nEvery repeater adds its own ASE, and every later repeater amplifies it as much as the signal. A\nhundred repeaters add a hundred times the noise of one, 20 dB more. The rule of thumb for the\nOSNR in 0.1 nm is\n\n$$\\text{OSNR} \\approx 58 + P_{ch} - NF - L_{span} - 10\\log_{10} N$$\n\nwhich here is $58 + 0 - 4.5 - 9.6 - 20 = 23.9$ dB. The flattened line below measures 23.80 to 23.88 dB.\n\n## The gain is not flat\n\nErbium gives more gain at longer wavelengths. Each repeater here has 0.05 dB more gain for every\nterahertz further down. That is about 0.1 dB from the band's centre to its edge, too small to notice\nonce. After a hundred repeaters it is not small:\n\n| Channel | Power | OSNR |\n| :-- | :-- | :-- |\n| 1532 nm | \u221211.36 dBm | 17.00 dB |\n| 1548 nm | \u22121.25 dBm | 23.20 dB |\n| 1560 nm | +6.20 dBm | 26.61 dB |\n\nThe short-wavelength channel lost 11 dB and the long one gained 6. The worst channel sets the\ncable's capacity, so it is the 17.00 dB that counts.\n\n## The gain-flattening filter\n\nUndersea repeaters carry a passive filter cut to the inverse of the erbium's gain shape. With one in\nevery repeater, every channel arrives at 0.00 dBm and its OSNR is within 0.1 dB of the rule of thumb.\nThe filter's own 1 dB of loss is made up by the amplifier, and that costs only a few hundredths of\na decibel.\n\nThis line is a power budget: no dispersion and no nonlinearity. In a real cable the channels that\narrive at +6 dBm would also be distorted by the Kerr effect, which is another reason to flatten.\n\n## Try this\n\n- Tick *flatten* on [[cable]]. The tilt on [[osa]] disappears, and every channel reads 23.80 to\n  23.88 dB."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": -47.0,
+      "w": 134.0,
+      "h": 508.0,
+      "text": "Eight channels, 0 dBm each",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 471.0,
+      "y": 163.0,
+      "w": 134.0,
+      "h": 88.0,
+      "text": "At the landing station",
+      "tone": "metric"
+    },
+    {
+      "id": "a3",
+      "kind": "note",
+      "x": 290.0,
+      "y": 302.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "6000 km: 100 spans of 60 km. The edge channels end 17.6 dB apart.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a4",
+      "kind": "arrow",
+      "x1": 388.0,
+      "y1": 300.0,
+      "x2": 388.0,
+      "y2": 256.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

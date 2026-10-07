@@ -46,6 +46,8 @@ from .electrical import (
 from .feedback import Feedback
 from .fiber import Fiber
 from .filters import ElectricalFilter, OpticalFilter, OpticalSpectrumAnalyzer
+from .free_space import FreeSpaceChannel
+from .line import AmplifiedLine
 from .long_period import LongPeriodGrating
 from .mapping import (
     DifferentialDecoder,
@@ -73,8 +75,10 @@ from .photonic import (
     RingResonator,
     Waveguide,
 )
+from .quantum import BB84Receiver
 from .reflective import Circulator, FiberBraggGrating
-from .sources import CWLaser, FabryPerotLaser, GaussianPulse, SechPulse
+from .rf import ElectricalSpectrumAnalyzer, RFTone
+from .sources import CWLaser, FabryPerotLaser, GaussianPulse, SechPulse, SweptLaser
 from .tilted import TiltedFiberBraggGrating
 from .wdm import Demultiplexer, Multiplexer, WavelengthSelectiveSwitch
 
@@ -82,7 +86,9 @@ __all__ = [
     "EDFA",
     "MMI",
     "APDPhotodiode",
+    "AmplifiedLine",
     "Attenuator",
+    "BB84Receiver",
     "BERAnalyzer",
     "BackscatterFiber",
     "ButterflyEqualizer",
@@ -105,6 +111,7 @@ __all__ = [
     "DualPolarizationReceiver",
     "EdgeCoupler",
     "ElectricalFilter",
+    "ElectricalSpectrumAnalyzer",
     "EyeDiagram",
     "FECDecoder",
     "FECEncoder",
@@ -113,6 +120,7 @@ __all__ = [
     "Feedback",
     "Fiber",
     "FiberBraggGrating",
+    "FreeSpaceChannel",
     "FrequencyRecovery",
     "GaussianPulse",
     "GratingCoupler",
@@ -138,6 +146,7 @@ __all__ = [
     "PolarizationRotator",
     "PowerMeter",
     "QAMMapper",
+    "RFTone",
     "RingResonator",
     "SechPulse",
     "Slicer",
@@ -145,6 +154,7 @@ __all__ = [
     "SoftFECDecoder",
     "SoftFECEncoder",
     "Splitter",
+    "SweptLaser",
     "TiltedFiberBraggGrating",
     "TimingRecovery",
     "Waveguide",

@@ -712,6 +712,74 @@ def _otdr(at: Layout) -> list[dict[str, Any]]:
     ]
 
 
+# ---------------------------------------------------------------------------
+# Phase 7: real-world systems
+
+
+def _metro_ring(at: Layout) -> list[dict[str, Any]]:
+    return [
+        frame(at, ["probe", "osa_in"], "Broadband probe", "optical"),
+        frame(at, [f"node{k}" for k in range(1, 9)], "Eight ROADM nodes", "binary"),
+        below_note(at["node4"], "50 GHz at one node, 35.24 GHz after eight: $B\\,N^{-1/2m}$."),
+        below_arrow(at["node4"]),
+    ]
+
+
+def _submarine(at: Layout) -> list[dict[str, Any]]:
+    return [
+        frame(at, [f"ch{index}" for index in range(8)], "Eight channels, 0 dBm each", "optical"),
+        frame(at, ["osa"], "At the landing station", "metric"),
+        below_note(
+            at["cable"], "6000 km: 100 spans of 60 km. The edge channels end 17.6 dB apart."
+        ),
+        below_arrow(at["cable"]),
+    ]
+
+
+def _zr_dwdm(at: Layout) -> list[dict[str, Any]]:
+    return [
+        frame(at, ["nb0", "nb2"], "Neighbours", "optical"),
+        frame(at, ["mux", "boost", "fib", "pre", "demux"], "Open line system", "binary"),
+        *above_note(at["fib"], "The pluggable sends −13.8 dBm; the booster lifts it to the line."),
+    ]
+
+
+def _rof(at: Layout) -> list[dict[str, Any]]:
+    return [
+        frame(at, ["rf"], "Two radio tones", "electrical"),
+        frame(at, ["esa"], "Spectrum", "metric"),
+        below_note(at["fib"], "Third-order products at 0.9 and 1.2 GHz, 34.10 dB under each tone."),
+        below_arrow(at["fib"]),
+    ]
+
+
+def _free_space(at: Layout) -> list[dict[str, Any]]:
+    return [
+        frame(at, ["prbs", "drv", "tx", "mzm"], "10 Gb/s transmitter", "binary"),
+        frame(at, ["pin", "lpf", "ber", "eye"], "Receiver", "metric"),
+        below_note(at["air"], "1 km of air costs 20.71 dB on an average day."),
+        below_arrow(at["air"]),
+    ]
+
+
+def _lidar(at: Layout) -> list[dict[str, Any]]:
+    return [
+        frame(at, ["target", "echo"], "Target 30 m away", "binary"),
+        frame(at, ["esa"], "Beat note", "metric"),
+        below_note(at["tap"], "The echo is 200 ns late, so it is 200 MHz behind the sweep."),
+        below_arrow(at["tap"]),
+    ]
+
+
+def _qkd(at: Layout) -> list[dict[str, Any]]:
+    return [
+        frame(at, ["alice", "attenuate"], "Alice: 0.5 photons a pulse", "optical"),
+        frame(at, ["bob"], "Bob", "metric"),
+        below_note(at["fib"], "50 km: 10 dB. QBER 1.51 %, key 1019 kb/s."),
+        below_arrow(at["fib"]),
+    ]
+
+
 _MARKS = {
     "ook_eye": _ook_eye,
     "wdm_osa": _wdm_osa,
@@ -753,6 +821,13 @@ _MARKS = {
     "tilted_grating": _tilted_grating,
     "lpg_pair": _lpg_pair,
     "otdr": _otdr,
+    "metro_ring": _metro_ring,
+    "submarine": _submarine,
+    "zr_dwdm": _zr_dwdm,
+    "rof": _rof,
+    "free_space": _free_space,
+    "lidar": _lidar,
+    "qkd": _qkd,
 }
 
 
@@ -2446,6 +2521,279 @@ detector noise, so it falls forever.
   because a cleave reflects −14.7 dB.
 - Set *width* of [[pulse]] to 600000 ps. The trace gets brighter but the splice step smears out:
   a long pulse trades resolution for range.
+""".strip(),
+    },
+    "metro_ring": {
+        "title": "7.1 A metro ring of ROADM nodes",
+        "body": r"""
+A metro ring passes a channel through node after node. At each one a wavelength-selective switch
+(WSS) drops one channel, adds a new one in its place, and expresses the rest through its own
+passband. One passband is 50 GHz wide. Eight of them in a row are narrower than any one of them.
+
+[[probe]] is a 4 ps pulse: its spectrum is far wider than a channel, so it lights the whole
+passband at once, the way a swept laser would on a bench. [[node1]] to [[node8]] are the nodes, each
+dropping and re-adding channel 1 from [[add]]. [[osa_1]] and [[osa_8]] read what is left of
+channel 0 after one node and after eight, against [[osa_in]].
+
+## Filters in cascade
+
+Each passband is a third-order super-Gaussian, exactly half power at ±25 GHz. Eight in a row
+multiply, so the half-power point moves inwards to where one passband is $2^{-1/8}$:
+
+$$B_N = B\,N^{-1/2m}$$
+
+With $B = 50$ GHz, $m = 3$ and $N = 8$ that is 35.36 GHz. The trace measures 49.89 GHz after one
+node and 35.24 GHz after eight, read on the analyser's 1 GHz grid.
+
+A 32 GBd channel needs about 35 GHz. After eight nodes it is being cut at its edges, and that is
+why a metro ring has a node budget as well as a power budget.
+
+Each node also costs its 4 dB of insertion loss, 32.00 dB for eight. A real ring puts an amplifier
+in every node to make it up. The narrowing is not made up by anything.
+
+## Why a pulse and not white light
+
+The ASE that lit the gratings in Phase 6 cannot show this. The switch passes noise through a flat
+rectangle as wide as its noise bandwidth, which gets the power right but has no shape to narrow.
+The pulse is a sampled field, and the passband shapes it exactly.
+
+## Try this
+
+- Set *order* of every node to 5. The edges are steeper and the cascade narrows less: 40.51 GHz after
+  eight, against 40.61 GHz from the formula.
+""".strip(),
+    },
+    "submarine": {
+        "title": "7.2 A transoceanic segment",
+        "body": r"""
+A transatlantic cable is about 6000 km of fibre with a repeater every 60 km. [[cable]] is that whole
+line in one block: 100 spans of 0.16 dB/km fibre, each followed by an amplifier with a 4.5 dB noise
+figure that makes up the span's 9.6 dB. Eight channels [[ch0]] to [[ch7]] from 1532 to 1560 nm go
+in at 0 dBm each. [[osa]] reads what arrives.
+
+## Noise adds up span by span
+
+Every repeater adds its own ASE, and every later repeater amplifies it as much as the signal. A
+hundred repeaters add a hundred times the noise of one, 20 dB more. The rule of thumb for the
+OSNR in 0.1 nm is
+
+$$\text{OSNR} \approx 58 + P_{ch} - NF - L_{span} - 10\log_{10} N$$
+
+which here is $58 + 0 - 4.5 - 9.6 - 20 = 23.9$ dB. The flattened line below measures 23.80 to 23.88 dB.
+
+## The gain is not flat
+
+Erbium gives more gain at longer wavelengths. Each repeater here has 0.05 dB more gain for every
+terahertz further down. That is about 0.1 dB from the band's centre to its edge, too small to notice
+once. After a hundred repeaters it is not small:
+
+| Channel | Power | OSNR |
+| :-- | :-- | :-- |
+| 1532 nm | −11.36 dBm | 17.00 dB |
+| 1548 nm | −1.25 dBm | 23.20 dB |
+| 1560 nm | +6.20 dBm | 26.61 dB |
+
+The short-wavelength channel lost 11 dB and the long one gained 6. The worst channel sets the
+cable's capacity, so it is the 17.00 dB that counts.
+
+## The gain-flattening filter
+
+Undersea repeaters carry a passive filter cut to the inverse of the erbium's gain shape. With one in
+every repeater, every channel arrives at 0.00 dBm and its OSNR is within 0.1 dB of the rule of thumb.
+The filter's own 1 dB of loss is made up by the amplifier, and that costs only a few hundredths of
+a decibel.
+
+This line is a power budget: no dispersion and no nonlinearity. In a real cable the channels that
+arrive at +6 dBm would also be distorted by the Kerr effect, which is another reason to flatten.
+
+## Try this
+
+- Tick *flatten* on [[cable]]. The tilt on [[osa]] disappears, and every channel reads 23.80 to
+  23.88 dB.
+""".strip(),
+    },
+    "zr_dwdm": {
+        "title": "7.3 400ZR on an open DWDM line",
+        "body": r"""
+A 400ZR pluggable puts a whole coherent transceiver in a module the size of a thumb. Data centres
+plug it into a router and run it over someone else's DWDM line. This is the 400ZR from 4.6, on a
+75 GHz slot between two neighbours, over 80 km.
+
+The transceiver on the left is the same as in 4.6. [[nb0]] and [[nb2]] fill the slots either side.
+[[mux]] puts the three on one fibre. [[boost]] lifts them to the line, [[fib]] is 80 km of fibre,
+[[pre]] makes up its 16 dB, and [[demux]] hands the middle slot back to the receiver.
+
+## Pluggable power
+
+The pluggable puts out only −13.8 dBm. The mux costs another 4 dB, so the booster's 18 dB is what
+sets the launch power and so the OSNR: 32.95 dB at the receiver. The constellations on [[vsa_x]] and
+[[vsa_y]] read an EVM of 6.19 % with no symbol errors.
+
+## The receiver picks its own channel
+
+The receiver mixes what arrives with its own local oscillator [[lo]], and only light near the LO's
+frequency lands in its electrical bandwidth. The neighbours, 75 GHz away, beat to 75 GHz and are
+filtered out after the detector. So a coherent receiver needs no demultiplexer in front of it: it
+is tuned by its laser. Open line systems use this, and a "colourless" add/drop port is one with no
+filter at all.
+
+## Try this
+
+- Delete [[demux]] and wire [[pre]] straight into [[rx]] and [[osnr]]. The receiver now sees all
+  three channels, and the EVM is still 5.99 % with no errors.
+- Set *gain* of [[boost]] to 8. The launch drops by 10 dB, the OSNR falls to 26.43 dB, and the EVM
+  rises to 11.59 % with a few symbol errors.
+""".strip(),
+    },
+    "rof": {
+        "title": "7.4 Radio over fibre",
+        "body": r"""
+A 5G fronthaul link can carry the radio signal itself on light, so the antenna site needs only a
+photodiode and an amplifier. The fibre has to carry the radio waveform without bending it, and
+the modulator is where it bends.
+
+[[rf]] makes two tones of 0.5 V each, at 1.0 and 1.1 GHz. [[mzm]] is biased at quadrature, halfway
+up its curve, where it is most nearly straight. [[fib]] is 10 km and [[pd]] turns the light back into
+current. [[esa]] is an electrical spectrum analyser: power into 50 Ω against frequency.
+
+## Intermodulation
+
+The modulator's response is a sine, not a line. Two tones through it make new ones, and the
+third-order products at $2f_1 - f_2 = 0.9$ GHz and $2f_2 - f_1 = 1.2$ GHz land right beside the
+tones, where no filter can remove them. On [[esa]] the tones read −16.61 dBm and the products
+−50.71 dBm.
+
+For a quadrature-biased modulator the ratio follows from Bessel functions of the phase swing
+$\beta = \pi A / V_\pi$:
+
+$$\frac{C}{I} = 20\log_{10}\frac{J_0(\beta)}{J_2(\beta)}$$
+
+That is 34.07 dB for $A = 0.5$ V and $V_\pi = 4$ V. The trace measures 34.10 dB.
+
+Quadrature bias also cancels every even-order product: the second harmonic at 2 GHz is at
+−110.44 dBm, no higher than the receiver's own noise beside it.
+
+## Try this
+
+- Set *amplitude* of [[rf]] to 1.0. The tones gain 4.45 dB and the products gain 17.23 dB: the
+  ratio falls to 21.32 dB (21.31 dB from the formula). Every decibel of drive costs about three of
+  ratio, which is why analogue links are run gently.
+""".strip(),
+    },
+    "free_space": {
+        "title": "7.5 A free-space optical link",
+        "body": r"""
+A laser link between two rooftops needs no fibre in the ground. It does need the air to cooperate.
+
+[[tx]] and [[mzm]] send 10 Gb/s on-off keying at 10 dBm. [[air]] is a kilometre of open air between a
+2.5 cm transmitter and a 10 cm receiving lens. [[pm_rx]] reads the received power and [[ber]] the
+errors after a PIN photodiode.
+
+## Where the light goes
+
+- **The beam spreads.** At 1 mrad it is 1.025 m across after a kilometre, and the lens catches
+  $(0.1/1.025)^2$ of it: 20.21 dB of geometric loss.
+- **The air absorbs.** 0.5 dB/km on a clear day.
+
+So 20.71 dB in all, and [[pm_rx]] reads −13.72 dBm. The eye is wide open: Q is 20.86.
+
+## Turbulence
+
+Warm and cool cells of air drift across the beam and make the received power flicker. For weak
+turbulence the strength is the Rytov variance:
+
+$$\sigma_R^2 = 1.23\,C_n^2\,k^{7/6}\,L^{11/6}$$
+
+With $C_n^2 = 10^{-14}$ m$^{-2/3}$ that is 0.199. The intensity is then log-normal, and the link
+spends 0.1 % of the time below a fade of 6.11 dB. The flicker is milliseconds slow, so *outage*
+picks one moment of it: 0 is the average, 0.001 is the fade a link is designed against.
+
+## Try this
+
+- Set *outage* of [[air]] to 0.001. The received power drops to −19.83 dBm, and Q to 5.24: still no
+  errors in this window, but close to the edge.
+- Then set *cn2* to 1e-13, strong turbulence on a hot afternoon. The fade is 16.43 dB, the power
+  −30.14 dBm, and 630 of 2040 bits are wrong.
+- Set *outage* back to 0 and *attenuation* to 10, light haze. The power is −23.22 dBm and 11 bits are
+  wrong. Fog is 100 dB/km and more, and no margin survives it.
+""".strip(),
+    },
+    "lidar": {
+        "title": "7.6 FMCW LiDAR",
+        "body": r"""
+A frequency-modulated continuous-wave (FMCW) LiDAR measures range without timing a pulse. The laser
+sweeps its frequency, and the echo from a target comes back with the frequency the laser had a
+round trip ago.
+
+[[tx]] sweeps 1 GHz in one microsecond. [[tap]] keeps half as a local copy. The other half goes to
+the target and back: [[target]] is the 200 ns round trip to 30 m, and [[echo]] the 30 dB the target
+and the optics cost. [[mix]] adds the two and [[pd]] detects them. [[esa]] shows the beat.
+
+## Range is a frequency
+
+The echo is $\tau = 2R/c$ late, and in that time the sweep has moved on by
+
+$$f_b = \frac{B}{T}\,\tau = \frac{2BR}{cT}$$
+
+At 1 GHz per µs, 30 m is a 200.0 MHz beat. [[esa]] reads its peak at 200.0 MHz, which
+gives back 29.98 m.
+
+The range resolution is set by the sweep, not by the detector: one analyser bin is $1/T$ = 1 MHz,
+which is $c/2B$ = 15 cm of range.
+
+The echo is 30 dB weaker than the light that left, but it beats against the full-power local copy.
+That gain is what lets an FMCW LiDAR see a dark target far away, and it is the same trick as the
+coherent receiver's local oscillator.
+
+## Try this
+
+- Set *delay* of [[target]] to 400277 ps, the round trip to 60 m. The beat moves to 400.0 MHz.
+""".strip(),
+    },
+    "qkd": {
+        "title": "7.7 Quantum key distribution",
+        "body": r"""
+In BB84 quantum key distribution, Alice sends a key in pulses so faint that most of them hold no
+photon at all. An eavesdropper who measures a photon disturbs it, so the error rate Bob sees bounds
+what anyone else can know about the key.
+
+[[alice]] is attenuated by [[attenuate]] to $\mu = 0.5$ photons a pulse at 1 GHz: 71.93 dB below 1 mW.
+[[fib]] is 50 km of 0.2 dB/km fibre. [[bob]] counts photons with a detector of 10 % efficiency and
+$10^{-6}$ dark counts a pulse, and reports the error rate and the key.
+
+## What Bob counts
+
+The channel is 10 dB, so with the detector each photon has a 1 % chance of a click: $5.0\times10^{-3}$
+clicks a pulse. A click on the wrong basis is thrown away (sifting halves the rate). Errors come from
+the optics' 1.5 % misalignment and from dark counts, which click at random. The quantum bit error
+rate (QBER) is 1.51 %.
+
+## How much key is secret
+
+Pulses with two or more photons are not safe: an eavesdropper could keep one. Decoy states (pulses
+of other, random intensities) let Alice and Bob measure how many clicks came from single photons.
+Only those count, and error correction and privacy amplification then take their share:
+
+$$R = \tfrac12\big[Q_1(1 - h(e_1)) - Q_\mu f\,h(E_\mu)\big]$$
+
+That leaves 1019 kb/s of secret key at 50 km.
+
+## Distance
+
+| Fibre | QBER | Secret key |
+| :-- | :-- | :-- |
+| 25 km | 1.50 % | 3233 kb/s |
+| 50 km | 1.51 % | 1019 kb/s |
+| 100 km | 1.60 % | 100.0 kb/s |
+| 150 km | 2.45 % | 8.26 kb/s |
+| 200 km | 9.58 % | 0 |
+
+The key falls with the fibre's loss until the dark counts catch up with the signal. Then the
+errors climb and no key is left.
+
+## Try this
+
+- Set *length* of [[fib]] to 200. The QBER climbs to 9.58 % and the secure key is zero.
 """.strip(),
     },
 }

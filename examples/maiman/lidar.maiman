@@ -1,0 +1,211 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 1000000000.0,
+    "samples_per_symbol": 4,
+    "sequence_length": 1000,
+    "seed": 1,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "tx",
+      "type": "SweptLaser",
+      "params": {
+        "power": 10.0,
+        "sweep": 1.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "tap",
+      "type": "Splitter",
+      "params": {},
+      "config": {
+        "num_outputs": 2
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "target",
+      "type": "DelayLine",
+      "params": {
+        "delay": 200138.4571188912
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 240.0
+      }
+    },
+    {
+      "id": "echo",
+      "type": "Attenuator",
+      "params": {
+        "attenuation": 30.0
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 240.0
+      }
+    },
+    {
+      "id": "mix",
+      "type": "DirectionalCoupler",
+      "params": {
+        "coupling": 0.5
+      },
+      "config": {
+        "second_input": true
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "pd",
+      "type": "PINPhotodiode",
+      "params": {},
+      "ui": {
+        "x": 780.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "esa",
+      "type": "ElectricalSpectrumAnalyzer",
+      "params": {
+        "stop": 0.5
+      },
+      "ui": {
+        "x": 930.0,
+        "y": 140.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "target",
+        "out"
+      ],
+      "to": [
+        "echo",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "pd",
+        "out"
+      ],
+      "to": [
+        "esa",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "tap",
+        "out0"
+      ],
+      "to": [
+        "mix",
+        "in1"
+      ]
+    },
+    {
+      "from": [
+        "echo",
+        "out"
+      ],
+      "to": [
+        "mix",
+        "in2"
+      ]
+    },
+    {
+      "from": [
+        "mix",
+        "out1"
+      ],
+      "to": [
+        "pd",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "tx",
+        "out"
+      ],
+      "to": [
+        "tap",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "tap",
+        "out1"
+      ],
+      "to": [
+        "target",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "7.6 FMCW LiDAR",
+    "body": "A frequency-modulated continuous-wave (FMCW) LiDAR measures range without timing a pulse. The laser\nsweeps its frequency, and the echo from a target comes back with the frequency the laser had a\nround trip ago.\n\n[[tx]] sweeps 1 GHz in one microsecond. [[tap]] keeps half as a local copy. The other half goes to\nthe target and back: [[target]] is the 200 ns round trip to 30 m, and [[echo]] the 30 dB the target\nand the optics cost. [[mix]] adds the two and [[pd]] detects them. [[esa]] shows the beat.\n\n## Range is a frequency\n\nThe echo is $\\tau = 2R/c$ late, and in that time the sweep has moved on by\n\n$$f_b = \\frac{B}{T}\\,\\tau = \\frac{2BR}{cT}$$\n\nAt 1 GHz per \u00b5s, 30 m is a 200.0 MHz beat. [[esa]] reads its peak at 200.0 MHz, which\ngives back 29.98 m.\n\nThe range resolution is set by the sweep, not by the detector: one analyser bin is $1/T$ = 1 MHz,\nwhich is $c/2B$ = 15 cm of range.\n\nThe echo is 30 dB weaker than the light that left, but it beats against the full-power local copy.\nThat gain is what lets an FMCW LiDAR see a dark target far away, and it is the same trick as the\ncoherent receiver's local oscillator.\n\n## Try this\n\n- Set *delay* of [[target]] to 400277 ps, the round trip to 60 m. The beat moves to 400.0 MHz."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 321.0,
+      "y": 213.0,
+      "w": 284.0,
+      "h": 88.0,
+      "text": "Target 30 m away",
+      "tone": "binary"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 921.0,
+      "y": 113.0,
+      "w": 134.0,
+      "h": 88.0,
+      "text": "Beat note",
+      "tone": "metric"
+    },
+    {
+      "id": "a3",
+      "kind": "note",
+      "x": 140.0,
+      "y": 252.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "The echo is 200 ns late, so it is 200 MHz behind the sweep.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a4",
+      "kind": "arrow",
+      "x1": 238.0,
+      "y1": 250.0,
+      "x2": 238.0,
+      "y2": 206.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

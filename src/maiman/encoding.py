@@ -40,6 +40,7 @@ from .components.dsp import (
 )
 from .components.electrical import FECReport, SoftFECReport
 from .components.mapping import PilotEstimate
+from .components.rf import ElectricalSpectrum
 from .kernels import PropagationDiagnostics
 from .signals import (
     BinarySignal,
@@ -52,6 +53,7 @@ from .signals import (
     OpticalSpectrum,
     PAMMeasurement,
     PowerReading,
+    Readout,
     ScopeTrace,
     SymbolSignal,
 )
@@ -215,6 +217,32 @@ def _spectrum(spectrum: OpticalSpectrum) -> dict[str, Any]:
         "power_per_resolution_w": _numbers(spectrum.power_per_resolution()),
         "resolution_bandwidth": number(spectrum.resolution_bandwidth),
     }
+
+
+def _electrical_spectrum(spectrum: ElectricalSpectrum) -> dict[str, Any]:
+    # The same kind as an optical spectrum, so it draws in the same pane; the
+    # axis says the x values are radio frequencies, not wavelengths.
+    return {
+        "kind": "spectrum",
+        "axis": "rf",
+        "frequencies_ghz": _numbers(np.asarray(spectrum.frequencies) / 1e9),
+        "power_per_resolution_w": _numbers(np.asarray(spectrum.power_w)),
+        "resolution_bandwidth": number(spectrum.resolution_bandwidth),
+    }
+
+
+def _readout(readout: Readout) -> dict[str, Any]:
+    # Values flattened to the top level too, so a sweep can plot any of them.
+    encoded: dict[str, Any] = {key: number(value) for key, value in readout.values.items()}
+    encoded.update(
+        {
+            "kind": "readout",
+            "caption": readout.caption,
+            "summary": readout.summary,
+            "values": {key: number(value) for key, value in readout.values.items()},
+        }
+    )
+    return encoded
 
 
 def _scope(trace: ScopeTrace) -> dict[str, Any]:
@@ -444,6 +472,8 @@ _ENCODERS: dict[type, Any] = {
     PowerReading: _power,
     OpticalSpectrum: _spectrum,
     ScopeTrace: _scope,
+    ElectricalSpectrum: _electrical_spectrum,
+    Readout: _readout,
     EyeHistogram: _eye_histogram,
     EyeMeasurement: _eye_measurement,
     PAMMeasurement: _pam_measurement,

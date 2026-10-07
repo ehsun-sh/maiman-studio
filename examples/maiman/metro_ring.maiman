@@ -1,0 +1,440 @@
+{
+  "schema_version": 1,
+  "maiman_version": "0.16.0",
+  "context": {
+    "bit_rate": 25000000000.0,
+    "samples_per_symbol": 16,
+    "sequence_length": 64,
+    "seed": 1,
+    "precision": "single"
+  },
+  "nodes": [
+    {
+      "id": "probe",
+      "type": "GaussianPulse",
+      "params": {
+        "peak_power": 20.0,
+        "width": 4.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "osa_in",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1550.0,
+        "span": 300.0,
+        "points": 4096.0,
+        "resolution_bandwidth": 1.0
+      },
+      "ui": {
+        "x": 30.0,
+        "y": 290.0
+      }
+    },
+    {
+      "id": "add",
+      "type": "CWLaser",
+      "params": {
+        "power": -40.0,
+        "wavelength": 1549.1990263841476
+      },
+      "ui": {
+        "x": 30.0,
+        "y": -10.0
+      }
+    },
+    {
+      "id": "node1",
+      "type": "WavelengthSelectiveSwitch",
+      "params": {
+        "bandwidth": 50.0,
+        "order": 3.0
+      },
+      "config": {
+        "channels": 4
+      },
+      "ui": {
+        "x": 180.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "osa_1",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1550.0,
+        "span": 300.0,
+        "points": 4096.0,
+        "resolution_bandwidth": 1.0
+      },
+      "ui": {
+        "x": 255.0,
+        "y": 290.0
+      }
+    },
+    {
+      "id": "node2",
+      "type": "WavelengthSelectiveSwitch",
+      "params": {
+        "bandwidth": 50.0,
+        "order": 3.0
+      },
+      "config": {
+        "channels": 4
+      },
+      "ui": {
+        "x": 330.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "node3",
+      "type": "WavelengthSelectiveSwitch",
+      "params": {
+        "bandwidth": 50.0,
+        "order": 3.0
+      },
+      "config": {
+        "channels": 4
+      },
+      "ui": {
+        "x": 480.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "node4",
+      "type": "WavelengthSelectiveSwitch",
+      "params": {
+        "bandwidth": 50.0,
+        "order": 3.0
+      },
+      "config": {
+        "channels": 4
+      },
+      "ui": {
+        "x": 630.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "node5",
+      "type": "WavelengthSelectiveSwitch",
+      "params": {
+        "bandwidth": 50.0,
+        "order": 3.0
+      },
+      "config": {
+        "channels": 4
+      },
+      "ui": {
+        "x": 780.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "node6",
+      "type": "WavelengthSelectiveSwitch",
+      "params": {
+        "bandwidth": 50.0,
+        "order": 3.0
+      },
+      "config": {
+        "channels": 4
+      },
+      "ui": {
+        "x": 930.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "node7",
+      "type": "WavelengthSelectiveSwitch",
+      "params": {
+        "bandwidth": 50.0,
+        "order": 3.0
+      },
+      "config": {
+        "channels": 4
+      },
+      "ui": {
+        "x": 1080.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "node8",
+      "type": "WavelengthSelectiveSwitch",
+      "params": {
+        "bandwidth": 50.0,
+        "order": 3.0
+      },
+      "config": {
+        "channels": 4
+      },
+      "ui": {
+        "x": 1230.0,
+        "y": 140.0
+      }
+    },
+    {
+      "id": "osa_8",
+      "type": "OpticalSpectrumAnalyzer",
+      "params": {
+        "auto_span": false,
+        "center_wavelength": 1550.0,
+        "span": 300.0,
+        "points": 4096.0,
+        "resolution_bandwidth": 1.0
+      },
+      "ui": {
+        "x": 1380.0,
+        "y": 140.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": [
+        "add",
+        "out"
+      ],
+      "to": [
+        "node1",
+        "add"
+      ]
+    },
+    {
+      "from": [
+        "probe",
+        "out"
+      ],
+      "to": [
+        "node1",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "add",
+        "out"
+      ],
+      "to": [
+        "node2",
+        "add"
+      ]
+    },
+    {
+      "from": [
+        "node1",
+        "out"
+      ],
+      "to": [
+        "node2",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "add",
+        "out"
+      ],
+      "to": [
+        "node3",
+        "add"
+      ]
+    },
+    {
+      "from": [
+        "node2",
+        "out"
+      ],
+      "to": [
+        "node3",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "add",
+        "out"
+      ],
+      "to": [
+        "node4",
+        "add"
+      ]
+    },
+    {
+      "from": [
+        "node3",
+        "out"
+      ],
+      "to": [
+        "node4",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "add",
+        "out"
+      ],
+      "to": [
+        "node5",
+        "add"
+      ]
+    },
+    {
+      "from": [
+        "node4",
+        "out"
+      ],
+      "to": [
+        "node5",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "add",
+        "out"
+      ],
+      "to": [
+        "node6",
+        "add"
+      ]
+    },
+    {
+      "from": [
+        "node5",
+        "out"
+      ],
+      "to": [
+        "node6",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "add",
+        "out"
+      ],
+      "to": [
+        "node7",
+        "add"
+      ]
+    },
+    {
+      "from": [
+        "node6",
+        "out"
+      ],
+      "to": [
+        "node7",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "add",
+        "out"
+      ],
+      "to": [
+        "node8",
+        "add"
+      ]
+    },
+    {
+      "from": [
+        "node7",
+        "out"
+      ],
+      "to": [
+        "node8",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "node1",
+        "out"
+      ],
+      "to": [
+        "osa_1",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "node8",
+        "out"
+      ],
+      "to": [
+        "osa_8",
+        "in"
+      ]
+    },
+    {
+      "from": [
+        "probe",
+        "out"
+      ],
+      "to": [
+        "osa_in",
+        "in"
+      ]
+    }
+  ],
+  "notes": {
+    "title": "7.1 A metro ring of ROADM nodes",
+    "body": "A metro ring passes a channel through node after node. At each one a wavelength-selective switch\n(WSS) drops one channel, adds a new one in its place, and expresses the rest through its own\npassband. One passband is 50 GHz wide. Eight of them in a row are narrower than any one of them.\n\n[[probe]] is a 4 ps pulse: its spectrum is far wider than a channel, so it lights the whole\npassband at once, the way a swept laser would on a bench. [[node1]] to [[node8]] are the nodes, each\ndropping and re-adding channel 1 from [[add]]. [[osa_1]] and [[osa_8]] read what is left of\nchannel 0 after one node and after eight, against [[osa_in]].\n\n## Filters in cascade\n\nEach passband is a third-order super-Gaussian, exactly half power at \u00b125 GHz. Eight in a row\nmultiply, so the half-power point moves inwards to where one passband is $2^{-1/8}$:\n\n$$B_N = B\\,N^{-1/2m}$$\n\nWith $B = 50$ GHz, $m = 3$ and $N = 8$ that is 35.36 GHz. The trace measures 49.89 GHz after one\nnode and 35.24 GHz after eight, read on the analyser's 1 GHz grid.\n\nA 32 GBd channel needs about 35 GHz. After eight nodes it is being cut at its edges, and that is\nwhy a metro ring has a node budget as well as a power budget.\n\nEach node also costs its 4 dB of insertion loss, 32.00 dB for eight. A real ring puts an amplifier\nin every node to make it up. The narrowing is not made up by anything.\n\n## Why a pulse and not white light\n\nThe ASE that lit the gratings in Phase 6 cannot show this. The switch passes noise through a flat\nrectangle as wide as its noise bandwidth, which gets the power right but has no shape to narrow.\nThe pulse is a sampled field, and the passband shapes it exactly.\n\n## Try this\n\n- Set *order* of every node to 5. The edges are steeper and the cascade narrows less: 40.51 GHz after\n  eight, against 40.61 GHz from the formula."
+  },
+  "annotations": [
+    {
+      "id": "a1",
+      "kind": "rect",
+      "x": 21.0,
+      "y": 113.0,
+      "w": 134.0,
+      "h": 238.0,
+      "text": "Broadband probe",
+      "tone": "optical"
+    },
+    {
+      "id": "a2",
+      "kind": "rect",
+      "x": 171.0,
+      "y": 113.0,
+      "w": 1184.0,
+      "h": 88.0,
+      "text": "Eight ROADM nodes",
+      "tone": "binary"
+    },
+    {
+      "id": "a3",
+      "kind": "note",
+      "x": 590.0,
+      "y": 252.0,
+      "w": 240.0,
+      "h": 96.0,
+      "text": "50 GHz at one node, 35.24 GHz after eight: $B\\,N^{-1/2m}$.",
+      "tone": "electrical"
+    },
+    {
+      "id": "a4",
+      "kind": "arrow",
+      "x1": 688.0,
+      "y1": 250.0,
+      "x2": 688.0,
+      "y2": 206.0,
+      "text": "",
+      "tone": "metric"
+    }
+  ]
+}

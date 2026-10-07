@@ -145,13 +145,13 @@ are where we expect to find the most missing pieces.
 
 | # | Example | What it teaches | Status |
 | :-- | :--- | :--- | :--- |
-| 7.1 | Metro ring with ROADMs | Filter narrowing through cascaded nodes | 🟡 needs the WSS from 3.9 |
-| 7.2 | Submarine segment, 6000 km | Gain equalisation, GSNR budget, SDM trade-offs | 🟢 in loop form (4.7); 🟡 needs a **gain-flattening filter** |
-| 7.3 | Data-centre interconnect with 400ZR over a DWDM line | Pluggables on an open line system | 🟢 from 3.4 and 4.6 |
-| 7.4 | 5G fronthaul, analogue radio over fibre | RF on light, intermodulation, EVM of the radio signal | 🟡 needs an **RF tone source** and an **electrical spectrum analyser** |
-| 7.5 | Free-space optical link | Beam divergence, turbulence fading | 🔴 needs a **free-space channel** |
-| 7.6 | FMCW LiDAR | Chirped laser, beat frequency to range | 🟡 needs a **swept-frequency source** and a beat-note analyser |
-| 7.7 | Quantum key distribution (BB84, decoy states) | Single photons, QBER, secure key rate | 🔴 needs a **single-photon detector** and a photon-counting model |
+| 7.1 | Metro ring with ROADMs | Filter narrowing through cascaded nodes | ✅ `metro_ring.maiman`, with lesson; a broadband pulse through eight WSS nodes |
+| 7.2 | Submarine segment, 6000 km | Gain equalisation, GSNR budget, SDM trade-offs | ✅ `submarine.maiman`, with lesson; OSNR budget and gain flattening (no nonlinear GSNR, no SDM) |
+| 7.3 | Data-centre interconnect with 400ZR over a DWDM line | Pluggables on an open line system | ✅ `zr_dwdm.maiman`, with lesson |
+| 7.4 | 5G fronthaul, analogue radio over fibre | RF on light, intermodulation, EVM of the radio signal | ✅ `rof.maiman`, with lesson; two-tone intermodulation against Bessel theory (no radio EVM yet) |
+| 7.5 | Free-space optical link | Beam divergence, turbulence fading | ✅ `free_space.maiman`, with lesson |
+| 7.6 | FMCW LiDAR | Chirped laser, beat frequency to range | ✅ `lidar.maiman`, with lesson |
+| 7.7 | Quantum key distribution (BB84, decoy states) | Single photons, QBER, secure key rate | ✅ `qkd.maiman`, with lesson |
 
 ---
 
@@ -166,11 +166,11 @@ Collected from the 🟡 and 🔴 rows, in the order the phases need them:
 | Wavelength-selective switch | 3.9 | ✅ **Wavelength-Selective Switch**: express, drop and add on the grid, with its isolation leaking onto the added channel as a field |
 | Raman amplifier | 3.10 | Counter-pumped, using the measured gain shape the SRS model already has |
 | ~~PCS mapper~~ | 4.8 | Done: **PCS Mapper**, a Maxwell–Boltzmann source |
-| Gain-flattening filter | 7.2 | An `OpticalFilter` with an arbitrary measured shape may be enough |
-| RF tone source, electrical spectrum analyser | 7.4 | Also useful for 1.3 (harmonics of the MZM) |
-| Swept-frequency source | 7.6 | |
+| ~~Gain-flattening filter~~ | 7.2 | Done: **Amplified Line**, N spans with a tilted gain and an optional flattening filter in every repeater |
+| ~~RF tone source, electrical spectrum analyser~~ | 7.4 | Done: **RF Tone** and **Electrical Spectrum Analyzer**, drawn in the Spectrum tab on a GHz axis |
+| ~~Swept-frequency source~~ | 7.6 | Done: **Swept Laser**, a linear chirp across the window |
 | ~~Backscatter model~~ | 6.5 | Done: **Fiber with Backscatter**, probed by the Gaussian Pulse |
-| Single-photon detector, free-space channel | 7.7, 7.5 | Each is a model, not just a block |
+| ~~Single-photon detector, free-space channel~~ | 7.7, 7.5 | Done: **BB84 Receiver** (decoy-state GLLP key rate) and **Free-Space Channel** (divergence, absorption, log-normal fading) |
 
 ## Found along the way
 
@@ -179,6 +179,11 @@ first. Each entry says which example found it and what was done.
 
 | Date | Example | Finding | Outcome |
 | :--- | :--- | :--- | :--- |
+| 2026-10-07 | 7.1 | Noise through a passband is cut to a flat rectangle of the filter's noise bandwidth, so white light through eight WSS nodes shows the loss but not the narrowing | 7.1 probes with a 4 ps pulse, whose field the passband shapes exactly; open: carry a passband's shape on noise bins the way a ring's is |
+| 2026-10-07 | 7.2 | The EDFA's gain is flat, and a hundred repeaters drawn as blocks is two hundred blocks | **Amplified Line** added: N spans and repeaters with a gain tilt, ASE summed span by span, and an optional gain-flattening filter. No dispersion and no nonlinearity, so the budget is OSNR, not GSNR; open: nonlinear interference (GN model) and SDM |
+| 2026-10-07 | 7.3 | A coherent receiver selects its channel with its LO: removing the demultiplexer leaves the EVM unchanged | Said in the lesson; the neighbours are unmodulated loading channels |
+| 2026-10-07 | 7.4 | Nothing made or read radio frequencies | **RF Tone** and **Electrical Spectrum Analyzer** added; the Spectrum tab draws an electrical trace on a GHz axis. Open: a radio-format (OFDM) source for the EVM of the radio signal |
+| 2026-10-07 | 7.7 | A key rate is a few named numbers, and no result type carried them | A generic **Readout** result: named values, a caption under the block and a line in the run log |
 | 2026-10-07 | 6.5 | No block sent light back towards its source, so an OTDR could not be drawn | **Fiber with Backscatter** added: Rayleigh backscatter, a splice and a break or a cleaved end, returned as the launch pulse convolved with the fibre's response. It is the speckle-free average and has no detector noise, so the trace never meets a floor |
 | 2026-10-07 | 6.5 | The Optical Oscilloscope drew linear power in picoseconds from the middle of the window, which suits a pulse and not an echo 250 µs long falling over decades | The oscilloscope can count time from the window's start and ask for decibels; the Scope tab then draws dBm and picks ps, ns or µs for its axis |
 | 2026-10-07 | 6.4 | The only broadband source is an EDFA's ASE, 1534 to 1566 nm, narrower than a long-period grating's notch | 6.4's period is 485 µm, which puts LP04's notch at 1550 nm; open: a broadband (SLED or supercontinuum) source to show a whole notch |
