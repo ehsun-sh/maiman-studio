@@ -136,7 +136,7 @@ call in CI:
 * The version in `pyproject.toml`, `src/maiman/__init__.py`, `CITATION.cff` and
   `desktop/package.json` must move together for the next release — that one *is* checked.
 * Releases carry no desktop installers. The **Desktop** workflow still builds them on demand as
-  workflow artifacts; users open the studio with the Maiman App shortcut instead.
+  workflow artifacts; users open the studio with the Maiman Studio shortcut instead.
 
 ## When the upload fails with `invalid-publisher`
 

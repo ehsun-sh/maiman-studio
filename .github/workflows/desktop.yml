@@ -4,7 +4,7 @@
 # (PyInstaller cannot cross-compile), checks the frozen copy serves the studio
 # and runs a link, then wraps it in Electron with electron-builder. The
 # installers are uploaded as workflow artifacts only. Releases ship no
-# installers; the Maiman App shortcut (tools/make_shortcut.py) is the way to
+# installers; the Maiman Studio shortcut (tools/make_shortcut.py) is the way to
 # open the studio.
 #
 # Nothing is signed. A macOS build is quarantined by Gatekeeper and a Windows

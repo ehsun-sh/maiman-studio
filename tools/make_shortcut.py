@@ -1,4 +1,4 @@
-"""Create a "Maiman App" shortcut, with the Maiman icon, in the repository root.
+"""Create a "Maiman Studio" shortcut, with the Maiman icon, in the repository root.
 
 Run it once with the Python that has Maiman's dependencies:
 
@@ -9,9 +9,9 @@ Python, which opens the studio in the browser. A shortcut has to hold absolute
 paths, so it is made on your machine rather than kept in git; run this again
 if you move the checkout or change Python.
 
-  Windows  Maiman App.lnk
-  macOS    Maiman App.app
-  Linux    Maiman App.desktop
+  Windows  Maiman Studio.lnk
+  macOS    Maiman Studio.app
+  Linux    Maiman Studio.desktop
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 LAUNCHER = ROOT / "tools" / "maiman_app.py"
 ASSETS = ROOT / "assets"
-NAME = "Maiman App"
+NAME = "Maiman Studio"
 
 
 def _windows() -> Path:
@@ -73,15 +73,15 @@ def _macos() -> Path:
             {
                 "CFBundleName": NAME,
                 "CFBundleDisplayName": NAME,
-                "CFBundleIdentifier": "io.github.ehsun-sh.maiman-app",
-                "CFBundleExecutable": "maiman-app",
+                "CFBundleIdentifier": "io.github.ehsun-sh.maiman-studio",
+                "CFBundleExecutable": "maiman-studio",
                 "CFBundleIconFile": "icon",
                 "CFBundlePackageType": "APPL",
                 "CFBundleShortVersionString": "1.0",
             },
             f,
         )
-    run = macos / "maiman-app"
+    run = macos / "maiman-studio"
     run.write_text(f"#!/bin/sh\nexec {shlex.quote(sys.executable)} {shlex.quote(str(LAUNCHER))}\n")
     run.chmod(run.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     # Finder caches icons; touching the bundle makes it look again.

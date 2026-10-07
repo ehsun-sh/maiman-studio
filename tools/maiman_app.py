@@ -1,6 +1,6 @@
 """Open Maiman Studio in the browser, from this checkout, with nothing but Python.
 
-This is what the "Maiman App" shortcut runs (see tools/make_shortcut.py). It
+This is what the "Maiman Studio" shortcut runs (see tools/make_shortcut.py). It
 starts the session server on a free loopback port, opens the studio in the
 default browser, and shows a small window that keeps the server alive: closing
 that window stops Maiman. Without Tk (some Linux Pythons ship without it) the
@@ -41,7 +41,7 @@ def main() -> int:
             root.withdraw()
             from tkinter import messagebox
 
-            messagebox.showerror("Maiman App", message)
+            messagebox.showerror("Maiman Studio", message)
         else:
             print(message, file=sys.stderr)
         return 1
@@ -58,7 +58,7 @@ def main() -> int:
             threading.Event().wait()
         else:
             root = tk.Tk()
-            root.title("Maiman App")
+            root.title("Maiman Studio")
             root.resizable(False, False)
             icon = ROOT / "assets" / "icon-192.png"
             with contextlib.suppress(tk.TclError):

@@ -222,12 +222,11 @@ sight. Installers are built by the **Desktop** workflow and attached to each Git
 are not code-signed yet; [desktop/README.md](desktop/README.md) says how to open one anyway, and
 how to build it yourself.
 
-From a checkout with Node.js installed, double-click `start-studio.bat` (Windows),
-`start-studio.command` (macOS) or `start-studio.sh` (Linux) in the repository root to open it.
-
-Without Node.js, run `python tools/make_shortcut.py` once. It puts a **Maiman App** shortcut with
-the Maiman icon in the repository root; double-clicking it opens the studio in your browser using
-that same Python, and the small window it shows stops Maiman when you close it.
+From a checkout, double-click `make-shortcut.bat` (Windows), `make-shortcut.command` (macOS) or
+`make-shortcut.sh` (Linux) once. It puts a **Maiman Studio** shortcut with the Maiman icon in the
+repository root and opens the studio; from then on, double-click that shortcut. It runs the studio
+in your browser with the same Python, and the small window it shows stops Maiman when you close
+it. Run it again if you move the checkout or change Python.
 
 ### If you would rather write Python
 
