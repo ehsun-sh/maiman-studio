@@ -69,7 +69,7 @@ from .transient import (
     step_schedule,
 )
 
-__version__ = "0.16.0"
+__version__ = "0.17.0"
 
 __all__ = [
     "METASTABLE_LIFETIME",
