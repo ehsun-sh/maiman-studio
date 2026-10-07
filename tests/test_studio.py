@@ -1200,6 +1200,7 @@ TEMPLATE_FILES = {
     "launch-power": "launch_power.maiman",
     "fwm-dsf": "fwm_dsf.maiman",
     "roadm": "roadm.maiman",
+    "raman": "raman.maiman",
     "qpsk-b2b": "qpsk_b2b.maiman",
     "coherent-sdfec": "coherent_sdfec.maiman",
     "dualpol": "dualpol.maiman",

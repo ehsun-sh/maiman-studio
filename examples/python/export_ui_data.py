@@ -604,6 +604,7 @@ TEMPLATES: dict[str, tuple[str, Path]] = {
     "launch-power": ("3.5 Optimum launch power", amplified.project_path("launch_power")),
     "fwm-dsf": ("3.6 Four-wave mixing on G.653 fibre", amplified.project_path("fwm_dsf")),
     "roadm": ("3.9 A ROADM add/drop node", amplified.project_path("roadm")),
+    "raman": ("3.10 Distributed Raman amplification", amplified.project_path("raman")),
     "qpsk-b2b": ("4.1 QPSK back to back", coherent.project_path("qpsk_b2b")),
     "coherent-sdfec": ("4.3 Coherent link, soft-decision FEC", SDFEC_PROJECT),
     "dualpol": ("4.4 Dual polarisation, 256 Gb/s", coherent.project_path("dualpol")),
