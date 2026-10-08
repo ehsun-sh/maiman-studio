@@ -6,7 +6,7 @@
 
 **Status:** design document, now describing a running system. Phases 0 through 5 are implemented
 and released as 0.x; what each block still approximates is collected under [§10, Open](#open).
-**Revision:** 2 — restructured, corrected, and expanded from the initial concept draft.
+**Revision:** 2.
 
 ---
 
@@ -103,8 +103,8 @@ it rather than rewriting it.
 
 Analysis and visualization are **not** a layer in this stack. They are *consumers* of results —
 some run in the engine (eye-histogram binning, spectrum estimation, BER counting), some run in
-the browser (rendering). Placing them as a layer between the GUI and the component library, as
-the initial draft did, describes no real dependency and would produce a confused codebase.
+the browser (rendering). Placing them as a layer between the GUI and the component library
+describes no real dependency and would produce a confused codebase.
 
 ### 2.2 Layer responsibilities
 
@@ -153,8 +153,8 @@ class SimulationContext:
 ```
 
 Every sampled signal in a run shares `N`, `Fs`, and the same time origin. This is what makes
-blocks composable at all, and it is what the initial draft's per-signal `sampling_rate` /
-`num_samples` fields quietly allowed to drift apart.
+blocks composable at all; per-signal `sampling_rate` / `num_samples` fields would quietly
+allow them to drift apart.
 
 **Reproducibility rule:** all stochastic blocks (laser phase noise, ASE, shot noise, thermal
 noise) draw from independent generators derived deterministically from `seed` and the block's
@@ -257,7 +257,7 @@ suite runs in both.
 
 ## 4. Execution Engine
 
-Absent from the original draft, and the heart of any dataflow simulator.
+The heart of any dataflow simulator.
 
 ### 4.1 Execution model
 
@@ -441,8 +441,7 @@ headless with no GUI installed.
   architecture. A browser-accessible tool removes the largest barrier to trying it.
 * **Graph editor:** use an existing canvas library (React Flow / rete.js). The node-graph editor
   is a solved problem and not where this project's value lies.
-* **Plot data is reduced in the engine, not in the browser.** This is the key point the original
-  draft missed. An eye diagram is a 2D histogram — the engine bins millions of samples and sends
+* **Plot data is reduced in the engine, not in the browser.** This is the key point. An eye diagram is a 2D histogram — the engine bins millions of samples and sends
   a small array; the browser never receives raw sample buffers. Same for spectra (send the
   computed PSD on a display grid) and BER curves. With this rule, ordinary Canvas/WebGL2
   rendering is more than sufficient.
