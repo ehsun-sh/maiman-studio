@@ -156,7 +156,13 @@ def test_the_block_is_the_function_and_cuts_a_carrier_by_it(
         frequencies, fibre=FIBRE, period=PERIOD, length=LENGTH, index_modulation=MODULATION
     )
     assert np.allclose(block.scattering_matrix(frequencies).s, expected.s, rtol=0.0, atol=1e-12)
-    assert block.resonances() == pytest.approx(resonances, rel=1e-12)
+    # Rank by rank: pytest 9 refuses a sequence of tuples inside approx, and a
+    # rank is an integer that has to match exactly rather than approximately.
+    found = block.resonances()
+    assert [rank for rank, _ in found] == [rank for rank, _ in resonances]
+    assert [wavelength for _, wavelength in found] == pytest.approx(
+        [wavelength for _, wavelength in resonances], rel=1e-12
+    )
 
     ctx = SimulationContext(bit_rate=10e9, samples_per_symbol=8, sequence_length=16)
     f0 = C_LIGHT / centre
