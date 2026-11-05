@@ -20,6 +20,7 @@
   pages:
     - { title: Release notes, url: /docs/releases, file: releases.md }
     - { title: Roadmap, url: /roadmap, file: roadmap.md }
+    - { title: UX improvement plan, url: /docs/ux-plan, file: ux-plan.md }
     - { title: Examples roadmap, url: /docs/examples-roadmap, file: EXAMPLES_ROADMAP.md }
 - section: Development
   pages:
